@@ -7,22 +7,23 @@ package ui.styles;
 public class ButtonStyles {
     
     /**
-     * Style for the main Ask button - circular orange gradient with shadow effects
+     * Style for the main Ask button - dock icon style with modern design
      */
-    public static final String ASK_BUTTON_STYLE = 
+    public static final String ASK_BUTTON_STYLE =
         "-fx-background-radius: 33.5; " +
         "-fx-border-radius: 33.5; " +
-        "-fx-background-color: linear-gradient(to bottom, #FF6B35, #F7931E); " +
-        "-fx-border-color: #FFFFFF; " +
+        "-fx-background-color: linear-gradient(to bottom, #667eea, #764ba2); " +
+        "-fx-border-color: rgba(255,255,255,0.3); " +
         "-fx-border-width: 2px; " +
         "-fx-text-fill: white; " +
         "-fx-font-weight: 900; " +
-        "-fx-font-size: 12px; " +
-        "-fx-font-family: 'SF Pro Display Black', 'Helvetica Neue Bold', 'Arial Black', sans-serif; " +
+        "-fx-font-size: 11px; " +
+        "-fx-font-family: 'SF Pro Display', 'Helvetica Neue', 'Arial', sans-serif; " +
         "-fx-text-alignment: center; " +
-        "-fx-letter-spacing: 0.3px; " +
-        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0, 0, 3), " +
-        "dropshadow(gaussian, rgba(0,0,0,0.8), 1, 0, 0, 1);";
+        "-fx-letter-spacing: 0.2px; " +
+        "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 8, 0, 0, 4), " +
+        "innershadow(gaussian, rgba(255,255,255,0.2), 2, 0, 0, 1); " +
+        "-fx-cursor: hand;";
 
     /**
      * Style for the send button in the chat interface
