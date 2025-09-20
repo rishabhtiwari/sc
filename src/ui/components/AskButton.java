@@ -1,3 +1,5 @@
+package ui.components;
+
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.layout.Pane;
@@ -5,7 +7,12 @@ import javafx.scene.paint.Color;
 import javafx.scene.shape.Circle;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
+import ui.styles.ButtonStyles;
 
+/**
+ * Floating Ask button component that provides access to the chat interface.
+ * Features a circular design with drag functionality and always-on-top behavior.
+ */
 public class AskButton {
     
     private Stage buttonStage;
@@ -15,25 +22,23 @@ public class AskButton {
         this.chatSidebar = new ChatSidebar();
     }
     
+    /**
+     * Shows the Ask button on screen
+     */
     public void show() {
+        configureStage();
+        createButton();
+        showStage();
+    }
+    
+    /**
+     * Creates the circular Ask button with styling and event handlers
+     */
+    private void createButton() {
         // Create circular Ask button with question mark and iChat text
         Button askButton = new Button("?\niChat");
         askButton.setPrefSize(67, 67);
-        askButton.setStyle(
-            "-fx-background-radius: 33.5; " +
-            "-fx-border-radius: 33.5; " +
-            "-fx-background-color: linear-gradient(to bottom, #FF6B35, #F7931E); " +
-            "-fx-border-color: #FFFFFF; " +
-            "-fx-border-width: 2px; " +
-            "-fx-text-fill: white; " +
-            "-fx-font-weight: 900; " +
-            "-fx-font-size: 12px; " +
-            "-fx-font-family: 'SF Pro Display Black', 'Helvetica Neue Bold', 'Arial Black', sans-serif; " +
-            "-fx-text-alignment: center; " +
-            "-fx-letter-spacing: 0.3px; " +
-            "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.5), 6, 0, 0, 3), " +
-            "dropshadow(gaussian, rgba(0,0,0,0.8), 1, 0, 0, 1);"
-        );
+        askButton.setStyle(ButtonStyles.ASK_BUTTON_STYLE);
         
         // Add click event to open sidebar and hide button
         askButton.setOnAction(e -> {
@@ -41,11 +46,16 @@ public class AskButton {
             chatSidebar.show(() -> showButton()); // Pass callback to show button when sidebar closes
         });
         
-        // Create button stage
-        buttonStage = new Stage();
-        
-        // Make button draggable across entire screen
+        setupDragFunctionality(askButton);
+        createButtonScene(askButton);
+    }
+    
+    /**
+     * Sets up drag functionality for the button
+     */
+    private void setupDragFunctionality(Button askButton) {
         final double[] dragDelta = new double[2];
+        
         askButton.setOnMousePressed(e -> {
             dragDelta[0] = buttonStage.getX() - e.getScreenX();
             dragDelta[1] = buttonStage.getY() - e.getScreenY();
@@ -55,7 +65,12 @@ public class AskButton {
             buttonStage.setX(e.getScreenX() + dragDelta[0]);
             buttonStage.setY(e.getScreenY() + dragDelta[1]);
         });
-        
+    }
+    
+    /**
+     * Creates the scene with circular clipping for the button
+     */
+    private void createButtonScene(Button askButton) {
         // Create transparent layout
         Pane root = new Pane();
         root.getChildren().add(askButton);
@@ -68,15 +83,30 @@ public class AskButton {
         Scene scene = new Scene(root, 67, 67);
         scene.setFill(Color.TRANSPARENT);
         
-        // Configure stage to be transparent and always on top
+        buttonStage.setScene(scene);
+    }
+    
+    /**
+     * Configures the stage properties
+     */
+    private void configureStage() {
+        buttonStage = new Stage();
         buttonStage.initStyle(StageStyle.TRANSPARENT);
         buttonStage.setAlwaysOnTop(true);
         buttonStage.setResizable(false);
         buttonStage.setTitle("iChat Ask Button");
-        buttonStage.setScene(scene);
+    }
+    
+    /**
+     * Shows the button stage
+     */
+    private void showStage() {
         buttonStage.show();
     }
     
+    /**
+     * Hides both the button and sidebar
+     */
     public void hide() {
         if (buttonStage != null) {
             buttonStage.hide();
@@ -84,12 +114,18 @@ public class AskButton {
         chatSidebar.hide();
     }
 
+    /**
+     * Hides only the button (used when opening sidebar)
+     */
     public void hideButton() {
         if (buttonStage != null) {
             buttonStage.hide();
         }
     }
 
+    /**
+     * Shows the button (used when closing sidebar)
+     */
     public void showButton() {
         if (buttonStage != null) {
             buttonStage.show();

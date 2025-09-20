@@ -1,6 +1,13 @@
+package app;
+
 import javafx.application.Application;
 import javafx.stage.Stage;
+import ui.components.AskButton;
 
+/**
+ * Main JavaFX application class for the iChat Assistant.
+ * Manages the application lifecycle and coordinates the main components.
+ */
 public class IChatApplication extends Application {
 
     private AskButton askButton;
