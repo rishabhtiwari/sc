@@ -13,15 +13,15 @@ import java.awt.image.BufferedImage;
  * Provides native dock/taskbar icon functionality.
  */
 public class SystemTrayManager {
-    
+
     private SystemTray systemTray;
     private TrayIcon trayIcon;
     private ChatSidebar chatSidebar;
-    
+
     public SystemTrayManager() {
         this.chatSidebar = new ChatSidebar();
     }
-    
+
     /**
      * Initializes and shows the system tray icon
      */
@@ -67,9 +67,22 @@ public class SystemTrayManager {
             trayIcon.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
-                    System.out.println("Tray icon clicked!");
+                    System.out.println("🖱️ Tray icon clicked!");
+                    System.out.println("🔍 Starting screen detection...");
+
                     Platform.runLater(() -> {
-                        chatSidebar.toggle();
+                        try {
+                            // Get the screen where the active window is located
+                            javafx.stage.Screen activeScreen = detectActiveWindowScreen();
+                            System.out.println("🎯 Detected screen: " + activeScreen.getBounds());
+                            System.out.println("📱 Calling toggleOnScreen...");
+                            chatSidebar.toggleOnScreen(activeScreen);
+                        } catch (Exception ex) {
+                            System.err.println("❌ Error in tray click handler: " + ex.getMessage());
+                            ex.printStackTrace();
+                            // Fallback to regular toggle
+                            chatSidebar.toggle();
+                        }
                     });
                 }
             });
@@ -92,7 +105,7 @@ public class SystemTrayManager {
             e.printStackTrace();
         }
     }
-    
+
     /**
      * Creates the tray icon image
      */
@@ -108,14 +121,14 @@ public class SystemTrayManager {
 
         // Create gradient background (purple to blue)
         GradientPaint gradient = new GradientPaint(0, 0, new Color(102, 126, 234),
-                                                  0, size, new Color(118, 75, 162));
+                0, size, new Color(118, 75, 162));
         g2d.setPaint(gradient);
-        g2d.fillOval(2, 2, size-4, size-4);
+        g2d.fillOval(2, 2, size - 4, size - 4);
 
         // Add subtle white border
         g2d.setColor(new Color(255, 255, 255, 180));
         g2d.setStroke(new BasicStroke(2.0f));
-        g2d.drawOval(2, 2, size-4, size-4);
+        g2d.drawOval(2, 2, size - 4, size - 4);
 
         // Add "iC" text for iChat
         g2d.setColor(Color.WHITE);
@@ -142,24 +155,25 @@ public class SystemTrayManager {
         System.out.println("✅ Created tray icon: " + size + "x" + size + " pixels");
         return image;
     }
-    
+
     /**
      * Creates the popup menu for the tray icon
      */
     private PopupMenu createPopupMenu() {
         PopupMenu popupMenu = new PopupMenu();
-        
+
         // Open Chat menu item
         MenuItem openItem = new MenuItem("Open iChat");
         openItem.addActionListener(e -> {
             Platform.runLater(() -> {
-                chatSidebar.show();
+                javafx.stage.Screen activeScreen = detectActiveWindowScreen();
+                chatSidebar.showOnScreen(activeScreen);
             });
         });
-        
+
         // Separator
         popupMenu.addSeparator();
-        
+
         // About menu item
         MenuItem aboutItem = new MenuItem("About iChat");
         aboutItem.addActionListener(e -> {
@@ -167,7 +181,7 @@ public class SystemTrayManager {
                 showAboutDialog();
             });
         });
-        
+
         // Exit menu item
         MenuItem exitItem = new MenuItem("Exit");
         exitItem.addActionListener(e -> {
@@ -175,26 +189,26 @@ public class SystemTrayManager {
             Platform.exit();
             System.exit(0);
         });
-        
+
         popupMenu.add(openItem);
         popupMenu.add(aboutItem);
         popupMenu.addSeparator();
         popupMenu.add(exitItem);
-        
+
         return popupMenu;
     }
-    
+
     /**
      * Shows an about dialog
      */
     private void showAboutDialog() {
         if (Desktop.isDesktopSupported()) {
-            trayIcon.displayMessage("About iChat", 
-                                   "iChat Assistant v1.0\nYour AI-powered chat companion", 
-                                   TrayIcon.MessageType.INFO);
+            trayIcon.displayMessage("About iChat",
+                    "iChat Assistant v1.0\nYour AI-powered chat companion",
+                    TrayIcon.MessageType.INFO);
         }
     }
-    
+
     /**
      * Updates the tray icon tooltip
      */
@@ -203,7 +217,7 @@ public class SystemTrayManager {
             trayIcon.setToolTip(tooltip);
         }
     }
-    
+
     /**
      * Shows a notification message
      */
@@ -212,7 +226,40 @@ public class SystemTrayManager {
             trayIcon.displayMessage(title, message, TrayIcon.MessageType.INFO);
         }
     }
-    
+
+    /**
+     * Detects the screen where the user's mouse pointer is currently located.
+     * Falls back to primary screen if the mouse location can't be obtained.
+     */
+    private javafx.stage.Screen detectActiveWindowScreen() {
+        try {
+// Create a JavaFX Robot to get the mouse position in the correct coordinate system
+            javafx.scene.robot.Robot robot = new javafx.scene.robot.Robot();
+            javafx.geometry.Point2D mousePos = robot.getMousePosition(); // in JavaFX coordinates
+
+            if (mousePos != null) {
+// Check each screen's bounds to see which contains the mouse
+                for (javafx.stage.Screen screen : javafx.stage.Screen.getScreens()) {
+                    javafx.geometry.Rectangle2D bounds = screen.getBounds();
+                    System.out.println("Checking screen bounds: " + bounds);
+
+                    if (bounds.contains(mousePos)) {
+                        System.out.println("✅ Mouse is on screen: " + bounds);
+                        return screen;
+                    }
+                }
+            } else {
+                System.out.println("⚠️ Robot returned null mouse position. Check permissions on macOS.");
+            }
+        } catch (Exception e) {
+            System.err.println("Error detecting screen by mouse pointer: " + e.getMessage());
+            e.printStackTrace();
+        }
+// Fallback to primary if nothing else worked
+        System.out.println("⚠️ Using primary screen as fallback");
+        return javafx.stage.Screen.getPrimary();
+    }
+
     /**
      * Cleans up system tray resources
      */
