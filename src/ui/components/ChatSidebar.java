@@ -38,10 +38,68 @@ public class ChatSidebar {
     }
 
     /**
+     * Toggles the sidebar visibility on a specific screen
+     */
+    public void toggleOnScreen(Screen targetScreen) {
+        System.out.println("🔄 toggleOnScreen called with screen: " + targetScreen.getBounds());
+        System.out.println("📊 Current visibility: " + isVisible);
+
+        if (isVisible) {
+            System.out.println("🙈 Hiding sidebar...");
+            hide();
+        } else {
+            System.out.println("👁️ Showing sidebar on target screen...");
+            showOnScreen(targetScreen);
+        }
+    }
+
+    /**
      * Shows the sidebar without a callback
      */
     public void show() {
         show(null);
+    }
+
+    /**
+     * Shows the sidebar on a specific screen
+     */
+    public void showOnScreen(Screen targetScreen) {
+        showOnScreen(targetScreen, null);
+    }
+
+    /**
+     * Shows the sidebar on a specific screen with callback
+     */
+    public void showOnScreen(Screen targetScreen, Runnable onCloseCallback) {
+        System.out.println("📺 showOnScreen called with target: " + targetScreen.getBounds());
+        this.onCloseCallback = onCloseCallback;
+
+        if (sidebarStage != null && isVisible) {
+            System.out.println("🔄 Sidebar already visible, repositioning...");
+            // Re-position on target screen and bring to front
+            positionSidebarOnScreen(targetScreen);
+            sidebarStage.toFront();
+            sidebarStage.requestFocus();
+            return;
+        }
+
+        if (sidebarStage == null) {
+            System.out.println("🏗️ Creating new sidebar stage...");
+            createSidebar();
+        }
+
+        System.out.println("📍 Positioning sidebar on target screen...");
+        // Position on target screen before showing
+        positionSidebarOnScreen(targetScreen);
+
+        System.out.println("👀 Showing sidebar stage...");
+        sidebarStage.show();
+        sidebarStage.toFront();
+        sidebarStage.requestFocus();
+
+        isVisible = true;
+
+        System.out.println("✅ Sidebar shown on target screen: " + targetScreen.getBounds());
     }
 
     /**
@@ -51,7 +109,10 @@ public class ChatSidebar {
         this.onCloseCallback = onCloseCallback;
 
         if (sidebarStage != null && isVisible) {
+            // Re-position on active screen and bring to front
+            positionSidebar();
             sidebarStage.toFront();
+            sidebarStage.requestFocus();
             return;
         }
 
@@ -59,8 +120,16 @@ public class ChatSidebar {
             createSidebar();
         }
 
+        // Position on active screen before showing
+        positionSidebar();
+
         sidebarStage.show();
+        sidebarStage.toFront();
+        sidebarStage.requestFocus();
+
         isVisible = true;
+
+        System.out.println("✅ Sidebar shown on active screen");
     }
     
     /**
@@ -86,33 +155,155 @@ public class ChatSidebar {
         sidebarStage = new Stage();
         sidebarStage.setTitle("iChat Assistant");
         sidebarStage.setAlwaysOnTop(true);
-        
+        sidebarStage.setResizable(false);
+
         // Create sidebar content
         VBox content = createSidebarContent();
-        
+
         // Create scene with CSS styling
         Scene scene = new Scene(content, 380, 650);
         scene.getStylesheets().add("data:text/css," + SidebarStyles.getSidebarCSS());
-        
+
         sidebarStage.setScene(scene);
-        
+
         positionSidebar();
         setupCloseHandler();
     }
     
     /**
-     * Positions the sidebar on the right side of the screen (opening from system tray)
+     * Positions the sidebar on the active screen (where user is currently working)
      */
     private void positionSidebar() {
+        try {
+            // Get the active screen based on mouse position
+            Screen activeScreen = getActiveScreen();
+
+            double screenWidth = activeScreen.getVisualBounds().getWidth();
+            double screenHeight = activeScreen.getVisualBounds().getHeight();
+            double screenMinX = activeScreen.getVisualBounds().getMinX();
+            double screenMinY = activeScreen.getVisualBounds().getMinY();
+
+            // Position on right side of active screen
+            double sidebarWidth = 380;
+            double sidebarHeight = 650;
+            double rightMargin = 20;
+            double topMargin = 50;
+
+            double x = screenMinX + screenWidth - sidebarWidth - rightMargin;
+            double y = screenMinY + topMargin;
+
+            // Ensure sidebar fits within screen bounds
+            if (y + sidebarHeight > screenMinY + screenHeight) {
+                y = screenMinY + screenHeight - sidebarHeight - 20;
+            }
+
+            System.out.println("Positioning sidebar on screen: " + activeScreen.getBounds());
+            System.out.println("Sidebar position: x=" + x + ", y=" + y);
+
+            sidebarStage.setX(x);
+            sidebarStage.setY(y);
+
+        } catch (Exception e) {
+            System.err.println("Error positioning sidebar: " + e.getMessage());
+            // Fallback to primary screen
+            positionOnPrimaryScreen();
+        }
+    }
+
+    /**
+     * Gets the screen where the user is currently active (based on mouse position)
+     */
+    private Screen getActiveScreen() {
+        try {
+            // Get current mouse position
+            java.awt.Point mouseLocation = java.awt.MouseInfo.getPointerInfo().getLocation();
+            double mouseX = mouseLocation.getX();
+            double mouseY = mouseLocation.getY();
+
+            System.out.println("Mouse position: x=" + mouseX + ", y=" + mouseY);
+
+            // Find which screen contains the mouse
+            for (Screen screen : Screen.getScreens()) {
+                javafx.geometry.Rectangle2D bounds = screen.getBounds();
+                if (bounds.contains(mouseX, mouseY)) {
+                    System.out.println("Found active screen: " + bounds);
+                    return screen;
+                }
+            }
+
+            // If mouse not found on any screen, try visual bounds
+            for (Screen screen : Screen.getScreens()) {
+                javafx.geometry.Rectangle2D bounds = screen.getVisualBounds();
+                if (bounds.contains(mouseX, mouseY)) {
+                    System.out.println("Found active screen (visual): " + bounds);
+                    return screen;
+                }
+            }
+
+        } catch (Exception e) {
+            System.err.println("Error detecting active screen: " + e.getMessage());
+        }
+
+        // Fallback to primary screen
+        System.out.println("Falling back to primary screen");
+        return Screen.getPrimary();
+    }
+
+    /**
+     * Positions the sidebar on a specific screen
+     */
+    private void positionSidebarOnScreen(Screen targetScreen) {
+        try {
+            System.out.println("🎯 Positioning sidebar on screen: " + targetScreen.getBounds());
+            System.out.println("📐 Visual bounds: " + targetScreen.getVisualBounds());
+
+            double screenWidth = targetScreen.getVisualBounds().getWidth();
+            double screenHeight = targetScreen.getVisualBounds().getHeight();
+            double screenMinX = targetScreen.getVisualBounds().getMinX();
+            double screenMinY = targetScreen.getVisualBounds().getMinY();
+
+            System.out.println("📊 Screen dimensions: " + screenWidth + "x" + screenHeight + " at (" + screenMinX + "," + screenMinY + ")");
+
+            // Position on right side of target screen
+            double sidebarWidth = 380;
+            double sidebarHeight = 650;
+            double rightMargin = 20;
+            double topMargin = 50;
+
+            double x = screenMinX + screenWidth - sidebarWidth - rightMargin;
+            double y = screenMinY + topMargin;
+
+            // Ensure sidebar fits within screen bounds
+            if (y + sidebarHeight > screenMinY + screenHeight) {
+                y = screenMinY + screenHeight - sidebarHeight - 20;
+                System.out.println("⚠️ Adjusted Y position to fit screen: " + y);
+            }
+
+            System.out.println("📍 Final sidebar position: x=" + x + ", y=" + y);
+
+            sidebarStage.setX(x);
+            sidebarStage.setY(y);
+
+            System.out.println("✅ Sidebar positioned successfully");
+
+        } catch (Exception e) {
+            System.err.println("❌ Error positioning sidebar on target screen: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to primary screen
+            positionOnPrimaryScreen();
+        }
+    }
+
+    /**
+     * Fallback method to position on primary screen
+     */
+    private void positionOnPrimaryScreen() {
         Screen primaryScreen = Screen.getPrimary();
         double screenWidth = primaryScreen.getVisualBounds().getWidth();
-        double screenHeight = primaryScreen.getVisualBounds().getHeight();
         double screenMinX = primaryScreen.getVisualBounds().getMinX();
         double screenMinY = primaryScreen.getVisualBounds().getMinY();
 
-        // Position on right side with margin from edges (like system tray apps)
         double sidebarWidth = 380;
-        double sidebarHeight = 650;
         double rightMargin = 20;
         double topMargin = 50;
 
