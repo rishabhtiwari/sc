@@ -1,5 +1,6 @@
 package ui.components;
 
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -14,6 +15,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import ui.styles.SidebarStyles;
+import api.IChatApiService;
+import config.IChatConfig;
 
 /**
  * Chat sidebar component that provides the main chat interface.
@@ -25,6 +28,27 @@ public class ChatSidebar {
     private boolean isVisible = false;
     private TextArea chatArea;
     private Runnable onCloseCallback;
+    private IChatApiService apiService;
+
+    /**
+     * Constructor - initializes the API service with configured URL
+     */
+    public ChatSidebar() {
+        String apiUrl = IChatConfig.getApiUrl();
+        this.apiService = new IChatApiService(apiUrl);
+        System.out.println("✅ ChatSidebar initialized with API service");
+
+        // Print configuration for debugging
+        IChatConfig.printConfig();
+    }
+
+    /**
+     * Constructor with custom API URL
+     */
+    public ChatSidebar(String apiUrl) {
+        this.apiService = new IChatApiService(apiUrl);
+        System.out.println("✅ ChatSidebar initialized with custom API URL: " + apiUrl);
+    }
     
     /**
      * Toggles the sidebar visibility
@@ -415,23 +439,38 @@ public class ChatSidebar {
         Button sendButton = new Button("🚀 Send");
         sendButton.getStyleClass().add("send-button");
 
-        // Send message functionality with better responses
+        // Send message functionality with API integration
         Runnable sendMessage = () -> {
             String message = messageInput.getText().trim();
             if (!message.isEmpty()) {
+                // Add user message to chat
                 addMessage("You", message);
-
-                // Generate more engaging demo responses
-                String[] responses = {
-                    "That's a great question! Let me help you with that. 🤔",
-                    "I understand what you're looking for. Here's what I think... 💡",
-                    "Thanks for sharing that with me! I'd be happy to assist. ✨",
-                    "Interesting point! Let me provide you with some insights. 🎯",
-                    "I'm here to help! Let me break that down for you. 📝"
-                };
-                String response = responses[(int) (Math.random() * responses.length)];
-                addMessage("Assistant", response);
                 messageInput.clear();
+
+                // Show typing indicator
+                addMessage("Assistant", "💭 Thinking...");
+
+                // Send message to API asynchronously
+                apiService.sendMessage(message)
+                    .thenAccept(response -> {
+                        // Update UI on JavaFX Application Thread
+                        Platform.runLater(() -> {
+                            // Remove typing indicator (last message)
+                            removeLastMessage();
+                            // Add actual response
+                            addMessage("Assistant", response);
+                        });
+                    })
+                    .exceptionally(throwable -> {
+                        // Handle errors on JavaFX Application Thread
+                        Platform.runLater(() -> {
+                            // Remove typing indicator
+                            removeLastMessage();
+                            // Add error message
+                            addMessage("Assistant", "Sorry, I encountered an error: " + throwable.getMessage() + " 😔");
+                        });
+                        return null;
+                    });
             }
         };
 
@@ -469,5 +508,25 @@ public class ChatSidebar {
     private void addMessage(String sender, String message) {
         chatArea.appendText("\n\n" + sender + ": " + message);
         chatArea.setScrollTop(Double.MAX_VALUE);
+    }
+
+    /**
+     * Removes the last message from the chat area (used to remove typing indicator)
+     */
+    private void removeLastMessage() {
+        String currentText = chatArea.getText();
+        int lastMessageIndex = currentText.lastIndexOf("\n\n");
+        if (lastMessageIndex > 0) {
+            chatArea.setText(currentText.substring(0, lastMessageIndex));
+        }
+    }
+
+    /**
+     * Cleanup method to shutdown API service
+     */
+    public void cleanup() {
+        if (apiService != null) {
+            apiService.shutdown();
+        }
     }
 }

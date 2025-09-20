@@ -185,6 +185,10 @@ public class SystemTrayManager {
         // Exit menu item
         MenuItem exitItem = new MenuItem("Exit");
         exitItem.addActionListener(e -> {
+            // Cleanup resources
+            if (chatSidebar != null) {
+                chatSidebar.cleanup();
+            }
             cleanup();
             Platform.exit();
             System.exit(0);
