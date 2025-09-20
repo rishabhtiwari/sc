@@ -101,22 +101,23 @@ public class ChatSidebar {
     }
     
     /**
-     * Positions the sidebar on the right side of the screen (like opening from dock)
+     * Positions the sidebar on the right side of the screen (opening from system tray)
      */
     private void positionSidebar() {
         Screen primaryScreen = Screen.getPrimary();
         double screenWidth = primaryScreen.getVisualBounds().getWidth();
         double screenHeight = primaryScreen.getVisualBounds().getHeight();
+        double screenMinX = primaryScreen.getVisualBounds().getMinX();
         double screenMinY = primaryScreen.getVisualBounds().getMinY();
 
-        // Position on right side with some margin from edges
+        // Position on right side with margin from edges (like system tray apps)
         double sidebarWidth = 380;
         double sidebarHeight = 650;
         double rightMargin = 20;
-        double bottomMargin = 100; // Leave space for dock icon
+        double topMargin = 50;
 
-        double x = screenWidth - sidebarWidth - rightMargin;
-        double y = screenMinY + screenHeight - sidebarHeight - bottomMargin;
+        double x = screenMinX + screenWidth - sidebarWidth - rightMargin;
+        double y = screenMinY + topMargin;
 
         sidebarStage.setX(x);
         sidebarStage.setY(y);

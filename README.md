@@ -1,6 +1,6 @@
-# iChat Assistant - Refactored
+# iChat Assistant - System Tray Integration
 
-A JavaFX-based floating chat assistant with a clean, modular architecture.
+A JavaFX-based chat assistant that runs in your system tray/dock like IntelliJ and other professional applications.
 
 ## 🏗️ Project Structure
 
@@ -11,11 +11,14 @@ src/
 │   └── IChatApplication.java         # Main JavaFX application class
 ├── ui/
 │   ├── components/
-│   │   ├── AskButton.java            # Floating circular button component
+│   │   ├── AskButton.java            # Floating button component (legacy)
 │   │   └── ChatSidebar.java          # Chat interface component
 │   └── styles/
 │       ├── ButtonStyles.java         # Centralized button styling
 │       └── SidebarStyles.java        # Centralized sidebar styling
+├── system/
+│   └── SystemTrayManager.java        # System tray/dock integration
+└── run-ichat.sh                      # Launch script
 ```
 
 ## 🎯 Refactoring Improvements
