@@ -35,32 +35,50 @@ public class AskButton {
      * Creates the circular Ask button with styling and event handlers
      */
     private void createButton() {
-        // Create circular Ask button with question mark and iChat text
-        Button askButton = new Button("?\niChat");
+        // Create dock-style iChat button
+        Button askButton = new Button("💬\niChat");
         askButton.setPrefSize(67, 67);
         askButton.setStyle(ButtonStyles.ASK_BUTTON_STYLE);
         
-        // Add click event to open sidebar and hide button
+        // Add click event to open/toggle sidebar (like dock icon behavior)
         askButton.setOnAction(e -> {
-            hideButton();
-            chatSidebar.show(() -> showButton()); // Pass callback to show button when sidebar closes
+            chatSidebar.toggle(); // Toggle sidebar without hiding the dock icon
         });
-        
+
+        // Add hover effects like dock icons
+        setupHoverEffects(askButton);
         setupDragFunctionality(askButton);
         createButtonScene(askButton);
     }
     
     /**
+     * Sets up hover effects like dock icons (scale up on hover)
+     */
+    private void setupHoverEffects(Button askButton) {
+        // Scale up on hover like dock icons
+        askButton.setOnMouseEntered(e -> {
+            askButton.setScaleX(1.1);
+            askButton.setScaleY(1.1);
+        });
+
+        // Scale back to normal when mouse leaves
+        askButton.setOnMouseExited(e -> {
+            askButton.setScaleX(1.0);
+            askButton.setScaleY(1.0);
+        });
+    }
+
+    /**
      * Sets up drag functionality for the button
      */
     private void setupDragFunctionality(Button askButton) {
         final double[] dragDelta = new double[2];
-        
+
         askButton.setOnMousePressed(e -> {
             dragDelta[0] = buttonStage.getX() - e.getScreenX();
             dragDelta[1] = buttonStage.getY() - e.getScreenY();
         });
-        
+
         askButton.setOnMouseDragged(e -> {
             buttonStage.setX(e.getScreenX() + dragDelta[0]);
             buttonStage.setY(e.getScreenY() + dragDelta[1]);
@@ -96,12 +114,35 @@ public class AskButton {
         buttonStage.setResizable(false);
         buttonStage.setTitle("iChat Ask Button");
     }
-    
+
     /**
-     * Shows the button stage
+     * Shows the button stage and positions it like a dock icon
      */
     private void showStage() {
         buttonStage.show();
+        positionAsDockIcon();
+    }
+
+    /**
+     * Positions the button at the bottom center of the screen like a dock icon
+     */
+    private void positionAsDockIcon() {
+        javafx.stage.Screen primaryScreen = javafx.stage.Screen.getPrimary();
+        double screenWidth = primaryScreen.getVisualBounds().getWidth();
+        double screenHeight = primaryScreen.getVisualBounds().getHeight();
+        double screenMinX = primaryScreen.getVisualBounds().getMinX();
+        double screenMinY = primaryScreen.getVisualBounds().getMinY();
+
+        // Position at bottom center of screen (like dock icon)
+        double buttonWidth = 67;
+        double buttonHeight = 67;
+        double bottomMargin = 20; // Distance from bottom edge
+
+        double x = screenMinX + (screenWidth - buttonWidth) / 2; // Center horizontally
+        double y = screenMinY + screenHeight - buttonHeight - bottomMargin; // Bottom with margin
+
+        buttonStage.setX(x);
+        buttonStage.setY(y);
     }
     
     /**
