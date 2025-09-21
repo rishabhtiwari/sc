@@ -1,0 +1,12 @@
+OCR Test Document
+
+This is a sample document for testing
+the Paddle OCR Document Converter Service.
+
+Features:
+• Multi-language support
+• PDF and image processing  
+• JSON, text, and markdown output
+
+Contact: support@ichat.com
+Date: September 21, 2025

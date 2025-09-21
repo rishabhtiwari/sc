@@ -187,6 +187,36 @@ Your server should respond with JSON:
 
 The project includes a professional Python API server with MVC architecture.
 
+## 📄 **OCR Document Converter Service**
+
+A separate microservice for document OCR using PaddleOCR, supporting PDF, images, and DOCX files.
+
+### **OCR Service Features**
+- **Multi-format Support**: PDF, PNG, JPG, JPEG, BMP, TIFF, WEBP, DOCX
+- **Multi-language OCR**: English, Chinese, French, German, Korean, Japanese
+- **Output Formats**: Plain text, JSON, Markdown
+- **High Accuracy**: Powered by PaddleOCR 2.7.0.3
+- **Batch Processing**: Multi-page PDF support
+
+### **Quick Start OCR Service**
+```bash
+# Build and run OCR service
+cd ocr-service
+./docker-run.sh build && ./docker-run.sh run
+
+# Test document conversion
+curl -X POST -F "file=@document.pdf" http://localhost:8081/convert
+
+# Check service health
+curl http://localhost:8081/health
+```
+
+### **OCR API Endpoints**
+- **POST /convert** - Convert document to text
+- **GET /health** - Service health check
+- **GET /formats** - Supported formats and languages
+- **GET /status** - Detailed service status
+
 ### **Quick Start with Docker (Recommended)**
 
 1. **Build and run with Docker:**
