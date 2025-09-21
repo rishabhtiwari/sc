@@ -72,8 +72,8 @@ public class IChatApiService {
             connection.setConnectTimeout(IChatConfig.CONNECTION_TIMEOUT);
             connection.setReadTimeout(IChatConfig.READ_TIMEOUT);
             
-            // Create JSON payload
-            String jsonPayload = createJsonPayload(message);
+            // Create JSON payload with client ID from config
+            String jsonPayload = createJsonPayload(message, IChatConfig.CLIENT_ID);
             System.out.println("📋 JSON Payload: " + jsonPayload);
             
             // Send the request
@@ -114,9 +114,10 @@ public class IChatApiService {
     /**
      * Creates JSON payload for the API request
      * @param message The user message
+     * @param client The client identifier
      * @return JSON string
      */
-    private String createJsonPayload(String message) {
+    private String createJsonPayload(String message, String client) {
         // Escape JSON special characters
         String escapedMessage = message
             .replace("\\", "\\\\")
@@ -124,11 +125,16 @@ public class IChatApiService {
             .replace("\n", "\\n")
             .replace("\r", "\\r")
             .replace("\t", "\\t");
-        
+
+        String escapedClient = client
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"");
+
         return String.format(
-            "{ \"message\": \"%s\", \"timestamp\": %d, \"client\": \"desktop\" }",
+            "{ \"message\": \"%s\", \"timestamp\": %d, \"client\": \"%s\" }",
             escapedMessage,
-            System.currentTimeMillis()
+            System.currentTimeMillis(),
+            escapedClient
         );
     }
     
