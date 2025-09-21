@@ -5,6 +5,7 @@ Document Service - Handles document processing and conversion
 import os
 import time
 import tempfile
+import gc
 from typing import Dict, Any, List
 from werkzeug.datastructures import FileStorage
 
@@ -18,6 +19,12 @@ try:
     PDF2IMAGE_AVAILABLE = True
 except ImportError:
     PDF2IMAGE_AVAILABLE = False
+
+try:
+    import PyPDF2
+    PYPDF2_AVAILABLE = True
+except ImportError:
+    PYPDF2_AVAILABLE = False
     print("⚠️ pdf2image not available. Install with: pip install pdf2image")
 
 try:
@@ -159,25 +166,92 @@ class DocumentService:
             result['text'] = self._format_output(result['text'], output_format)
         return result
 
-    def _process_pdf(self, pdf_path: str, temp_dir: str, output_format: str) -> Dict[str, Any]:
-        """Process PDF file by converting to images and running OCR"""
-        if not PDF2IMAGE_AVAILABLE:
-            return {"status": "error", "error": "PDF processing not available"}
+    def _extract_text_from_pdf(self, pdf_path: str) -> str:
+        """Try to extract text directly from PDF without OCR"""
+        if not PYPDF2_AVAILABLE:
+            return ""
 
-        print(f"📄 Processing PDF: {os.path.basename(pdf_path)}")
         try:
-            images = convert_from_path(pdf_path)
-            image_paths = []
-            for i, image in enumerate(images):
-                image_path = os.path.join(temp_dir, f"page_{i+1}.png")
-                image.save(image_path, 'PNG')
-                image_paths.append(image_path)
+            with open(pdf_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
+                return text.strip()
+        except Exception as e:
+            print(f"⚠️ Direct PDF text extraction failed: {str(e)}")
+            return ""
 
-            result = self.ocr_service.extract_text_from_multiple_images(image_paths)
-            if result['status'] == 'success':
-                result['text'] = self._format_output(result['text'], output_format)
-                result['pages_processed'] = len(image_paths)
-            return result
+    def _process_pdf(self, pdf_path: str, temp_dir: str, output_format: str) -> Dict[str, Any]:
+        """Process PDF file - try direct text extraction first, then OCR as fallback"""
+        print(f"📄 Processing PDF: {os.path.basename(pdf_path)}")
+
+        # First, try to extract text directly from PDF (much faster and less memory)
+        direct_text = self._extract_text_from_pdf(pdf_path)
+        if direct_text and len(direct_text.strip()) > 10:  # If we got meaningful text
+            print(f"✅ Extracted text directly from PDF (no OCR needed)")
+            return {
+                "status": "success",
+                "text": self._format_output(direct_text, output_format),
+                "confidence": 1.0,
+                "method": "direct_extraction",
+                "pages_processed": "all"
+            }
+
+        # Fallback to OCR if no text was found or text is too short
+        print(f"📄 No extractable text found, falling back to OCR...")
+        if not PDF2IMAGE_AVAILABLE:
+            return {"status": "error", "error": "PDF OCR processing not available"}
+
+        try:
+            # Get page count first without loading all images
+            from pdf2image import pdfinfo_from_path
+            info = pdfinfo_from_path(pdf_path)
+            total_pages = info["Pages"]
+            print(f"📚 Processing {total_pages} pages...")
+
+            all_text = []
+            total_confidence = 0.0
+
+            # Process pages one at a time to reduce memory usage
+            for page_num in range(1, total_pages + 1):
+                print(f"📄 Processing page {page_num}/{total_pages}")
+
+                # Convert only one page at a time with lower DPI to reduce memory usage
+                images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num, dpi=150)
+                if not images:
+                    continue
+
+                image = images[0]  # Only one image since we're processing one page
+                image_path = os.path.join(temp_dir, f"page_{page_num}.png")
+                image.save(image_path, 'PNG')
+                print(f"🔍 Processing image: {image_path}")
+
+                # Process this page
+                page_result = self.ocr_service.extract_text_from_image(image_path)
+                if page_result['status'] == 'success':
+                    all_text.append(page_result['text'])
+                    total_confidence += page_result.get('confidence', 0.0)
+
+                # Clean up the image from memory and disk
+                image.close()
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+
+                # Force garbage collection to free memory
+                gc.collect()
+
+            # Combine all text
+            combined_text = '\n\n'.join(all_text)
+            avg_confidence = total_confidence / total_pages if total_pages > 0 else 0.0
+
+            return {
+                "status": "success",
+                "text": self._format_output(combined_text, output_format),
+                "confidence": avg_confidence,
+                "pages_processed": total_pages,
+                "method": "ocr"
+            }
         except Exception as e:
             return {"status": "error", "error": f"PDF processing failed: {str(e)}"}
 
