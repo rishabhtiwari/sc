@@ -1,0 +1,22 @@
+# Python dependencies for iChat API Server
+
+# Web framework for API server
+flask==2.3.3
+flask-cors==4.0.0
+
+# System monitoring and performance metrics
+psutil==5.9.5
+
+# HTTP client for testing and health checks
+requests==2.31.0
+
+# Development and testing (optional - can be excluded in production)
+pytest==7.4.0
+pytest-flask==1.2.0
+
+# Code formatting and linting (optional - can be excluded in production)
+black==23.7.0
+flake8==6.0.0
+
+# Production WSGI server (optional)
+gunicorn==21.2.0

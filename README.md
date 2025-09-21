@@ -22,6 +22,14 @@ src/
 │   └── IChatApiService.java          # API service for server communication
 ├── config/
 │   └── IChatConfig.java              # Configuration management
+├── api-server/                          # Professional Python API server
+│   ├── app.py                        # Main application entry point
+│   ├── config/                       # Configuration management
+│   ├── controllers/                  # Business logic layer
+│   ├── handlers/                     # HTTP request/response handling
+│   ├── routes/                       # URL routing
+│   ├── requirements.txt              # Python dependencies
+│   └── README.md                     # API server documentation
 └── run-ichat.sh                      # Launch script
 ```
 
@@ -174,6 +182,54 @@ Your server should respond with JSON:
 - **Error handling** - Graceful fallback for connection issues
 - **Configurable timeouts** - 10s connection, 30s read timeout
 - **Debug logging** - Detailed console output for troubleshooting
+
+## 🐍 **Python API Server**
+
+The project includes a professional Python API server with MVC architecture.
+
+### **Quick Start with Docker (Recommended)**
+
+1. **Build and run with Docker:**
+   ```bash
+   cd api-server
+   ./docker-run.sh build
+   ./docker-run.sh run
+   ```
+
+2. **Or use Docker Compose:**
+   ```bash
+   cd api-server
+   docker-compose up -d
+   ```
+
+### **Alternative: Local Python Setup**
+
+1. **Install Python dependencies:**
+   ```bash
+   cd api-server
+   pip install -r requirements.txt
+   ```
+
+2. **Start the Python API server:**
+   ```bash
+   python3 app.py
+   ```
+
+3. **Run the Java client:**
+   - The Java app will automatically connect to `http://localhost:8080/api/chat`
+   - Send messages through the iChat interface
+   - See real-time communication between Java client and Python server
+
+### **Professional API Server Features**
+
+- **MVC Architecture** - Controllers, Handlers, Routes separation
+- **Multiple Endpoints** - Chat, health, status, ping, version
+- **System Monitoring** - CPU, memory, performance metrics
+- **Configuration Management** - Environment-based settings
+- **Error Handling** - Structured error responses
+- **CORS Enabled** - Works with web and desktop clients
+- **Blueprint Routing** - Modular URL organization
+- **Application Factory** - Clean initialization pattern
 
 ## 📝 Next Steps
 
