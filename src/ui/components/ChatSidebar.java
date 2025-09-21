@@ -12,11 +12,14 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import ui.styles.SidebarStyles;
 import api.IChatApiService;
+import api.DocumentUploadService;
 import config.IChatConfig;
+import java.io.File;
 
 /**
  * Chat sidebar component that provides the main chat interface.
@@ -29,6 +32,7 @@ public class ChatSidebar {
     private TextArea chatArea;
     private Runnable onCloseCallback;
     private IChatApiService apiService;
+    private DocumentUploadService documentService;
 
     /**
      * Constructor - initializes the API service with configured URL
@@ -36,7 +40,8 @@ public class ChatSidebar {
     public ChatSidebar() {
         String apiUrl = IChatConfig.getApiUrl();
         this.apiService = new IChatApiService(apiUrl);
-        System.out.println("✅ ChatSidebar initialized with API service");
+        this.documentService = new DocumentUploadService();
+        System.out.println("✅ ChatSidebar initialized with API service and document upload service");
 
         // Print configuration for debugging
         IChatConfig.printConfig();
@@ -179,19 +184,26 @@ public class ChatSidebar {
         sidebarStage = new Stage();
         sidebarStage.setTitle("iChat Assistant");
         sidebarStage.setAlwaysOnTop(true);
-        sidebarStage.setResizable(false);
+        sidebarStage.setResizable(true); // Allow resizing
 
         // Create sidebar content
         VBox content = createSidebarContent();
 
-        // Create scene with CSS styling
+        // Create scene with CSS styling - initial size
         Scene scene = new Scene(content, 380, 650);
         scene.getStylesheets().add("data:text/css," + SidebarStyles.getSidebarCSS());
 
         sidebarStage.setScene(scene);
 
+        // Set minimum and maximum size constraints
+        sidebarStage.setMinWidth(320);  // Minimum width for usability
+        sidebarStage.setMinHeight(400); // Minimum height for usability
+        sidebarStage.setMaxWidth(800);  // Maximum width to prevent too wide
+        sidebarStage.setMaxHeight(1200); // Maximum height for very tall screens
+
         positionSidebar();
         setupCloseHandler();
+        setupResizeHandlers();
     }
     
     /**
@@ -208,8 +220,8 @@ public class ChatSidebar {
             double screenMinY = activeScreen.getVisualBounds().getMinY();
 
             // Position on right side of active screen
-            double sidebarWidth = 380;
-            double sidebarHeight = 650;
+            double sidebarWidth = sidebarStage.getWidth() > 0 ? sidebarStage.getWidth() : 380;
+            double sidebarHeight = sidebarStage.getHeight() > 0 ? sidebarStage.getHeight() : 650;
             double rightMargin = 20;
             double topMargin = 50;
 
@@ -289,8 +301,8 @@ public class ChatSidebar {
             System.out.println("📊 Screen dimensions: " + screenWidth + "x" + screenHeight + " at (" + screenMinX + "," + screenMinY + ")");
 
             // Position on right side of target screen
-            double sidebarWidth = 380;
-            double sidebarHeight = 650;
+            double sidebarWidth = sidebarStage.getWidth() > 0 ? sidebarStage.getWidth() : 380;
+            double sidebarHeight = sidebarStage.getHeight() > 0 ? sidebarStage.getHeight() : 650;
             double rightMargin = 20;
             double topMargin = 50;
 
@@ -327,7 +339,7 @@ public class ChatSidebar {
         double screenMinX = primaryScreen.getVisualBounds().getMinX();
         double screenMinY = primaryScreen.getVisualBounds().getMinY();
 
-        double sidebarWidth = 380;
+        double sidebarWidth = sidebarStage != null && sidebarStage.getWidth() > 0 ? sidebarStage.getWidth() : 380;
         double rightMargin = 20;
         double topMargin = 50;
 
@@ -344,6 +356,24 @@ public class ChatSidebar {
     private void setupCloseHandler() {
         sidebarStage.setOnCloseRequest(e -> {
             hide(); // Use hide() method to trigger callback
+        });
+    }
+
+    /**
+     * Sets up resize event handlers to provide user feedback
+     */
+    private void setupResizeHandlers() {
+        // Add resize feedback
+        sidebarStage.widthProperty().addListener((obs, oldWidth, newWidth) -> {
+            if (isVisible && newWidth.doubleValue() > 0) {
+                System.out.println("📏 Sidebar width changed to: " + Math.round(newWidth.doubleValue()) + "px");
+            }
+        });
+
+        sidebarStage.heightProperty().addListener((obs, oldHeight, newHeight) -> {
+            if (isVisible && newHeight.doubleValue() > 0) {
+                System.out.println("📏 Sidebar height changed to: " + Math.round(newHeight.doubleValue()) + "px");
+            }
         });
     }
     
@@ -376,7 +406,7 @@ public class ChatSidebar {
         Label headerLabel = new Label("💬 iChat Assistant");
         headerLabel.getStyleClass().add("sidebar-header");
 
-        Label subtitleLabel = new Label("Your AI-powered chat companion");
+        Label subtitleLabel = new Label("Your AI-powered chat companion • Resizable");
         subtitleLabel.getStyleClass().add("sidebar-subtitle");
 
         headerSection.getChildren().addAll(headerLabel, subtitleLabel);
@@ -424,10 +454,10 @@ public class ChatSidebar {
     }
     
     /**
-     * Creates the message input area with text field and send button
+     * Creates the message input area with text field, upload button, and send button
      */
     private HBox createInputArea() {
-        HBox inputArea = new HBox(12);
+        HBox inputArea = new HBox(8);
         inputArea.setAlignment(Pos.CENTER);
         inputArea.getStyleClass().add("input-container");
 
@@ -435,6 +465,11 @@ public class ChatSidebar {
         messageInput.setPromptText("💭 Type your message here...");
         messageInput.getStyleClass().add("message-input");
         HBox.setHgrow(messageInput, Priority.ALWAYS);
+
+        // Small upload button
+        Button uploadButton = new Button("📎");
+        uploadButton.getStyleClass().add("upload-button");
+        uploadButton.setOnAction(e -> handleDocumentUpload());
 
         Button sendButton = new Button("🚀 Send");
         sendButton.getStyleClass().add("send-button");
@@ -477,12 +512,12 @@ public class ChatSidebar {
         sendButton.setOnAction(e -> sendMessage.run());
         messageInput.setOnAction(e -> sendMessage.run());
 
-        inputArea.getChildren().addAll(messageInput, sendButton);
+        inputArea.getChildren().addAll(messageInput, uploadButton, sendButton);
         return inputArea;
     }
     
     /**
-     * Creates the action buttons (Clear and Close)
+     * Creates the action buttons (Clear, Resize Info, and Close)
      */
     private HBox createActionButtons() {
         HBox actionButtons = new HBox(8);
@@ -491,14 +526,22 @@ public class ChatSidebar {
         Button clearButton = new Button("🗑️ Clear");
         clearButton.getStyleClass().add("action-button");
         clearButton.setOnAction(e -> {
-            chatArea.setText("👋 Welcome to iChat Assistant!\n\n✨ I'm here to help you with any questions or tasks you might have. Feel free to start a conversation!");
+            chatArea.setText("👋 Welcome to iChat Assistant!\n\n✨ I'm here to help you with any questions or tasks you might have. Feel free to start a conversation!\n\n📏 Tip: You can resize this window by dragging the edges or corners!");
+        });
+
+        Button resizeInfoButton = new Button("📏 Resize");
+        resizeInfoButton.getStyleClass().add("action-button");
+        resizeInfoButton.setOnAction(e -> {
+            double currentWidth = Math.round(sidebarStage.getWidth());
+            double currentHeight = Math.round(sidebarStage.getHeight());
+            addMessage("System", "📏 Current size: " + currentWidth + "×" + currentHeight + "px\n\n💡 Drag the window edges to resize!\n• Min: 320×400px\n• Max: 800×1200px");
         });
 
         Button closeButton = new Button("✖️ Close");
         closeButton.getStyleClass().add("close-button");
         closeButton.setOnAction(e -> hide());
 
-        actionButtons.getChildren().addAll(clearButton, closeButton);
+        actionButtons.getChildren().addAll(clearButton, resizeInfoButton, closeButton);
         return actionButtons;
     }
     
@@ -522,11 +565,66 @@ public class ChatSidebar {
     }
 
     /**
+     * Handles document upload functionality
+     */
+    private void handleDocumentUpload() {
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select Document for OCR Processing");
+
+        // Set file extension filters
+        fileChooser.getExtensionFilters().addAll(
+            new FileChooser.ExtensionFilter("All Supported", "*.pdf", "*.docx", "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff", "*.webp"),
+            new FileChooser.ExtensionFilter("PDF Documents", "*.pdf"),
+            new FileChooser.ExtensionFilter("Word Documents", "*.docx"),
+            new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff", "*.webp")
+        );
+
+        File selectedFile = fileChooser.showOpenDialog(sidebarStage);
+
+        if (selectedFile != null) {
+            // Check if file is supported
+            if (!documentService.isSupportedFile(selectedFile)) {
+                addMessage("System", "❌ Unsupported file type. Supported formats: " + documentService.getSupportedExtensions());
+                return;
+            }
+
+            // Add upload message
+            addMessage("You", "📎 Uploading document: " + selectedFile.getName());
+            addMessage("Assistant", "⏳ Processing your document with OCR... Please wait.");
+
+            // Upload document asynchronously
+            documentService.uploadDocument(selectedFile, "text", "en")
+                .thenAccept(response -> {
+                    // Update UI on JavaFX Application Thread
+                    Platform.runLater(() -> {
+                        // Remove processing message
+                        removeLastMessage();
+                        // Add OCR result
+                        addMessage("Assistant", response);
+                    });
+                })
+                .exceptionally(throwable -> {
+                    // Handle errors on JavaFX Application Thread
+                    Platform.runLater(() -> {
+                        // Remove processing message
+                        removeLastMessage();
+                        // Add error message
+                        addMessage("Assistant", "Sorry, I encountered an error processing your document: " + throwable.getMessage() + " 😔");
+                    });
+                    return null;
+                });
+        }
+    }
+
+    /**
      * Cleanup method to shutdown API service
      */
     public void cleanup() {
         if (apiService != null) {
             apiService.shutdown();
+        }
+        if (documentService != null) {
+            documentService.shutdown();
         }
     }
 }

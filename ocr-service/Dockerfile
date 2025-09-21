@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FLASK_HOST=0.0.0.0 \
     FLASK_PORT=8081
 
-# Install system dependencies for OCR including build tools
+# Install system dependencies for OCR including build tools and PDF processing
 RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y \
     libavcodec-dev \
     libavformat-dev \
     libswscale-dev \
+    poppler-utils \
     wget \
     curl \
     && rm -rf /var/lib/apt/lists/*

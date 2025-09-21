@@ -13,6 +13,8 @@ public class SidebarStyles {
         return ".sidebar-content {" +
                 "-fx-background-color: linear-gradient(to bottom, #ffffff, #f8fafc);" +
                 "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 20, 0, 0, 5);" +
+                "-fx-min-width: 320px;" +
+                "-fx-min-height: 400px;" +
                 "}" +
 
                 ".header-section {" +
@@ -84,6 +86,20 @@ public class SidebarStyles {
                 "-fx-font-size: 14px;" +
                 "-fx-font-weight: bold;" +
                 "-fx-effect: dropshadow(gaussian, rgba(79,172,254,0.4), 8, 0, 0, 2);" +
+                "}" +
+
+                ".upload-button {" +
+                "-fx-background-color: linear-gradient(to bottom, #a8edea, #fed6e3);" +
+                "-fx-text-fill: #2d3748;" +
+                "-fx-border-radius: 18px;" +
+                "-fx-background-radius: 18px;" +
+                "-fx-padding: 8 12 8 12;" +
+                "-fx-font-size: 16px;" +
+                "-fx-font-weight: bold;" +
+                "-fx-effect: dropshadow(gaussian, rgba(168,237,234,0.4), 6, 0, 0, 2);" +
+                "-fx-min-width: 36px;" +
+                "-fx-max-width: 36px;" +
+                "-fx-pref-width: 36px;" +
                 "}" +
 
                 ".action-button {" +
