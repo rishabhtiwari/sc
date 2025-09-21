@@ -6,6 +6,8 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -399,14 +401,14 @@ public class ChatSidebar {
      * Creates the header section with title and subtitle
      */
     private VBox createHeaderSection() {
-        VBox headerSection = new VBox(3);
-        headerSection.setPadding(new Insets(20, 25, 15, 25));
+        VBox headerSection = new VBox(4);
+        headerSection.setPadding(new Insets(20, 20, 16, 20));
         headerSection.getStyleClass().add("header-section");
 
-        Label headerLabel = new Label("💬 iChat Assistant");
+        Label headerLabel = new Label("iChat Assistant");
         headerLabel.getStyleClass().add("sidebar-header");
 
-        Label subtitleLabel = new Label("Your AI-powered chat companion • Resizable");
+        Label subtitleLabel = new Label("AI-powered chat companion with document processing");
         subtitleLabel.getStyleClass().add("sidebar-subtitle");
 
         headerSection.getChildren().addAll(headerLabel, subtitleLabel);
@@ -430,7 +432,7 @@ public class ChatSidebar {
         chatScrollPane.getStyleClass().add("chat-scroll");
 
         // Set margins for chat area
-        VBox.setMargin(chatScrollPane, new Insets(0, 25, 15, 25));
+        VBox.setMargin(chatScrollPane, new Insets(0, 20, 16, 20));
 
         // Make chat area grow to fill available space
         VBox.setVgrow(chatScrollPane, Priority.ALWAYS);
@@ -442,14 +444,13 @@ public class ChatSidebar {
      * Creates the input section with message input and action buttons
      */
     private VBox createInputSection() {
-        VBox inputSection = new VBox(10);
-        inputSection.setPadding(new Insets(10, 25, 20, 25));
+        VBox inputSection = new VBox(12);
+        inputSection.setPadding(new Insets(16, 20, 20, 20));
         inputSection.getStyleClass().add("input-section");
 
         HBox inputArea = createInputArea();
-        HBox actionButtons = createActionButtons();
 
-        inputSection.getChildren().addAll(inputArea, actionButtons);
+        inputSection.getChildren().add(inputArea);
         return inputSection;
     }
     
@@ -462,16 +463,15 @@ public class ChatSidebar {
         inputArea.getStyleClass().add("input-container");
 
         TextField messageInput = new TextField();
-        messageInput.setPromptText("💭 Type your message here...");
+        messageInput.setPromptText("Type your message here...");
         messageInput.getStyleClass().add("message-input");
+        messageInput.setPrefHeight(40); // Make input bigger
         HBox.setHgrow(messageInput, Priority.ALWAYS);
 
-        // Small upload button
-        Button uploadButton = new Button("📎");
-        uploadButton.getStyleClass().add("upload-button");
-        uploadButton.setOnAction(e -> handleDocumentUpload());
+        // Triple-dot menu button
+        Button menuButton = createMenuButton();
 
-        Button sendButton = new Button("🚀 Send");
+        Button sendButton = new Button("Send");
         sendButton.getStyleClass().add("send-button");
 
         // Send message functionality with API integration
@@ -512,32 +512,67 @@ public class ChatSidebar {
         sendButton.setOnAction(e -> sendMessage.run());
         messageInput.setOnAction(e -> sendMessage.run());
 
-        inputArea.getChildren().addAll(messageInput, uploadButton, sendButton);
+        inputArea.getChildren().addAll(messageInput, menuButton, sendButton);
         return inputArea;
     }
-    
+
     /**
-     * Creates the action buttons (Clear, Resize Info, and Close)
+     * Creates the triple-dot menu button with all actions
+     */
+    private Button createMenuButton() {
+        Button menuButton = new Button("⋯");
+        menuButton.getStyleClass().add("upload-button");
+        menuButton.setTooltip(new javafx.scene.control.Tooltip("More actions"));
+
+        // Create context menu
+        ContextMenu contextMenu = new ContextMenu();
+
+        // Upload document menu item
+        MenuItem uploadItem = new MenuItem("Upload Document");
+        uploadItem.setOnAction(e -> handleDocumentUpload());
+
+        // Clear chat menu item
+        MenuItem clearItem = new MenuItem("Clear Chat");
+        clearItem.setOnAction(e -> {
+            chatArea.setText("👋 Welcome to iChat Assistant!\n\n✨ I'm here to help you with any questions or tasks you might have. Feel free to start a conversation!\n\n📄 Upload documents using the menu button for OCR processing.");
+        });
+
+        // Close menu item
+        MenuItem closeItem = new MenuItem("Close");
+        closeItem.setOnAction(e -> hide());
+
+        contextMenu.getItems().addAll(uploadItem, clearItem, closeItem);
+
+        // Show context menu on button click
+        menuButton.setOnAction(e -> {
+            contextMenu.show(menuButton, javafx.geometry.Side.BOTTOM, 0, 0);
+        });
+
+        return menuButton;
+    }
+
+    /**
+     * Creates the action buttons (Clear, Resize Info, and Close) - DEPRECATED
      */
     private HBox createActionButtons() {
         HBox actionButtons = new HBox(8);
         actionButtons.setAlignment(Pos.CENTER);
 
-        Button clearButton = new Button("🗑️ Clear");
-        clearButton.getStyleClass().add("action-button");
+        Button clearButton = new Button("Clear");
+        clearButton.getStyleClass().add("clear-button");
         clearButton.setOnAction(e -> {
-            chatArea.setText("👋 Welcome to iChat Assistant!\n\n✨ I'm here to help you with any questions or tasks you might have. Feel free to start a conversation!\n\n📏 Tip: You can resize this window by dragging the edges or corners!");
+            chatArea.setText("👋 Welcome to iChat Assistant!\n\n✨ I'm here to help you with any questions or tasks you might have. Feel free to start a conversation!\n\n📄 Upload documents using the attachment button for OCR processing.");
         });
 
-        Button resizeInfoButton = new Button("📏 Resize");
+        Button resizeInfoButton = new Button("Resize");
         resizeInfoButton.getStyleClass().add("action-button");
         resizeInfoButton.setOnAction(e -> {
             double currentWidth = Math.round(sidebarStage.getWidth());
             double currentHeight = Math.round(sidebarStage.getHeight());
-            addMessage("System", "📏 Current size: " + currentWidth + "×" + currentHeight + "px\n\n💡 Drag the window edges to resize!\n• Min: 320×400px\n• Max: 800×1200px");
+            addMessage("System", "Current size: " + currentWidth + "×" + currentHeight + "px\n\nDrag the window edges to resize!\n• Min: 320×400px\n• Max: 800×1200px");
         });
 
-        Button closeButton = new Button("✖️ Close");
+        Button closeButton = new Button("Close");
         closeButton.getStyleClass().add("close-button");
         closeButton.setOnAction(e -> hide());
 
