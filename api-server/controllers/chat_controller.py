@@ -7,6 +7,8 @@ import random
 from typing import Dict, Any, Optional
 
 from flask import current_app
+from utils.document_detector import document_detector
+from services.ocr_service_client import ocr_client
 
 
 class ChatController:
@@ -64,8 +66,20 @@ class ChatController:
             if delay > 0:
                 time.sleep(delay)
             
+            # Check if this is a document-related query
+            document_intent = document_detector.extract_intent(message)
+
             # Generate response based on message content
-            response_message = ChatController._generate_response(message)
+            if document_intent['is_document_query']:
+                response_message = document_detector.generate_document_response(document_intent)
+                # Add OCR service status
+                ocr_status = ocr_client.health_check()
+                if ocr_status['status'] == 'healthy':
+                    response_message += "\n\n✅ OCR service is ready and operational!"
+                else:
+                    response_message += "\n\n⚠️ OCR service is currently unavailable. Please try again later."
+            else:
+                response_message = ChatController._generate_response(message)
             
             # Create response data
             response_data = {

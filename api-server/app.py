@@ -11,6 +11,7 @@ from flask_cors import CORS
 
 from routes.chat_routes import chat_bp
 from routes.health_routes import health_bp
+from routes.document_routes import document_bp
 from config.app_config import AppConfig
 
 
@@ -29,6 +30,7 @@ def create_app():
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
     app.register_blueprint(health_bp, url_prefix='/api')
+    app.register_blueprint(document_bp, url_prefix='/api')
     
     # Root endpoint
     @app.route('/', methods=['GET'])
@@ -44,6 +46,7 @@ def create_app():
             "endpoints": {
                 "chat": "/api/chat (POST)",
                 "health": "/api/health (GET)",
+                "documents": "/api/documents/* (GET/POST)",
                 "home": "/ (GET)"
             },
             "timestamp": int(time.time() * 1000)
@@ -60,6 +63,7 @@ def main():
         print("🚀 Starting iChat API Server v2.0...")
         print("📍 Server will be available at: http://localhost:8080")
         print("🔗 Chat endpoint: http://localhost:8080/api/chat")
+        print("📄 Document processing: http://localhost:8080/api/documents")
         print("❤️  Health check: http://localhost:8080/api/health")
         print("🛑 Press Ctrl+C to stop the server")
         print("=" * 50)
