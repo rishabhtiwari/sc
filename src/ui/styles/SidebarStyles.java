@@ -11,9 +11,9 @@ public class SidebarStyles {
      */
     public static String getSidebarCSS() {
         return ".sidebar-content {" +
-                "-fx-background-color: #ffffff;" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 16, 0, 0, 4);" +
-                "-fx-border-color: #e5e7eb;" +
+                "-fx-background-color: #2d3748;" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.25), 16, 0, 0, 4);" +
+                "-fx-border-color: #4a5568;" +
                 "-fx-border-width: 1px;" +
                 "-fx-border-radius: 12px;" +
                 "-fx-background-radius: 12px;" +
@@ -22,8 +22,8 @@ public class SidebarStyles {
                 "}" +
 
                 ".header-section {" +
-                "-fx-background-color: #ffffff;" +
-                "-fx-border-color: #e5e7eb;" +
+                "-fx-background-color: #2d3748;" +
+                "-fx-border-color: #4a5568;" +
                 "-fx-border-width: 0 0 1 0;" +
                 "-fx-background-radius: 12 12 0 0;" +
                 "}" +
@@ -32,47 +32,59 @@ public class SidebarStyles {
                 "-fx-font-family: 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;" +
                 "-fx-font-size: 20px;" +
                 "-fx-font-weight: 600;" +
-                "-fx-text-fill: #111827;" +
+                "-fx-text-fill: #ffffff;" +
                 "}" +
 
                 ".sidebar-subtitle {" +
                 "-fx-font-family: 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;" +
                 "-fx-font-size: 13px;" +
-                "-fx-text-fill: #6b7280;" +
+                "-fx-text-fill: #e2e8f0;" +
                 "-fx-font-weight: 400;" +
                 "}" +
 
                 ".chat-area {" +
-                "-fx-background-color: #f9fafb;" +
-                "-fx-border-color: #e5e7eb;" +
+                "-fx-background-color: #4a5568;" +
+                "-fx-border-color: #718096;" +
                 "-fx-border-width: 1px;" +
                 "-fx-border-radius: 8px;" +
                 "-fx-background-radius: 8px;" +
                 "-fx-padding: 16px;" +
                 "-fx-font-family: 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;" +
                 "-fx-font-size: 14px;" +
-                "-fx-text-fill: #374151;" +
+                "-fx-text-fill: #ffffff;" +
                 "-fx-line-spacing: 4px;" +
                 "}" +
 
                 ".chat-scroll {" +
-                "-fx-background-color: transparent;" +
+                "-fx-background-color: #4a5568;" +
                 "-fx-border-color: transparent;" +
                 "-fx-fit-to-width: true;" +
                 "-fx-fit-to-height: true;" +
                 "}" +
 
+                ".scroll-pane {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
+                ".scroll-pane .viewport {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
+                ".scroll-pane .content {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
                 ".input-section {" +
-                "-fx-background-color: #ffffff;" +
+                "-fx-background-color: #2d3748;" +
                 "-fx-background-radius: 0 0 12 12;" +
-                "-fx-border-color: #e5e7eb;" +
+                "-fx-border-color: #4a5568;" +
                 "-fx-border-width: 1 0 0 0;" +
                 "}" +
 
                 ".input-container {" +
-                "-fx-background-color: #f9fafb;" +
+                "-fx-background-color: #4a5568;" +
                 "-fx-background-radius: 8px;" +
-                "-fx-border-color: #d1d5db;" +
+                "-fx-border-color: #718096;" +
                 "-fx-border-width: 1px;" +
                 "-fx-border-radius: 8px;" +
                 "-fx-padding: 6px;" +
@@ -85,13 +97,13 @@ public class SidebarStyles {
                 "-fx-padding: 12 16 12 16;" +
                 "-fx-font-family: 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;" +
                 "-fx-font-size: 14px;" +
-                "-fx-text-fill: #111827;" +
-                "-fx-prompt-text-fill: #9ca3af;" +
+                "-fx-text-fill: #ffffff;" +
+                "-fx-prompt-text-fill: #cbd5e0;" +
                 "-fx-pref-height: 40px;" +
                 "}" +
 
                 ".send-button {" +
-                "-fx-background-color: #2563eb;" +
+                "-fx-background-color: #3182ce;" +
                 "-fx-text-fill: white;" +
                 "-fx-border-radius: 6px;" +
                 "-fx-background-radius: 6px;" +
@@ -103,13 +115,13 @@ public class SidebarStyles {
                 "}" +
 
                 ".send-button:hover {" +
-                "-fx-background-color: #1d4ed8;" +
+                "-fx-background-color: #2c5aa0;" +
                 "}" +
 
                 ".upload-button {" +
-                "-fx-background-color: #f3f4f6;" +
-                "-fx-text-fill: #6b7280;" +
-                "-fx-border-color: #d1d5db;" +
+                "-fx-background-color: #718096;" +
+                "-fx-text-fill: #ffffff;" +
+                "-fx-border-color: #a0aec0;" +
                 "-fx-border-width: 1px;" +
                 "-fx-border-radius: 6px;" +
                 "-fx-background-radius: 6px;" +
@@ -125,8 +137,8 @@ public class SidebarStyles {
                 "}" +
 
                 ".upload-button:hover {" +
-                "-fx-background-color: #e5e7eb;" +
-                "-fx-text-fill: #374151;" +
+                "-fx-background-color: #a0aec0;" +
+                "-fx-text-fill: #ffffff;" +
                 "}" +
 
                 ".menu-button {" +
@@ -165,6 +177,27 @@ public class SidebarStyles {
 
                 ".context-menu .menu-item .label {" +
                 "-fx-font-size: 12px;" +
+                "}" +
+
+                ".text-area {" +
+                "-fx-background-color: #4a5568;" +
+                "-fx-text-fill: #ffffff;" +
+                "}" +
+
+                ".text-area .content {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
+                ".text-area .scroll-pane {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
+                ".text-area .scroll-pane .viewport {" +
+                "-fx-background-color: #4a5568;" +
+                "}" +
+
+                ".text-area .scroll-pane .content {" +
+                "-fx-background-color: #4a5568;" +
                 "}" +
 
                 ".action-button {" +
