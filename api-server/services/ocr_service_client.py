@@ -70,6 +70,115 @@ class OCRServiceClient:
                 "status": "error",
                 "error": str(e)
             }
+
+    def convert_document_format(
+        self,
+        file_data: Union[FileStorage, bytes, str],
+        filename: str,
+        target_format: str,
+        options: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Convert document format using OCR service
+
+        Args:
+            file_data: File data (FileStorage, bytes, or file path)
+            filename: Original filename
+            target_format: Target format (pdf, docx, txt)
+            options: Optional conversion parameters
+
+        Returns:
+            Dict[str, Any]: Conversion results with file data
+        """
+        try:
+            temp_file_path = None
+
+            # Handle different file data types
+            if isinstance(file_data, FileStorage):
+                files = {'file': (filename, file_data, file_data.content_type)}
+            elif isinstance(file_data, bytes):
+                files = {'file': (filename, file_data)}
+            elif isinstance(file_data, str) and os.path.exists(file_data):
+                with open(file_data, 'rb') as f:
+                    files = {'file': (filename, f.read())}
+            else:
+                return {
+                    "status": "error",
+                    "error": "Invalid file data provided"
+                }
+
+            # Prepare form data
+            data = {
+                'target_format': target_format
+            }
+
+            # Add options if provided
+            if options:
+                import json
+                data['options'] = json.dumps(options)
+
+            # Make request to OCR service conversion endpoint
+            response = requests.post(
+                f"{self.base_url}/convert-format",
+                files=files,
+                data=data,
+                timeout=self.timeout
+            )
+
+            response.raise_for_status()
+
+            # Handle file download response
+            if response.headers.get('content-type', '').startswith('application/'):
+                # File download response
+                return {
+                    "status": "success",
+                    "file_data": response.content,
+                    "filename": response.headers.get('Content-Disposition', '').split('filename=')[-1].strip('"'),
+                    "content_type": response.headers.get('content-type')
+                }
+            else:
+                # JSON error response
+                result = response.json()
+                return {
+                    "status": "error",
+                    "error": result.get('error', 'Conversion failed')
+                }
+
+        except requests.exceptions.RequestException as e:
+            return {
+                "status": "error",
+                "error": f"OCR service request failed: {str(e)}"
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": f"Conversion failed: {str(e)}"
+            }
+
+    def get_conversion_info(self) -> Dict[str, Any]:
+        """
+        Get conversion information from OCR service
+
+        Returns:
+            Dict[str, Any]: Conversion capabilities and supported formats
+        """
+        try:
+            response = requests.get(
+                f"{self.base_url}/conversion-info",
+                timeout=5
+            )
+            response.raise_for_status()
+
+            return {
+                "status": "success",
+                "data": response.json()
+            }
+
+        except requests.exceptions.RequestException as e:
+            return {
+                "status": "error",
+                "error": f"Failed to get conversion info: {str(e)}"
+            }
     
     def convert_document(
         self, 
