@@ -5,6 +5,7 @@ Document Routes - URL routing for document processing endpoints
 from flask import Blueprint
 
 from handlers.document_handler import DocumentHandler
+from handlers.conversion_handler import ConversionHandler
 
 # Create blueprint for document routes
 document_bp = Blueprint('documents', __name__)
@@ -48,27 +49,52 @@ def get_service_status():
     return DocumentHandler.handle_service_status()
 
 
-@document_bp.route('/documents/analyze', methods=['POST'])
-def analyze_query():
+
+
+
+@document_bp.route('/documents/convert-format', methods=['POST'])
+def convert_document_format():
     """
-    POST /api/documents/analyze - Analyze text query for document intent
-    
-    Expected JSON payload:
-    {
-        "query": "User's text query to analyze"
-    }
-    
+    POST /api/documents/convert-format - Convert document from one format to another
+
+    Expected form data:
+    - file: Document file to convert (PDF, DOCX, TXT)
+    - target_format: Target format (pdf|docx|txt)
+    - options: Optional conversion parameters (JSON string)
+
     Returns:
-        JSON response with intent analysis and suggestions
+        File download response with converted document
     """
-    return DocumentHandler.handle_analyze_query()
+    return ConversionHandler.handle_document_conversion()
+
+
+@document_bp.route('/documents/conversion-info', methods=['GET'])
+def get_conversion_info():
+    """
+    GET /api/documents/conversion-info - Get supported conversion formats and capabilities
+
+    Returns:
+        JSON response with conversion information
+    """
+    return ConversionHandler.handle_conversion_info()
+
+
+@document_bp.route('/documents/conversion-test', methods=['GET'])
+def test_conversion_endpoints():
+    """
+    GET /api/documents/conversion-test - Test document conversion endpoints
+
+    Returns:
+        JSON response confirming conversion endpoints are operational
+    """
+    return ConversionHandler.handle_conversion_test()
 
 
 @document_bp.route('/documents/test', methods=['GET'])
 def test_document_endpoints():
     """
     GET /api/documents/test - Test document processing endpoints
-    
+
     Returns:
         JSON response confirming endpoints are operational
     """
@@ -95,7 +121,7 @@ def get_help():
     Returns:
         JSON response with usage instructions
     """
-    from utils.document_detector import document_detector
+
     
     return {
         "message": "Document Processing API Help",
@@ -118,19 +144,29 @@ def get_help():
             },
             "status": {
                 "method": "GET",
-                "url": "/api/documents/status", 
+                "url": "/api/documents/status",
                 "description": "Check OCR service health and status"
             },
-            "analyze": {
+            "convert_format": {
                 "method": "POST",
-                "url": "/api/documents/analyze",
-                "description": "Analyze text for document processing intent"
+                "url": "/api/documents/convert-format",
+                "description": "Convert document from one format to another",
+                "parameters": {
+                    "file": "Document file to convert (required)",
+                    "target_format": "pdf|docx|txt (required)",
+                    "options": "Optional conversion parameters (JSON string)"
+                }
+            },
+            "conversion_info": {
+                "method": "GET",
+                "url": "/api/documents/conversion-info",
+                "description": "Get supported conversion formats and capabilities"
             }
         },
         "supported_formats": ["PDF", "DOCX", "PNG", "JPG", "JPEG", "BMP", "TIFF", "WEBP"],
         "supported_languages": ["en", "ch", "fr", "german", "korean", "japan"],
         "output_formats": ["text", "json", "markdown"],
         "max_file_size": "10MB",
-        "upload_instructions": document_detector.get_upload_instructions(),
+        "upload_instructions": "Upload documents via POST /api/documents/upload with multipart form data",
         "timestamp": int(__import__('time').time() * 1000)
     }, 200

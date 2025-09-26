@@ -8,7 +8,7 @@ from werkzeug.datastructures import FileStorage
 
 from flask import current_app
 from services.ocr_service_client import ocr_client
-from utils.document_detector import document_detector
+
 
 
 class DocumentController:
@@ -186,35 +186,4 @@ class DocumentController:
                 "status": "error"
             }
     
-    @staticmethod
-    def analyze_text_query(query: str) -> Dict[str, Any]:
-        """
-        Analyze a text query for document-related intent
-        
-        Args:
-            query (str): User query to analyze
-            
-        Returns:
-            Dict[str, Any]: Analysis result
-        """
-        try:
-            intent = document_detector.extract_intent(query)
-            
-            response = {
-                "status": "success",
-                "query": query,
-                "intent": intent,
-                "timestamp": int(time.time() * 1000)
-            }
-            
-            if intent['is_document_query']:
-                response["suggested_response"] = document_detector.generate_document_response(intent)
-                response["upload_instructions"] = document_detector.get_upload_instructions()
-            
-            return response
-            
-        except Exception as e:
-            return {
-                "error": f"Failed to analyze query: {str(e)}",
-                "status": "error"
-            }
+

@@ -107,50 +107,7 @@ class DocumentHandler:
                 "status": "error"
             }), 500
     
-    @staticmethod
-    def handle_analyze_query() -> Dict[str, Any]:
-        """
-        Handle text query analysis for document intent
-        
-        Expected JSON payload:
-        {
-            "query": "User's text query to analyze"
-        }
-        
-        Returns:
-            JSON response with analysis result
-        """
-        try:
-            # Get JSON data
-            data = request.get_json()
-            
-            if not data or 'query' not in data:
-                return jsonify({
-                    "error": "No query provided in request body",
-                    "status": "error"
-                }), 400
-            
-            query = data['query']
-            
-            if not query or not query.strip():
-                return jsonify({
-                    "error": "Empty query not allowed",
-                    "status": "error"
-                }), 400
-            
-            # Analyze query
-            result = DocumentController.analyze_text_query(query)
-            
-            if result['status'] == 'success':
-                return jsonify(result), 200
-            else:
-                return jsonify(result), 500
-                
-        except Exception as e:
-            return jsonify({
-                "error": f"Request handling error: {str(e)}",
-                "status": "error"
-            }), 500
+
     
     @staticmethod
     def handle_document_test() -> Dict[str, Any]:
@@ -169,9 +126,8 @@ class DocumentHandler:
                 "status": "success",
                 "endpoints": {
                     "upload": "/api/documents/upload",
-                    "formats": "/api/documents/formats", 
-                    "status": "/api/documents/status",
-                    "analyze": "/api/documents/analyze"
+                    "formats": "/api/documents/formats",
+                    "status": "/api/documents/status"
                 },
                 "ocr_service": ocr_status.get('ocr_service', {}).get('status', 'unknown'),
                 "timestamp": int(__import__('time').time() * 1000)

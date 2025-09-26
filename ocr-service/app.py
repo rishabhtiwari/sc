@@ -10,6 +10,7 @@ from flask_cors import CORS
 from config.ocr_config import OCRConfig
 from controllers.ocr_controller import OCRController
 from controllers.health_controller import HealthController
+from controllers.conversion_controller import ConversionController
 from middleware.error_handler import ErrorHandler
 from middleware.request_logger import RequestLogger
 from utils.logger import get_logger
@@ -34,14 +35,15 @@ def create_app():
     # Initialize controllers
     ocr_controller = OCRController()
     health_controller = HealthController()
+    conversion_controller = ConversionController()
 
     # Register routes
-    register_routes(app, ocr_controller, health_controller)
+    register_routes(app, ocr_controller, health_controller, conversion_controller)
 
     return app
 
 
-def register_routes(app: Flask, ocr_controller: OCRController, health_controller: HealthController):
+def register_routes(app: Flask, ocr_controller: OCRController, health_controller: HealthController, conversion_controller: ConversionController):
     """
     Register all application routes
 
@@ -49,6 +51,7 @@ def register_routes(app: Flask, ocr_controller: OCRController, health_controller
         app: Flask application instance
         ocr_controller: OCR controller instance
         health_controller: Health controller instance
+        conversion_controller: Conversion controller instance
     """
     # Health and status endpoints
     app.add_url_rule('/', 'home', health_controller.service_info, methods=['GET'])
@@ -58,6 +61,10 @@ def register_routes(app: Flask, ocr_controller: OCRController, health_controller
     # OCR endpoints
     app.add_url_rule('/convert', 'convert', ocr_controller.convert_document, methods=['POST'])
     app.add_url_rule('/formats', 'formats', ocr_controller.get_supported_formats, methods=['GET'])
+
+    # Document conversion endpoints
+    app.add_url_rule('/convert-format', 'convert_format', conversion_controller.convert_document, methods=['POST'])
+    app.add_url_rule('/conversion-info', 'conversion_info', conversion_controller.get_conversion_info, methods=['GET'])
 
 
 def main():
