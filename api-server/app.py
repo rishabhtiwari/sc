@@ -12,6 +12,7 @@ from flask_cors import CORS
 from routes.chat_routes import chat_bp
 from routes.health_routes import health_bp
 from routes.document_routes import document_bp
+from routes.llm_routes import llm_bp
 from config.app_config import AppConfig
 
 
@@ -31,6 +32,7 @@ def create_app():
     app.register_blueprint(chat_bp, url_prefix='/api')
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(document_bp, url_prefix='/api')
+    app.register_blueprint(llm_bp, url_prefix='/api')
     
     # Root endpoint
     @app.route('/', methods=['GET'])
@@ -47,6 +49,7 @@ def create_app():
                 "chat": "/api/chat (POST)",
                 "health": "/api/health (GET)",
                 "documents": "/api/documents/* (GET/POST)",
+                "llm": "/api/llm/* (GET/POST)",
                 "home": "/ (GET)"
             },
             "timestamp": int(time.time() * 1000)

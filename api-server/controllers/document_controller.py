@@ -8,6 +8,7 @@ from werkzeug.datastructures import FileStorage
 
 from flask import current_app
 from services.ocr_service_client import ocr_client
+from services.embedding_service_client import embedding_client
 
 
 
@@ -184,6 +185,137 @@ class DocumentController:
             return {
                 "error": f"Failed to check OCR service status: {str(e)}",
                 "status": "error"
+            }
+
+    @staticmethod
+    def embed_document(file: FileStorage, title: str = None, author: str = None,
+                      category: str = None) -> Dict[str, Any]:
+        """
+        Embed document for RAG using embedding service
+
+        Args:
+            file (FileStorage): Uploaded file
+            title (str): Document title
+            author (str): Document author
+            category (str): Document category
+
+        Returns:
+            Dict[str, Any]: Embedding result with client storage info
+        """
+        try:
+            current_app.logger.info(f"📄 Embedding document: {file.filename}")
+
+            # Prepare metadata
+            metadata = {
+                "upload_timestamp": int(time.time() * 1000)
+            }
+            if title:
+                metadata["title"] = title
+            if author:
+                metadata["author"] = author
+            if category:
+                metadata["category"] = category
+
+            # Get file size before processing (without consuming the stream)
+            file_size = 0
+            if hasattr(file, 'content_length') and file.content_length:
+                file_size = file.content_length
+            elif hasattr(file, 'stream'):
+                # Save current position
+                current_pos = file.stream.tell()
+                # Seek to end to get size
+                file.stream.seek(0, 2)
+                file_size = file.stream.tell()
+                # Reset to original position
+                file.stream.seek(current_pos)
+
+            # Embed document using embedding service
+            result = embedding_client.embed_document(
+                file=file,
+                metadata=metadata
+            )
+
+            if result and result.get('status') == 'success':
+                # Extract data from embedding service response
+                embed_data = result.get('data', {})
+                document_id = embed_data.get('document_id')
+
+                return {
+                    "status": "success",
+                    "message": "Document embedded successfully",
+                    "document_id": document_id,
+                    "filename": file.filename,
+                    "metadata": metadata,
+                    "text_length": embed_data.get('text_length', 0),
+                    "chunks_created": embed_data.get('chunks_created', 0),
+                    "chunks_stored": embed_data.get('chunks_stored', 0),
+                    "processing_time": embed_data.get('processing_time', 0),
+                    "client_storage_info": {
+                        "document_id": document_id,
+                        "filename": file.filename,
+                        "title": title or file.filename,
+                        "author": author or "Unknown",
+                        "category": category or "General",
+                        "upload_date": int(time.time() * 1000),
+                        "file_size": file_size,
+                        "storage_key": f"client_doc_{document_id}"
+                    },
+                    "timestamp": int(time.time() * 1000)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Document embedding failed: {result.get('error', 'Unknown error')}",
+                    "timestamp": int(time.time() * 1000)
+                }
+
+        except Exception as e:
+            current_app.logger.error(f"Error embedding document: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Document embedding failed: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }
+
+    @staticmethod
+    def get_document_info(document_id: str) -> Dict[str, Any]:
+        """
+        Get document information by ID from embedding service
+
+        Args:
+            document_id (str): Document ID from embedding service
+
+        Returns:
+            Dict[str, Any]: Document information
+        """
+        try:
+            # Get document info from embedding service
+            result = embedding_client.get_document_info(document_id)
+
+            if result and result.get('status') == 'success':
+                return {
+                    "status": "success",
+                    "document_id": document_id,
+                    "document_info": result.get('document_info', {}),
+                    "metadata": result.get('metadata', {}),
+                    "chunks_count": result.get('chunks_count', 0),
+                    "timestamp": int(time.time() * 1000)
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"Document not found or service error: {result.get('error', 'Unknown error')}",
+                    "document_id": document_id,
+                    "timestamp": int(time.time() * 1000)
+                }
+
+        except Exception as e:
+            current_app.logger.error(f"Error getting document info for {document_id}: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to get document info: {str(e)}",
+                "document_id": document_id,
+                "timestamp": int(time.time() * 1000)
             }
     
 
