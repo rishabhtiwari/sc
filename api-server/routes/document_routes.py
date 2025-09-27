@@ -27,6 +27,37 @@ def upload_document():
     return DocumentHandler.handle_document_upload()
 
 
+@document_bp.route('/documents/embed', methods=['POST'])
+def embed_document():
+    """
+    POST /api/documents/embed - Upload and embed a document for RAG
+
+    Expected form data:
+    - file: Document file to embed (PDF, DOCX, TXT, etc.)
+    - title: Document title (optional)
+    - author: Document author (optional)
+    - category: Document category (optional)
+
+    Returns:
+        JSON response with embedding result and document ID
+    """
+    return DocumentHandler.handle_document_embed()
+
+
+@document_bp.route('/documents/info/<document_id>', methods=['GET'])
+def get_document_info(document_id):
+    """
+    GET /api/documents/info/<document_id> - Get document information by ID
+
+    Path parameters:
+    - document_id: Document ID from embedding service
+
+    Returns:
+        JSON response with document metadata and information
+    """
+    return DocumentHandler.handle_document_info(document_id)
+
+
 @document_bp.route('/documents/formats', methods=['GET'])
 def get_supported_formats():
     """

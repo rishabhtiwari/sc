@@ -19,7 +19,8 @@ def chat_message():
     {
         "message": "User's message text",
         "timestamp": 1640995200000,  # optional
-        "client": "desktop"          # optional
+        "client": "desktop",         # optional
+        "use_rag": false            # optional, enables RAG
     }
     
     Returns:
@@ -50,12 +51,97 @@ def chat_test():
     return ChatHandler.handle_chat_test()
 
 
+# RAG-enabled routes
+@chat_bp.route('/chat/search', methods=['POST'])
+def search_documents():
+    """
+    POST /api/chat/search - Search documents using semantic search
+
+    Expected JSON payload:
+    {
+        "query": "search query text",
+        "limit": 5  # optional, default: 5, max: 20
+    }
+
+    Returns:
+        JSON response with search results
+    """
+    return ChatHandler.handle_document_search()
+
+
+@chat_bp.route('/chat/context', methods=['POST'])
+def build_rag_context():
+    """
+    POST /api/chat/context - Build RAG context for a query
+
+    Expected JSON payload:
+    {
+        "query": "query for context building",
+        "max_chunks": 3  # optional, default: 3, max: 10
+    }
+
+    Returns:
+        JSON response with RAG context data
+    """
+    return ChatHandler.handle_rag_context()
+
+
+@chat_bp.route('/chat/set-context', methods=['POST'])
+def set_client_context():
+    """
+    POST /api/chat/set-context - Set context using client-stored document IDs
+
+    Expected JSON payload:
+    {
+        "document_ids": ["doc_123", "doc_456"],  # Array of document IDs from client
+        "client_id": "client_uuid",              # Optional client identifier
+        "session_id": "session_uuid"             # Optional session identifier
+    }
+
+    Returns:
+        JSON response with context setup status
+    """
+    return ChatHandler.handle_set_client_context()
+
+
+@chat_bp.route('/chat/context-status', methods=['GET'])
+def get_context_status():
+    """
+    GET /api/chat/context-status - Get current context status
+
+    Query parameters:
+    - client_id: Client identifier (optional)
+    - session_id: Session identifier (optional)
+
+    Returns:
+        JSON response with current context information
+    """
+    return ChatHandler.handle_context_status()
+
+
+@chat_bp.route('/chat/clear-context', methods=['POST'])
+def clear_client_context():
+    """
+    POST /api/chat/clear-context - Clear current client context
+
+    Expected JSON payload:
+    {
+        "client_id": "client_uuid",    # Optional client identifier
+        "session_id": "session_uuid"   # Optional session identifier
+    }
+
+    Returns:
+        JSON response with clear operation status
+    """
+    return ChatHandler.handle_clear_context()
+
+
 # Additional routes can be added here
 @chat_bp.route('/chat/ping', methods=['GET'])
 def chat_ping():
     """
     GET /api/chat/ping - Simple ping for chat service
-    
+
     Returns:
         Simple pong response
     """
