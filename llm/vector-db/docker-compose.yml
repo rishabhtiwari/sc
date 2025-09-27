@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  vector-db:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ichat-vector-db
+    ports:
+      - "8084:8084"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    environment:
+      - PYTHONPATH=/app
+      - TRANSFORMERS_CACHE=/app/cache
+      - HF_HOME=/app/cache
+      - SENTENCE_TRANSFORMERS_HOME=/app/cache
+    networks:
+      - ichat-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  ichat-network:
+    external: true
