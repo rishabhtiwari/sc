@@ -46,7 +46,7 @@ class DocumentService:
         """
         self.ocr_service = OCRService()
         self.supported_image_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
-        self.supported_document_formats = {'.pdf', '.docx'}
+        self.supported_document_formats = {'.pdf', '.docx', '.txt'}
         
         print("📄 Document Service initialized")
     
@@ -81,6 +81,8 @@ class DocumentService:
             return 'pdf'
         elif ext == '.docx':
             return 'docx'
+        elif ext == '.txt':
+            return 'txt'
         else:
             return 'unknown'
     
@@ -133,6 +135,8 @@ class DocumentService:
                     result = self._process_pdf(temp_file_path, temp_dir, output_format)
                 elif file_type == 'docx':
                     result = self._process_docx(temp_file_path, output_format)
+                elif file_type == 'txt':
+                    result = self._process_txt(temp_file_path, output_format)
                 else:
                     result = {
                         "status": "error",
@@ -274,6 +278,47 @@ class DocumentService:
             }
         except Exception as e:
             return {"status": "error", "error": f"DOCX processing failed: {str(e)}"}
+
+    def _process_txt(self, txt_path: str, output_format: str) -> Dict[str, Any]:
+        """Process TXT file (read plain text directly)"""
+        try:
+            print(f"📝 Processing TXT file: {os.path.basename(txt_path)}")
+
+            # Read text file with different encodings
+            encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252']
+            text = None
+
+            for encoding in encodings:
+                try:
+                    with open(txt_path, 'r', encoding=encoding) as f:
+                        text = f.read()
+                    print(f"✅ Successfully read file with {encoding} encoding")
+                    break
+                except UnicodeDecodeError:
+                    continue
+
+            if text is None:
+                return {"status": "error", "error": "Could not decode text file with any supported encoding"}
+
+            if not text.strip():
+                return {"status": "error", "error": "Text file is empty"}
+
+            # Format output
+            formatted_text = self._format_output(text, output_format)
+
+            return {
+                "status": "success",
+                "text": formatted_text,
+                "confidence": 1.0,  # Perfect confidence for plain text
+                "method": "direct_text_read",
+                "encoding_used": encoding,
+                "character_count": len(text),
+                "word_count": len(text.split())
+            }
+
+        except Exception as e:
+            print(f"❌ TXT processing error: {str(e)}")
+            return {"status": "error", "error": f"TXT processing failed: {str(e)}"}
 
     def _format_output(self, text: str, output_format: str) -> str:
         """Format output text according to specified format"""
