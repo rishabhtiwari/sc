@@ -59,7 +59,8 @@ def register_routes(app: Flask, ocr_controller: OCRController, health_controller
     app.add_url_rule('/status', 'status', health_controller.detailed_status, methods=['GET'])
 
     # OCR endpoints
-    app.add_url_rule('/convert', 'convert', ocr_controller.convert_document, methods=['POST'])
+    app.add_url_rule('/ocr/extract', 'extract_text', ocr_controller.extract_text, methods=['POST'])
+    app.add_url_rule('/ocr/convert', 'convert_document', ocr_controller.convert_document, methods=['POST'])
     app.add_url_rule('/formats', 'formats', ocr_controller.get_supported_formats, methods=['GET'])
 
     # Document conversion endpoints

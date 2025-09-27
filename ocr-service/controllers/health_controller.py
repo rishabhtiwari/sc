@@ -96,13 +96,14 @@ class HealthController(BaseController):
             "version": "1.0.0",
             "status": "running",
             "endpoints": {
-                "convert": "/convert (POST)",
+                "extract": "/ocr/extract (POST)",
+                "convert": "/ocr/convert (POST)",
                 "health": "/health (GET)",
                 "status": "/status (GET)",
                 "formats": "/formats (GET)"
             },
             "supported_formats": [
-                "PDF", "PNG", "JPG", "JPEG", "BMP", "TIFF", "DOCX"
+                "PDF", "PNG", "JPG", "JPEG", "BMP", "TIFF", "DOCX", "TXT"
             ]
         }
         
