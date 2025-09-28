@@ -19,7 +19,7 @@ services:
     networks:
       - ichat-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -49,7 +49,7 @@ services:
     networks:
       - ichat-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -57,6 +57,133 @@ services:
     restart: unless-stopped
     depends_on:
       - ichat-api
+
+  # LLM Service for AI responses
+  llm-service:
+    build:
+      context: ./llm/llm-prompt-generation
+      dockerfile: Dockerfile
+    container_name: ichat-llm-service
+    ports:
+      - "8083:8083"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8083
+      # Model Configuration - Change LLM_MODEL_KEY to select different models
+      # Options: flan-t5-base, flan-t5-small, flan-t5-large, mistral-7b-q4, mistral-7b-q5, mistral-7b-q2
+      - LLM_MODEL_KEY=mistral-7b-q4
+      - LLM_USE_GPU=false
+      - MODEL_CACHE_DIR=/app/cache
+      - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
+    volumes:
+      - ./llm/llm-prompt-generation/logs:/app/logs
+      - ./llm/llm-prompt-generation/cache:/app/cache
+    networks:
+      - ichat-network
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 4G
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8083/health" ]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 180s  # LLM service takes longer to load model
+    restart: unless-stopped
+    depends_on:
+      - ichat-api
+
+  # Embedding Service for document processing
+  embedding-service:
+    build:
+      context: ./llm/embedding-service
+      dockerfile: Dockerfile
+    container_name: ichat-embedding-service
+    ports:
+      - "8085:8085"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8085
+      - OCR_SERVICE_URL=http://ichat-ocr-service:8081
+      - VECTOR_DB_URL=http://ichat-vector-db:8084
+    volumes:
+      - ./llm/embedding-service/logs:/app/logs
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8085/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      - ocr-service
+      - ichat-vector-db
+
+  # Vector Database Service
+  ichat-vector-db:
+    build:
+      context: ./llm/vector-db
+      dockerfile: Dockerfile
+    container_name: ichat-vector-db
+    ports:
+      - "8084:8084"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8084
+      - CHROMA_DB_PATH=/app/data/chroma
+    volumes:
+      - ./llm/vector-db/data:/app/data
+      - ./llm/vector-db/logs:/app/logs
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8084/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # Retriever Service for RAG
+  ichat-retriever-service:
+    build:
+      context: ./llm/retriever-service
+      dockerfile: Dockerfile
+    container_name: ichat-retriever-service
+    ports:
+      - "8086:8086"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8086
+      - VECTOR_DB_URL=http://ichat-vector-db:8084
+      - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
+    volumes:
+      - ./llm/retriever-service/logs:/app/logs
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      - ichat-vector-db
+      - embedding-service
 
 networks:
   ichat-network:
@@ -72,3 +199,16 @@ volumes:
     driver: local
   ocr-logs:
     driver: local
+  llm-logs:
+    driver: local
+  llm-cache:
+    driver: local
+  embedding-logs:
+    driver: local
+  vector-db-data:
+    driver: local
+  vector-db-logs:
+    driver: local
+  retriever-logs:
+    driver: local
+

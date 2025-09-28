@@ -59,7 +59,7 @@ class LLMServiceClient:
             self.logger.info(f"Sending chat request to LLM service: {message[:50]}...")
             
             response = requests.post(
-                f"{self.base_url}/llm/ichat",
+                f"{self.base_url}/llm/chat",
                 json=payload,
                 timeout=self.timeout,
                 headers={'Content-Type': 'application/json'}

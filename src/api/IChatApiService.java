@@ -41,10 +41,21 @@ public class IChatApiService {
      * @return CompletableFuture with the server response
      */
     public CompletableFuture<String> sendMessage(String message) {
+        return sendMessage(message, false, null);
+    }
+
+    /**
+     * Sends a message to the iChat server asynchronously with RAG support
+     * @param message The user message to send
+     * @param useRag Whether to use RAG (Retrieval-Augmented Generation)
+     * @param sessionId The session ID for context management
+     * @return CompletableFuture with the server response
+     */
+    public CompletableFuture<String> sendMessage(String message, boolean useRag, String sessionId) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                System.out.println("📤 Sending message to iChat server: " + message);
-                return sendMessageSync(message);
+                System.out.println("📤 Sending message to iChat server: " + message + " (RAG: " + useRag + ")");
+                return sendMessageSync(message, useRag, sessionId);
             } catch (Exception e) {
                 System.err.println("❌ Error sending message to iChat server: " + e.getMessage());
                 return "Sorry, I'm having trouble connecting to the server right now. Please try again later. 🔄";
@@ -59,6 +70,18 @@ public class IChatApiService {
      * @throws IOException if the request fails
      */
     private String sendMessageSync(String message) throws IOException {
+        return sendMessageSync(message, false, null);
+    }
+
+    /**
+     * Sends a message to the iChat server synchronously with RAG support
+     * @param message The user message to send
+     * @param useRag Whether to use RAG (Retrieval-Augmented Generation)
+     * @param sessionId The session ID for context management
+     * @return The server response
+     * @throws IOException if the request fails
+     */
+    private String sendMessageSync(String message, boolean useRag, String sessionId) throws IOException {
         URL url = new URL(apiUrl);
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
         
@@ -72,8 +95,8 @@ public class IChatApiService {
             connection.setConnectTimeout(IChatConfig.CONNECTION_TIMEOUT);
             connection.setReadTimeout(IChatConfig.READ_TIMEOUT);
             
-            // Create JSON payload with client ID from config
-            String jsonPayload = createJsonPayload(message, IChatConfig.CLIENT_ID);
+            // Create JSON payload with client ID from config and RAG support
+            String jsonPayload = createJsonPayload(message, IChatConfig.CLIENT_ID, useRag, sessionId);
             System.out.println("📋 JSON Payload: " + jsonPayload);
             
             // Send the request
@@ -118,6 +141,18 @@ public class IChatApiService {
      * @return JSON string
      */
     private String createJsonPayload(String message, String client) {
+        return createJsonPayload(message, client, false, null);
+    }
+
+    /**
+     * Creates JSON payload for the API request with RAG support
+     * @param message The user message
+     * @param client The client identifier
+     * @param useRag Whether to use RAG
+     * @param sessionId The session ID for context management
+     * @return JSON string
+     */
+    private String createJsonPayload(String message, String client, boolean useRag, String sessionId) {
         // Escape JSON special characters
         String escapedMessage = message
             .replace("\\", "\\\\")
@@ -130,12 +165,25 @@ public class IChatApiService {
             .replace("\\", "\\\\")
             .replace("\"", "\\\"");
 
-        return String.format(
-            "{ \"message\": \"%s\", \"timestamp\": %d, \"client\": \"%s\" }",
-            escapedMessage,
-            System.currentTimeMillis(),
-            escapedClient
-        );
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.append("{ ");
+        jsonBuilder.append("\"message\": \"").append(escapedMessage).append("\", ");
+        jsonBuilder.append("\"timestamp\": ").append(System.currentTimeMillis()).append(", ");
+        jsonBuilder.append("\"client\": \"").append(escapedClient).append("\"");
+
+        if (useRag) {
+            jsonBuilder.append(", \"use_rag\": true");
+        }
+
+        if (sessionId != null && !sessionId.trim().isEmpty()) {
+            String escapedSessionId = sessionId
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"");
+            jsonBuilder.append(", \"session_id\": \"").append(escapedSessionId).append("\"");
+        }
+
+        jsonBuilder.append(" }");
+        return jsonBuilder.toString();
     }
     
     /**

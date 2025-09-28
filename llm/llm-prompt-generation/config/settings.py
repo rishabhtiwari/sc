@@ -30,8 +30,11 @@ class Config:
     RETRIEVER_CONTEXT_ENDPOINT = '/retrieve/context'
     RETRIEVER_HEALTH_ENDPOINT = '/health'
     
-    # LLM Configuration
-    MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'google/flan-t5-base')
+    # LLM Configuration - Model selection via environment variable
+    MODEL_KEY = os.getenv('LLM_MODEL_KEY', 'flan-t5-base')  # Model key for factory
+    MODEL_NAME = os.getenv('LLM_MODEL_NAME', 'google/flan-t5-base')  # Fallback for direct model name
+    MODEL_FILE = os.getenv('MODEL_FILE', 'mistral-7b-instruct-v0.2.Q4_K_M.gguf')  # For GGUF models
+    MODEL_TYPE = os.getenv('MODEL_TYPE', 'flan-t5')  # Model type for factory
     MODEL_CACHE_DIR = os.getenv('MODEL_CACHE_DIR', '/app/cache')
     USE_GPU = os.getenv('LLM_USE_GPU', 'false').lower() == 'true'
     

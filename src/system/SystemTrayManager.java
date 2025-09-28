@@ -1,7 +1,7 @@
 package system;
 
 import javafx.application.Platform;
-import ui.components.ChatSidebar;
+import ui.components.EnhancedChatSidebar;
 
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -16,10 +16,11 @@ public class SystemTrayManager {
 
     private SystemTray systemTray;
     private TrayIcon trayIcon;
-    private ChatSidebar chatSidebar;
+    private EnhancedChatSidebar enhancedChatSidebar;
 
     public SystemTrayManager() {
-        this.chatSidebar = new ChatSidebar();
+        this.enhancedChatSidebar = new EnhancedChatSidebar();
+        System.out.println("✅ SystemTrayManager initialized with Enhanced Chat Sidebar");
     }
 
     /**
@@ -76,12 +77,12 @@ public class SystemTrayManager {
                             javafx.stage.Screen activeScreen = detectActiveWindowScreen();
                             System.out.println("🎯 Detected screen: " + activeScreen.getBounds());
                             System.out.println("📱 Calling toggleOnScreen...");
-                            chatSidebar.toggleOnScreen(activeScreen);
+                            enhancedChatSidebar.toggleOnScreen(activeScreen);
                         } catch (Exception ex) {
                             System.err.println("❌ Error in tray click handler: " + ex.getMessage());
                             ex.printStackTrace();
                             // Fallback to regular toggle
-                            chatSidebar.toggle();
+                            enhancedChatSidebar.toggle();
                         }
                     });
                 }
@@ -167,7 +168,7 @@ public class SystemTrayManager {
         openItem.addActionListener(e -> {
             Platform.runLater(() -> {
                 javafx.stage.Screen activeScreen = detectActiveWindowScreen();
-                chatSidebar.showOnScreen(activeScreen);
+                enhancedChatSidebar.showOnScreen(activeScreen);
             });
         });
 
@@ -186,8 +187,8 @@ public class SystemTrayManager {
         MenuItem exitItem = new MenuItem("Exit");
         exitItem.addActionListener(e -> {
             // Cleanup resources
-            if (chatSidebar != null) {
-                chatSidebar.cleanup();
+            if (enhancedChatSidebar != null) {
+                enhancedChatSidebar.cleanup();
             }
             cleanup();
             Platform.exit();
