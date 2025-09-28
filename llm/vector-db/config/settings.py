@@ -19,8 +19,15 @@ class Config:
     CHROMA_COLLECTION_NAME = 'documents'
     
     # Embedding configuration
-    EMBEDDING_MODEL = 'all-MiniLM-L6-v2'  # Sentence Transformers model
-    EMBEDDING_DIMENSION = 384  # Dimension for all-MiniLM-L6-v2
+    EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'BAAI/bge-base-en-v1.5')  # Default model
+    EMBEDDING_DIMENSION = None  # Will be set dynamically based on model
+
+    # Available embedding models
+    AVAILABLE_MODELS = {
+        'all-MiniLM-L6-v2': 384,
+        'BAAI/bge-base-en-v1.5': 768,
+        'BAAI/bge-small-en-v1.5': 384
+    }
     
     # Document processing
     DEFAULT_CHUNK_SIZE = 1000
@@ -35,6 +42,13 @@ class Config:
     # Performance settings
     BATCH_SIZE = 100
     MAX_CONCURRENT_REQUESTS = 10
+
+    # Deduplication and cleanup settings
+    ENABLE_DEDUPLICATION = True
+    CLEANUP_INTERVAL_HOURS = 24  # Run cleanup every 24 hours
+    CLEANUP_STARTUP_DELAY_HOURS = 1  # Wait 1 hour before first cleanup
+    DEFAULT_CLEANUP_DAYS = 7  # Clean up duplicates older than 7 days
+    CLEANUP_BATCH_SIZE = 100  # Process cleanup in batches
     
     # Logging
     LOG_LEVEL = 'INFO'
@@ -51,10 +65,25 @@ class Config:
     @classmethod
     def get_embedding_config(cls) -> Dict[str, Any]:
         """Get embedding configuration"""
+        dimension = cls.AVAILABLE_MODELS.get(cls.EMBEDDING_MODEL, 384)
         return {
             'model_name': cls.EMBEDDING_MODEL,
-            'dimension': cls.EMBEDDING_DIMENSION
+            'dimension': dimension
         }
+
+    @classmethod
+    def get_available_models(cls) -> Dict[str, int]:
+        """Get available embedding models"""
+        return cls.AVAILABLE_MODELS.copy()
+
+    @classmethod
+    def set_embedding_model(cls, model_name: str) -> bool:
+        """Set the embedding model if it's available"""
+        if model_name in cls.AVAILABLE_MODELS:
+            cls.EMBEDDING_MODEL = model_name
+            cls.EMBEDDING_DIMENSION = cls.AVAILABLE_MODELS[model_name]
+            return True
+        return False
     
     @classmethod
     def get_processing_config(cls) -> Dict[str, Any]:

@@ -70,7 +70,10 @@ class RetrieverService:
             # Filter results by similarity threshold
             filtered_results = []
             for result in search_results.get("results", []):
-                similarity = 1.0 - result.get("distance", 1.0)  # Convert distance to similarity
+                distance = result.get("distance", float('inf'))
+                # Convert distance to similarity using inverse relationship
+                # Lower distance = higher similarity
+                similarity = 1.0 / (1.0 + distance)  # This gives values between 0 and 1
                 if similarity >= min_similarity:
                     result["similarity"] = similarity
                     filtered_results.append(result)

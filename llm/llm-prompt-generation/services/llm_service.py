@@ -259,48 +259,48 @@ class LLMService:
     def _get_rag_context(self, query: str) -> Dict[str, Any]:
         """
         Get RAG context from retriever service
-        
+
         Args:
             query: User query
-            
+
         Returns:
             Dictionary containing context and chunks
         """
         try:
             self.logger.info(f"Retrieving RAG context for: '{query[:50]}...'")
-            
+
             # Call retriever service
             rag_url = Config.get_retriever_url(Config.RETRIEVER_RAG_ENDPOINT)
-            
+
             payload = {
                 "query": query,
                 "max_chunks": Config.MAX_CONTEXT_CHUNKS
             }
-            
+
             response = requests.post(
                 rag_url,
                 json=payload,
                 timeout=Config.RETRIEVER_TIMEOUT,
                 headers={'Content-Type': 'application/json'}
             )
-            
+
             if response.status_code != 200:
                 self.logger.warning(f"Retriever service returned status {response.status_code}")
                 return {"context": "", "chunks": []}
-            
+
             rag_result = response.json()
-            
+
             context = rag_result.get("context", "")
             chunks = rag_result.get("chunks", [])
-            
+
             self.logger.info(f"Retrieved context: {len(context)} chars, {len(chunks)} chunks")
-            
+
             return {
                 "context": context,
                 "chunks": chunks,
                 "total_chunks": len(chunks)
             }
-            
+
         except Exception as e:
             self.logger.error(f"Error retrieving RAG context: {str(e)}")
             return {"context": "", "chunks": []}
