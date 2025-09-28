@@ -326,7 +326,20 @@ class EmbeddingService:
             ids = []
 
             for chunk in chunks:
-                documents.append(chunk["text"])
+                # Include filename context in the embedded text for better search
+                filename = chunk["metadata"].get("filename", "")
+                chunk_text = chunk["text"]
+
+                # Prepend filename context to improve search matching
+                # This allows searches like "resume" to match documents with "Resume" in filename
+                if filename:
+                    # Extract meaningful parts from filename (remove extension, replace underscores)
+                    filename_clean = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+                    enhanced_text = f"Document: {filename_clean}\n\n{chunk_text}"
+                else:
+                    enhanced_text = chunk_text
+
+                documents.append(enhanced_text)
                 metadatas.append(chunk["metadata"])
                 ids.append(chunk["id"])
 

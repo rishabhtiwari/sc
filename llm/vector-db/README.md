@@ -8,6 +8,8 @@ A ChromaDB-based vector database service for storing and retrieving document emb
 - **Sentence Transformers**: Built-in embedding model (all-MiniLM-L6-v2)
 - **RESTful API**: Complete CRUD operations for documents and collections
 - **Semantic Search**: Vector similarity search with metadata filtering
+- **Smart Deduplication**: Automatic content-based deduplication using SHA-256 hashing
+- **Auto Cleanup**: Automatic removal of duplicate documents older than 7 days
 - **Docker Support**: Containerized deployment with health checks
 - **Scalable Architecture**: Designed for integration with LLM services
 
@@ -17,7 +19,7 @@ A ChromaDB-based vector database service for storing and retrieving document emb
 
 - `GET /health` - Service health check
 - `GET /vector/collections` - Get collection information
-- `POST /vector/documents` - Add documents to vector database
+- `POST /vector/documents` - Add documents to vector database (with automatic deduplication)
 - `POST /vector/search` - Search for similar documents
 - `DELETE /vector/documents` - Delete documents by IDs
 - `POST /vector/embeddings` - Generate embeddings for text
@@ -70,6 +72,37 @@ curl -X POST http://localhost:8084/vector/embeddings \
   -d '{
     "texts": ["Hello world", "Another text"]
   }'
+
+
+
+## 🔄 Deduplication System
+
+### Automatic Deduplication
+- **Content Hashing**: Each document gets a SHA-256 hash of its content
+- **Duplicate Detection**: Before storing, checks if content hash already exists
+- **Metadata Updates**: Updates existing document metadata instead of creating duplicates
+- **Storage Efficiency**: Prevents redundant storage of identical content
+
+### Automatic Cleanup
+- **Scheduled Cleanup**: Runs every 24 hours automatically
+- **7-Day Retention**: Removes duplicate documents older than 7 days
+- **Keeps Newest**: Always preserves the most recently added version
+- **Batch Processing**: Processes cleanup in batches for performance
+
+### Response Format
+When adding documents, the API returns detailed deduplication information:
+
+```json
+{
+  "status": "success",
+  "documents_added": 2,           // New unique documents stored
+  "documents_updated": 1,         // Existing documents updated with new metadata
+  "duplicates_skipped": 0,        // Duplicates that couldn't be processed
+  "new_document_ids": ["uuid1", "uuid2"],
+  "updated_documents": [{"id": "existing_uuid", "action": "updated_metadata"}],
+  "all_document_ids": ["uuid1", "uuid2", "existing_uuid"],  // Complete list for context storage
+  "timestamp": 1640995200000
+}
 ```
 
 ## 🔧 Configuration

@@ -7,66 +7,66 @@ from typing import Dict, Any
 
 class Config:
     """Configuration class for retriever service"""
-    
+
     # Service Configuration
     SERVICE_NAME = "Retriever Service"
     SERVICE_VERSION = "1.0.0"
     SERVICE_DESCRIPTION = "Document retrieval and RAG service for iChat"
-    
+
     # Server Configuration
     HOST = os.getenv('RETRIEVER_HOST', '0.0.0.0')
     PORT = int(os.getenv('RETRIEVER_PORT', 8086))
     DEBUG = os.getenv('RETRIEVER_DEBUG', 'false').lower() == 'true'
-    
+
     # Environment
     ENVIRONMENT = os.getenv('RETRIEVER_ENV', 'development')
-    
+
     # External Services
     EMBEDDING_SERVICE_URL = os.getenv('EMBEDDING_SERVICE_URL', 'http://localhost:8085')
     VECTOR_DB_URL = os.getenv('VECTOR_DB_URL', 'http://localhost:8084')
-    
+
     # Embedding Service Endpoints
     EMBEDDING_SEARCH_ENDPOINT = '/embed/search'
     EMBEDDING_DOCUMENT_ENDPOINT = '/embed/document'
     EMBEDDING_HEALTH_ENDPOINT = '/health'
-    
+
     # Vector DB Endpoints
     VECTOR_DB_SEARCH_ENDPOINT = '/vector/search'
     VECTOR_DB_DOCUMENTS_ENDPOINT = '/vector/documents'
     VECTOR_DB_HEALTH_ENDPOINT = '/health'
-    
+
     # Retrieval Configuration
     DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 5))
     MAX_SEARCH_LIMIT = int(os.getenv('MAX_SEARCH_LIMIT', 20))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.2))
-    
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
+
     # RAG Configuration
     CONTEXT_WINDOW_SIZE = int(os.getenv('CONTEXT_WINDOW_SIZE', 4000))
     MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 10))
     CHUNK_OVERLAP_THRESHOLD = float(os.getenv('CHUNK_OVERLAP_THRESHOLD', 0.8))
-    
+
     # Request Timeouts (seconds)
     EMBEDDING_TIMEOUT = int(os.getenv('EMBEDDING_TIMEOUT', 30))
     VECTOR_DB_TIMEOUT = int(os.getenv('VECTOR_DB_TIMEOUT', 15))
-    
+
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     LOG_FILE = os.getenv('LOG_FILE', '/app/logs/retriever-service.log')
-    
+
     # CORS Configuration
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
-    
+
     @classmethod
     def get_embedding_url(cls, endpoint: str) -> str:
         """Get full URL for embedding service endpoint"""
         return f"{cls.EMBEDDING_SERVICE_URL}{endpoint}"
-    
+
     @classmethod
     def get_vector_db_url(cls, endpoint: str) -> str:
         """Get full URL for vector database endpoint"""
         return f"{cls.VECTOR_DB_URL}{endpoint}"
-    
+
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:
         """Convert configuration to dictionary"""

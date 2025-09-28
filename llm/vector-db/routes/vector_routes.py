@@ -241,12 +241,12 @@ def delete_documents():
 def generate_embeddings():
     """
     POST /vector/embeddings - Generate embeddings for text
-    
+
     Expected JSON payload:
     {
         "texts": ["text1", "text2", ...]
     }
-    
+
     Returns:
         JSON response with embeddings
     """
@@ -256,26 +256,26 @@ def generate_embeddings():
                 "status": "error",
                 "error": "Vector service not initialized"
             }), 503
-        
+
         data = request.get_json()
         if not data:
             return jsonify({
                 "status": "error",
                 "error": "No JSON data provided"
             }), 400
-        
+
         texts = data.get('texts', [])
         if not texts:
             return jsonify({
                 "status": "error",
                 "error": "No texts provided"
             }), 400
-        
+
         logger.info(f"Generating embeddings for {len(texts)} texts")
-        
+
         # Generate embeddings using the service's embedding model
         embeddings = vector_service.embedding_model.encode(texts).tolist()
-        
+
         return jsonify({
             "status": "success",
             "embeddings": embeddings,
@@ -283,9 +283,122 @@ def generate_embeddings():
             "dimension": len(embeddings[0]) if embeddings else 0,
             "model": vector_service.config.EMBEDDING_MODEL
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Failed to generate embeddings: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+
+@vector_bp.route('/vector/clear', methods=['DELETE'])
+def clear_all_documents():
+    """
+    DELETE /vector/clear - Clear all documents from vector database
+
+    Returns:
+        JSON response with operation result
+    """
+    try:
+        if not vector_service:
+            return jsonify({
+                "status": "error",
+                "error": "Vector service not initialized"
+            }), 503
+
+        logger.warning("Clearing ALL documents from vector database")
+
+        result = vector_service.clear_all_documents()
+
+        if result['status'] == 'success':
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+    except Exception as e:
+        logger.error(f"Failed to clear all documents: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+
+@vector_bp.route('/vector/models', methods=['GET'])
+def get_model_info():
+    """
+    GET /vector/models - Get current model information and available models
+
+    Returns:
+        JSON response with model information
+    """
+    try:
+        if not vector_service:
+            return jsonify({
+                "status": "error",
+                "error": "Vector service not initialized"
+            }), 503
+
+        result = vector_service.get_model_info()
+
+        if result['status'] == 'success':
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+    except Exception as e:
+        logger.error(f"Failed to get model info: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": str(e)
+        }), 500
+
+
+@vector_bp.route('/vector/models/switch', methods=['POST'])
+def switch_embedding_model():
+    """
+    POST /vector/models/switch - Switch to a different embedding model
+
+    Expected JSON payload:
+    {
+        "model_name": "BAAI/bge-base-en-v1.5"
+    }
+
+    Returns:
+        JSON response with switch operation result
+    """
+    try:
+        if not vector_service:
+            return jsonify({
+                "status": "error",
+                "error": "Vector service not initialized"
+            }), 503
+
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "status": "error",
+                "error": "No JSON data provided"
+            }), 400
+
+        model_name = data.get('model_name', '').strip()
+        if not model_name:
+            return jsonify({
+                "status": "error",
+                "error": "No model_name provided"
+            }), 400
+
+        logger.info(f"Switching embedding model to: {model_name}")
+
+        result = vector_service.switch_embedding_model(model_name)
+
+        if result['status'] == 'success':
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"Failed to switch embedding model: {str(e)}")
         return jsonify({
             "status": "error",
             "error": str(e)
