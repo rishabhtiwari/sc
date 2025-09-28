@@ -109,26 +109,53 @@ class RetrieverService:
             contexts = []
             for doc_id in document_ids:
                 try:
-                    # Get chunks for this document
-                    chunks_url = Config.get_embedding_url(f"{Config.EMBEDDING_DOCUMENT_ENDPOINT}/{doc_id}/chunks")
-                    
-                    response = requests.get(
-                        chunks_url,
-                        timeout=Config.EMBEDDING_TIMEOUT
+                    # Query vector database for chunks with this document_id
+                    search_payload = {
+                        "query": f"document_id:{doc_id}",
+                        "n_results": 50,  # Get all chunks for this document
+                        "collection_name": "documents"
+                    }
+
+                    vector_db_url = Config.get_vector_db_url(Config.VECTOR_DB_SEARCH_ENDPOINT)
+                    response = requests.post(
+                        vector_db_url,
+                        json=search_payload,
+                        timeout=Config.VECTOR_DB_TIMEOUT,
+                        headers={'Content-Type': 'application/json'}
                     )
-                    
+
                     if response.status_code == 200:
-                        chunks_data = response.json()
+                        search_results = response.json()
+
+                        # Filter results to only include chunks from this specific document
+                        document_chunks = []
+                        for result in search_results.get("results", []):
+                            metadata = result.get("metadata", {})
+                            if metadata.get("document_id") == doc_id:
+                                document_chunks.append(result)
+
                         contexts.append({
                             "document_id": doc_id,
-                            "chunks": chunks_data.get("chunks", []),
-                            "total_chunks": chunks_data.get("total_chunks", 0)
+                            "chunks": document_chunks,
+                            "total_chunks": len(document_chunks)
                         })
+
+                        self.logger.info(f"Found {len(document_chunks)} chunks for document {doc_id}")
                     else:
                         self.logger.warning(f"Could not retrieve chunks for document {doc_id}: {response.status_code}")
-                        
+                        contexts.append({
+                            "document_id": doc_id,
+                            "chunks": [],
+                            "total_chunks": 0
+                        })
+
                 except Exception as e:
                     self.logger.error(f"Error retrieving context for document {doc_id}: {str(e)}")
+                    contexts.append({
+                        "document_id": doc_id,
+                        "chunks": [],
+                        "total_chunks": 0
+                    })
                     continue
             
             return {

@@ -265,18 +265,47 @@ class DocumentService:
             return {"status": "error", "error": "DOCX processing not available"}
 
         try:
+            print(f"📄 Processing DOCX file: {os.path.basename(docx_path)}")
             doc = Document(docx_path)
+
+            # Extract text from paragraphs
             paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-            extracted_text = '\n\n'.join(paragraphs)
+            print(f"📝 Found {len(paragraphs)} non-empty paragraphs")
+
+            # Also try to extract text from tables
+            table_text = []
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        cell_text = cell.text.strip()
+                        if cell_text:
+                            table_text.append(cell_text)
+
+            print(f"📊 Found {len(table_text)} table cells with text")
+
+            # Combine all text
+            all_text = paragraphs + table_text
+            extracted_text = '\n\n'.join(all_text)
+
+            print(f"📋 Total extracted text length: {len(extracted_text)} characters")
+
+            if not extracted_text.strip():
+                return {
+                    "status": "error",
+                    "error": f"DOCX file appears to be empty - no text found in {len(doc.paragraphs)} paragraphs and {len(doc.tables)} tables"
+                }
 
             return {
                 "status": "success",
                 "text": self._format_output(extracted_text, output_format),
                 "confidence": 1.0,
                 "paragraphs": len(paragraphs),
+                "tables": len(doc.tables),
+                "table_cells": len(table_text),
                 "method": "text_extraction"
             }
         except Exception as e:
+            print(f"❌ DOCX processing error: {str(e)}")
             return {"status": "error", "error": f"DOCX processing failed: {str(e)}"}
 
     def _process_txt(self, txt_path: str, output_format: str) -> Dict[str, Any]:

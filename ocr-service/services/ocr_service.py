@@ -52,11 +52,13 @@ class OCRService:
     def health_check(self) -> bool:
         """
         Check if OCR service is healthy
-        
+
         Returns:
             bool: True if service is healthy
         """
         return PADDLEOCR_AVAILABLE and self.ocr_engine is not None
+
+
     
     def extract_text_from_image(self, image_path: str, confidence_threshold: float = 0.5) -> Dict[str, Any]:
         """
@@ -107,9 +109,9 @@ class OCRService:
             avg_confidence = total_confidence / valid_detections if valid_detections > 0 else 0.0
             
             final_text = '\n'.join(extracted_text)
-            
+
             print(f"📝 Extracted {len(final_text)} characters with {avg_confidence:.2f} confidence")
-            
+
             return {
                 "status": "success",
                 "text": final_text,

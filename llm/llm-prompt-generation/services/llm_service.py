@@ -4,55 +4,98 @@ LLM Service for prompt generation and response generation
 import time
 import requests
 import torch
+import os
 from typing import Dict, List, Any, Optional
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from config.settings import Config
 from utils.logger import setup_logger
+from models.model_factory import ModelFactory
+
+try:
+    from llama_cpp import Llama
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    LLAMA_CPP_AVAILABLE = False
+    print("⚠️ llama-cpp-python not available. Install with: pip install llama-cpp-python")
+
+try:
+    from huggingface_hub import hf_hub_download
+    HF_HUB_AVAILABLE = True
+except ImportError:
+    HF_HUB_AVAILABLE = False
+    print("⚠️ huggingface-hub not available. Install with: pip install huggingface-hub")
 
 
 class LLMService:
     """Service for LLM-powered prompt generation and response generation"""
-    
+
     def __init__(self):
         self.logger = setup_logger('llm-service')
         self.logger.info("Initializing LLM Service")
-        
+
         # Service URLs
         self.retriever_service_url = Config.RETRIEVER_SERVICE_URL
-        
+
         # Model components
-        self.tokenizer = None
-        self.model = None
-        self.generator = None
+        self.model_instance = None
         self.model_loaded = False
-        
+
         self.logger.info(f"Retriever Service URL: {self.retriever_service_url}")
-        self.logger.info(f"Model: {Config.MODEL_NAME}")
+        self.logger.info(f"Model Key: {Config.MODEL_KEY}")
         self.logger.info(f"Use GPU: {Config.USE_GPU}")
-        
-        # Load model
-        self._load_model()
+
+        # Load model using factory
+        self._load_model_via_factory()
     
+    def _load_model_via_factory(self):
+        """Load model using the model factory"""
+        try:
+            # Prepare configuration for model factory
+            model_config = {
+                'cache_dir': Config.MODEL_CACHE_DIR,
+                'use_gpu': Config.USE_GPU,
+                # Don't override model_name - let factory use its own configuration
+                'model_file': Config.MODEL_FILE   # For GGUF models
+            }
+
+            # Create model instance using factory
+            self.model_instance = ModelFactory.create_model(
+                model_key=Config.MODEL_KEY,
+                config=model_config,
+                logger=self.logger
+            )
+
+            if self.model_instance is None:
+                self.logger.error("Failed to create model instance")
+                return
+
+            # Load the model
+            if self.model_instance.load_model():
+                self.model_loaded = True
+                self.logger.info("Model loaded successfully via factory")
+
+                # Set model type for compatibility with legacy code
+                self.model_type = self.model_instance.get_model_type()
+                self.logger.info(f"Model type: {self.model_type}")
+
+                # Log model info
+                model_info = self.model_instance.get_model_info()
+                self.logger.info(f"Model Info: {model_info}")
+            else:
+                self.logger.error("Failed to load model via factory")
+
+        except Exception as e:
+            self.logger.error(f"Error loading model via factory: {str(e)}")
+
     def _load_model(self):
-        """Load the LLM model and tokenizer"""
+        """Legacy method - kept for backward compatibility"""
+        self.logger.warning("Using legacy model loading method. Consider using factory approach.")
         try:
             self.logger.info(f"Loading model: {Config.MODEL_NAME}")
-            
+
             # Determine device
             device = "cuda" if Config.USE_GPU and torch.cuda.is_available() else "cpu"
             self.logger.info(f"Using device: {device}")
-            
-            # Load tokenizer
-            self.logger.info("Loading tokenizer...")
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                Config.MODEL_NAME,
-                cache_dir=Config.MODEL_CACHE_DIR,
-                trust_remote_code=True
-            )
-            
-            # Add pad token if it doesn't exist
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
             
             # Load model - try seq2seq first (T5, FLAN-T5), then causal LM (GPT, DialoGPT)
             self.logger.info("Loading model...")
@@ -106,7 +149,7 @@ class LLMService:
             self.model_loaded = False
             raise e
     
-    def generate_response(self, query: str, use_rag: bool = True, 
+    def generate_response(self, query: str, use_rag: bool = True,
                          context: str = None) -> Dict[str, Any]:
         """
         Generate response using LLM with optional RAG context
@@ -146,31 +189,56 @@ class LLMService:
             
             self.logger.info(f"Using {response_type} response mode")
             
-            # Generate response
-            generation_params = Config.get_generation_params(self.model_type)
-            
-            # Generate text
-            generated = self.generator(
-                prompt,
-                **generation_params
-            )
-            
-            # Extract generated text based on model type
-            if generated and len(generated) > 0:
-                if self.model_type == "seq2seq":
-                    # For seq2seq models (T5, FLAN-T5), the response is the full generated text
-                    response_text = generated[0]['generated_text'].strip()
+            # Initialize generation_params for return statement
+            generation_params = {}
+
+            # Generate response using appropriate method
+            if hasattr(self, 'model_instance') and self.model_instance:
+                # Use factory model instance
+                if context and context.strip():
+                    result = self.model_instance.generate_with_context(query, context)
                 else:
-                    # For causal LM models (GPT, DialoGPT), remove the prompt
-                    response_text = generated[0]['generated_text'].strip()
-                    # Clean up response (remove prompt if it's included)
-                    if prompt in response_text:
-                        response_text = response_text.replace(prompt, "").strip()
+                    result = self.model_instance.generate_response(prompt)
+
+                if result.get('status') == 'success':
+                    response_text = result.get('response', '').strip()
+                    # Get generation params from the result if available
+                    generation_params = result.get('generation_params', {})
+                else:
+                    response_text = "I apologize, but I couldn't generate a response at this time."
+                    self.logger.error(f"Model generation failed: {result.get('error', 'Unknown error')}")
             else:
-                response_text = "I apologize, but I couldn't generate a response at this time."
+                # Fallback to legacy pipeline method
+                generation_params = Config.get_generation_params(self.model_type)
+
+                # Generate text
+                generated = self.generator(
+                    prompt,
+                    **generation_params
+                )
+
+                # Extract generated text based on model type
+                if generated and len(generated) > 0:
+                    if self.model_type == "seq2seq":
+                        # For seq2seq models (T5, FLAN-T5), the response is the full generated text
+                        response_text = generated[0]['generated_text'].strip()
+                    else:
+                        # For causal LM models (GPT, DialoGPT), remove the prompt
+                        response_text = generated[0]['generated_text'].strip()
+                        # Clean up response (remove prompt if it's included)
+                        if prompt in response_text:
+                            response_text = response_text.replace(prompt, "").strip()
+                else:
+                    response_text = "I apologize, but I couldn't generate a response at this time."
             
             self.logger.info(f"Generated response ({len(response_text)} chars)")
-            
+
+            # Get actual model name from model instance if available
+            actual_model_name = Config.MODEL_NAME
+            if hasattr(self, 'model_instance') and self.model_instance:
+                model_info = self.model_instance.get_model_info()
+                actual_model_name = model_info.get('model_name', Config.MODEL_NAME)
+
             return {
                 "status": "success",
                 "query": query,
@@ -179,7 +247,7 @@ class LLMService:
                 "context_used": bool(context and context.strip()),
                 "context_length": len(context) if context else 0,
                 "context_chunks": len(context_chunks),
-                "model": Config.MODEL_NAME,
+                "model": actual_model_name,
                 "generation_params": generation_params,
                 "timestamp": int(time.time() * 1000)
             }
@@ -305,11 +373,17 @@ class LLMService:
             overall_healthy = (health_status["service"] == "healthy" and 
                              health_status["retriever_service"] == "healthy")
             
+            # Get actual model name from model instance if available
+            actual_model_name = Config.MODEL_NAME
+            if hasattr(self, 'model_instance') and self.model_instance:
+                model_info = self.model_instance.get_model_info()
+                actual_model_name = model_info.get('model_name', Config.MODEL_NAME)
+
             return {
                 "status": "healthy" if overall_healthy else "degraded",
                 "service_name": Config.SERVICE_NAME,
                 "version": Config.SERVICE_VERSION,
-                "model": Config.MODEL_NAME,
+                "model": actual_model_name,
                 "model_loaded": self.model_loaded,
                 "dependencies": health_status,
                 "timestamp": int(time.time() * 1000)

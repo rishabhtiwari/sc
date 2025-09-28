@@ -43,6 +43,12 @@ ENV PYTHONUNBUFFERED=1
 ENV TRANSFORMERS_CACHE=/app/cache
 ENV HF_HOME=/app/cache
 
+# Model Configuration - Change this to select different models
+# Available options: flan-t5-base, flan-t5-small, flan-t5-large, mistral-7b-q4, mistral-7b-q5, mistral-7b-q2
+ENV LLM_MODEL_KEY=mistral-7b-q4
+ENV LLM_USE_GPU=false
+ENV MODEL_CACHE_DIR=/app/cache
+
 # Switch to non-root user
 USER llmservice
 

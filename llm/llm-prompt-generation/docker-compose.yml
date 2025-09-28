@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  # LLM Service for AI responses
+  llm-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ichat-llm-service
+    ports:
+      - "8083:8087"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8087
+      # Model Configuration - Change LLM_MODEL_KEY to select different models
+      # Options: flan-t5-base, flan-t5-small, flan-t5-large, mistral-7b-q4, mistral-7b-q5, mistral-7b-q2
+      - LLM_MODEL_KEY=mistral-7b-q4
+      - LLM_USE_GPU=false
+      - MODEL_CACHE_DIR=/app/cache
+      - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
+    volumes:
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    networks:
+      - ichat-network
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 6G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8087/health"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 180s  # LLM service takes longer to load model
+    restart: unless-stopped
+
+networks:
+  ichat-network:
+    external: true
+    name: ichat-network
+
+volumes:
+  llm-logs:
+    driver: local
+  llm-cache:
+    driver: local

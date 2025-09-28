@@ -16,10 +16,10 @@ import ui.styles.ButtonStyles;
 public class AskButton {
     
     private Stage buttonStage;
-    private ChatSidebar chatSidebar;
-    
+    private EnhancedChatSidebar enhancedChatSidebar;
+
     public AskButton() {
-        this.chatSidebar = new ChatSidebar();
+        this.enhancedChatSidebar = new EnhancedChatSidebar();
     }
     
     /**
@@ -42,7 +42,7 @@ public class AskButton {
         
         // Add click event to open/toggle sidebar (like dock icon behavior)
         askButton.setOnAction(e -> {
-            chatSidebar.toggle(); // Toggle sidebar without hiding the dock icon
+            enhancedChatSidebar.toggle(); // Toggle sidebar without hiding the dock icon
         });
 
         // Add hover effects like dock icons
@@ -152,7 +152,7 @@ public class AskButton {
         if (buttonStage != null) {
             buttonStage.hide();
         }
-        chatSidebar.hide();
+        enhancedChatSidebar.hide();
     }
 
     /**

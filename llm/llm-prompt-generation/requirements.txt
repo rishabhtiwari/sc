@@ -10,3 +10,5 @@ accelerate==0.24.0
 sentencepiece==0.1.99
 protobuf==4.25.0
 numpy==1.24.3
+llama-cpp-python==0.2.20
+huggingface-hub==0.19.4
