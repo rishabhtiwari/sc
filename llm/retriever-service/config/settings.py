@@ -36,9 +36,9 @@ class Config:
     VECTOR_DB_HEALTH_ENDPOINT = '/health'
 
     # Retrieval Configuration
-    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 5))
+    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 10))
     MAX_SEARCH_LIMIT = int(os.getenv('MAX_SEARCH_LIMIT', 20))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.7))
 
     # RAG Configuration
     CONTEXT_WINDOW_SIZE = int(os.getenv('CONTEXT_WINDOW_SIZE', 4000))

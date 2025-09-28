@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub OAuth Test - iChat Code Generation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .step {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #0366d6;
+        }
+        button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0256cc;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            box-sizing: border-box;
+        }
+        input[readonly] {
+            background-color: #f8f9fa;
+            color: #6c757d;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 GitHub OAuth Test</h1>
+        <p>Test the GitHub OAuth integration for private repository access.</p>
+
+        <div class="step">
+            <h3>Step 0: Configure GitHub OAuth App</h3>
+            <p>First, set up your GitHub OAuth application credentials.</p>
+            <div class="form-group">
+                <label for="client-id">GitHub Client ID:</label>
+                <input type="text" id="client-id" placeholder="Enter your GitHub OAuth app Client ID">
+            </div>
+            <div class="form-group">
+                <label for="client-secret">GitHub Client Secret:</label>
+                <input type="password" id="client-secret" placeholder="Enter your GitHub OAuth app Client Secret">
+            </div>
+            <div class="form-group">
+                <label for="redirect-uri">Redirect URI:</label>
+                <input type="text" id="redirect-uri" value="http://localhost:8088/code/auth/github/callback" readonly>
+            </div>
+            <div class="form-group">
+                <label for="scope">OAuth Scope:</label>
+                <input type="text" id="scope" value="repo,read:user" readonly>
+            </div>
+            <button onclick="configureOAuth()">⚙️ Configure OAuth</button>
+            <div id="config-result"></div>
+        </div>
+
+        <div class="step">
+            <h3>Step 1: Initiate GitHub OAuth</h3>
+            <p>After configuring OAuth, start the GitHub authentication process.</p>
+            <div class="form-group">
+                <label for="config-id">Config ID:</label>
+                <input type="text" id="config-id" placeholder="Config ID from Step 0" readonly>
+            </div>
+            <button onclick="startOAuth()" id="start-oauth-btn" disabled>🚀 Start GitHub OAuth</button>
+            <div id="oauth-result"></div>
+        </div>
+        
+        <div class="step">
+            <h3>Step 2: Check Authentication Status</h3>
+            <p>After completing OAuth, check your authentication status.</p>
+            <div class="form-group">
+                <label for="session-id">Session ID:</label>
+                <input type="text" id="session-id" placeholder="Enter session ID from OAuth response">
+            </div>
+            <button onclick="checkAuthStatus()">✅ Check Auth Status</button>
+            <div id="auth-result"></div>
+        </div>
+        
+        <div class="step">
+            <h3>Step 3: Connect to Private Repository</h3>
+            <p>Connect to your private repository using the authenticated session.</p>
+            <div class="form-group">
+                <label for="repo-url">Repository URL:</label>
+                <input type="text" id="repo-url" placeholder="git@github-rishabh:rishabhtiwari/sc.git" value="git@github-rishabh:rishabhtiwari/sc.git">
+            </div>
+            <div class="form-group">
+                <label for="repo-branch">Branch (optional):</label>
+                <input type="text" id="repo-branch" placeholder="main" value="main">
+            </div>
+            <button onclick="connectRepository()">🔗 Connect Repository</button>
+            <div id="connect-result"></div>
+        </div>
+        
+        <div class="step">
+            <h3>📋 Instructions</h3>
+            <ol>
+                <li><strong>Create GitHub OAuth App:</strong> Go to GitHub Settings → Developer settings → OAuth Apps → New OAuth App</li>
+                <li><strong>Configure App:</strong> Use <code>http://localhost:8088/code/auth/github/callback</code> as callback URL</li>
+                <li><strong>Get Credentials:</strong> Copy Client ID and Client Secret from your GitHub OAuth app</li>
+                <li><strong>Configure OAuth:</strong> Enter credentials in Step 0 and click "Configure OAuth"</li>
+                <li><strong>Start OAuth:</strong> Click "Start GitHub OAuth" to get the authorization URL</li>
+                <li><strong>Authorize:</strong> Visit the auth URL and authorize the application</li>
+                <li><strong>Get Session:</strong> Copy the session_id from the callback response</li>
+                <li><strong>Check Status:</strong> Verify your authentication status</li>
+                <li><strong>Connect Repo:</strong> Use your session to connect to private repositories</li>
+            </ol>
+
+            <h4>🔗 Quick Setup Links:</h4>
+            <ul>
+                <li><a href="https://github.com/settings/developers" target="_blank">GitHub Developer Settings</a></li>
+                <li><a href="https://github.com/settings/applications/new" target="_blank">Create New OAuth App</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8088';
+
+        async function configureOAuth() {
+            const clientId = document.getElementById('client-id').value;
+            const clientSecret = document.getElementById('client-secret').value;
+            const redirectUri = document.getElementById('redirect-uri').value;
+            const scope = document.getElementById('scope').value;
+
+            if (!clientId || !clientSecret) {
+                document.getElementById('config-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Please enter both Client ID and Client Secret
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/code/auth/github/config`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        client_secret: clientSecret,
+                        redirect_uri: redirectUri,
+                        scope: scope
+                    })
+                });
+
+                const data = await response.json();
+                const resultDiv = document.getElementById('config-result');
+
+                if (data.status === 'success') {
+                    document.getElementById('config-id').value = data.data.config_id;
+                    document.getElementById('start-oauth-btn').disabled = false;
+
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ OAuth Configuration Stored!
+
+                            Config ID: ${data.data.config_id}
+                            Scope: ${data.data.scope}
+
+                            You can now start the OAuth flow!
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('config-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Network Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function startOAuth() {
+            const configId = document.getElementById('config-id').value;
+
+            if (!configId) {
+                document.getElementById('oauth-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Please configure OAuth first (Step 0)
+                    </div>
+                `;
+                return;
+            }
+            try {
+                const response = await fetch(`${API_BASE}/code/auth/github/login?config_id=${configId}`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('oauth-result');
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ OAuth URL Generated!
+                            
+                            State: ${data.data.state}
+                            
+                            🔗 Click here to authorize: 
+                            <a href="${data.data.auth_url}" target="_blank">Authorize GitHub Access</a>
+                            
+                            After authorization, you'll get a session_id in the callback response.
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('oauth-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Network Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function checkAuthStatus() {
+            const sessionId = document.getElementById('session-id').value;
+            
+            if (!sessionId) {
+                document.getElementById('auth-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Please enter a session ID
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/code/auth/status?session_id=${sessionId}`);
+                const data = await response.json();
+                
+                const resultDiv = document.getElementById('auth-result');
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ Authenticated!
+                            
+                            User: ${data.data.user.login} (${data.data.user.name})
+                            Email: ${data.data.user.email || 'Not public'}
+                            Scope: ${data.data.token_info.scope}
+                            
+                            You can now connect to private repositories!
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('auth-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Network Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+        
+        async function connectRepository() {
+            const sessionId = document.getElementById('session-id').value;
+            const repoUrl = document.getElementById('repo-url').value;
+            const branch = document.getElementById('repo-branch').value || 'main';
+            
+            if (!sessionId) {
+                document.getElementById('connect-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Please enter a session ID first
+                    </div>
+                `;
+                return;
+            }
+            
+            if (!repoUrl) {
+                document.getElementById('connect-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Please enter a repository URL
+                    </div>
+                `;
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/code/connect`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        type: 'git',
+                        url: repoUrl,
+                        branch: branch,
+                        session_id: sessionId
+                    })
+                });
+                
+                const data = await response.json();
+                const resultDiv = document.getElementById('connect-result');
+                
+                if (data.status === 'success') {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            ✅ Repository Connected!
+                            
+                            Repository ID: ${data.data.repository_id}
+                            Languages: ${data.data.languages.join(', ')}
+                            Files: ${data.data.total_files}
+                            
+                            Repository is now available for code generation!
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ Error: ${data.error}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('connect-result').innerHTML = `
+                    <div class="result error">
+                        ❌ Network Error: ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

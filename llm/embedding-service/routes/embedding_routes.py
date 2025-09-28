@@ -171,6 +171,71 @@ def delete_document(document_id: str):
             "timestamp": int(time.time() * 1000)
         }), 500
 
+@embedding_bp.route('/documents', methods=['POST'])
+def process_documents_bulk():
+    """
+    Process multiple documents in bulk for repository integration
+
+    Expected JSON payload:
+    - documents: List of document objects with:
+      - content: Text content of the document
+      - metadata: Document metadata (type, repository_id, file_path, language, etc.)
+
+    Returns:
+    - document_ids: List of generated document IDs
+    - processing statistics
+    """
+    try:
+        # Get embedding service from app context
+        embedding_service = getattr(current_app, 'embedding_service', None)
+        if not embedding_service:
+            return jsonify({
+                "status": "error",
+                "error": "Embedding service not available",
+                "timestamp": int(time.time() * 1000)
+            }), 503
+
+        # Get JSON payload
+        if not request.is_json:
+            return jsonify({
+                "status": "error",
+                "error": "Content-Type must be application/json",
+                "timestamp": int(time.time() * 1000)
+            }), 400
+
+        data = request.get_json()
+        documents = data.get('documents', [])
+
+        if not documents or not isinstance(documents, list):
+            return jsonify({
+                "status": "error",
+                "error": "Documents list is required",
+                "timestamp": int(time.time() * 1000)
+            }), 400
+
+        logger.info(f"Processing {len(documents)} documents in bulk")
+
+        # Process documents in bulk
+        result = embedding_service.process_documents_bulk(documents)
+
+        return jsonify({
+            "status": "success",
+            "document_ids": result["document_ids"],
+            "total_documents": result["total_documents"],
+            "total_chunks": result["total_chunks"],
+            "processing_time_ms": result["processing_time_ms"],
+            "timestamp": int(time.time() * 1000)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error processing documents in bulk: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": "Failed to process documents in bulk",
+            "details": str(e),
+            "timestamp": int(time.time() * 1000)
+        }), 500
+
 @embedding_bp.route('/search', methods=['POST'])
 def search_documents():
     """

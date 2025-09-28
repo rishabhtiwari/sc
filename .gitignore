@@ -32,3 +32,7 @@ bin/
 
 ### Log files ###
 *.log
+
+### Java Libraries ###
+lib/
+*.jar

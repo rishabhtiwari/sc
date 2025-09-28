@@ -59,9 +59,18 @@ for jar in "$JAVAFX_PATH"/*.jar; do
     fi
 done
 
-echo "📚 JavaFX Classpath: $JAVAFX_CLASSPATH"
+# Add JSON library to classpath
+JSON_LIB="lib/json-20240303.jar"
+if [ -f "$JSON_LIB" ]; then
+    JAVAFX_CLASSPATH="$JAVAFX_CLASSPATH:$JSON_LIB"
+    echo "📚 Added JSON library: $JSON_LIB"
+else
+    echo "⚠️  JSON library not found at: $JSON_LIB"
+fi
 
-# Compile with JavaFX in classpath
+echo "📚 Full Classpath: $JAVAFX_CLASSPATH"
+
+# Compile with JavaFX and JSON library in classpath
 javac -cp "src:$JAVAFX_CLASSPATH" -d out/production/sc $JAVA_FILES
 
 # Check compilation result
@@ -90,8 +99,8 @@ echo "🎯 Starting iChat Assistant..."
 echo "📍 Look for the purple 'iC' icon in your system tray/menu bar"
 echo ""
 
-# Run with JavaFX in classpath
-echo "🚀 Running with JavaFX classpath..."
+# Run with JavaFX and JSON library in classpath
+echo "🚀 Running with full classpath..."
 java -cp "out/production/sc:$JAVAFX_CLASSPATH" Main
 
 echo ""

@@ -35,7 +35,7 @@ class Config:
     MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10MB
     
     # Search configuration
-    DEFAULT_SEARCH_RESULTS = 5
+    DEFAULT_SEARCH_RESULTS = 10
     MAX_SEARCH_RESULTS = 50
     DEFAULT_SIMILARITY_THRESHOLD = 0.7
     
