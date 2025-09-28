@@ -12,6 +12,7 @@ import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import ui.styles.SidebarStyles;
+import ui.components.CodeBlockRenderer;
 import api.IChatApiService;
 import api.ClientDocumentStorageService;
 import config.IChatConfig;
@@ -29,7 +30,8 @@ public class EnhancedChatSidebar {
 
     private Stage sidebarStage;
     private boolean isVisible = false;
-    private TextArea chatArea;
+    private VBox chatContainer;
+    private ScrollPane chatScrollPane;
     private Runnable onCloseCallback;
     private IChatApiService apiService;
     private ClientDocumentStorageService documentStorageService;
@@ -247,20 +249,28 @@ public class EnhancedChatSidebar {
 
 
     /**
-     * Creates the chat area
+     * Creates the chat area with rich code block support
      */
     private ScrollPane createChatArea() {
-        chatArea = new TextArea();
-        chatArea.setEditable(false);
-        chatArea.setWrapText(true);
-        chatArea.getStyleClass().add("chat-area");
-        updateChatWelcomeMessage();
+        chatContainer = new VBox(10);
+        chatContainer.setPadding(new Insets(16));
+        chatContainer.setStyle(
+            "-fx-background-color: #4a5568;" +
+            "-fx-border-color: #718096;" +
+            "-fx-border-width: 1px;" +
+            "-fx-border-radius: 8px;" +
+            "-fx-background-radius: 8px;"
+        );
 
-        ScrollPane chatScrollPane = new ScrollPane(chatArea);
+        // Add welcome message
+        addWelcomeMessage();
+
+        chatScrollPane = new ScrollPane(chatContainer);
         chatScrollPane.setFitToWidth(true);
         chatScrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         chatScrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         chatScrollPane.getStyleClass().add("chat-scroll");
+        chatScrollPane.setStyle("-fx-background-color: transparent;");
 
         return chatScrollPane;
     }
@@ -455,38 +465,42 @@ public class EnhancedChatSidebar {
         System.out.println("📁 Document storage initialized and ready");
     }
 
-    private void updateChatWelcomeMessage() {
+    private void addWelcomeMessage() {
         String welcomeMessage = "👋 Welcome to iChat Assistant!\n\n" +
             "✨ I'm your AI-powered chat companion.\n\n" +
             "📎 Upload documents using the ⋯ menu for intelligent responses\n" +
             "💬 Ask me anything and I'll help you!\n\n" +
             "Ready to chat! 🚀";
 
-        if (chatArea != null) {
-            chatArea.setText(welcomeMessage);
-        }
+        VBox welcomeBlock = CodeBlockRenderer.createFormattedMessage("Assistant", welcomeMessage);
+        chatContainer.getChildren().add(welcomeBlock);
     }
 
     private void clearChat() {
-        updateChatWelcomeMessage();
+        if (chatContainer != null) {
+            chatContainer.getChildren().clear();
+            addWelcomeMessage();
+        }
     }
 
     private void addMessage(String sender, String message) {
-        if (chatArea != null) {
-            chatArea.appendText("\n\n" + sender + ": " + message);
-            chatArea.setScrollTop(Double.MAX_VALUE);
+        if (chatContainer != null) {
+            VBox messageBlock = CodeBlockRenderer.createFormattedMessage(sender, message);
+            chatContainer.getChildren().add(messageBlock);
+
+            // Auto-scroll to bottom
+            Platform.runLater(() -> {
+                chatScrollPane.setVvalue(1.0);
+            });
         }
     }
 
     private void removeLastMessage() {
-        if (chatArea != null) {
-            String currentText = chatArea.getText();
-            int lastMessageIndex = currentText.lastIndexOf("\n\n");
-            if (lastMessageIndex > 0) {
-                chatArea.setText(currentText.substring(0, lastMessageIndex));
-            }
+        if (chatContainer != null && !chatContainer.getChildren().isEmpty()) {
+            chatContainer.getChildren().remove(chatContainer.getChildren().size() - 1);
         }
     }
+
 
     private String formatFileSize(long bytes) {
         if (bytes < 1024) return bytes + " B";

@@ -176,6 +176,9 @@ class LLMService:
             else:
                 context_chunks = []
             
+            # Detect if this is a code generation request
+            is_code_request = self._is_code_generation_request(query)
+
             # Build prompt
             if context and context.strip():
                 prompt = Config.RAG_PROMPT_TEMPLATE.format(
@@ -183,6 +186,9 @@ class LLMService:
                     question=query
                 )
                 response_type = "rag"
+            elif is_code_request:
+                prompt = Config.CODE_GENERATION_PROMPT_TEMPLATE.format(question=query)
+                response_type = "code_generation"
             else:
                 prompt = Config.FALLBACK_PROMPT_TEMPLATE.format(question=query)
                 response_type = "direct"
@@ -232,6 +238,10 @@ class LLMService:
                     response_text = "I apologize, but I couldn't generate a response at this time."
             
             self.logger.info(f"Generated response ({len(response_text)} chars)")
+
+            # Post-process response for better formatting
+            if is_code_request:
+                response_text = self._format_code_response(response_text)
 
             # Get actual model name from model instance if available
             actual_model_name = Config.MODEL_NAME
@@ -396,3 +406,135 @@ class LLMService:
                 "error": str(e),
                 "timestamp": int(time.time() * 1000)
             }
+
+    def _is_code_generation_request(self, query: str) -> bool:
+        """
+        Detect if the query is asking for code generation
+
+        Args:
+            query: User query
+
+        Returns:
+            True if this appears to be a code generation request
+        """
+        code_keywords = [
+            'write', 'create', 'generate', 'build', 'implement', 'develop',
+            'function', 'class', 'method', 'code', 'script', 'program',
+            'algorithm', 'python', 'javascript', 'java', 'cpp', 'c++',
+            'html', 'css', 'sql', 'bash', 'shell', 'php', 'ruby', 'go',
+            'rust', 'typescript', 'swift', 'kotlin', 'scala', 'api',
+            'endpoint', 'component', 'module', 'library', 'framework'
+        ]
+
+        query_lower = query.lower()
+        return any(keyword in query_lower for keyword in code_keywords)
+
+    def _format_code_response(self, response: str) -> str:
+        """
+        Format code response to ensure proper code block formatting
+
+        Args:
+            response: Raw response from LLM
+
+        Returns:
+            Formatted response with proper code blocks
+        """
+        import re
+
+        # If response already has code blocks, return as is
+        if '```' in response:
+            return response
+
+        # Try to detect code patterns and wrap them in code blocks
+        lines = response.split('\n')
+        formatted_lines = []
+        in_code_block = False
+        code_language = None
+
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+
+            # Detect start of code block
+            if not in_code_block and self._looks_like_code_start(stripped, lines[i:]):
+                # Try to detect language
+                code_language = self._detect_code_language(response)
+                formatted_lines.append(f'```{code_language}')
+                formatted_lines.append(line)
+                in_code_block = True
+            # Detect end of code block
+            elif in_code_block and (not stripped or self._looks_like_explanation(stripped)):
+                formatted_lines.append('```')
+                formatted_lines.append(line)
+                in_code_block = False
+            else:
+                formatted_lines.append(line)
+
+        # Close any open code block
+        if in_code_block:
+            formatted_lines.append('```')
+
+        return '\n'.join(formatted_lines)
+
+    def _looks_like_code_start(self, line: str, remaining_lines: list) -> bool:
+        """Check if a line looks like the start of a code block"""
+        code_indicators = [
+            'def ', 'class ', 'function ', 'var ', 'let ', 'const ',
+            'import ', 'from ', 'if ', 'for ', 'while ', 'try:',
+            '#!/', '<?php', '<html', '<script', 'SELECT ', 'CREATE ',
+            'public class', 'private ', 'public ', 'protected '
+        ]
+
+        # Check if line starts with common code patterns
+        if any(line.startswith(indicator) for indicator in code_indicators):
+            return True
+
+        # Check if line has code-like structure (assignments, function calls)
+        if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*\s*[=\(]', line):
+            return True
+
+        # Check if multiple consecutive lines look like code
+        code_like_count = 0
+        for next_line in remaining_lines[:3]:
+            if (next_line.strip() and
+                (next_line.startswith('    ') or next_line.startswith('\t') or
+                 any(indicator in next_line for indicator in code_indicators))):
+                code_like_count += 1
+
+        return code_like_count >= 2
+
+    def _looks_like_explanation(self, line: str) -> bool:
+        """Check if a line looks like explanation text rather than code"""
+        explanation_indicators = [
+            'this function', 'this class', 'this code', 'this script',
+            'the above', 'explanation:', 'note:', 'example:', 'usage:',
+            'you can', 'this will', 'this creates', 'this implements'
+        ]
+
+        return any(indicator in line.lower() for indicator in explanation_indicators)
+
+    def _detect_code_language(self, response: str) -> str:
+        """Detect the programming language from the response"""
+        language_patterns = {
+            'python': ['def ', 'import ', 'from ', 'print(', '__init__', 'self.'],
+            'javascript': ['function ', 'var ', 'let ', 'const ', 'console.log', '=>'],
+            'java': ['public class', 'private ', 'public static', 'System.out'],
+            'cpp': ['#include', 'std::', 'cout', 'cin', 'int main'],
+            'html': ['<html', '<div', '<script', '<style', '<!DOCTYPE'],
+            'css': ['{', '}', 'color:', 'background:', 'margin:'],
+            'sql': ['SELECT', 'FROM', 'WHERE', 'INSERT', 'UPDATE', 'CREATE'],
+            'bash': ['#!/bin/bash', 'echo', 'grep', 'awk', 'sed'],
+            'php': ['<?php', '$_', 'echo ', 'function '],
+            'ruby': ['def ', 'end', 'puts ', 'require '],
+            'go': ['package ', 'func ', 'import ', 'fmt.'],
+            'rust': ['fn ', 'let ', 'mut ', 'println!'],
+            'swift': ['func ', 'var ', 'let ', 'print('],
+            'kotlin': ['fun ', 'val ', 'var ', 'println(']
+        }
+
+        response_lower = response.lower()
+
+        for language, patterns in language_patterns.items():
+            if any(pattern.lower() in response_lower for pattern in patterns):
+                return language
+
+        return ''  # Default to no language specification
