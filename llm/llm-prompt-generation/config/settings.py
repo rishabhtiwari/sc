@@ -69,6 +69,22 @@ Question: {question}
 
 Answer:"""
 
+    # Code Generation Prompt Template
+    CODE_GENERATION_PROMPT_TEMPLATE = """You are an expert software developer. Generate clean, efficient, and well-documented code based on the user's request.
+
+Question: {question}
+
+Requirements:
+1. Write clean, readable code
+2. Include proper error handling where appropriate
+3. Add meaningful comments and docstrings
+4. Follow best practices for the target language
+5. Format the code properly with proper indentation
+
+Please provide your response with the code wrapped in appropriate code blocks using markdown formatting (```language).
+
+Answer:"""
+
     # Request Timeouts (seconds)
     RETRIEVER_TIMEOUT = int(os.getenv('RETRIEVER_TIMEOUT', 30))
     MODEL_LOAD_TIMEOUT = int(os.getenv('MODEL_LOAD_TIMEOUT', 120))
