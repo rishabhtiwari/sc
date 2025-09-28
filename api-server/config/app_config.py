@@ -28,6 +28,18 @@ class AppConfig:
     # Logging
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 
+    # MCP Service integration
+    MCP_SERVICE_HOST = os.environ.get('MCP_SERVICE_HOST', 'localhost')
+    MCP_SERVICE_PORT = int(os.environ.get('MCP_SERVICE_PORT', 8089))
+
+    # Code Generation Service integration (for backward compatibility)
+    CODE_GENERATION_SERVICE_HOST = os.environ.get('CODE_GENERATION_SERVICE_HOST', 'localhost')
+    CODE_GENERATION_SERVICE_PORT = int(os.environ.get('CODE_GENERATION_SERVICE_PORT', 8088))
+
+    # LLM Service integration
+    LLM_SERVICE_HOST = os.environ.get('LLM_SERVICE_HOST', 'localhost')
+    LLM_SERVICE_PORT = int(os.environ.get('LLM_SERVICE_PORT', 8087))
+
 
 class DevelopmentConfig(AppConfig):
     """

@@ -415,3 +415,75 @@ class EmbeddingService:
             self.delete_document(document_id)
         except Exception as e:
             self.logger.error(f"Error during document cleanup: {str(e)}")
+
+    def process_documents_bulk(self, documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Process multiple documents in bulk for repository integration
+
+        Args:
+            documents: List of document objects with 'content' and 'metadata' fields
+
+        Returns:
+            Dictionary with processing results
+        """
+        try:
+            start_time = time.time()
+            document_ids = []
+            total_chunks = 0
+
+            self.logger.info(f"Starting bulk processing of {len(documents)} documents")
+
+            for i, doc in enumerate(documents):
+                try:
+                    content = doc.get('content', '')
+                    metadata = doc.get('metadata', {})
+
+                    if not content.strip():
+                        self.logger.warning(f"Document {i} has empty content, skipping")
+                        continue
+
+                    # Generate document ID
+                    document_id = str(uuid.uuid4())
+                    document_ids.append(document_id)
+
+                    # Create a synthetic filename from metadata
+                    file_path = metadata.get('file_path', f'document_{i}')
+                    filename = os.path.basename(file_path) if file_path else f'document_{i}.txt'
+
+                    self.logger.info(f"Processing document {i+1}/{len(documents)}: {filename}")
+
+                    # Chunk the text content
+                    chunks = self._chunk_text(content, document_id, filename)
+
+                    # Add metadata to each chunk
+                    for chunk in chunks:
+                        chunk['metadata'].update(metadata)
+                        chunk['metadata']['document_id'] = document_id
+                        chunk['metadata']['filename'] = filename
+                        chunk['metadata']['source'] = 'bulk_processing'
+
+                    # Store chunks in vector database
+                    if chunks:
+                        self._store_chunks_in_vector_db(chunks, document_id)
+                        total_chunks += len(chunks)
+                        self.logger.info(f"Stored {len(chunks)} chunks for document {filename}")
+
+                except Exception as e:
+                    self.logger.error(f"Error processing document {i}: {str(e)}")
+                    continue
+
+            processing_time = int((time.time() - start_time) * 1000)
+
+            result = {
+                "document_ids": document_ids,
+                "total_documents": len(document_ids),
+                "total_chunks": total_chunks,
+                "processing_time_ms": processing_time
+            }
+
+            self.logger.info(f"Bulk processing completed: {len(document_ids)} documents, {total_chunks} chunks in {processing_time}ms")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error in bulk document processing: {str(e)}")
+            raise e

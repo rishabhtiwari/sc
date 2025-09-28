@@ -13,6 +13,7 @@ import javafx.stage.Screen;
 import javafx.stage.Stage;
 import ui.styles.SidebarStyles;
 import ui.components.CodeBlockRenderer;
+import ui.components.MCPConnectionDialog;
 import api.IChatApiService;
 import api.ClientDocumentStorageService;
 import config.IChatConfig;
@@ -48,7 +49,7 @@ public class EnhancedChatSidebar {
         this.apiService = new IChatApiService(apiUrl);
         this.documentStorageService = new ClientDocumentStorageService();
         this.currentSessionId = "session_" + UUID.randomUUID().toString().substring(0, 8);
-        
+
         System.out.println("✅ Enhanced ChatSidebar initialized");
         System.out.println("🆔 Session ID: " + currentSessionId);
 
@@ -351,13 +352,18 @@ public class EnhancedChatSidebar {
         MenuItem uploadItem = new MenuItem("📎 Upload Document");
         uploadItem.setOnAction(e -> handleDocumentUpload());
 
+        MenuItem mcpItem = new MenuItem("🔗 MCP Provider Management");
+        mcpItem.setOnAction(e -> showMCPManagement());
+
+
+
         MenuItem clearChatItem = new MenuItem("🧹 Clear Conversation");
         clearChatItem.setOnAction(e -> clearChat());
 
         MenuItem closeItem = new MenuItem("❌ Close iChat Assistant");
         closeItem.setOnAction(e -> hide());
 
-        contextMenu.getItems().addAll(uploadItem, clearChatItem, closeItem);
+        contextMenu.getItems().addAll(uploadItem, mcpItem, clearChatItem, closeItem);
 
         menuButton.setOnAction(e -> {
             contextMenu.show(menuButton, javafx.geometry.Side.BOTTOM, 0, 0);
@@ -368,6 +374,31 @@ public class EnhancedChatSidebar {
 
 
 
+
+
+    /**
+     * Shows the MCP management dialog
+     */
+    private void showMCPManagement() {
+        try {
+            // Create API service instance
+            String apiUrl = config.IChatConfig.getApiUrl();
+            api.IChatApiService apiService = new api.IChatApiService(apiUrl);
+
+            MCPManagerDialog mcpManager = new MCPManagerDialog(apiService);
+            mcpManager.show();
+
+            // Add system message to chat
+            addMessage("System", "🔗 MCP Provider Management opened. Manage your provider connections.");
+
+        } catch (Exception ex) {
+            System.err.println("❌ Error showing MCP management dialog: " + ex.getMessage());
+            ex.printStackTrace();
+
+            // Show error message to user
+            addMessage("System", "❌ Error opening MCP management dialog: " + ex.getMessage());
+        }
+    }
 
 
     /**

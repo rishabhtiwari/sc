@@ -1,0 +1,243 @@
+/* MCP Connection Dialog Styles */
+
+.root {
+    -fx-font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Main container */
+.main-container {
+    -fx-background-color: #f8f9fa;
+    -fx-border-color: #e9ecef;
+    -fx-border-width: 1px;
+    -fx-border-radius: 8px;
+}
+
+/* Header styles */
+.dialog-title {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+.dialog-subtitle {
+    -fx-font-size: 14px;
+    -fx-text-fill: #6c757d;
+}
+
+/* Section labels */
+.section-label {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #495057;
+}
+
+/* Provider box */
+.provider-box {
+    -fx-padding: 15px;
+    -fx-border-color: #28a745;
+    -fx-border-radius: 8px;
+    -fx-background-color: #f8fff9;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 4, 0, 0, 2);
+}
+
+.provider-box:hover {
+    -fx-background-color: #f0fff4;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 6, 0, 0, 3);
+}
+
+.provider-name {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #2c3e50;
+}
+
+.provider-description {
+    -fx-font-size: 12px;
+    -fx-text-fill: #6c757d;
+}
+
+/* Configuration grid */
+.config-grid {
+    -fx-background-color: white;
+    -fx-border-color: #dee2e6;
+    -fx-border-radius: 8px;
+    -fx-padding: 15px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 2, 0, 0, 1);
+}
+
+.config-label {
+    -fx-font-weight: bold;
+    -fx-text-fill: #495057;
+}
+
+/* Text fields */
+.text-field, .password-field {
+    -fx-background-color: white;
+    -fx-border-color: #ced4da;
+    -fx-border-radius: 4px;
+    -fx-padding: 8px 12px;
+    -fx-font-size: 14px;
+}
+
+.text-field:focused, .password-field:focused {
+    -fx-border-color: #007bff;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,123,255,0.25), 4, 0, 0, 0);
+}
+
+/* Buttons */
+.button {
+    -fx-border-radius: 6px;
+    -fx-background-radius: 6px;
+    -fx-font-weight: bold;
+    -fx-padding: 10px 20px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.1), 2, 0, 0, 1);
+}
+
+.button:hover {
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.15), 4, 0, 0, 2);
+}
+
+.button:pressed {
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 1, 0, 0, 0);
+}
+
+/* Primary button */
+.primary-button {
+    -fx-background-color: #007bff;
+    -fx-text-fill: white;
+}
+
+.primary-button:hover {
+    -fx-background-color: #0056b3;
+}
+
+.primary-button:disabled {
+    -fx-background-color: #6c757d;
+    -fx-opacity: 0.6;
+}
+
+/* Success button */
+.success-button {
+    -fx-background-color: #28a745;
+    -fx-text-fill: white;
+}
+
+.success-button:hover {
+    -fx-background-color: #1e7e34;
+}
+
+.success-button:disabled {
+    -fx-background-color: #6c757d;
+    -fx-opacity: 0.6;
+}
+
+/* Secondary button */
+.secondary-button {
+    -fx-background-color: #6c757d;
+    -fx-text-fill: white;
+}
+
+.secondary-button:hover {
+    -fx-background-color: #545b62;
+}
+
+/* Status label */
+.status-label {
+    -fx-font-size: 12px;
+    -fx-padding: 10px;
+    -fx-wrap-text: true;
+}
+
+.status-success {
+    -fx-text-fill: #28a745;
+}
+
+.status-error {
+    -fx-text-fill: #dc3545;
+}
+
+.status-info {
+    -fx-text-fill: #007bff;
+}
+
+.status-default {
+    -fx-text-fill: #6c757d;
+}
+
+/* Loading indicator */
+.progress-indicator {
+    -fx-progress-color: #007bff;
+}
+
+/* Providers list */
+.providers-list {
+    -fx-background-color: white;
+    -fx-border-color: #dee2e6;
+    -fx-border-radius: 8px;
+    -fx-padding: 15px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.05), 2, 0, 0, 1);
+}
+
+/* Scrollable content */
+.scroll-pane {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
+.scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+.scroll-pane .content {
+    -fx-background-color: transparent;
+}
+
+/* Icons */
+.provider-icon {
+    -fx-font-size: 24px;
+}
+
+.status-icon {
+    -fx-font-size: 20px;
+}
+
+/* Tooltips */
+.tooltip {
+    -fx-background-color: #2c3e50;
+    -fx-text-fill: white;
+    -fx-font-size: 12px;
+    -fx-padding: 6px 10px;
+    -fx-background-radius: 4px;
+}
+
+/* Form validation */
+.text-field.error, .password-field.error {
+    -fx-border-color: #dc3545;
+    -fx-effect: dropshadow(three-pass-box, rgba(220,53,69,0.25), 4, 0, 0, 0);
+}
+
+/* Animation classes */
+.fade-in {
+    -fx-opacity: 0;
+}
+
+.fade-in:hover {
+    -fx-opacity: 1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 800px) {
+    .dialog-title {
+        -fx-font-size: 20px;
+    }
+    
+    .section-label {
+        -fx-font-size: 14px;
+    }
+    
+    .text-field, .password-field {
+        -fx-font-size: 12px;
+        -fx-padding: 6px 10px;
+    }
+}

@@ -14,6 +14,8 @@ services:
       - FLASK_DEBUG=false
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=8080
+      - MCP_SERVICE_HOST=ichat-mcp-service
+      - MCP_SERVICE_PORT=8089
     volumes:
       - ./api-server/logs:/app/logs
     networks:
@@ -185,6 +187,75 @@ services:
       - ichat-vector-db
       - embedding-service
 
+  # Code Generation Service
+  ichat-code-generation-service:
+    build:
+      context: ./code-generation-service
+      dockerfile: Dockerfile
+    container_name: ichat-code-generation-service
+    ports:
+      - "8088:8088"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8088
+      - LLM_SERVICE_HOST=ichat-llm-service
+      - LLM_SERVICE_PORT=8087
+      - LLM_PROMPT_SERVICE_HOST=ichat-llm-service
+      - LLM_PROMPT_SERVICE_PORT=8087
+      - MAX_REPO_SIZE_MB=500
+      - MAX_FILE_SIZE_KB=1024
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./code-generation-service/logs:/app/logs
+      - ./code-generation-service/temp:/app/temp
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8088/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - llm-service
+
+  # MCP Service for Model Context Protocol integration
+  ichat-mcp-service:
+    build:
+      context: ./mcp-service
+      dockerfile: Dockerfile
+    container_name: ichat-mcp-service
+    ports:
+      - "8089:8089"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8089
+      - MAX_MCP_CONNECTIONS=10
+      - MCP_CONNECTION_TIMEOUT=30
+      - MCP_EXECUTION_TIMEOUT=60
+      - MCP_CONFIG_STORAGE_PATH=/app/data/mcp_configs
+      - MCP_TEMP_PATH=/app/temp
+      - OAUTH_STATE_EXPIRY=600
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./mcp-service/logs:/app/logs
+      - ./mcp-service/data:/app/data
+      - ./mcp-service/temp:/app/temp
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8089/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
 networks:
   ichat-network:
     driver: bridge
@@ -210,5 +281,15 @@ volumes:
   vector-db-logs:
     driver: local
   retriever-logs:
+    driver: local
+  code-generation-logs:
+    driver: local
+  code-generation-temp:
+    driver: local
+  mcp-logs:
+    driver: local
+  mcp-data:
+    driver: local
+  mcp-temp:
     driver: local
 
