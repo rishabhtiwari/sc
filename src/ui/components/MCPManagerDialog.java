@@ -196,11 +196,11 @@ public class MCPManagerDialog {
         providersList.getChildren().clear();
         
         try {
-            // Always show GitHub provider (it's the main one we support)
+            // Show all supported providers
             createGitHubProviderCard();
-            
-            // TODO: Add other providers here as they become available
-            
+            createDatabaseProviderCard();
+            createDocumentUploadProviderCard();
+
         } catch (Exception e) {
             System.err.println("❌ Error displaying providers: " + e.getMessage());
             statusLabel.setText("❌ Error displaying providers: " + e.getMessage());

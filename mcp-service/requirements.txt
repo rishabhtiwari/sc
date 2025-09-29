@@ -10,6 +10,10 @@ authlib==1.2.1
 cryptography==41.0.7
 sqlalchemy==2.0.23
 
+# Database drivers
+psycopg2-binary==2.9.9
+mysql-connector-python==8.2.0
+
 # MCP Protocol support (will use custom implementation for now)
 # mcp==1.0.0
 
