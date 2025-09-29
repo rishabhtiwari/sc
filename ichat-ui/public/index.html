@@ -9,139 +9,282 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
   <style>
-    /* Custom scrollbar */
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 6px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #374151;
-      border-radius: 3px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #6b7280;
-      border-radius: 3px;
-    }
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #9ca3af;
-    }
-    
-    /* Gradient animation */
-    @keyframes gradient {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0f172a;
+      color: #f1f5f9;
     }
     
     .gradient-text {
-      background: linear-gradient(-45deg, #3b82f6, #8b5cf6, #06b6d4, #10b981);
-      background-size: 400% 400%;
-      animation: gradient 3s ease infinite;
+      background: linear-gradient(135deg, #a855f7, #ec4899);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
     }
     
-    /* Message animations */
-    .message-enter {
-      opacity: 0;
-      transform: translateY(10px);
-      animation: messageEnter 0.3s ease-out forwards;
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
     }
     
-    @keyframes messageEnter {
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    ::-webkit-scrollbar-track {
+      background: #334155;
     }
     
-    /* Typing indicator */
-    .typing-indicator {
-      display: inline-block;
+    ::-webkit-scrollbar-thumb {
+      background: #64748b;
+      border-radius: 3px;
     }
     
-    .typing-indicator span {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: #9ca3af;
-      margin: 0 2px;
-      animation: typing 1.4s infinite ease-in-out;
-    }
-    
-    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
-    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
-    
-    @keyframes typing {
-      0%, 80%, 100% {
-        transform: scale(0.8);
-        opacity: 0.5;
-      }
-      40% {
-        transform: scale(1);
-        opacity: 1;
-      }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
+
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    const ChatMessage = ({ message, isUser }) => {
-      return (
-        <div className={`message-enter mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-          <div className={`max-w-[80%] p-4 rounded-2xl shadow-lg ${
-            isUser
-              ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white ml-4'
-              : 'bg-slate-600 text-slate-100 mr-4 border border-slate-500'
-          }`}>
-            <div className="flex items-start gap-3">
-              {!isUser && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-robot text-white text-sm"></i>
-                </div>
-              )}
+    // Immediate connectivity test - runs before React components load
+    window.addEventListener('load', async () => {
+      console.log('🚀 Page loaded - running immediate connectivity test...');
+
+      try {
+        console.log('🧪 Testing direct fetch to API...');
+        const response = await fetch('http://127.0.0.1:8080/api/chat/test', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Origin': window.location.origin
+          },
+          mode: 'cors'
+        });
+
+        console.log('📡 Direct fetch response status:', response.status);
+        console.log('📋 Direct fetch response headers:', Object.fromEntries(response.headers.entries()));
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Direct fetch SUCCESS:', data);
+          console.log('🎯 API is reachable from browser!');
+        } else {
+          console.error('❌ Direct fetch failed with status:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Direct fetch ERROR:', error);
+        console.error('🔍 Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+      }
+    });
+
+    // API Service - using 127.0.0.1 for consistent IPv4 resolution
+    const API_BASE_URL = 'http://127.0.0.1:8080/api';
+
+    const apiService = {
+      async request(endpoint, options = {}) {
+        const url = `${API_BASE_URL}${endpoint}`;
+
+        const defaultOptions = {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        };
+
+        const config = {
+          ...defaultOptions,
+          ...options,
+          headers: {
+            ...defaultOptions.headers,
+            ...options.headers,
+          },
+        };
+
+        try {
+          console.log(`🌐 API Request: ${config.method || 'GET'} ${url}`);
+          console.log('📤 Request config:', JSON.stringify(config, null, 2));
+          console.log('🌍 Current origin:', window.location.origin);
+          console.log('🎯 Target URL:', url);
+          console.log('🔧 Browser info:', navigator.userAgent);
+
+          // Add timing for debugging
+          const startTime = performance.now();
+
+          // Test basic connectivity first for POST requests
+          if (config.method === 'POST') {
+            console.log('🧪 Testing CORS preflight...');
+            try {
+              const preflightResponse = await fetch(url, {
+                method: 'OPTIONS',
+                headers: {
+                  'Origin': window.location.origin,
+                  'Access-Control-Request-Method': 'POST',
+                  'Access-Control-Request-Headers': 'Content-Type'
+                }
+              });
+              console.log('✅ CORS preflight response:', preflightResponse.status, preflightResponse.statusText);
+              console.log('📋 CORS headers:', Object.fromEntries(preflightResponse.headers.entries()));
+            } catch (preflightError) {
+              console.error('❌ CORS preflight failed:', preflightError);
+            }
+          }
+
+          const response = await fetch(url, config);
+
+          const endTime = performance.now();
+          console.log(`⏱️ Request took ${(endTime - startTime).toFixed(2)}ms`);
+          console.log('📥 Response status:', response.status, response.statusText);
+          console.log('📋 Response headers:', Object.fromEntries(response.headers.entries()));
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ HTTP Error Response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+          }
+
+          const data = await response.json();
+          console.log('✅ API Response:', data);
+
+          return data;
+        } catch (error) {
+          console.error('❌ API Error:', error);
+          console.error('❌ Error details:', {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+            url: url,
+            method: config.method || 'GET',
+            timestamp: new Date().toISOString()
+          });
+
+          // Enhanced error detection with specific debugging
+          if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+            console.error('🚫 Network Error: Failed to fetch - this indicates a network-level issue');
+            console.error('🔍 Detailed diagnosis:');
+            console.error('   1. API server status: Check if running on port 8080');
+            console.error('   2. CORS configuration: Verify server allows origin', window.location.origin);
+            console.error('   3. Network connectivity: Check if localhost:8080 is accessible');
+            console.error('   4. Browser security: Check for mixed content or security policy blocks');
+            console.error('   5. Firewall/Proxy: Check if connection is being blocked');
+
+            // Additional connectivity tests
+            console.log('🧪 Running additional diagnostics...');
+
+            // Test if we can reach the server at all
+            try {
+              const basicTest = await fetch('http://127.0.0.1:8080/api/health', {
+                method: 'GET',
+                mode: 'cors'
+              });
+              console.log('✅ Basic server connectivity test passed:', basicTest.status);
+            } catch (basicError) {
+              console.error('❌ Basic server connectivity test failed:', basicError);
+              console.error('   → This confirms the server is not reachable from the browser');
+            }
+          }
+
+          throw error;
+        }
+      },
+
+      async testConnection() {
+        return this.request('/chat/test');
+      },
+
+      async sendChatMessage(message, options = {}) {
+        const payload = {
+          message: message.trim(),
+          timestamp: Date.now(),
+          client: 'ichat-ui',
+          use_rag: options.useRag || false,
+          session_id: options.sessionId || `web-session-${Date.now()}`,
+          conversation_id: options.conversationId || null,
+          ...options
+        };
+
+        return this.request('/chat', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      }
+    };
+
+    // Message Component
+    const Message = ({ message }) => {
+      const isUser = message.sender === 'user';
+      const isAssistant = message.sender === 'assistant';
+
+      const formatTime = (timestamp) => {
+        return new Date(timestamp).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      };
+
+      if (isUser) {
+        return (
+          <div className="flex justify-start">
+            <div className="flex gap-2 max-w-xs lg:max-w-md">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0">
+                <i className="fas fa-user text-white text-xs"></i>
+              </div>
               <div className="flex-1">
-                <div className="text-sm font-medium mb-1">
-                  {isUser ? 'You' : 'iChat Assistant'}
+                <div className="bg-blue-600 text-white p-3 rounded-2xl rounded-bl-md shadow-lg">
+                  <p className="text-sm">{message.text}</p>
                 </div>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap">
-                  {message.text}
-                </div>
-                <div className="text-xs opacity-70 mt-2">
-                  {new Date(message.timestamp).toLocaleTimeString()}
+                <div className="text-xs text-slate-400 mt-1">
+                  {formatTime(message.timestamp)}
                 </div>
               </div>
-              {isUser && (
-                <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
-                  <i className="fas fa-user text-white text-sm"></i>
-                </div>
-              )}
             </div>
+          </div>
+        );
+      }
+
+      if (isAssistant) {
+        return (
+          <div className="flex justify-end">
+            <div className="max-w-xs lg:max-w-md">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white p-3 rounded-2xl rounded-br-md shadow-lg">
+                <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+              </div>
+              <div className="text-xs text-slate-400 mt-1 text-right">
+                {formatTime(message.timestamp)}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex justify-center">
+          <div className="bg-slate-600 text-slate-300 px-3 py-1 rounded-full text-xs">
+            {message.text}
           </div>
         </div>
       );
     };
 
+    // TypingIndicator Component
     const TypingIndicator = () => {
       return (
-        <div className="message-enter mb-4 flex justify-start">
-          <div className="max-w-[80%] p-4 rounded-2xl bg-slate-600 text-slate-100 mr-4 border border-slate-500">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
-                <i className="fas fa-robot text-white text-sm"></i>
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-medium mb-1">iChat Assistant</div>
-                <div className="typing-indicator">
-                  <span></span>
-                  <span></span>
-                  <span></span>
+        <div className="flex justify-end">
+          <div className="max-w-xs lg:max-w-md">
+            <div className="bg-gradient-to-r from-purple-500 to-pink-600 text-white p-3 rounded-2xl rounded-br-md shadow-lg">
+              <div className="flex items-center space-x-1">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
+                <span className="text-xs text-white/80 ml-2">Assistant is typing...</span>
               </div>
             </div>
           </div>
@@ -149,212 +292,12 @@
       );
     };
 
-    const Sidebar = ({ activeSection, setActiveSection }) => {
-      const [isOpen, setIsOpen] = useState(true);
-
-      const menuItems = [
-        {
-          name: 'Chat',
-          icon: 'fas fa-comments',
-          id: 'chat',
-          description: 'AI Chat Assistant'
-        },
-        {
-          name: 'MCP Connection',
-          icon: 'fas fa-plug',
-          id: 'mcp',
-          description: 'Model Context Protocol'
-        },
-        {
-          name: 'Context Setup',
-          icon: 'fas fa-cogs',
-          id: 'context',
-          description: 'Repository Context'
-        }
-      ];
-
-      const toggleSidebar = () => setIsOpen(!isOpen);
-
-      return (
-        <div className={`flex ${isOpen ? 'w-64' : 'w-16'} bg-slate-800 text-slate-200 min-h-screen transition-all duration-300 border-r border-slate-600`}>
-          <div className="flex flex-col w-full">
-            {/* Sidebar Header */}
-            <div className="p-4 flex items-center justify-between border-b border-slate-600">
-              {isOpen && <h2 className="text-lg font-bold gradient-text">iChat</h2>}
-              <button
-                onClick={toggleSidebar}
-                className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                <i className={`fas ${isOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-slate-400`}></i>
-              </button>
-            </div>
-
-            {/* Menu Items */}
-            <nav className="flex-1 p-2">
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveSection(item.id)}
-                  className={`w-full flex items-center p-3 mb-2 rounded-lg transition-all duration-200 ${
-                    activeSection === item.id
-                      ? 'bg-blue-500 text-white shadow-md'
-                      : 'hover:bg-slate-700 text-slate-300'
-                  }`}
-                >
-                  <i className={`${item.icon} text-lg ${isOpen ? 'mr-3' : 'mx-auto'}`}></i>
-                  {isOpen && (
-                    <div className="flex-1 text-left">
-                      <div className="font-medium">{item.name}</div>
-                      <div className="text-xs text-slate-400">{item.description}</div>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </nav>
-
-            {/* Footer */}
-            {isOpen && (
-              <div className="p-4 border-t border-slate-600">
-                <div className="text-xs text-slate-400 text-center">
-                  iChat Assistant v1.0
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    };
-
-    const ChatContent = ({ messages, isTyping, onSend, messagesEndRef }) => {
-      return (
-        <div className="flex-1 flex flex-col">
-          <ChatHeader />
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isUser={message.sender === 'user'}
-              />
-            ))}
-            {isTyping && <TypingIndicator />}
-            <div ref={messagesEndRef} />
-          </div>
-          <ChatInput onSend={onSend} disabled={isTyping} />
-        </div>
-      );
-    };
-
-    const MCPContent = () => {
-      return (
-        <div className="flex-1 flex flex-col">
-          <div className="bg-slate-700 border-b border-slate-500 p-4">
-            <h1 className="text-xl font-bold gradient-text">MCP Connection</h1>
-            <p className="text-sm text-slate-400">Model Context Protocol Configuration</p>
-          </div>
-          <div className="flex-1 p-6 bg-slate-800">
-            <div className="max-w-2xl mx-auto">
-              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600">
-                <h3 className="text-lg font-semibold mb-4 text-slate-100">Available Providers</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <i className="fas fa-database text-blue-400"></i>
-                      <div>
-                        <div className="font-medium text-slate-100">Database Provider</div>
-                        <div className="text-sm text-slate-400">Connect to databases</div>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
-                      Connect
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <i className="fas fa-file-code text-green-400"></i>
-                      <div>
-                        <div className="font-medium text-slate-100">File System Provider</div>
-                        <div className="text-sm text-slate-400">Access local files</div>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
-                      Connect
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <i className="fas fa-cloud text-purple-400"></i>
-                      <div>
-                        <div className="font-medium text-slate-100">API Provider</div>
-                        <div className="text-sm text-slate-400">External API connections</div>
-                      </div>
-                    </div>
-                    <button className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition">
-                      Connect
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    const ContextContent = () => {
-      return (
-        <div className="flex-1 flex flex-col">
-          <div className="bg-slate-700 border-b border-slate-500 p-4">
-            <h1 className="text-xl font-bold gradient-text">Context Setup</h1>
-            <p className="text-sm text-slate-400">Repository Context Management</p>
-          </div>
-          <div className="flex-1 p-6 bg-slate-800">
-            <div className="max-w-2xl mx-auto">
-              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600 mb-6">
-                <h3 className="text-lg font-semibold mb-4 text-slate-100">Repository Connection</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Repository URL</label>
-                    <input
-                      type="text"
-                      placeholder="https://github.com/username/repository"
-                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Access Token</label>
-                    <input
-                      type="password"
-                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                  </div>
-                  <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
-                    <i className="fas fa-link mr-2"></i>
-                    Connect Repository
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600">
-                <h3 className="text-lg font-semibold mb-4 text-slate-100">Connected Repositories</h3>
-                <div className="text-center text-slate-400 py-8">
-                  <i className="fas fa-folder-open text-4xl mb-4"></i>
-                  <p>No repositories connected yet</p>
-                  <p className="text-sm">Connect a repository to enable contextual assistance</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    const ChatInput = ({ onSend, disabled }) => {
+    // ChatInput Component
+    const ChatInput = ({ onSend, disabled = false }) => {
       const [input, setInput] = useState('');
-      const inputRef = useRef(null);
 
-      const handleSend = () => {
+      const handleSubmit = (e) => {
+        e.preventDefault();
         if (input.trim() && !disabled) {
           onSend(input.trim());
           setInput('');
@@ -364,52 +307,72 @@
       const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          handleSend();
+          handleSubmit(e);
         }
       };
 
-      useEffect(() => {
-        if (inputRef.current && !disabled) {
-          inputRef.current.focus();
-        }
-      }, [disabled]);
-
       return (
-        <div className="border-t border-gray-600 p-4 bg-gray-800">
-          <div className="flex gap-3 items-end">
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={disabled}
-                className="w-full p-3 pr-12 rounded-xl bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none min-h-[44px] max-h-32 disabled:opacity-50"
-                placeholder="Type your message... (Press Enter to send)"
-                rows="1"
-                style={{ 
-                  height: 'auto',
-                  minHeight: '44px'
-                }}
-                onInput={(e) => {
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
-                }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || disabled}
-                className="absolute right-2 bottom-2 w-8 h-8 bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                <i className="fas fa-paper-plane text-white text-sm"></i>
-              </button>
-            </div>
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <div className="flex-1 relative">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={disabled ? "Connecting to server..." : "Type your message..."}
+              disabled={disabled}
+              className={`w-full p-3 pr-12 rounded-xl border resize-none transition-colors ${
+                disabled
+                  ? 'bg-slate-700 border-slate-600 text-slate-400 cursor-not-allowed'
+                  : 'bg-slate-600 border-slate-500 text-slate-100 focus:border-blue-400 focus:outline-none'
+              }`}
+              rows="1"
+              style={{ minHeight: '48px', maxHeight: '120px' }}
+            />
+            <button
+              type="submit"
+              disabled={!input.trim() || disabled}
+              className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-2 rounded-lg transition-colors ${
+                !input.trim() || disabled
+                  ? 'text-slate-500 cursor-not-allowed'
+                  : 'text-blue-400 hover:text-blue-300 hover:bg-slate-700'
+              }`}
+            >
+              <i className="fas fa-paper-plane"></i>
+            </button>
           </div>
-        </div>
+        </form>
       );
     };
 
-    const ChatHeader = () => {
+    // ChatHeader Component
+    const ChatHeader = ({ connectionStatus }) => {
+      const getStatusColor = () => {
+        switch (connectionStatus) {
+          case 'connected': return 'text-green-400';
+          case 'disconnected': return 'text-red-400';
+          case 'checking': return 'text-yellow-400';
+          default: return 'text-slate-400';
+        }
+      };
+
+      const getStatusText = () => {
+        switch (connectionStatus) {
+          case 'connected': return 'Connected to API';
+          case 'disconnected': return 'API Disconnected';
+          case 'checking': return 'Checking connection...';
+          default: return 'Unknown status';
+        }
+      };
+
+      const getStatusIcon = () => {
+        switch (connectionStatus) {
+          case 'connected': return 'fa-circle';
+          case 'disconnected': return 'fa-times-circle';
+          case 'checking': return 'fa-clock';
+          default: return 'fa-question-circle';
+        }
+      };
+
       return (
         <div className="bg-slate-700 border-b border-slate-500 p-3">
           <div className="flex items-center justify-between">
@@ -417,11 +380,116 @@
               <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center">
                 <i className="fas fa-comments text-white text-sm"></i>
               </div>
-              <h1 className="text-lg font-bold gradient-text">
-                iChat Assistant
-              </h1>
+              <div>
+                <h1 className="text-lg font-bold gradient-text">
+                  iChat Assistant
+                </h1>
+                <p className={`text-xs ${getStatusColor()}`}>
+                  <i className={`fas ${getStatusIcon()} text-xs mr-1 ${connectionStatus === 'connected' ? 'animate-pulse' : ''}`}></i>
+                  {getStatusText()}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  console.log('🔬 Running comprehensive API diagnostics...');
+
+                  const results = {
+                    basicConnectivity: null,
+                    corsPreflightTest: null,
+                    getEndpointTest: null,
+                    postEndpointTest: null,
+                    healthCheck: null
+                  };
+
+                  try {
+                    // Test 1: Basic connectivity to health endpoint
+                    console.log('🧪 Test 1: Basic health check...');
+                    try {
+                      const healthResponse = await fetch('http://127.0.0.1:8080/api/health', {
+                        method: 'GET',
+                        mode: 'cors'
+                      });
+                      results.healthCheck = {
+                        status: healthResponse.status,
+                        statusText: healthResponse.statusText,
+                        headers: Object.fromEntries(healthResponse.headers.entries())
+                      };
+                      console.log('✅ Health check passed:', results.healthCheck);
+                    } catch (error) {
+                      results.healthCheck = { error: error.message };
+                      console.error('❌ Health check failed:', error);
+                    }
+
+                    // Test 2: CORS preflight test
+                    console.log('🧪 Test 2: CORS preflight test...');
+                    try {
+                      const preflightResponse = await fetch('http://127.0.0.1:8080/api/chat', {
+                        method: 'OPTIONS',
+                        headers: {
+                          'Origin': window.location.origin,
+                          'Access-Control-Request-Method': 'POST',
+                          'Access-Control-Request-Headers': 'Content-Type'
+                        }
+                      });
+                      results.corsPreflightTest = {
+                        status: preflightResponse.status,
+                        statusText: preflightResponse.statusText,
+                        headers: Object.fromEntries(preflightResponse.headers.entries())
+                      };
+                      console.log('✅ CORS preflight passed:', results.corsPreflightTest);
+                    } catch (error) {
+                      results.corsPreflightTest = { error: error.message };
+                      console.error('❌ CORS preflight failed:', error);
+                    }
+
+                    // Test 3: GET endpoint test
+                    console.log('🧪 Test 3: GET endpoint test...');
+                    try {
+                      const getResult = await apiService.testConnection();
+                      results.getEndpointTest = { success: true, data: getResult };
+                      console.log('✅ GET endpoint test passed:', getResult);
+                    } catch (error) {
+                      results.getEndpointTest = { error: error.message };
+                      console.error('❌ GET endpoint test failed:', error);
+                    }
+
+                    // Test 4: POST endpoint test
+                    console.log('🧪 Test 4: POST endpoint test...');
+                    try {
+                      const postResult = await apiService.sendChatMessage('Diagnostic test message');
+                      results.postEndpointTest = { success: true, data: postResult };
+                      console.log('✅ POST endpoint test passed:', postResult);
+                    } catch (error) {
+                      results.postEndpointTest = { error: error.message };
+                      console.error('❌ POST endpoint test failed:', error);
+                    }
+
+                    // Display comprehensive results
+                    const successCount = Object.values(results).filter(r => r && (r.success || r.status === 200)).length;
+                    const totalTests = Object.keys(results).length;
+
+                    console.log('📊 Diagnostic Results Summary:', results);
+
+                    const resultText = `🔬 API Diagnostics Complete (${successCount}/${totalTests} passed)\n\n` +
+                      `Health Check: ${results.healthCheck?.status || 'Failed'}\n` +
+                      `CORS Preflight: ${results.corsPreflightTest?.status || 'Failed'}\n` +
+                      `GET Endpoint: ${results.getEndpointTest?.success ? 'Passed' : 'Failed'}\n` +
+                      `POST Endpoint: ${results.postEndpointTest?.success ? 'Passed' : 'Failed'}\n\n` +
+                      `Check browser console for detailed logs.`;
+
+                    alert(resultText);
+
+                  } catch (error) {
+                    console.error('❌ Diagnostics failed:', error);
+                    alert('❌ Diagnostics Failed!\n\nError: ' + error.message);
+                  }
+                }}
+                className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+              >
+                🔬 Diagnose
+              </button>
               <button className="w-8 h-8 rounded-lg bg-slate-600 hover:bg-slate-500 transition-colors flex items-center justify-center">
                 <i className="fas fa-ellipsis-v text-slate-300"></i>
               </button>
@@ -431,17 +499,93 @@
       );
     };
 
-    const App = () => {
-      const [messages, setMessages] = useState([
+    // Sidebar Component
+    const Sidebar = ({ activeSection, setActiveSection }) => {
+      const [isOpen, setIsOpen] = useState(true);
+
+      const menuItems = [
         {
-          id: 1,
-          text: "Hello! I'm your iChat Assistant. How can I help you today?",
-          sender: 'assistant',
-          timestamp: new Date()
+          id: 'chat',
+          name: 'Chat',
+          icon: 'fas fa-comments',
+          description: 'AI Chat Assistant'
+        },
+        {
+          id: 'mcp',
+          name: 'MCP Connection',
+          icon: 'fas fa-plug',
+          description: 'Model Context Protocol'
+        },
+        {
+          id: 'context',
+          name: 'Context Setup',
+          icon: 'fas fa-cog',
+          description: 'Repository Context'
         }
-      ]);
-      const [isTyping, setIsTyping] = useState(false);
-      const [activeSection, setActiveSection] = useState('chat');
+      ];
+
+      const toggleSidebar = () => {
+        setIsOpen(!isOpen);
+      };
+
+      const handleItemClick = (itemId) => {
+        setActiveSection(itemId);
+      };
+
+      return (
+        <div className={`bg-slate-800 border-r border-slate-600 transition-all duration-300 ${
+          isOpen ? 'w-64' : 'w-16'
+        }`}>
+          <div className="p-4 border-b border-slate-600">
+            <div className="flex items-center justify-between">
+              {isOpen && (
+                <h2 className="text-lg font-semibold text-slate-100">iChat</h2>
+              )}
+              <button
+                onClick={toggleSidebar}
+                className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
+              >
+                <i className={`fas ${isOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-slate-400`}></i>
+              </button>
+            </div>
+          </div>
+
+          <nav className="p-2">
+            {menuItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleItemClick(item.id)}
+                className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors mb-2 ${
+                  activeSection === item.id
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                }`}
+              >
+                <i className={`${item.icon} text-lg`}></i>
+                {isOpen && (
+                  <div className="flex-1 text-left">
+                    <div className="font-medium">{item.name}</div>
+                    <div className="text-xs opacity-75">{item.description}</div>
+                  </div>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {isOpen && (
+            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-600">
+              <div className="text-xs text-slate-400">
+                <div>iChat Assistant v2.0</div>
+                <div>Powered by AI</div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ChatContent Component
+    const ChatContent = ({ messages, isTyping, onSend, connectionStatus }) => {
       const messagesEndRef = useRef(null);
 
       const scrollToBottom = () => {
@@ -451,6 +595,201 @@
       useEffect(() => {
         scrollToBottom();
       }, [messages, isTyping]);
+
+      return (
+        <div className="flex-1 flex flex-col">
+          <ChatHeader connectionStatus={connectionStatus} />
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((message) => (
+              <Message key={message.id} message={message} />
+            ))}
+
+            {isTyping && <TypingIndicator />}
+
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="border-t border-slate-600 p-4">
+            <ChatInput onSend={onSend} disabled={connectionStatus === 'disconnected'} />
+          </div>
+        </div>
+      );
+    };
+
+    // MCPContent Component
+    const MCPContent = () => {
+      const providers = [
+        {
+          id: 'database',
+          name: 'Database',
+          icon: 'fas fa-database',
+          description: 'Connect to SQL databases',
+          status: 'available'
+        },
+        {
+          id: 'filesystem',
+          name: 'File System',
+          icon: 'fas fa-folder',
+          description: 'Access local file system',
+          status: 'available'
+        },
+        {
+          id: 'api',
+          name: 'API Services',
+          icon: 'fas fa-cloud',
+          description: 'Connect to external APIs',
+          status: 'available'
+        }
+      ];
+
+      return (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-slate-700 border-b border-slate-500 p-4">
+            <h1 className="text-xl font-bold text-slate-100">MCP Connection</h1>
+            <p className="text-sm text-slate-400">Configure Model Context Protocol providers</p>
+          </div>
+
+          <div className="flex-1 p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {providers.map((provider) => (
+                <div key={provider.id} className="bg-slate-700 rounded-lg p-4 border border-slate-600">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-slate-600 flex items-center justify-center">
+                      <i className={`${provider.icon} text-slate-300`}></i>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-100">{provider.name}</h3>
+                      <p className="text-xs text-slate-400">{provider.description}</p>
+                    </div>
+                  </div>
+                  <button className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                    Connect
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ContextContent Component
+    const ContextContent = () => {
+      const [repoUrl, setRepoUrl] = useState('');
+      const [accessToken, setAccessToken] = useState('');
+
+      const handleConnect = (e) => {
+        e.preventDefault();
+        console.log('Connecting to repository:', { repoUrl, accessToken });
+      };
+
+      return (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-slate-700 border-b border-slate-500 p-4">
+            <h1 className="text-xl font-bold text-slate-100">Context Setup</h1>
+            <p className="text-sm text-slate-400">Connect your code repositories for enhanced AI assistance</p>
+          </div>
+
+          <div className="flex-1 p-6">
+            <div className="max-w-md mx-auto">
+              <form onSubmit={handleConnect} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Repository URL
+                  </label>
+                  <input
+                    type="url"
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    placeholder="https://github.com/username/repository"
+                    className="w-full p-3 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:border-blue-400 focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={accessToken}
+                    onChange={(e) => setAccessToken(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    className="w-full p-3 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:border-blue-400 focus:outline-none"
+                    required
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Generate a personal access token from your repository settings
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  Connect Repository
+                </button>
+              </form>
+
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold text-slate-100 mb-4">Connected Repositories</h3>
+                <div className="text-center text-slate-400 py-8">
+                  <i className="fas fa-code-branch text-4xl mb-4"></i>
+                  <p>No repositories connected yet</p>
+                  <p className="text-sm">Connect your first repository to get started</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // Main App Component
+    const App = () => {
+      const [messages, setMessages] = useState([
+        {
+          id: 1,
+          text: "Hello! I'm your iChat Assistant. How can I help you today?",
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+      ]);
+
+      const [isTyping, setIsTyping] = useState(false);
+      const [activeSection, setActiveSection] = useState('chat');
+      const [connectionStatus, setConnectionStatus] = useState('checking');
+
+      // Check API connectivity on component mount
+      useEffect(() => {
+        const checkConnection = async () => {
+          try {
+            console.log('🔍 Checking API connection...');
+            const response = await apiService.testConnection();
+            console.log('📡 Connection test response:', response);
+            if (response && response.status === 'success') {
+              console.log('✅ API connection successful');
+              setConnectionStatus('connected');
+            } else {
+              console.log('❌ API connection failed - invalid response');
+              setConnectionStatus('disconnected');
+            }
+          } catch (error) {
+            console.error('❌ Connection check failed:', error);
+            setConnectionStatus('disconnected');
+          }
+        };
+
+        // Add a small delay to ensure API server is ready
+        setTimeout(() => {
+          checkConnection();
+        }, 1000);
+
+        const interval = setInterval(checkConnection, 30000);
+        return () => clearInterval(interval);
+      }, []);
 
       const handleSend = async (text) => {
         const userMessage = {
@@ -463,18 +802,48 @@
         setMessages(prev => [...prev, userMessage]);
         setIsTyping(true);
 
-        // Simulate API call delay
-        setTimeout(() => {
-          const assistantMessage = {
+        try {
+          const response = await apiService.sendChatMessage(text, {
+            useRag: false,
+            sessionId: `web-session-${Date.now()}`
+          });
+
+          if (response.status === 'success') {
+            setConnectionStatus('connected');
+
+            const assistantMessage = {
+              id: Date.now() + 1,
+              text: response.response || response.message || 'I received your message but had trouble generating a response.',
+              sender: 'assistant',
+              timestamp: new Date()
+            };
+
+            setMessages(prev => [...prev, assistantMessage]);
+          } else {
+            const errorMessage = {
+              id: Date.now() + 1,
+              text: `Sorry, I encountered an error: ${response.error || 'Unknown error occurred'}`,
+              sender: 'assistant',
+              timestamp: new Date()
+            };
+
+            setMessages(prev => [...prev, errorMessage]);
+          }
+        } catch (error) {
+          console.error('Chat API Error:', error);
+          setConnectionStatus('disconnected');
+
+          const errorMessage = {
             id: Date.now() + 1,
-            text: `I received your message: "${text}". This is a demo response from the iChat Assistant. In a real implementation, this would connect to your backend API.`,
+            text: `Sorry, I'm having trouble connecting to the server. Please check if the API server is running on port 8080. Error: ${error.message}`,
             sender: 'assistant',
             timestamp: new Date()
           };
 
-          setMessages(prev => [...prev, assistantMessage]);
+          setMessages(prev => [...prev, errorMessage]);
+        } finally {
           setIsTyping(false);
-        }, 1500);
+        }
       };
 
       const renderContent = () => {
@@ -485,7 +854,7 @@
                 messages={messages}
                 isTyping={isTyping}
                 onSend={handleSend}
-                messagesEndRef={messagesEndRef}
+                connectionStatus={connectionStatus}
               />
             );
           case 'mcp':
@@ -498,7 +867,7 @@
                 messages={messages}
                 isTyping={isTyping}
                 onSend={handleSend}
-                messagesEndRef={messagesEndRef}
+                connectionStatus={connectionStatus}
               />
             );
         }
@@ -506,14 +875,20 @@
 
       return (
         <div className="min-h-screen bg-slate-900 text-slate-100 flex">
-          <Sidebar activeSection={activeSection} setActiveSection={setActiveSection} />
+          <Sidebar
+            activeSection={activeSection}
+            setActiveSection={setActiveSection}
+          />
           {renderContent()}
         </div>
       );
     };
 
+    // Render the app
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
+</body>
+</html>
 </body>
 </html>

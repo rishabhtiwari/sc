@@ -27,8 +27,17 @@ def create_app():
     # Load configuration
     app.config.from_object(AppConfig)
     
-    # Enable CORS for cross-origin requests
-    CORS(app)
+    # Enable CORS for cross-origin requests with comprehensive localhost configuration
+    CORS(app,
+         origins=[
+             'http://localhost:3001',
+             'http://127.0.0.1:3001',
+             'http://[::1]:3001',  # IPv6 localhost
+             'http://0.0.0.0:3001'  # All interfaces
+         ],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept'],
+         supports_credentials=True)
     
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')

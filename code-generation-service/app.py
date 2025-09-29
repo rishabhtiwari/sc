@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config.settings import Config
 from routes.code_routes import code_bp
 from routes.health_routes import health_bp
-from routes.repository_routes import repository_bp
 from utils.logger import setup_logger
 
 
@@ -36,7 +35,6 @@ def create_app() -> Flask:
     # Register blueprints
     app.register_blueprint(code_bp)
     app.register_blueprint(health_bp)
-    app.register_blueprint(repository_bp)
     
     # Global error handlers
     @app.errorhandler(HTTPException)
