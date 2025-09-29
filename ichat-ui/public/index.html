@@ -551,10 +551,11 @@
       };
 
       return (
-        <div className={`bg-white border-r border-gray-200 shadow-lg transition-all duration-300 ${
+        <div className={`bg-white border-r border-gray-200 shadow-lg transition-all duration-300 flex flex-col h-full ${
           isOpen ? 'w-64' : 'w-16'
         }`}>
-          <div className="p-4 border-b border-gray-200">
+          {/* Fixed Header */}
+          <div className="flex-shrink-0 p-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               {isOpen && (
                 <h2 className="text-lg font-semibold text-gray-800">iChat</h2>
@@ -568,7 +569,8 @@
             </div>
           </div>
 
-          <nav className="p-2">
+          {/* Scrollable Navigation */}
+          <nav className="flex-1 p-2 overflow-y-auto">
             {menuItems.map((item) => (
               <button
                 key={item.id}
@@ -590,8 +592,9 @@
             ))}
           </nav>
 
+          {/* Fixed Footer */}
           {isOpen && (
-            <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+            <div className="flex-shrink-0 p-4 border-t border-gray-200">
               <div className="text-xs text-gray-500">
                 <div>iChat Assistant v2.0</div>
                 <div>Powered by AI</div>
@@ -615,10 +618,14 @@
       }, [messages, isTyping]);
 
       return (
-        <div className="flex-1 flex flex-col">
-          <ChatHeader connectionStatus={connectionStatus} />
+        <div className="flex-1 flex flex-col h-screen">
+          {/* Fixed Header */}
+          <div className="flex-shrink-0">
+            <ChatHeader connectionStatus={connectionStatus} />
+          </div>
 
-          <div className="flex-1 overflow-y-auto">
+          {/* Scrollable Messages Area */}
+          <div className="flex-1 overflow-y-auto min-h-0">
             {messages.map((message) => (
               <Message key={message.id} message={message} />
             ))}
@@ -628,7 +635,8 @@
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="border-t border-gray-200 bg-white">
+          {/* Fixed Input Area */}
+          <div className="flex-shrink-0 border-t border-gray-200 bg-white">
             <div className="max-w-4xl mx-auto px-4 py-4">
               <ChatInput onSend={onSend} disabled={connectionStatus === 'disconnected'} />
             </div>
@@ -894,7 +902,7 @@
       };
 
       return (
-        <div className="min-h-screen bg-gray-50 text-gray-800 flex">
+        <div className="h-screen bg-gray-50 text-gray-800 flex overflow-hidden">
           <Sidebar
             activeSection={activeSection}
             setActiveSection={setActiveSection}
