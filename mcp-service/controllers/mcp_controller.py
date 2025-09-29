@@ -597,6 +597,52 @@ class MCPController:
                     "message": "Provider configured successfully",
                     "timestamp": int(time.time() * 1000)
                 }, 200
+
+            elif provider == 'database':
+                # Configure Database Provider
+                from services.database_mcp_service import DatabaseMCPService
+                db_service = DatabaseMCPService()
+                result = db_service.configure_provider(data)
+
+                if result['status'] == 'success':
+                    return {
+                        "status": "success",
+                        "config_id": result['config_id'],
+                        "provider": provider,
+                        "message": result['message'],
+                        "timestamp": int(time.time() * 1000)
+                    }, 200
+                else:
+                    return {
+                        "status": "error",
+                        "error": result['error'],
+                        "timestamp": int(time.time() * 1000)
+                    }, 400
+
+            elif provider == 'document_upload':
+                # Configure Document Upload Provider
+                from services.document_upload_mcp_service import DocumentUploadMCPService
+                doc_service = DocumentUploadMCPService()
+                result = doc_service.configure_provider(data)
+
+                if result['status'] == 'success':
+                    return {
+                        "status": "success",
+                        "config_id": result['config_id'],
+                        "provider": provider,
+                        "message": result['message'],
+                        "storage_path": result.get('storage_path'),
+                        "max_file_size_mb": result.get('max_file_size_mb'),
+                        "allowed_extensions": result.get('allowed_extensions'),
+                        "timestamp": int(time.time() * 1000)
+                    }, 200
+                else:
+                    return {
+                        "status": "error",
+                        "error": result['error'],
+                        "timestamp": int(time.time() * 1000)
+                    }, 400
+
             else:
                 return {
                     "status": "error",

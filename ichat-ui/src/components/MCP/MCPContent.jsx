@@ -1,6 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/apiService';
 
+// Helper function to get provider icon
+const getProviderIcon = (providerId) => {
+  const iconMap = {
+    'github': 'fab fa-github',
+    'database': 'fas fa-database',
+    'document_upload': 'fas fa-file-upload',
+    'gitlab': 'fab fa-gitlab',
+    'filesystem': 'fas fa-folder-open'
+  };
+  return iconMap[providerId] || 'fas fa-plug';
+};
+
+// Helper function to get provider color theme
+const getProviderColor = (providerId) => {
+  const colorMap = {
+    'github': 'text-gray-800',
+    'database': 'text-blue-600',
+    'document_upload': 'text-green-600',
+    'gitlab': 'text-orange-600',
+    'filesystem': 'text-purple-600'
+  };
+  return colorMap[providerId] || 'text-gray-600';
+};
+
 const MCPContent = () => {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,13 +45,29 @@ const MCPContent = () => {
       const response = await apiService.getMCPProviders();
       console.log('MCP providers response:', response);
 
-      // Ensure we always have an array
-      if (response && Array.isArray(response.providers)) {
-        setProviders(response.providers);
+      // Handle both array and object response formats
+      if (response && response.providers) {
+        if (Array.isArray(response.providers)) {
+          // Legacy array format
+          setProviders(response.providers);
+        } else if (typeof response.providers === 'object') {
+          // New object format - convert to array with provider IDs
+          const providersArray = Object.keys(response.providers).map(providerId => ({
+            id: providerId,
+            ...response.providers[providerId],
+            connected: false // Default to disconnected
+          }));
+          console.log('Converted providers to array:', providersArray);
+          setProviders(providersArray);
+        } else {
+          console.warn('MCP providers response format not recognized:', response);
+          setProviders([]);
+        }
       } else if (Array.isArray(response)) {
+        // Direct array response
         setProviders(response);
       } else {
-        console.warn('MCP providers response is not an array:', response);
+        console.warn('MCP providers response is not valid:', response);
         setProviders([]);
       }
     } catch (error) {
@@ -115,10 +155,10 @@ const MCPContent = () => {
           ) : (
             <div className="grid gap-4">
               {providers.map((provider) => (
-                <div key={provider.id} className="border border-gray-200 rounded-lg p-4">
+                <div key={provider.id} className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <i className={`${provider.icon || 'fas fa-plug'} text-xl text-gray-600`}></i>
+                      <i className={`${getProviderIcon(provider.id)} text-2xl ${getProviderColor(provider.id)}`}></i>
                       <div>
                         <h3 className="font-medium text-gray-800">{provider.name}</h3>
                         <p className="text-sm text-gray-500">{provider.description}</p>

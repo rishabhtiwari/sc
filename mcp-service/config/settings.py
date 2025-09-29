@@ -91,6 +91,99 @@ class MCPConfig:
                 }
             ]
         },
+        'database': {
+            'name': 'Database Provider',
+            'description': 'Connect to databases (PostgreSQL, MySQL, SQLite) for data operations',
+            'oauth_required': False,
+            'enabled': True,
+            'config_fields': [
+                {
+                    'name': 'db_type',
+                    'label': 'Database Type',
+                    'type': 'select',
+                    'required': True,
+                    'options': ['postgresql', 'mysql', 'sqlite'],
+                    'description': 'Type of database to connect to'
+                },
+                {
+                    'name': 'host',
+                    'label': 'Database Host',
+                    'type': 'text',
+                    'required': True,
+                    'default': 'localhost',
+                    'description': 'Database server hostname or IP address'
+                },
+                {
+                    'name': 'port',
+                    'label': 'Database Port',
+                    'type': 'number',
+                    'required': True,
+                    'default': '5432',
+                    'description': 'Database server port number'
+                },
+                {
+                    'name': 'database',
+                    'label': 'Database Name',
+                    'type': 'text',
+                    'required': True,
+                    'description': 'Name of the database to connect to'
+                },
+                {
+                    'name': 'username',
+                    'label': 'Username',
+                    'type': 'text',
+                    'required': True,
+                    'description': 'Database username for authentication'
+                },
+                {
+                    'name': 'password',
+                    'label': 'Password',
+                    'type': 'password',
+                    'required': True,
+                    'description': 'Database password for authentication'
+                }
+            ]
+        },
+        'document_upload': {
+            'name': 'Document Upload Provider',
+            'description': 'Upload and process documents for RAG integration',
+            'oauth_required': False,
+            'enabled': True,
+            'config_fields': [
+                {
+                    'name': 'storage_path',
+                    'label': 'Storage Path',
+                    'type': 'text',
+                    'required': True,
+                    'default': '/app/documents',
+                    'description': 'Local path to store uploaded documents'
+                },
+                {
+                    'name': 'max_file_size',
+                    'label': 'Max File Size (MB)',
+                    'type': 'number',
+                    'required': True,
+                    'default': '100',
+                    'description': 'Maximum file size allowed for uploads'
+                },
+                {
+                    'name': 'allowed_extensions',
+                    'label': 'Allowed Extensions',
+                    'type': 'text',
+                    'required': True,
+                    'default': 'pdf,doc,docx,txt,md,rtf',
+                    'description': 'Comma-separated list of allowed file extensions'
+                },
+                {
+                    'name': 'auto_process',
+                    'label': 'Auto Process Documents',
+                    'type': 'checkbox',
+                    'required': False,
+                    'default': 'true',
+                    'description': 'Automatically process documents for RAG after upload'
+                }
+            ]
+        },
         # Future providers can be added here
         'gitlab': {
             'name': 'GitLab',
