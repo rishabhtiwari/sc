@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iChat Assistant</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.20.15/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Custom scrollbar */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #374151;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #6b7280;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #9ca3af;
+    }
+    
+    /* Gradient animation */
+    @keyframes gradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    
+    .gradient-text {
+      background: linear-gradient(-45deg, #3b82f6, #8b5cf6, #06b6d4, #10b981);
+      background-size: 400% 400%;
+      animation: gradient 3s ease infinite;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    /* Message animations */
+    .message-enter {
+      opacity: 0;
+      transform: translateY(10px);
+      animation: messageEnter 0.3s ease-out forwards;
+    }
+    
+    @keyframes messageEnter {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* Typing indicator */
+    .typing-indicator {
+      display: inline-block;
+    }
+    
+    .typing-indicator span {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #9ca3af;
+      margin: 0 2px;
+      animation: typing 1.4s infinite ease-in-out;
+    }
+    
+    .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+    .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+    
+    @keyframes typing {
+      0%, 80%, 100% {
+        transform: scale(0.8);
+        opacity: 0.5;
+      }
+      40% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const ChatMessage = ({ message, isUser }) => {
+      return (
+        <div className={`message-enter mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+          <div className={`max-w-[80%] p-4 rounded-2xl shadow-lg ${
+            isUser
+              ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white ml-4'
+              : 'bg-slate-600 text-slate-100 mr-4 border border-slate-500'
+          }`}>
+            <div className="flex items-start gap-3">
+              {!isUser && (
+                <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-robot text-white text-sm"></i>
+                </div>
+              )}
+              <div className="flex-1">
+                <div className="text-sm font-medium mb-1">
+                  {isUser ? 'You' : 'iChat Assistant'}
+                </div>
+                <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {message.text}
+                </div>
+                <div className="text-xs opacity-70 mt-2">
+                  {new Date(message.timestamp).toLocaleTimeString()}
+                </div>
+              </div>
+              {isUser && (
+                <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center flex-shrink-0">
+                  <i className="fas fa-user text-white text-sm"></i>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const TypingIndicator = () => {
+      return (
+        <div className="message-enter mb-4 flex justify-start">
+          <div className="max-w-[80%] p-4 rounded-2xl bg-slate-600 text-slate-100 mr-4 border border-slate-500">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                <i className="fas fa-robot text-white text-sm"></i>
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium mb-1">iChat Assistant</div>
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const Sidebar = ({ activeSection, setActiveSection }) => {
+      const [isOpen, setIsOpen] = useState(true);
+
+      const menuItems = [
+        {
+          name: 'Chat',
+          icon: 'fas fa-comments',
+          id: 'chat',
+          description: 'AI Chat Assistant'
+        },
+        {
+          name: 'MCP Connection',
+          icon: 'fas fa-plug',
+          id: 'mcp',
+          description: 'Model Context Protocol'
+        },
+        {
+          name: 'Context Setup',
+          icon: 'fas fa-cogs',
+          id: 'context',
+          description: 'Repository Context'
+        }
+      ];
+
+      const toggleSidebar = () => setIsOpen(!isOpen);
+
+      return (
+        <div className={`flex ${isOpen ? 'w-64' : 'w-16'} bg-slate-800 text-slate-200 min-h-screen transition-all duration-300 border-r border-slate-600`}>
+          <div className="flex flex-col w-full">
+            {/* Sidebar Header */}
+            <div className="p-4 flex items-center justify-between border-b border-slate-600">
+              {isOpen && <h2 className="text-lg font-bold gradient-text">iChat</h2>}
+              <button
+                onClick={toggleSidebar}
+                className="p-2 rounded-lg hover:bg-slate-700 transition-colors"
+              >
+                <i className={`fas ${isOpen ? 'fa-chevron-left' : 'fa-chevron-right'} text-slate-400`}></i>
+              </button>
+            </div>
+
+            {/* Menu Items */}
+            <nav className="flex-1 p-2">
+              {menuItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id)}
+                  className={`w-full flex items-center p-3 mb-2 rounded-lg transition-all duration-200 ${
+                    activeSection === item.id
+                      ? 'bg-blue-500 text-white shadow-md'
+                      : 'hover:bg-slate-700 text-slate-300'
+                  }`}
+                >
+                  <i className={`${item.icon} text-lg ${isOpen ? 'mr-3' : 'mx-auto'}`}></i>
+                  {isOpen && (
+                    <div className="flex-1 text-left">
+                      <div className="font-medium">{item.name}</div>
+                      <div className="text-xs text-slate-400">{item.description}</div>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </nav>
+
+            {/* Footer */}
+            {isOpen && (
+              <div className="p-4 border-t border-slate-600">
+                <div className="text-xs text-slate-400 text-center">
+                  iChat Assistant v1.0
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const ChatContent = ({ messages, isTyping, onSend, messagesEndRef }) => {
+      return (
+        <div className="flex-1 flex flex-col">
+          <ChatHeader />
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                isUser={message.sender === 'user'}
+              />
+            ))}
+            {isTyping && <TypingIndicator />}
+            <div ref={messagesEndRef} />
+          </div>
+          <ChatInput onSend={onSend} disabled={isTyping} />
+        </div>
+      );
+    };
+
+    const MCPContent = () => {
+      return (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-slate-700 border-b border-slate-500 p-4">
+            <h1 className="text-xl font-bold gradient-text">MCP Connection</h1>
+            <p className="text-sm text-slate-400">Model Context Protocol Configuration</p>
+          </div>
+          <div className="flex-1 p-6 bg-slate-800">
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600">
+                <h3 className="text-lg font-semibold mb-4 text-slate-100">Available Providers</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <i className="fas fa-database text-blue-400"></i>
+                      <div>
+                        <div className="font-medium text-slate-100">Database Provider</div>
+                        <div className="text-sm text-slate-400">Connect to databases</div>
+                      </div>
+                    </div>
+                    <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+                      Connect
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <i className="fas fa-file-code text-green-400"></i>
+                      <div>
+                        <div className="font-medium text-slate-100">File System Provider</div>
+                        <div className="text-sm text-slate-400">Access local files</div>
+                      </div>
+                    </div>
+                    <button className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition">
+                      Connect
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-600 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <i className="fas fa-cloud text-purple-400"></i>
+                      <div>
+                        <div className="font-medium text-slate-100">API Provider</div>
+                        <div className="text-sm text-slate-400">External API connections</div>
+                      </div>
+                    </div>
+                    <button className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition">
+                      Connect
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ContextContent = () => {
+      return (
+        <div className="flex-1 flex flex-col">
+          <div className="bg-slate-700 border-b border-slate-500 p-4">
+            <h1 className="text-xl font-bold gradient-text">Context Setup</h1>
+            <p className="text-sm text-slate-400">Repository Context Management</p>
+          </div>
+          <div className="flex-1 p-6 bg-slate-800">
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600 mb-6">
+                <h3 className="text-lg font-semibold mb-4 text-slate-100">Repository Connection</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Repository URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://github.com/username/repository"
+                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Access Token</label>
+                    <input
+                      type="password"
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                      className="w-full px-4 py-2 bg-slate-600 border border-slate-500 rounded-lg text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  </div>
+                  <button className="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition">
+                    <i className="fas fa-link mr-2"></i>
+                    Connect Repository
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-slate-700 rounded-lg p-6 border border-slate-600">
+                <h3 className="text-lg font-semibold mb-4 text-slate-100">Connected Repositories</h3>
+                <div className="text-center text-slate-400 py-8">
+                  <i className="fas fa-folder-open text-4xl mb-4"></i>
+                  <p>No repositories connected yet</p>
+                  <p className="text-sm">Connect a repository to enable contextual assistance</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ChatInput = ({ onSend, disabled }) => {
+      const [input, setInput] = useState('');
+      const inputRef = useRef(null);
+
+      const handleSend = () => {
+        if (input.trim() && !disabled) {
+          onSend(input.trim());
+          setInput('');
+        }
+      };
+
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      };
+
+      useEffect(() => {
+        if (inputRef.current && !disabled) {
+          inputRef.current.focus();
+        }
+      }, [disabled]);
+
+      return (
+        <div className="border-t border-gray-600 p-4 bg-gray-800">
+          <div className="flex gap-3 items-end">
+            <div className="flex-1 relative">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                disabled={disabled}
+                className="w-full p-3 pr-12 rounded-xl bg-gray-700 text-white placeholder-gray-400 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none min-h-[44px] max-h-32 disabled:opacity-50"
+                placeholder="Type your message... (Press Enter to send)"
+                rows="1"
+                style={{ 
+                  height: 'auto',
+                  minHeight: '44px'
+                }}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.min(e.target.scrollHeight, 128) + 'px';
+                }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || disabled}
+                className="absolute right-2 bottom-2 w-8 h-8 bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                <i className="fas fa-paper-plane text-white text-sm"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ChatHeader = () => {
+      return (
+        <div className="bg-slate-700 border-b border-slate-500 p-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center">
+                <i className="fas fa-comments text-white text-sm"></i>
+              </div>
+              <h1 className="text-lg font-bold gradient-text">
+                iChat Assistant
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="w-8 h-8 rounded-lg bg-slate-600 hover:bg-slate-500 transition-colors flex items-center justify-center">
+                <i className="fas fa-ellipsis-v text-slate-300"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [messages, setMessages] = useState([
+        {
+          id: 1,
+          text: "Hello! I'm your iChat Assistant. How can I help you today?",
+          sender: 'assistant',
+          timestamp: new Date()
+        }
+      ]);
+      const [isTyping, setIsTyping] = useState(false);
+      const [activeSection, setActiveSection] = useState('chat');
+      const messagesEndRef = useRef(null);
+
+      const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      };
+
+      useEffect(() => {
+        scrollToBottom();
+      }, [messages, isTyping]);
+
+      const handleSend = async (text) => {
+        const userMessage = {
+          id: Date.now(),
+          text,
+          sender: 'user',
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        setIsTyping(true);
+
+        // Simulate API call delay
+        setTimeout(() => {
+          const assistantMessage = {
+            id: Date.now() + 1,
+            text: `I received your message: "${text}". This is a demo response from the iChat Assistant. In a real implementation, this would connect to your backend API.`,
+            sender: 'assistant',
+            timestamp: new Date()
+          };
+
+          setMessages(prev => [...prev, assistantMessage]);
+          setIsTyping(false);
+        }, 1500);
+      };
+
+      const renderContent = () => {
+        switch (activeSection) {
+          case 'chat':
+            return (
+              <ChatContent
+                messages={messages}
+                isTyping={isTyping}
+                onSend={handleSend}
+                messagesEndRef={messagesEndRef}
+              />
+            );
+          case 'mcp':
+            return <MCPContent />;
+          case 'context':
+            return <ContextContent />;
+          default:
+            return (
+              <ChatContent
+                messages={messages}
+                isTyping={isTyping}
+                onSend={handleSend}
+                messagesEndRef={messagesEndRef}
+              />
+            );
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-900 text-slate-100 flex">
+          <Sidebar activeSection={activeSection} setActiveSection={setActiveSection} />
+          {renderContent()}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
