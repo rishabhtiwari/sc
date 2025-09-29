@@ -103,6 +103,7 @@ services:
       - LLM_USE_GPU=false
       - MODEL_CACHE_DIR=/app/cache
       - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
+      - MIN_SIMILARITY_THRESHOLD=0.7
     volumes:
       - ./llm/llm-prompt-generation/logs:/app/logs
       - ./llm/llm-prompt-generation/cache:/app/cache
