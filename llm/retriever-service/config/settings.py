@@ -46,8 +46,8 @@ class Config:
     CHUNK_OVERLAP_THRESHOLD = float(os.getenv('CHUNK_OVERLAP_THRESHOLD', 0.8))
 
     # Request Timeouts (seconds)
-    EMBEDDING_TIMEOUT = int(os.getenv('EMBEDDING_TIMEOUT', 30))
-    VECTOR_DB_TIMEOUT = int(os.getenv('VECTOR_DB_TIMEOUT', 15))
+    EMBEDDING_TIMEOUT = int(os.getenv('EMBEDDING_TIMEOUT', 300))
+    VECTOR_DB_TIMEOUT = int(os.getenv('VECTOR_DB_TIMEOUT', 300))
 
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

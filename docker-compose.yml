@@ -97,6 +97,8 @@ services:
       - FLASK_DEBUG=false
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=8083
+      - LLM_HOST=0.0.0.0
+      - LLM_PORT=8083
       # Model Configuration - Change LLM_MODEL_KEY to select different models
       # Options: flan-t5-base, flan-t5-small, flan-t5-large, mistral-7b-q4, mistral-7b-q5, mistral-7b-q2
       - LLM_MODEL_KEY=mistral-7b-q4
@@ -104,6 +106,8 @@ services:
       - MODEL_CACHE_DIR=/app/cache
       - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
       - MIN_SIMILARITY_THRESHOLD=0.7
+      - RETRIEVER_TIMEOUT=300
+      - MODEL_LOAD_TIMEOUT=300
     volumes:
       - ./llm/llm-prompt-generation/logs:/app/logs
       - ./llm/llm-prompt-generation/cache:/app/cache
@@ -140,6 +144,9 @@ services:
       - FLASK_PORT=8085
       - OCR_SERVICE_URL=http://ichat-ocr-service:8081
       - VECTOR_DB_URL=http://ichat-vector-db:8084
+      - REQUEST_TIMEOUT=300
+      - OCR_TIMEOUT=300
+      - VECTOR_DB_TIMEOUT=300
     volumes:
       - ./llm/embedding-service/logs:/app/logs
     networks:
@@ -197,6 +204,8 @@ services:
       - FLASK_PORT=8086
       - VECTOR_DB_URL=http://ichat-vector-db:8084
       - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
+      - EMBEDDING_TIMEOUT=300
+      - VECTOR_DB_TIMEOUT=300
     volumes:
       - ./llm/retriever-service/logs:/app/logs
     networks:
@@ -226,12 +235,16 @@ services:
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=8088
       - LLM_SERVICE_HOST=ichat-llm-service
-      - LLM_SERVICE_PORT=8087
+      - LLM_SERVICE_PORT=8083
       - LLM_PROMPT_SERVICE_HOST=ichat-llm-service
-      - LLM_PROMPT_SERVICE_PORT=8087
+      - LLM_PROMPT_SERVICE_PORT=8083
       - MAX_REPO_SIZE_MB=500
       - MAX_FILE_SIZE_KB=1024
       - LOG_LEVEL=INFO
+      - ANALYSIS_TIMEOUT=300
+      - CODE_GENERATION_TIMEOUT=300
+      - HTTP_TIMEOUT=300
+      - LLM_REQUEST_TIMEOUT=300
     volumes:
       - ./code-generation-service/logs:/app/logs
       - ./code-generation-service/temp:/app/temp
@@ -261,8 +274,8 @@ services:
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=8089
       - MAX_MCP_CONNECTIONS=10
-      - MCP_CONNECTION_TIMEOUT=30
-      - MCP_EXECUTION_TIMEOUT=60
+      - MCP_CONNECTION_TIMEOUT=300
+      - MCP_EXECUTION_TIMEOUT=300
       - MCP_CONFIG_STORAGE_PATH=/app/data/mcp_configs
       - MCP_TEMP_PATH=/app/temp
       - OAUTH_STATE_EXPIRY=600

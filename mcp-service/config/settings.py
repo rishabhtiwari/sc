@@ -23,8 +23,8 @@ class MCPConfig:
     
     # MCP settings
     MAX_CONNECTIONS = int(os.environ.get('MAX_MCP_CONNECTIONS', 10))
-    CONNECTION_TIMEOUT = int(os.environ.get('MCP_CONNECTION_TIMEOUT', 30))
-    EXECUTION_TIMEOUT = int(os.environ.get('MCP_EXECUTION_TIMEOUT', 60))
+    CONNECTION_TIMEOUT = int(os.environ.get('MCP_CONNECTION_TIMEOUT', 300))
+    EXECUTION_TIMEOUT = int(os.environ.get('MCP_EXECUTION_TIMEOUT', 300))
     
     # Note: LLM integration is handled by the iChat API server, not MCP service
     
