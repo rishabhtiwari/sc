@@ -102,6 +102,61 @@ The UI service is integrated into the main `docker-compose.yml`:
 - **Security Headers**: XSS protection, content type sniffing protection
 - **Caching**: Static assets cached for 1 year
 - **Health Check**: `/health` endpoint
+
+## 🔄 Refactored Architecture (New!)
+
+The iChat UI has been refactored into a modern, modular React application with the following improvements:
+
+### 🚀 New Features
+- **Modular Components**: Separated into reusable React components
+- **Modern Build System**: Vite for fast development and optimized builds
+- **TypeScript Ready**: Easy migration path to TypeScript
+- **Custom Hooks**: Reusable logic with React hooks
+- **Centralized API Service**: Clean separation of concerns
+
+### 📁 New Structure
+```
+ichat-ui/
+├── public/                 # Legacy single-file version (fallback)
+├── src/                    # New modular source code
+│   ├── components/         # React components
+│   │   ├── Chat/          # Chat-related components
+│   │   ├── Sidebar/       # Sidebar components
+│   │   ├── MCP/           # MCP connection components
+│   │   └── Context/       # Repository context components
+│   ├── hooks/             # Custom React hooks
+│   ├── services/          # API and external services
+│   ├── styles/            # Global styles and CSS
+│   └── App.jsx            # Main application component
+├── index.html             # Vite HTML template
+├── vite.config.js         # Vite configuration
+└── tailwind.config.js     # Tailwind CSS configuration
+```
+
+### 🛠 Development (New Build System)
+```bash
+# Install dependencies
+npm install
+
+# Start development server (Vite)
+npm run dev
+
+# Build for production
+npm run build
+
+# Preview production build
+npm run preview
+
+# Legacy mode (original single-file)
+npm run legacy
+```
+
+### 🎯 Benefits of Refactoring
+1. **Better Maintainability**: Components are now in separate files
+2. **Improved Reusability**: Components can be easily reused and tested
+3. **Enhanced Performance**: Better tree-shaking and code splitting
+4. **Developer Experience**: Hot reload, better debugging, modern tooling
+5. **Future-Proof**: Easy to add TypeScript, testing, and advanced features
 - **SPA Routing**: All routes fallback to `index.html`
 
 ## UI Components
