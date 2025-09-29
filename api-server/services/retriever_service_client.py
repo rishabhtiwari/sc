@@ -12,7 +12,7 @@ import json
 class RetrieverServiceClient:
     """Client for communicating with the retriever service"""
     
-    def __init__(self, base_url: str = "http://ichat-retriever-service:8086", timeout: int = 60):
+    def __init__(self, base_url: str = "http://ichat-retriever-service:8086", timeout: int = 300):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.logger = logging.getLogger('api-server')

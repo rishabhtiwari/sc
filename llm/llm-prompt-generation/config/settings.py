@@ -86,8 +86,8 @@ Please provide your response with the code wrapped in appropriate code blocks us
 Answer:"""
 
     # Request Timeouts (seconds)
-    RETRIEVER_TIMEOUT = int(os.getenv('RETRIEVER_TIMEOUT', 30))
-    MODEL_LOAD_TIMEOUT = int(os.getenv('MODEL_LOAD_TIMEOUT', 120))
+    RETRIEVER_TIMEOUT = int(os.getenv('RETRIEVER_TIMEOUT', 300))
+    MODEL_LOAD_TIMEOUT = int(os.getenv('MODEL_LOAD_TIMEOUT', 300))
 
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

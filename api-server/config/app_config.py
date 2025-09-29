@@ -23,7 +23,7 @@ class AppConfig:
     
     # Chat settings
     CHAT_RESPONSE_DELAY = float(os.environ.get('CHAT_RESPONSE_DELAY', 0.5))
-    MAX_MESSAGE_LENGTH = int(os.environ.get('MAX_MESSAGE_LENGTH', 1000))
+    MAX_MESSAGE_LENGTH = int(os.environ.get('MAX_MESSAGE_LENGTH', 100000))  # Increased to 100k characters
     
     # Logging
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')

@@ -23,7 +23,7 @@ class OCRServiceClient:
             base_url (str): Base URL of the OCR service
         """
         self.base_url = base_url.rstrip('/')
-        self.timeout = 30  # 30 seconds timeout for OCR operations
+        self.timeout = 300  # 5 minutes timeout for OCR operations
         
     def health_check(self) -> Dict[str, Any]:
         """

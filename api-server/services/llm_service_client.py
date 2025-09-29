@@ -12,7 +12,7 @@ import json
 class LLMServiceClient:
     """Client for communicating with the LLM service"""
     
-    def __init__(self, base_url: str = "http://ichat-llm-service:8087", timeout: int = 120):
+    def __init__(self, base_url: str = "http://ichat-llm-service:8083", timeout: int = 300):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self.logger = logging.getLogger('api-server')
@@ -468,5 +468,5 @@ class LLMServiceClient:
             }
 
 
-# Global LLM client instance with 2-minute timeout
-llm_client = LLMServiceClient(timeout=120)
+# Global LLM client instance with 5-minute timeout
+llm_client = LLMServiceClient(timeout=300)

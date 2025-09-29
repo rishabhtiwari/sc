@@ -46,8 +46,8 @@ class Config:
     
     # Processing Configuration
     REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 300))  # 5 minutes
-    OCR_TIMEOUT = int(os.getenv('OCR_TIMEOUT', 180))  # 3 minutes
-    VECTOR_DB_TIMEOUT = int(os.getenv('VECTOR_DB_TIMEOUT', 60))  # 1 minute
+    OCR_TIMEOUT = int(os.getenv('OCR_TIMEOUT', 300))  # 5 minutes
+    VECTOR_DB_TIMEOUT = int(os.getenv('VECTOR_DB_TIMEOUT', 300))  # 5 minutes
     
     # Document ID Configuration
     DOCUMENT_ID_PREFIX = os.getenv('DOCUMENT_ID_PREFIX', 'doc')

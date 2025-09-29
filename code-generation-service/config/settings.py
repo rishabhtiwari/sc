@@ -77,11 +77,11 @@ class Config:
     ]
     MAX_FILE_SIZE_KB = int(os.getenv('MAX_FILE_SIZE_KB', 1024))  # 1MB per file
     ANALYSIS_TIMEOUT = int(os.getenv('ANALYSIS_TIMEOUT', 300))  # 5 minutes
-    
+
     # Code Generation Configuration
     DEFAULT_GENERATION_TEMPERATURE = float(os.getenv('DEFAULT_GENERATION_TEMPERATURE', 0.2))
     DEFAULT_MAX_TOKENS = int(os.getenv('DEFAULT_MAX_TOKENS', 2048))
-    CODE_GENERATION_TIMEOUT = int(os.getenv('CODE_GENERATION_TIMEOUT', 120))  # 2 minutes
+    CODE_GENERATION_TIMEOUT = int(os.getenv('CODE_GENERATION_TIMEOUT', 300))  # 5 minutes
     
     # File Extensions Mapping
     LANGUAGE_EXTENSIONS = {
@@ -115,8 +115,8 @@ class Config:
     LOG_FILE = os.getenv('LOG_FILE', 'logs/code-generation-service.log')
     
     # Request Timeouts
-    HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 30))
-    LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', 120))
+    HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 300))
+    LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', 300))
     
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:
