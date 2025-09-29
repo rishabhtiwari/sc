@@ -5,6 +5,7 @@ import time
 import requests
 import torch
 import os
+import re
 from typing import Dict, List, Any, Optional
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from config.settings import Config
@@ -439,7 +440,6 @@ class LLMService:
         Returns:
             Formatted response with proper code blocks
         """
-        import re
 
         # If response already has code blocks, return as is
         if '```' in response:

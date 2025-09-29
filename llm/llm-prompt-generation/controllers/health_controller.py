@@ -41,11 +41,17 @@ class HealthController:
     def service_info(self) -> Tuple[Dict[str, Any], int]:
         """
         Get service information
-        
+
         Returns:
             Tuple of (response_dict, status_code)
         """
         try:
+            # Get actual model name from model instance if available
+            actual_model_name = Config.MODEL_NAME
+            if hasattr(self.llm_service, 'model_instance') and self.llm_service.model_instance:
+                model_info = self.llm_service.model_instance.get_model_info()
+                actual_model_name = model_info.get('model_name', Config.MODEL_NAME)
+
             return {
                 "name": Config.SERVICE_NAME,
                 "version": Config.SERVICE_VERSION,
@@ -59,7 +65,7 @@ class HealthController:
                     "status": "/status (GET)"
                 },
                 "model": {
-                    "name": Config.MODEL_NAME,
+                    "name": actual_model_name,
                     "max_length": Config.MAX_LENGTH,
                     "max_new_tokens": Config.MAX_NEW_TOKENS,
                     "temperature": Config.TEMPERATURE,
@@ -75,7 +81,7 @@ class HealthController:
                 },
                 "timestamp": int(time.time() * 1000)
             }, 200
-            
+
         except Exception as e:
             self.logger.error(f"Error getting service info: {str(e)}")
             return {
