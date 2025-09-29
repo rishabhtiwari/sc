@@ -103,6 +103,30 @@ class ApiService {
     });
   }
 
+  async configureMCPProvider(providerId, config) {
+    return this.request(`/mcp/provider/${providerId}/config`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async startMCPProviderAuth(providerId, data) {
+    return this.request(`/mcp/provider/${providerId}/auth`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getMCPTokens() {
+    return this.request('/mcp/tokens');
+  }
+
+  async revokeMCPToken(tokenId) {
+    return this.request(`/mcp/token/${tokenId}/revoke`, {
+      method: 'POST',
+    });
+  }
+
   // Context/Repository methods
   async getRepositories() {
     return this.request('/context/repositories');
