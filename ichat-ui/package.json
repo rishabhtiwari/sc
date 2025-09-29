@@ -1,0 +1,31 @@
+{
+  "name": "ichat-ui",
+  "version": "1.0.0",
+  "description": "iChat Assistant UI - Grok-inspired chat interface",
+  "main": "public/index.html",
+  "scripts": {
+    "start": "python -m http.server 3000 --directory public",
+    "dev": "python -m http.server 8080 --directory public",
+    "build": "echo 'Build completed - static files ready'",
+    "serve": "python -m http.server 5000 --directory public"
+  },
+  "keywords": [
+    "chat",
+    "ui",
+    "react",
+    "ichat",
+    "assistant"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "."
+  },
+  "homepage": "."
+}
