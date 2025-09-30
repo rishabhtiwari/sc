@@ -7,7 +7,7 @@ class ApiService {
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const defaultOptions = {
       headers: {
         'Content-Type': 'application/json',
@@ -18,11 +18,11 @@ class ApiService {
 
     try {
       const response = await fetch(url, defaultOptions);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       return data;
     } catch (error) {
@@ -87,7 +87,18 @@ class ApiService {
 
   // MCP Service methods
   async getMCPProviders() {
+    // Get available MCP provider types for connection
     return this.request('/mcp/providers');
+  }
+
+  async getMCPConnectedProviders() {
+    // Get connected MCP providers via OAuth tokens
+    return this.request('/mcp/tokens');
+  }
+
+  // Deprecated - use the method below with token_id
+  async getMCPProviderResourcesOld(providerId) {
+    return this.request(`/mcp/providers/${providerId}/resources`);
   }
 
   async connectMCPProvider(providerId, config) {
@@ -141,6 +152,92 @@ class ApiService {
 
   async removeRepository(repoId) {
     return this.request(`/context/repositories/${repoId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Code Generation Service methods (proxied through api-server)
+  async connectRepository(repoConfig) {
+    return this.request('/code/connect', {
+      method: 'POST',
+      body: JSON.stringify(repoConfig),
+    });
+  }
+
+  async analyzeRepository(repositoryId, language) {
+    return this.request('/code/analyze', {
+      method: 'POST',
+      body: JSON.stringify({
+        repository_id: repositoryId,
+        language: language
+      }),
+    });
+  }
+
+  async getRepositoryFiles(repositoryId) {
+    return this.request(`/code/files?repository_id=${repositoryId}`);
+  }
+
+  async cleanupRepository(repositoryId) {
+    return this.request('/code/cleanup', {
+      method: 'POST',
+      body: JSON.stringify({ repository_id: repositoryId }),
+    });
+  }
+
+  // MCP Provider Resource methods
+  async getMCPProviderResources(providerId, tokenId) {
+    return this.request(`/mcp/provider/${providerId}/resources?token_id=${tokenId}`);
+  }
+
+  async addMCPResourceToContext(providerId, tokenId, resourceData) {
+    // Extract the actual resource data - it might be nested under resource_data
+    const actualResource = resourceData.resource_data || resourceData;
+
+    console.log('🔍 addMCPResourceToContext called with:', {
+      providerId,
+      tokenId,
+      resourceData,
+      actualResource,
+      clone_url: actualResource.clone_url,
+      default_branch: actualResource.default_branch
+    });
+
+    const requestBody = {
+      type: 'git',
+      url: actualResource.clone_url,
+      branch: actualResource.default_branch || 'main',
+      session_id: tokenId,
+      credentials: {
+        username: '',
+        token: ''
+      }
+    };
+
+    console.log('📤 Sending request body:', requestBody);
+
+    return this.request('/code/connect', {
+      method: 'POST',
+      body: JSON.stringify(requestBody),
+    });
+  }
+
+  async getConnectedRepositories() {
+    return this.request('/code/repositories');
+  }
+
+  async getMCPResources() {
+    // For now, MCP resources are stored as repositories with MCP provider info
+    // In the future, this might be a separate endpoint
+    return this.request('/code/repositories');
+  }
+
+  async getMCPContextResources() {
+    return this.request('/code/repositories');
+  }
+
+  async removeMCPResourceFromContext(resourceId) {
+    return this.request(`/code/repositories/${resourceId}`, {
       method: 'DELETE',
     });
   }

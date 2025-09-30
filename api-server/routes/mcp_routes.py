@@ -338,3 +338,17 @@ def clone_github_repository(owner, repo):
         JSON response with clone result
     """
     return MCPHandler.handle_github_repository_clone(owner, repo)
+
+
+@mcp_bp.route('/mcp/provider/<provider_id>/resources', methods=['GET'])
+def get_mcp_provider_resources(provider_id):
+    """
+    GET /api/mcp/provider/<provider_id>/resources - Get resources from MCP provider
+
+    Query parameters:
+        token_id: OAuth token ID for the provider
+
+    Returns:
+        JSON response with provider resources
+    """
+    return MCPHandler.handle_get_provider_resources(provider_id)

@@ -2,14 +2,16 @@
 Code Controller
 Handles API endpoints for code generation, repository connection, and analysis
 """
+import os
 import time
 from flask import request, jsonify
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, Optional
 
 from services.code_connector_service import CodeConnectorService
 from services.code_analysis_service import CodeAnalysisService
 from services.code_generation_service import CodeGenerationService
 from services.github_oauth_service import GitHubOAuthService
+from models.database import db_manager
 from utils.logger import setup_logger
 
 
@@ -59,10 +61,16 @@ class CodeController:
             
             self.logger.info(f"Connecting to {repo_type} repository")
 
-            # Handle GitHub OAuth session
+            # Handle GitHub OAuth session or MCP token
             session_id = data.get('session_id')
             if session_id:
+                # First try to get token from GitHub OAuth service (direct session)
                 access_token = self.github_oauth.get_access_token(session_id)
+
+                if not access_token:
+                    # If not found, try to get token from MCP service (token_id)
+                    access_token = self._get_mcp_access_token(session_id)
+
                 if access_token:
                     # Add GitHub token to credentials
                     if 'credentials' not in data:
@@ -70,12 +78,48 @@ class CodeController:
                     data['credentials']['token'] = access_token
                     self.logger.info("Using GitHub OAuth token for repository access")
                 else:
-                    return self.error_response("Invalid or expired session", 401)
+                    return self.error_response("Invalid or expired session/token", 401)
 
             # Connect to repository
             result = self.code_connector.connect_repository(data)
-            
+
             if result.get('status') == 'success':
+                # Store repository data in database
+                try:
+                    repository_data = {
+                        'repository_id': result.get('repository_id'),
+                        'name': data.get('repository_name', result.get('name', '')),
+                        'url': data.get('repository_url', data.get('url', '')),
+                        'branch': data.get('branch', 'main'),
+                        'provider': data.get('provider_id', repo_type),
+                        'provider_id': data.get('provider_id'),
+                        'token_id': data.get('token_id'),
+                        'status': 'connected',
+                        'local_path': result.get('local_path'),
+                        'metadata': {
+                            'type': repo_type,
+                            'connection_result': result
+                        }
+                    }
+
+                    # Add repository to database
+                    repo_id = db_manager.add_repository(repository_data)
+
+                    # Add to user context (default user for now)
+                    user_id = data.get('user_id', 'default')
+                    db_manager.add_to_user_context(user_id, repo_id)
+
+                    # Update result with database info
+                    result['repository_id'] = repo_id
+                    result['stored_in_database'] = True
+
+                    self.logger.info(f"Repository {repo_id} stored in database and added to user context")
+
+                except Exception as db_error:
+                    self.logger.error(f"Failed to store repository in database: {db_error}")
+                    # Don't fail the connection if database storage fails
+                    result['database_warning'] = f"Repository connected but not stored in database: {str(db_error)}"
+
                 return self.success_response(result), 200
             else:
                 return self.error_response(result.get('error', 'Connection failed'), 500)
@@ -456,3 +500,120 @@ class CodeController:
         except Exception as e:
             self.logger.error(f"Error in auth_status: {str(e)}")
             return self.error_response(f"Auth status check failed: {str(e)}", 500)
+
+    def get_repositories(self) -> Tuple[Dict[str, Any], int]:
+        """
+        Get list of connected repositories for the user
+
+        Query parameters:
+        - user_id: User ID (optional, defaults to 'default')
+
+        Returns:
+            JSON response with repositories list
+        """
+        try:
+            # Get user_id from query parameters
+            user_id = request.args.get('user_id', 'default')
+
+            # Get repositories from database
+            repositories = db_manager.get_repositories(user_id)
+
+            self.logger.info(f"Retrieved {len(repositories)} repositories for user {user_id}")
+
+            return jsonify({
+                "resources": repositories,  # UI expects 'resources' field
+                "repositories": repositories,  # Keep for backward compatibility
+                "count": len(repositories),
+                "status": "success",
+                "timestamp": int(time.time() * 1000)
+            }), 200
+
+        except Exception as e:
+            self.logger.error(f"Error getting repositories: {str(e)}")
+            return self.error_response(f"Failed to get repositories: {str(e)}", 500)
+
+    def delete_repository(self, repository_id: str) -> Tuple[Dict[str, Any], int]:
+        """
+        Delete a connected repository
+
+        Args:
+            repository_id: Repository ID to delete
+
+        Returns:
+            JSON response with deletion status
+        """
+        try:
+            self.logger.info(f"Deleting repository: {repository_id}")
+
+            # Get repository info before deletion
+            user_id = request.args.get('user_id', 'default')
+            repositories = db_manager.get_repositories(user_id)
+            repo_to_delete = None
+
+            for repo in repositories:
+                if repo.get('repository_id') == repository_id:
+                    repo_to_delete = repo
+                    break
+
+            if not repo_to_delete:
+                return self.error_response("Repository not found", 404)
+
+            # Remove repository files if they exist
+            local_path = repo_to_delete.get('local_path')
+            if local_path and os.path.exists(local_path):
+                import shutil
+                shutil.rmtree(local_path)
+                self.logger.info(f"Removed repository files at: {local_path}")
+
+            # Remove from database
+            db_manager.remove_repository(repository_id)
+
+            # Remove from user context
+            db_manager.remove_from_user_context(user_id, repository_id)
+
+            self.logger.info(f"Successfully deleted repository: {repository_id}")
+
+            return jsonify({
+                "status": "success",
+                "message": f"Repository {repository_id} deleted successfully",
+                "repository_id": repository_id,
+                "timestamp": int(time.time() * 1000)
+            }), 200
+
+        except Exception as e:
+            self.logger.error(f"Error deleting repository {repository_id}: {str(e)}")
+            return self.error_response(f"Failed to delete repository: {str(e)}", 500)
+
+    def _get_mcp_access_token(self, token_id: str) -> Optional[str]:
+        """
+        Get GitHub access token from MCP service
+
+        Args:
+            token_id: MCP token ID
+
+        Returns:
+            GitHub access token or None if not found
+        """
+        try:
+            import requests
+            from config.settings import Config
+
+            # Call MCP service to get token data
+            mcp_url = Config.get_mcp_service_url(f"tokens/{token_id}")
+            response = requests.get(mcp_url, timeout=10)
+
+            if response.status_code == 200:
+                token_data = response.json()
+                if token_data.get('status') == 'success' and token_data.get('data'):
+                    # Extract access token from the token data
+                    access_token = token_data['data'].get('access_token')
+                    if access_token:
+                        self.logger.info(f"Retrieved GitHub access token from MCP service for token {token_id}")
+                        return access_token
+
+            self.logger.warning(f"Could not retrieve access token from MCP service for token {token_id}")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error getting MCP access token: {str(e)}")
+            return None

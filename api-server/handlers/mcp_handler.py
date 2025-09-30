@@ -531,3 +531,23 @@ class MCPHandler:
                 "status": "error",
                 "error": f"Failed to clone repository: {str(e)}"
             }), 500
+
+    @staticmethod
+    def handle_get_provider_resources(provider_id: str):
+        """
+        Handle GET /mcp/provider/<provider_id>/resources requests
+        Get resources from MCP provider
+        """
+        try:
+            # Forward query parameters (like token_id)
+            params = request.args.to_dict()
+
+            result = MCPHandler._make_mcp_request('GET', f'/provider/{provider_id}/resources', params=params)
+            return jsonify(result)
+
+        except Exception as e:
+            logging.error(f"❌ Get provider resources failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to get provider resources: {str(e)}"
+            }), 500

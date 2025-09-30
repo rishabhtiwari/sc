@@ -806,6 +806,42 @@ class MCPController:
                 "timestamp": int(time.time() * 1000)
             }, 500
 
+    def get_token(self, token_id: str) -> Tuple[Dict[str, Any], int]:
+        """
+        Handle GET /tokens/<token_id> requests
+
+        Args:
+            token_id: Token ID to retrieve
+
+        Returns:
+            Tuple[Dict, int]: Response data and HTTP status code
+        """
+        try:
+            from services.github_oauth_service import GitHubOAuthService
+            oauth_service = GitHubOAuthService()
+            token_data = oauth_service.get_token_info(token_id)
+
+            if not token_data:
+                return {
+                    "status": "error",
+                    "error": "Token not found",
+                    "timestamp": int(time.time() * 1000)
+                }, 404
+
+            return {
+                "status": "success",
+                "data": token_data,
+                "timestamp": int(time.time() * 1000)
+            }, 200
+
+        except Exception as e:
+            self.logger.error(f"Failed to get token {token_id}: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to get token: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }, 500
+
     def revoke_token(self, token_id: str) -> Tuple[Dict[str, Any], int]:
         """
         Handle POST /token/<token_id>/revoke requests
@@ -1032,5 +1068,180 @@ class MCPController:
             return {
                 "status": "error",
                 "error": f"Failed to clone repository: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }, 500
+
+    def get_provider_resources(self, provider_id: str) -> Tuple[Dict[str, Any], int]:
+        """
+        Handle GET /provider/<provider_id>/resources requests
+        Get resources available from an MCP provider
+
+        Args:
+            provider_id: MCP provider ID (github, database, document_upload)
+
+        Returns:
+            Tuple of (response_dict, status_code)
+        """
+        try:
+            from flask import request
+
+            # Get token_id from query parameters
+            token_id = request.args.get('token_id')
+            if not token_id:
+                return {
+                    "status": "error",
+                    "error": "token_id query parameter is required",
+                    "timestamp": int(time.time() * 1000)
+                }, 400
+
+            self.logger.info(f"🔍 Getting resources for provider: {provider_id} with token: {token_id}")
+
+            # Get provider-specific resources
+            if provider_id == 'github':
+                return self._get_github_resources(token_id)
+            elif provider_id == 'database':
+                return self._get_database_resources(token_id)
+            elif provider_id == 'document_upload':
+                return self._get_document_resources(token_id)
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown provider: {provider_id}",
+                    "timestamp": int(time.time() * 1000)
+                }, 400
+
+        except Exception as e:
+            self.logger.error(f"❌ Error getting provider resources: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to get provider resources: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }, 500
+
+    def _get_github_resources(self, token_id: str) -> Tuple[Dict[str, Any], int]:
+        """Get GitHub repositories for the given token"""
+        try:
+            from services.github_mcp_service import GitHubMCPService
+
+            github_service = GitHubMCPService()
+            result = github_service.execute_tool('list_repositories', {'token_id': token_id})
+
+            if result['status'] == 'success':
+                # Convert repositories to resource format
+                resources = []
+                for repo in result.get('repositories', []):
+                    resources.append({
+                        'id': repo['full_name'],
+                        'name': repo['name'],
+                        'type': 'repository',
+                        'description': repo.get('description', ''),
+                        'url': repo['html_url'],
+                        'clone_url': repo['clone_url'],
+                        'default_branch': repo.get('default_branch', 'main'),
+                        'language': repo.get('language', ''),
+                        'stars': repo.get('stars', 0),
+                        'private': repo.get('private', False)
+                    })
+
+                return {
+                    "status": "success",
+                    "resources": resources,
+                    "count": len(resources),
+                    "timestamp": int(time.time() * 1000)
+                }, 200
+            else:
+                return {
+                    "status": "error",
+                    "error": result.get('error', 'Failed to get GitHub repositories'),
+                    "timestamp": int(time.time() * 1000)
+                }, 400
+
+        except Exception as e:
+            self.logger.error(f"❌ Error getting GitHub resources: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to get GitHub resources: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }, 500
+
+    def _get_database_resources(self, token_id: str) -> Tuple[Dict[str, Any], int]:
+        """Get database tables/schemas for the given token"""
+        try:
+            # TODO: Implement database resource listing
+            # This would connect to the database and list tables/schemas
+
+            # Mock data for now
+            resources = [
+                {
+                    'id': 'users_table',
+                    'name': 'users',
+                    'type': 'table',
+                    'description': 'User accounts table',
+                    'schema': 'public',
+                    'columns': ['id', 'username', 'email', 'created_at']
+                },
+                {
+                    'id': 'products_table',
+                    'name': 'products',
+                    'type': 'table',
+                    'description': 'Product catalog table',
+                    'schema': 'public',
+                    'columns': ['id', 'name', 'price', 'category']
+                }
+            ]
+
+            return {
+                "status": "success",
+                "resources": resources,
+                "count": len(resources),
+                "timestamp": int(time.time() * 1000)
+            }, 200
+
+        except Exception as e:
+            self.logger.error(f"❌ Error getting database resources: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to get database resources: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }, 500
+
+    def _get_document_resources(self, token_id: str) -> Tuple[Dict[str, Any], int]:
+        """Get uploaded documents for the given token"""
+        try:
+            # TODO: Implement document resource listing
+            # This would list uploaded documents from storage
+
+            # Mock data for now
+            resources = [
+                {
+                    'id': 'doc_1',
+                    'name': 'project_requirements.pdf',
+                    'type': 'document',
+                    'description': 'Project requirements document',
+                    'size': '2.5 MB',
+                    'uploaded_at': '2024-01-15T10:30:00Z'
+                },
+                {
+                    'id': 'doc_2',
+                    'name': 'api_documentation.md',
+                    'type': 'document',
+                    'description': 'API documentation in Markdown',
+                    'size': '1.2 MB',
+                    'uploaded_at': '2024-01-14T15:45:00Z'
+                }
+            ]
+
+            return {
+                "status": "success",
+                "resources": resources,
+                "count": len(resources),
+                "timestamp": int(time.time() * 1000)
+            }, 200
+
+        except Exception as e:
+            self.logger.error(f"❌ Error getting document resources: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to get document resources: {str(e)}",
                 "timestamp": int(time.time() * 1000)
             }, 500
