@@ -8,6 +8,9 @@ import tempfile
 import subprocess
 import requests
 import json
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 import fnmatch
@@ -460,78 +463,184 @@ class CodeConnectorService:
             return False
 
     def _store_repository_in_rag(self, repo_id: str, repo_path: str, repo_info: Dict[str, Any]) -> Dict[str, Any]:
-        """Store repository content in RAG system for future reference"""
+        """Store repository content in RAG system for future reference using threading"""
         try:
             # Get embedding service URL
             embedding_service_url = Config.get_embedding_service_url()
             if not embedding_service_url:
                 return {"success": False, "error": "Embedding service not configured"}
 
-            # Prepare repository documents for RAG
-            documents = []
+            # Get all files in the repository (not just important ones)
+            all_files = self._get_all_repository_files(repo_path)
 
-            # Add repository metadata
-            metadata_doc = {
-                "content": f"Repository: {repo_id}\n" +
-                          f"Languages: {', '.join(repo_info.get('languages', {}).keys())}\n" +
-                          f"Total files: {repo_info.get('total_files', 0)}\n" +
-                          f"Main files: {', '.join(repo_info.get('main_files', []))}\n" +
-                          f"Directories: {', '.join(repo_info.get('directories', []))[:200]}",
-                "metadata": {
-                    "type": "repository_metadata",
-                    "repository_id": repo_id,
-                    "source": "code_connector"
-                }
-            }
-            documents.append(metadata_doc)
+            if not all_files:
+                return {"success": False, "error": "No files found in repository"}
 
-            # Add important code files (limit to prevent overwhelming the system)
-            important_files = self._get_important_files(repo_path, repo_info)
-            for file_info in important_files[:10]:  # Limit to 10 most important files
-                try:
-                    file_path = os.path.join(repo_path, file_info['path'])
-                    if os.path.getsize(file_path) > Config.MAX_FILE_SIZE_KB * 1024:
-                        continue  # Skip large files
+            # Threading configuration
+            max_threads = Config.RAG_SYNC_THREADS
+            batch_size = Config.RAG_SYNC_BATCH_SIZE
 
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                        content = f.read()
+            # Thread-safe counters and collections
+            processed_files = 0
+            failed_files = 0
+            document_ids = []
+            lock = threading.Lock()
 
-                    # Create document for RAG
-                    file_doc = {
-                        "content": f"File: {file_info['path']}\n" +
-                                  f"Language: {file_info['language']}\n" +
-                                  f"Content:\n{content[:2000]}",  # Limit content size
-                        "metadata": {
+            self.logger.info(f"Processing {len(all_files)} files for repository {repo_id} using {max_threads} threads")
+            start_time = time.time()
+
+            def process_file_batch(file_batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+                """Process a batch of files in a single thread"""
+                batch_processed = 0
+                batch_failed = 0
+                batch_document_ids = []
+
+                for file_info in file_batch:
+                    try:
+                        file_path = os.path.join(repo_path, file_info['path'])
+
+                        # Skip large files
+                        if os.path.getsize(file_path) > Config.MAX_FILE_SIZE_KB * 1024:
+                            self.logger.debug(f"Skipping large file: {file_info['path']}")
+                            continue
+
+                        # Read file content
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+
+                        # Skip empty files
+                        if not content.strip():
+                            self.logger.debug(f"Skipping empty file: {file_info['path']}")
+                            continue
+
+                        # Create individual document for each file
+                        file_content = f"File: {file_info['path']}\n" + \
+                                      f"Language: {file_info['language']}\n" + \
+                                      f"Repository: {repo_id}\n" + \
+                                      f"Content:\n{content}"
+
+                        # Prepare metadata for individual file processing
+                        metadata = {
                             "type": "code_file",
                             "repository_id": repo_id,
                             "file_path": file_info['path'],
                             "language": file_info['language'],
-                            "source": "code_connector"
+                            "source": "code_connector",
+                            "file_size": len(content)
                         }
+
+                        # Process individual file using bulk documents endpoint
+                        documents = [{
+                            "content": file_content,
+                            "metadata": metadata
+                        }]
+
+                        response = requests.post(
+                            f"{embedding_service_url}/embed/documents",
+                            json={"documents": documents},
+                            timeout=60,
+                            headers={'Content-Type': 'application/json'}
+                        )
+
+                        if response.status_code == 200:
+                            result = response.json()
+                            if result.get("document_ids"):
+                                batch_document_ids.extend(result["document_ids"])
+                            batch_processed += 1
+                        else:
+                            self.logger.warning(f"Failed to process file {file_info['path']}: {response.status_code} - {response.text}")
+                            batch_failed += 1
+
+                    except Exception as e:
+                        self.logger.warning(f"Failed to process file {file_info['path']}: {str(e)}")
+                        batch_failed += 1
+                        continue
+
+                return {
+                    "processed": batch_processed,
+                    "failed": batch_failed,
+                    "document_ids": batch_document_ids
+                }
+
+            # Split files into batches for threading
+            file_batches = []
+            for i in range(0, len(all_files), batch_size):
+                file_batches.append(all_files[i:i + batch_size])
+
+            # Process files using ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=max_threads) as executor:
+                # Submit all batches to the thread pool
+                future_to_batch = {executor.submit(process_file_batch, batch): batch for batch in file_batches}
+
+                # Process completed futures
+                for future in as_completed(future_to_batch):
+                    try:
+                        result = future.result()
+
+                        # Thread-safe update of counters
+                        with lock:
+                            processed_files += result["processed"]
+                            failed_files += result["failed"]
+                            document_ids.extend(result["document_ids"])
+
+                            # Log progress every 50 files
+                            if processed_files % 50 == 0:
+                                elapsed_time = time.time() - start_time
+                                rate = processed_files / elapsed_time if elapsed_time > 0 else 0
+                                self.logger.info(f"Processed {processed_files}/{len(all_files)} files ({rate:.1f} files/sec)")
+
+                    except Exception as e:
+                        self.logger.error(f"Thread execution failed: {str(e)}")
+                        with lock:
+                            failed_files += len(future_to_batch[future])
+
+            # Store repository metadata as a separate document
+            try:
+                metadata_content = f"Repository: {repo_id}\n" + \
+                                 f"Languages: {', '.join(repo_info.get('languages', {}).keys())}\n" + \
+                                 f"Total files: {repo_info.get('total_files', 0)}\n" + \
+                                 f"Main files: {', '.join(repo_info.get('main_files', []))}\n" + \
+                                 f"Directories: {', '.join(repo_info.get('directories', []))}"
+
+                metadata_doc = [{
+                    "content": metadata_content,
+                    "metadata": {
+                        "type": "repository_metadata",
+                        "repository_id": repo_id,
+                        "source": "code_connector"
                     }
-                    documents.append(file_doc)
+                }]
 
-                except Exception as e:
-                    self.logger.warning(f"Failed to process file {file_info['path']}: {str(e)}")
-                    continue
-
-            # Send documents to embedding service
-            if documents:
                 response = requests.post(
                     f"{embedding_service_url}/embed/documents",
-                    json={"documents": documents},
+                    json={"documents": metadata_doc},
                     timeout=30,
                     headers={'Content-Type': 'application/json'}
                 )
 
                 if response.status_code == 200:
                     result = response.json()
-                    self.logger.info(f"Successfully stored {len(documents)} documents in RAG system for {repo_id}")
-                    return {"success": True, "documents_stored": len(documents), "result": result}
-                else:
-                    return {"success": False, "error": f"Embedding service returned {response.status_code}: {response.text}"}
-            else:
-                return {"success": False, "error": "No documents to store"}
+                    if result.get("document_ids"):
+                        document_ids.extend(result["document_ids"])
+
+            except Exception as e:
+                self.logger.warning(f"Failed to store repository metadata: {str(e)}")
+
+            elapsed_time = time.time() - start_time
+            avg_rate = processed_files / elapsed_time if elapsed_time > 0 else 0
+
+            self.logger.info(f"Repository RAG storage complete: {processed_files} files processed, {failed_files} failed, "
+                           f"{len(document_ids)} documents created in {elapsed_time:.1f}s ({avg_rate:.1f} files/sec)")
+
+            return {
+                "success": True,
+                "files_processed": processed_files,
+                "files_failed": failed_files,
+                "documents_stored": len(document_ids),
+                "document_ids": document_ids,
+                "processing_time_seconds": elapsed_time,
+                "processing_rate_files_per_second": avg_rate
+            }
 
         except Exception as e:
             self.logger.error(f"Failed to store repository in RAG system: {str(e)}")
@@ -661,6 +770,51 @@ class CodeConnectorService:
             self.logger.warning(f"Failed to find sample files for {language}: {str(e)}")
 
         return sample_files
+
+    def _get_all_repository_files(self, repo_path: str) -> List[Dict[str, Any]]:
+        """Get all code files in the repository for RAG processing"""
+        try:
+            all_files = []
+
+            for root, dirs, files in os.walk(repo_path):
+                # Skip ignored directories
+                dirs[:] = [d for d in dirs if not self._should_ignore(d)]
+
+                for filename in files:
+                    if self._should_ignore(filename):
+                        continue
+
+                    file_path = os.path.join(root, filename)
+                    rel_path = os.path.relpath(file_path, repo_path)
+
+                    # Skip files that are too large
+                    try:
+                        file_size = os.path.getsize(file_path)
+                        if file_size > Config.MAX_FILE_SIZE_KB * 1024:
+                            continue
+                    except OSError:
+                        continue
+
+                    # Get file extension and language
+                    _, ext = os.path.splitext(filename)
+                    file_language = Config.get_language_from_extension(ext)
+
+                    # Include all supported files (not just code files)
+                    if Config.is_supported_file(filename) or ext.lower() in ['.md', '.txt', '.rst', '.json', '.yaml', '.yml', '.xml']:
+                        all_files.append({
+                            "path": rel_path,
+                            "name": filename,
+                            "language": file_language or 'text',
+                            "size": file_size,
+                            "extension": ext.lower()
+                        })
+
+            self.logger.info(f"Found {len(all_files)} files for RAG processing")
+            return all_files
+
+        except Exception as e:
+            self.logger.error(f"Failed to get all repository files: {str(e)}")
+            return []
 
     def _get_repository_path(self, repository_id: str) -> Optional[str]:
         """Get local path for repository ID"""

@@ -127,6 +127,10 @@ class Config:
     # Request Timeouts
     HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 300))
     LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', 300))
+
+    # Threading Configuration for Repository Syncing
+    RAG_SYNC_THREADS = int(os.getenv('RAG_SYNC_THREADS', 10))  # Number of threads for RAG syncing
+    RAG_SYNC_BATCH_SIZE = int(os.getenv('RAG_SYNC_BATCH_SIZE', 5))  # Files per batch per thread
     
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:

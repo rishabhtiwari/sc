@@ -240,6 +240,8 @@ services:
       - LLM_SERVICE_PORT=8083
       - LLM_PROMPT_SERVICE_HOST=ichat-llm-service
       - LLM_PROMPT_SERVICE_PORT=8083
+      - EMBEDDING_SERVICE_HOST=ichat-embedding-service
+      - EMBEDDING_SERVICE_PORT=8085
       - MAX_REPO_SIZE_MB=500
       - MAX_FILE_SIZE_KB=1024
       - LOG_LEVEL=INFO
@@ -247,6 +249,8 @@ services:
       - CODE_GENERATION_TIMEOUT=300
       - HTTP_TIMEOUT=300
       - LLM_REQUEST_TIMEOUT=300
+      - RAG_SYNC_THREADS=10
+      - RAG_SYNC_BATCH_SIZE=5
     volumes:
       - ./code-generation-service/logs:/app/logs
       - ./code-generation-service/temp:/app/temp
@@ -261,6 +265,7 @@ services:
     restart: unless-stopped
     depends_on:
       - llm-service
+      - embedding-service
 
   # MCP Service for Model Context Protocol integration
   ichat-mcp-service:
