@@ -125,6 +125,11 @@ def list_tokens():
     """List OAuth tokens"""
     return mcp_controller.list_tokens()
 
+@mcp_bp.route('/tokens/<token_id>', methods=['GET'])
+def get_token(token_id):
+    """Get specific OAuth token"""
+    return mcp_controller.get_token(token_id)
+
 @mcp_bp.route('/token/<token_id>/revoke', methods=['POST'])
 def revoke_token(token_id):
     """Revoke OAuth token"""
@@ -145,6 +150,11 @@ def github_repositories():
 def github_repository_details(owner, repo):
     """Get repository details"""
     return mcp_controller.github_repository_details(owner, repo)
+
+@mcp_bp.route('/provider/<provider_id>/resources', methods=['GET'])
+def get_provider_resources(provider_id):
+    """Get resources from MCP provider"""
+    return mcp_controller.get_provider_resources(provider_id)
 
 @mcp_bp.route('/github/repository/<owner>/<repo>/clone', methods=['POST'])
 def github_repository_clone(owner, repo):

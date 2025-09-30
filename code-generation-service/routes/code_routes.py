@@ -16,6 +16,16 @@ def connect_repository():
     """Connect to a code repository"""
     return code_controller.connect_repository()
 
+@code_bp.route('/code/repositories', methods=['GET'])
+def get_repositories():
+    """Get list of connected repositories"""
+    return code_controller.get_repositories()
+
+@code_bp.route('/code/repositories/<repository_id>', methods=['DELETE'])
+def delete_repository(repository_id):
+    """Delete a connected repository"""
+    return code_controller.delete_repository(repository_id)
+
 # GitHub OAuth endpoints
 @code_bp.route('/code/auth/github/config', methods=['POST'])
 def github_oauth_config():

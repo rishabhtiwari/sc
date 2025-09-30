@@ -39,12 +39,23 @@ def create_app():
          allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept'],
          supports_credentials=True)
     
+    # Import blueprints
+    from routes.chat_routes import chat_bp
+    from routes.health_routes import health_bp
+    from routes.document_routes import document_bp
+    from routes.llm_routes import llm_bp
+    from routes.mcp_routes import mcp_bp
+    from routes.context_routes import context_bp
+    from routes.code_routes import code_bp
+
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(document_bp, url_prefix='/api')
     app.register_blueprint(llm_bp, url_prefix='/api')
     app.register_blueprint(mcp_bp, url_prefix='/api')
+    app.register_blueprint(context_bp, url_prefix='/api')
+    app.register_blueprint(code_bp, url_prefix='/api')
 
     
     # Root endpoint
@@ -64,6 +75,8 @@ def create_app():
                 "documents": "/api/documents/* (GET/POST)",
                 "llm": "/api/llm/* (GET/POST)",
                 "mcp": "/api/mcp/* (GET/POST)",
+                "context": "/api/context/* (GET/POST/DELETE)",
+                "code": "/api/code/* (GET/POST)",
                 "home": "/ (GET)"
             },
             "timestamp": int(time.time() * 1000)

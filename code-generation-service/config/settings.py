@@ -36,6 +36,10 @@ class Config:
     EMBEDDING_SERVICE_HOST = os.getenv('EMBEDDING_SERVICE_HOST', 'ichat-embedding-service')
     EMBEDDING_SERVICE_PORT = int(os.getenv('EMBEDDING_SERVICE_PORT', 8085))
 
+    # MCP Service Configuration
+    MCP_SERVICE_HOST = os.getenv('MCP_SERVICE_HOST', 'ichat-mcp-service')
+    MCP_SERVICE_PORT = int(os.getenv('MCP_SERVICE_PORT', 8089))
+
     # Service URLs
     @classmethod
     def get_llm_service_url(cls, endpoint: str = '') -> str:
@@ -53,6 +57,12 @@ class Config:
     def get_embedding_service_url(cls, endpoint: str = '') -> str:
         """Get embedding service URL with optional endpoint"""
         base_url = f"http://{cls.EMBEDDING_SERVICE_HOST}:{cls.EMBEDDING_SERVICE_PORT}"
+        return f"{base_url}/{endpoint.lstrip('/')}" if endpoint else base_url
+
+    @classmethod
+    def get_mcp_service_url(cls, endpoint: str = '') -> str:
+        """Get MCP service URL with optional endpoint"""
+        base_url = f"http://{cls.MCP_SERVICE_HOST}:{cls.MCP_SERVICE_PORT}"
         return f"{base_url}/{endpoint.lstrip('/')}" if endpoint else base_url
     
     # Code Repository Configuration
