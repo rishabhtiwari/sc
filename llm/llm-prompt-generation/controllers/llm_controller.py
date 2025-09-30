@@ -2,9 +2,11 @@
 Controller for LLM service endpoints
 """
 import time
-from flask import request, jsonify
-from typing import Dict, Tuple, Any
+import json
+from flask import request, jsonify, Response, stream_with_context
+from typing import Dict, Tuple, Any, Generator
 from services.llm_service import LLMService
+from services.streaming_service import StreamingService
 from config.settings import Config
 from utils.logger import setup_logger
 
@@ -14,6 +16,7 @@ class LLMController:
     
     def __init__(self):
         self.llm_service = LLMService()
+        self.streaming_service = StreamingService(self.llm_service)
         self.logger = setup_logger('llm-controller')
     
     def generate_response(self) -> Tuple[Dict[str, Any], int]:
@@ -191,3 +194,154 @@ class LLMController:
             "error": message,
             "timestamp": int(__import__('time').time() * 1000)
         }
+
+    def stream_response(self) -> Response:
+        """
+        Stream response using chunked processing
+
+        Expected JSON payload:
+        {
+            "query": "user question",
+            "context": "optional pre-provided context"
+        }
+
+        Returns:
+            Streaming response with Server-Sent Events
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                return Response(
+                    json.dumps({"error": "Request must be JSON"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            data = request.get_json()
+            if not data:
+                return Response(
+                    json.dumps({"error": "Empty request body"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract parameters
+            query = data.get('query', '').strip()
+            if not query:
+                return Response(
+                    json.dumps({"error": "Query is required"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            context = data.get('context', None)
+
+            self.logger.info(f"Starting streaming response for query: '{query[:50]}...'")
+
+            # Create streaming generator
+            def generate():
+                try:
+                    for chunk in self.streaming_service.generate_streaming_response(query, context):
+                        # Format as Server-Sent Events
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except Exception as e:
+                    self.logger.error(f"Error in streaming generator: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+
+            return Response(
+                stream_with_context(generate()),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type'
+                }
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in stream_response: {str(e)}")
+            return Response(
+                json.dumps({"error": f"Streaming failed: {str(e)}"}),
+                status=500,
+                mimetype='application/json'
+            )
+
+    def stream_chat(self) -> Response:
+        """
+        Stream chat response with RAG context
+
+        Expected JSON payload:
+        {
+            "query": "user question"
+        }
+
+        Returns:
+            Streaming response with Server-Sent Events
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                return Response(
+                    json.dumps({"error": "Request must be JSON"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            data = request.get_json()
+            if not data:
+                return Response(
+                    json.dumps({"error": "Empty request body"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract parameters
+            query = data.get('query', '').strip()
+            if not query:
+                return Response(
+                    json.dumps({"error": "Query is required"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            self.logger.info(f"Starting streaming chat for query: '{query[:50]}...'")
+
+            # Create streaming generator (will automatically use RAG)
+            def generate():
+                try:
+                    for chunk in self.streaming_service.generate_streaming_response(query):
+                        # Format as Server-Sent Events
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except Exception as e:
+                    self.logger.error(f"Error in streaming chat generator: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+
+            return Response(
+                stream_with_context(generate()),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type'
+                }
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error in stream_chat: {str(e)}")
+            return Response(
+                json.dumps({"error": f"Streaming chat failed: {str(e)}"}),
+                status=500,
+                mimetype='application/json'
+            )

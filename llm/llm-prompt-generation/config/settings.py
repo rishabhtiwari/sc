@@ -47,9 +47,15 @@ class Config:
     DO_SAMPLE = os.getenv('LLM_DO_SAMPLE', 'true').lower() == 'true'
 
     # RAG Configuration
-    MAX_CONTEXT_LENGTH = int(os.getenv('MAX_CONTEXT_LENGTH', 2000))
+    MAX_CONTEXT_LENGTH = int(os.getenv('MAX_CONTEXT_LENGTH', 4800))  # ~1200 tokens worth of context
     MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 5))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.7))
+
+    # Streaming Configuration
+    N_CTX = int(os.getenv('N_CTX', 2048))  # Context window for LLM
+    N_BATCH = int(os.getenv('N_BATCH', 8192))  # Batch size for LLM
+    ENABLE_STREAMING = os.getenv('ENABLE_STREAMING', 'true').lower() == 'true'
+    STREAM_DELAY_MS = int(os.getenv('STREAM_DELAY_MS', 50))  # Delay between streaming tokens
 
     # Prompt Templates
     SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT',

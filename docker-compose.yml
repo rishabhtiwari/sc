@@ -42,6 +42,9 @@ services:
       - MCP_SERVICE_PORT=8089
       - CODE_GENERATION_SERVICE_HOST=ichat-code-generation-service
       - CODE_GENERATION_SERVICE_PORT=8088
+      - LLM_SERVICE_HOST=ichat-llm-service
+      - LLM_SERVICE_PORT=8083
+      - LLM_SERVICE_URL=http://ichat-llm-service:8083
     volumes:
       - ./api-server/logs:/app/logs
     networks:
@@ -110,9 +113,15 @@ services:
       - MIN_SIMILARITY_THRESHOLD=0.7
       - RETRIEVER_TIMEOUT=300
       - MODEL_LOAD_TIMEOUT=300
+      - MAX_CONTEXT_LENGTH=4800
+      # Streaming Configuration
+      - N_CTX=2048
+      - N_BATCH=8192
+      - ENABLE_STREAMING=true
+      - STREAM_DELAY_MS=50
     volumes:
       - ./llm/llm-prompt-generation/logs:/app/logs
-      - ./llm/llm-prompt-generation/cache:/app/cache
+      - llm-model-cache:/app/cache  # Use named volume for persistent model cache
     networks:
       - ichat-network
     deploy:
@@ -337,4 +346,10 @@ volumes:
     driver: local
   mcp-temp:
     driver: local
+  llm-model-cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./llm/llm-prompt-generation/cache
 

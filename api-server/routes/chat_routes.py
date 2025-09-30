@@ -136,6 +136,43 @@ def clear_client_context():
     return ChatHandler.handle_clear_context()
 
 
+@chat_bp.route('/chat/stream', methods=['POST'])
+def stream_chat():
+    """
+    POST /api/chat/stream - Stream chat response with chunked processing
+
+    Expected JSON payload:
+    {
+        "message": "User's message text",
+        "session_id": "session_uuid",   # optional
+        "client": "desktop",            # optional
+        "use_rag": true                 # optional, enables RAG
+    }
+
+    Returns:
+        Server-Sent Events stream with chunked response
+    """
+    return ChatHandler.handle_stream_chat()
+
+
+@chat_bp.route('/chat/stream-direct', methods=['POST'])
+def stream_chat_direct():
+    """
+    POST /api/chat/stream-direct - Stream chat response without RAG
+
+    Expected JSON payload:
+    {
+        "message": "User's message text",
+        "session_id": "session_uuid",   # optional
+        "client": "desktop"             # optional
+    }
+
+    Returns:
+        Server-Sent Events stream with direct response
+    """
+    return ChatHandler.handle_stream_chat_direct()
+
+
 # Additional routes can be added here
 @chat_bp.route('/chat/ping', methods=['GET'])
 def chat_ping():
