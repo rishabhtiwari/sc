@@ -58,6 +58,79 @@ class ApiService {
     });
   }
 
+  /**
+   * Stream chat message with real-time response
+   * @param {string} message - The message to send
+   * @param {Object} options - Options for the request
+   * @param {Function} onChunk - Callback for each streaming chunk
+   * @param {Function} onComplete - Callback when streaming is complete
+   * @param {Function} onError - Callback for errors
+   */
+  async streamChatMessage(message, options = {}, onChunk, onComplete, onError) {
+    const payload = {
+      message: message.trim(),
+      timestamp: Date.now(),
+      client: 'ichat-ui',
+      use_rag: options.useRag !== false, // Default to true for streaming
+      session_id: options.sessionId || `web-session-${Date.now()}`,
+      conversation_id: options.conversationId || null,
+      ...options
+    };
+
+    const url = `${this.baseURL}/chat/stream`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+        signal: options.signal, // Support abort signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          if (onComplete) onComplete();
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              if (onChunk) onChunk(data);
+            } catch (e) {
+              console.error('Error parsing streaming data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Streaming request failed:', error);
+      if (onError) onError(error);
+      throw error;
+    }
+  }
+
   async uploadDocument(file, options = {}) {
     const formData = new FormData();
     formData.append('file', file);

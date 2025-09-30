@@ -538,3 +538,7 @@ class LLMService:
                 return language
 
         return ''  # Default to no language specification
+
+    def get_model_instance(self):
+        """Get the model instance for direct access"""
+        return getattr(self, 'model_instance', None)

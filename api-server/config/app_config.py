@@ -39,6 +39,7 @@ class AppConfig:
     # LLM Service integration
     LLM_SERVICE_HOST = os.environ.get('LLM_SERVICE_HOST', 'localhost')
     LLM_SERVICE_PORT = int(os.environ.get('LLM_SERVICE_PORT', 8087))
+    LLM_SERVICE_URL = os.environ.get('LLM_SERVICE_URL', 'http://localhost:8083')
 
 
 class DevelopmentConfig(AppConfig):

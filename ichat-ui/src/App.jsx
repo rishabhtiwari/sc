@@ -11,7 +11,9 @@ const App = () => {
     isTyping,
     connectionStatus,
     handleSend,
-    checkConnection
+    stopStream,
+    checkConnection,
+    canStop
   } = useChat();
 
   const [activeSection, setActiveSection] = useState('chat');
@@ -30,7 +32,9 @@ const App = () => {
             messages={messages}
             isTyping={isTyping}
             onSend={handleSend}
+            onStop={stopStream}
             connectionStatus={connectionStatus}
+            canStop={canStop}
           />
         );
       case 'mcp':
@@ -43,7 +47,9 @@ const App = () => {
             messages={messages}
             isTyping={isTyping}
             onSend={handleSend}
+            onStop={stopStream}
             connectionStatus={connectionStatus}
+            canStop={canStop}
           />
         );
     }

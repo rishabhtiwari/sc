@@ -13,6 +13,7 @@ export const useChat = () => {
 
   const [isTyping, setIsTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('checking');
+  const [currentStreamController, setCurrentStreamController] = useState(null);
 
   const checkConnection = useCallback(async () => {
     try {
@@ -28,7 +29,27 @@ export const useChat = () => {
     }
   }, []);
 
+  const stopStream = useCallback(() => {
+    if (currentStreamController) {
+      currentStreamController.abort();
+      setCurrentStreamController(null);
+      setIsTyping(false);
+
+      // Mark the current streaming message as stopped
+      setMessages(prev => prev.map(msg =>
+        msg.isStreaming
+          ? { ...msg, isStreaming: false, text: msg.text + '\n\n[Response stopped by user]' }
+          : msg
+      ));
+    }
+  }, [currentStreamController]);
+
   const handleSend = useCallback(async (text) => {
+    // Stop any existing stream
+    if (currentStreamController) {
+      currentStreamController.abort();
+    }
+
     const userMessage = {
       id: Date.now(),
       text,
@@ -39,49 +60,133 @@ export const useChat = () => {
     setMessages(prev => [...prev, userMessage]);
     setIsTyping(true);
 
+    // Create assistant message placeholder for streaming
+    const assistantMessageId = Date.now() + 1;
+    const assistantMessage = {
+      id: assistantMessageId,
+      text: '',
+      sender: 'assistant',
+      timestamp: new Date(),
+      isStreaming: true
+    };
+
+    setMessages(prev => [...prev, assistantMessage]);
+
+    // Create abort controller for this stream
+    const controller = new AbortController();
+    setCurrentStreamController(controller);
+
     try {
-      const response = await apiService.sendChatMessage(text, {
-        useRag: false,
-        sessionId: `web-session-${Date.now()}`
-      });
+      await apiService.streamChatMessage(
+        text,
+        {
+          useRag: true, // Enable RAG for better responses
+          sessionId: `web-session-${Date.now()}`,
+          signal: controller.signal // Pass abort signal
+        },
+        // onChunk callback
+        (chunk) => {
+          console.log('Received chunk:', chunk);
+          console.log('Chunk keys:', Object.keys(chunk));
+          console.log('Chunk type:', chunk.type);
+          console.log('Chunk content:', chunk.content);
 
-      if (response.status === 'success') {
-        setConnectionStatus('connected');
+          // Handle different chunk formats
+          if (chunk.type === 'token' && chunk.content) {
+            // Update the assistant message with new token content
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, text: msg.text + chunk.content }
+                : msg
+            ));
+          } else if (chunk.content && !chunk.type) {
+            // Handle direct content chunks (fallback)
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, text: msg.text + chunk.content }
+                : msg
+            ));
+          } else if (typeof chunk === 'string') {
+            // Handle string chunks directly
+            setMessages(prev => prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, text: msg.text + chunk }
+                : msg
+            ));
+          } else if (chunk.type === 'metadata') {
+            setConnectionStatus('connected');
+            console.log('Streaming metadata:', chunk);
+          } else if (chunk.type === 'chunk_start') {
+            console.log(`Starting chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
+          } else if (chunk.type === 'chunk_complete') {
+            console.log(`Completed chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
+          } else if (chunk.type === 'complete') {
+            console.log('Stream completed');
+          } else {
+            console.log('Unknown chunk format:', chunk);
+          }
+        },
+        // onComplete callback
+        () => {
+          console.log('Streaming completed');
+          setIsTyping(false);
+          setCurrentStreamController(null);
+          // Mark message as no longer streaming
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? { ...msg, isStreaming: false }
+              : msg
+          ));
+        },
+        // onError callback
+        (error) => {
+          console.error('Streaming error:', error);
+          setIsTyping(false);
+          setCurrentStreamController(null);
 
-        const assistantMessage = {
-          id: Date.now() + 1,
-          text: response.response || response.message || 'I received your message but had trouble generating a response.',
-          sender: 'assistant',
-          timestamp: new Date()
-        };
+          if (error.name === 'AbortError') {
+            // Stream was intentionally stopped
+            return;
+          }
 
-        setMessages(prev => [...prev, assistantMessage]);
-      } else {
-        const errorMessage = {
-          id: Date.now() + 1,
-          text: `Sorry, I encountered an error: ${response.error || 'Unknown error occurred'}`,
-          sender: 'assistant',
-          timestamp: new Date()
-        };
+          setConnectionStatus('disconnected');
 
-        setMessages(prev => [...prev, errorMessage]);
-      }
+          // Update assistant message with error
+          setMessages(prev => prev.map(msg =>
+            msg.id === assistantMessageId
+              ? {
+                  ...msg,
+                  text: 'Sorry, I\'m having trouble connecting to the server. Please check your connection and try again.',
+                  isStreaming: false
+                }
+              : msg
+          ));
+        }
+      );
     } catch (error) {
       console.error('Send message failed:', error);
+      setIsTyping(false);
+      setCurrentStreamController(null);
+
+      if (error.name === 'AbortError') {
+        // Stream was intentionally stopped
+        return;
+      }
+
       setConnectionStatus('disconnected');
 
-      const errorMessage = {
-        id: Date.now() + 1,
-        text: 'Sorry, I\'m having trouble connecting to the server. Please check your connection and try again.',
-        sender: 'assistant',
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsTyping(false);
+      // Update assistant message with error
+      setMessages(prev => prev.map(msg =>
+        msg.id === assistantMessageId
+          ? {
+              ...msg,
+              text: 'Sorry, I\'m having trouble connecting to the server. Please check your connection and try again.',
+              isStreaming: false
+            }
+          : msg
+      ));
     }
-  }, []);
+  }, [currentStreamController]);
 
   const clearMessages = useCallback(() => {
     setMessages([
@@ -99,7 +204,9 @@ export const useChat = () => {
     isTyping,
     connectionStatus,
     handleSend,
+    stopStream,
     checkConnection,
-    clearMessages
+    clearMessages,
+    canStop: !!currentStreamController
   };
 };

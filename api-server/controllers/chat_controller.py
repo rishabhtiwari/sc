@@ -4,7 +4,9 @@ Chat Controller - Business logic for chat operations
 
 import time
 import random
-from typing import Dict, Any, Optional
+import requests
+import json
+from typing import Dict, Any, Optional, Generator
 
 from flask import current_app
 from services.llm_service_client import llm_client
@@ -484,5 +486,164 @@ class ChatController:
             return {
                 "status": "error",
                 "message": f"Failed to clear context: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }
+
+    @classmethod
+    def stream_message(cls, message: str, client: str = "web", session_id: str = "default_session",
+                      use_rag: bool = True) -> Generator[Dict[str, Any], None, None]:
+        """
+        Stream a chat message response with chunked processing
+
+        Args:
+            message (str): The user's message
+            client (str): The client identifier
+            session_id (str): Session identifier
+            use_rag (bool): Whether to use RAG for enhanced responses
+
+        Yields:
+            Dict[str, Any]: Streaming response chunks
+        """
+        try:
+            current_app.logger.info(f"🔄 Starting streaming response for {client}:{session_id}")
+
+            # Send initial metadata
+            yield {
+                "type": "metadata",
+                "message": message,
+                "client": client,
+                "session_id": session_id,
+                "use_rag": use_rag,
+                "timestamp": int(time.time() * 1000)
+            }
+
+            # Try to use LLM service for streaming
+            try:
+                llm_service_url = current_app.config.get('LLM_SERVICE_URL', 'http://localhost:8083')
+
+                if use_rag:
+                    # Use streaming chat endpoint with RAG
+                    stream_url = f"{llm_service_url}/llm/stream-chat"
+                else:
+                    # Use direct streaming endpoint
+                    stream_url = f"{llm_service_url}/llm/stream"
+
+                payload = {
+                    "query": message
+                }
+
+                current_app.logger.info(f"🌐 Calling LLM streaming service: {stream_url}")
+
+                # Make streaming request to LLM service
+                response = requests.post(
+                    stream_url,
+                    json=payload,
+                    headers={
+                        'Content-Type': 'application/json',
+                        'Accept': 'text/event-stream'
+                    },
+                    stream=True,
+                    timeout=300
+                )
+
+                if response.status_code == 200:
+                    # Process streaming response
+                    for line in response.iter_lines(decode_unicode=True):
+                        if line and line.startswith('data: '):
+                            try:
+                                chunk_data = json.loads(line[6:])  # Remove 'data: ' prefix
+                                # Forward the chunk with additional metadata
+                                chunk_data['client'] = client
+                                chunk_data['session_id'] = session_id
+                                yield chunk_data
+                            except json.JSONDecodeError as e:
+                                current_app.logger.error(f"Error parsing streaming chunk: {e}")
+                                continue
+                else:
+                    # LLM service error, fall back to simple response
+                    current_app.logger.warning(f"LLM service returned {response.status_code}, using fallback")
+                    yield from cls._stream_fallback_response(message, client, session_id)
+
+            except requests.exceptions.RequestException as e:
+                current_app.logger.error(f"Error connecting to LLM service: {str(e)}")
+                # Fall back to simple streaming response
+                yield from cls._stream_fallback_response(message, client, session_id)
+
+        except Exception as e:
+            current_app.logger.error(f"❌ Error in stream_message: {str(e)}")
+            yield {
+                "type": "error",
+                "error": str(e),
+                "client": client,
+                "session_id": session_id,
+                "timestamp": int(time.time() * 1000)
+            }
+
+    @classmethod
+    def _stream_fallback_response(cls, message: str, client: str, session_id: str) -> Generator[Dict[str, Any], None, None]:
+        """
+        Generate a streaming fallback response when LLM service is unavailable
+
+        Args:
+            message (str): The user's message
+            client (str): The client identifier
+            session_id (str): Session identifier
+
+        Yields:
+            Dict[str, Any]: Streaming response chunks
+        """
+        try:
+            # Generate fallback response
+            response_text = cls._generate_response(message)
+
+            # Send metadata
+            yield {
+                "type": "metadata",
+                "total_chunks": 1,
+                "query": message,
+                "response_type": "fallback",
+                "client": client,
+                "session_id": session_id,
+                "timestamp": int(time.time() * 1000)
+            }
+
+            # Stream the response word by word
+            words = response_text.split()
+            for i, word in enumerate(words):
+                word_with_space = word if i == 0 else " " + word
+
+                yield {
+                    "type": "text",
+                    "content": word_with_space,
+                    "chunk_index": 0,
+                    "total_chunks": 1,
+                    "word_index": i,
+                    "total_words": len(words),
+                    "client": client,
+                    "session_id": session_id,
+                    "timestamp": int(time.time() * 1000)
+                }
+
+                # Small delay for typing effect
+                time.sleep(0.05)
+
+            # Send completion
+            yield {
+                "type": "complete",
+                "total_chunks": 1,
+                "response_length": len(response_text),
+                "source": "fallback",
+                "client": client,
+                "session_id": session_id,
+                "timestamp": int(time.time() * 1000)
+            }
+
+        except Exception as e:
+            current_app.logger.error(f"Error in fallback streaming: {str(e)}")
+            yield {
+                "type": "error",
+                "error": str(e),
+                "client": client,
+                "session_id": session_id,
                 "timestamp": int(time.time() * 1000)
             }

@@ -3,11 +3,14 @@ Chat Handler - HTTP request/response handling for chat endpoints
 """
 
 import time
+import json
 
 from flask import (
     request,
     jsonify,
-    current_app
+    current_app,
+    Response,
+    stream_with_context
 )
 
 from controllers.chat_controller import ChatController
@@ -399,3 +402,154 @@ class ChatHandler:
                 "status": "error",
                 "timestamp": int(time.time() * 1000)
             }), 500
+
+    @staticmethod
+    def handle_stream_chat():
+        """
+        Handle POST /api/chat/stream requests - Stream chat response with chunked processing
+
+        Returns:
+            Flask Response: Server-Sent Events stream
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                return Response(
+                    json.dumps({"error": "Request must be JSON"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            data = request.get_json()
+            if not data:
+                return Response(
+                    json.dumps({"error": "Empty request body"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract required fields
+            message = data.get('message', '').strip()
+            if not message:
+                return Response(
+                    json.dumps({"error": "Message is required"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract optional fields
+            session_id = data.get('session_id', 'default_session')
+            client = data.get('client', 'web')
+            use_rag = data.get('use_rag', True)
+
+            current_app.logger.info(f"🔄 Starting streaming chat for {client}:{session_id}: {message[:50]}...")
+
+            # Create streaming generator
+            def generate():
+                try:
+                    for chunk in ChatController.stream_message(message, client, session_id, use_rag):
+                        # Format as Server-Sent Events
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except Exception as e:
+                    current_app.logger.error(f"Error in streaming generator: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+
+            return Response(
+                stream_with_context(generate()),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization, Origin',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                }
+            )
+
+        except Exception as e:
+            current_app.logger.error(f"❌ Error in stream_chat: {str(e)}")
+            return Response(
+                json.dumps({"error": f"Streaming failed: {str(e)}"}),
+                status=500,
+                mimetype='application/json'
+            )
+
+    @staticmethod
+    def handle_stream_chat_direct():
+        """
+        Handle POST /api/chat/stream-direct requests - Stream chat response without RAG
+
+        Returns:
+            Flask Response: Server-Sent Events stream
+        """
+        try:
+            # Validate request
+            if not request.is_json:
+                return Response(
+                    json.dumps({"error": "Request must be JSON"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            data = request.get_json()
+            if not data:
+                return Response(
+                    json.dumps({"error": "Empty request body"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract required fields
+            message = data.get('message', '').strip()
+            if not message:
+                return Response(
+                    json.dumps({"error": "Message is required"}),
+                    status=400,
+                    mimetype='application/json'
+                )
+
+            # Extract optional fields
+            session_id = data.get('session_id', 'default_session')
+            client = data.get('client', 'web')
+
+            current_app.logger.info(f"🔄 Starting direct streaming chat for {client}:{session_id}: {message[:50]}...")
+
+            # Create streaming generator
+            def generate():
+                try:
+                    for chunk in ChatController.stream_message(message, client, session_id, use_rag=False):
+                        # Format as Server-Sent Events
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                except Exception as e:
+                    current_app.logger.error(f"Error in direct streaming generator: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "error": str(e),
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    yield f"data: {json.dumps(error_chunk)}\n\n"
+
+            return Response(
+                stream_with_context(generate()),
+                mimetype='text/event-stream',
+                headers={
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive',
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization, Origin',
+                    'Access-Control-Allow-Methods': 'POST, OPTIONS'
+                }
+            )
+
+        except Exception as e:
+            current_app.logger.error(f"❌ Error in stream_chat_direct: {str(e)}")
+            return Response(
+                json.dumps({"error": f"Direct streaming failed: {str(e)}"}),
+                status=500,
+                mimetype='application/json'
+            )

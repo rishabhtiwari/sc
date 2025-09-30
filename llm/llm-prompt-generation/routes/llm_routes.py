@@ -28,6 +28,16 @@ def search_documents():
     """Search documents using retriever service"""
     return llm_controller.search_documents()
 
+@llm_bp.route('/llm/stream', methods=['POST'])
+def stream_response():
+    """Stream response using chunked processing"""
+    return llm_controller.stream_response()
+
+@llm_bp.route('/llm/stream-chat', methods=['POST'])
+def stream_chat():
+    """Stream chat response with RAG context"""
+    return llm_controller.stream_chat()
+
 # Health endpoints
 @llm_bp.route('/health', methods=['GET'])
 def health_check():

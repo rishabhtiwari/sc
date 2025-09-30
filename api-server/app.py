@@ -36,7 +36,7 @@ def create_app():
              'http://0.0.0.0:3001'  # All interfaces
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept'],
+         allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept', 'Accept-Encoding', 'Cache-Control'],
          supports_credentials=True)
     
     # Import blueprints
