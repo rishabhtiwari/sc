@@ -57,6 +57,12 @@ class Config:
     ENABLE_STREAMING = os.getenv('ENABLE_STREAMING', 'true').lower() == 'true'
     STREAM_DELAY_MS = int(os.getenv('STREAM_DELAY_MS', 50))  # Delay between streaming tokens
 
+    # Sliding Window Continuation Configuration
+    ENABLE_CONTINUATION = os.getenv('ENABLE_CONTINUATION', 'true').lower() == 'true'
+    MAX_CONTINUATION_LOOPS = int(os.getenv('MAX_CONTINUATION_LOOPS', 5))
+    SLIDING_WINDOW_TOKENS = int(os.getenv('SLIDING_WINDOW_TOKENS', 300))  # Tokens to keep for continuity
+    CONTINUATION_THRESHOLD = float(os.getenv('CONTINUATION_THRESHOLD', 0.9))  # When to trigger continuation (90% of max tokens)
+
     # Prompt Templates
     SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT',
                               "You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely.")
