@@ -1,9 +1,11 @@
 """
-Streaming Service for multi-pass chunked responses
+Streaming Service for multi-pass chunked responses with buffered background generation
 """
 import time
 import asyncio
 import json
+import threading
+import queue
 from typing import Dict, List, Any, Generator, AsyncGenerator
 from config.settings import Config
 from utils.logger import setup_logger
@@ -15,7 +17,250 @@ class StreamingService:
     def __init__(self, llm_service):
         self.logger = setup_logger('streaming-service')
         self.llm_service = llm_service
-        self.logger.info("Streaming Service initialized")
+
+        # Producer-Consumer components for seamless streaming
+        self.token_buffer = queue.Queue()
+        self.generation_complete = threading.Event()
+        self.continuation_ready = threading.Event()
+
+        self.logger.info("Streaming Service initialized with producer-consumer pattern")
+
+    def _token_producer(self, query: str, context: str = None):
+        """
+        Producer: Independently generates all tokens across multiple passes.
+        Doesn't rely on consumer - just keeps generating until LLM says complete or natural end.
+        """
+        try:
+            complete_output = ""
+            history_tokens = Config.SLIDING_WINDOW_TOKENS
+            max_loops = Config.MAX_CONTINUATION_LOOPS
+
+            # Start with first prompt
+            current_prompt = self._build_initial_prompt(query, context)
+
+            # Debug: Log context usage
+            if context and context.strip():
+                self.logger.info(f"Producer: Using RAG context ({len(context)} chars)")
+                self.logger.info(f"Producer: Context preview: '{context[:100]}...'")
+            else:
+                self.logger.info("Producer: No RAG context provided")
+
+            self.logger.info(f"Producer: Initial prompt length: {len(current_prompt)} chars")
+
+            loop_idx = 0
+            while True:
+                self.logger.info(f"Producer starting pass {loop_idx + 1}")
+
+                # Get model instance for streaming
+                model_instance = self.llm_service.get_model_instance()
+                if not model_instance:
+                    self.token_buffer.put({"status": "error", "error": "Model instance not available"})
+                    return
+
+                # Generate tokens from model (no delays here)
+                token_count = 0
+                current_chunk = ""
+
+                # Always use streaming method - no fallbacks
+                self.logger.info(f"Producer: Starting streaming generation for pass {loop_idx + 1}")
+                self.logger.info(f"Producer: Model instance type: {type(model_instance)}")
+
+                # Get streaming generator from model
+                stream_generator = model_instance.generate_streaming_response(current_prompt)
+
+                self.logger.info(f"Producer starting to iterate through stream for pass {loop_idx + 1}")
+                chunk_count = 0
+                hit_limit = False
+
+                for chunk in stream_generator:
+                    chunk_count += 1
+
+                    if chunk.get("status") == "error":
+                        self.token_buffer.put({"status": "error", "error": chunk.get("error")})
+                        return
+
+                    if chunk.get("status") == "streaming":
+                        token_text = chunk.get("token", "")
+                        if token_text:
+                            current_chunk += token_text
+                            token_count += 1
+                            # Stream token to consumer immediately
+                            self.token_buffer.put({
+                                "status": "streaming",
+                                "token": token_text,
+                                "pass": loop_idx + 1,
+                                "token_count": token_count
+                            })
+
+                    elif chunk.get("status") == "complete":
+                        # Check if this was a forced truncation or natural completion
+                        finish_reason = None
+                        if isinstance(chunk, dict) and 'finish_reason' in chunk:
+                            finish_reason = chunk.get('finish_reason')
+
+                        total_tokens_so_far = len(complete_output.split()) + len(current_chunk.split())
+                        self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
+                        self.logger.info(f"Producer: Finish reason: {finish_reason}")
+                        self.logger.info(f"Producer: Total tokens so far: {total_tokens_so_far}")
+
+                        # NEW LOGIC: Check finish_reason for continuation decision
+                        if finish_reason == 'length':
+                            # Model hit token limit - FORCE CONTINUATION (no max_loops restriction)
+                            self.logger.info(f"Producer: finish_reason='length' - MODEL HIT TOKEN LIMIT - CONTINUING")
+                            hit_limit = True
+                            break
+                        elif finish_reason in ['stop', 'eos_token'] or finish_reason is None:
+                            # Natural completion - STOP
+                            total_tokens_final = total_tokens_so_far
+                            self.logger.info(
+                                f"Producer: finish_reason='{finish_reason}' - NATURAL COMPLETION - STOPPING")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {total_tokens_final}")
+                            self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
+                                                   "total_tokens": total_tokens_final})
+                            return
+                        else:
+                            # Unknown finish_reason - log and stop to be safe
+                            total_tokens_final = total_tokens_so_far
+                            self.logger.info(f"Producer: Unknown finish_reason='{finish_reason}' - STOPPING")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {total_tokens_final}")
+                            self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
+                                                   "total_tokens": total_tokens_final})
+                            return
+
+                # Add tokens to complete output for sliding window
+                complete_output += current_chunk
+
+                # If we hit limit, prepare next pass
+                if hit_limit:
+                    total_tokens_so_far = len(complete_output.split())
+                    self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
+                    self.logger.info(f"Producer: Total tokens accumulated: {total_tokens_so_far}")
+
+                    # Signal end of current pass to consumer
+                    self.token_buffer.put({
+                        "status": "pass_complete",
+                        "pass": loop_idx + 1,
+                        "tokens_in_pass": token_count,
+                        "total_tokens_so_far": total_tokens_so_far
+                    })
+
+                    # Small delay to let consumer process the pass completion
+                    import time
+                    time.sleep(0.1)  # 100ms delay between passes
+
+                    self.logger.info(f"Producer preparing next pass {loop_idx + 2}")
+                    # Build next prompt with sliding window context
+                    prev_text = self._get_sliding_window_context(complete_output, history_tokens)
+                    current_prompt = self._build_continuation_prompt(query, context, prev_text)
+
+                    # Debug: Log continuation prompt details
+                    self.logger.info(f"Producer: Continuation prompt length: {len(current_prompt)} chars")
+                    self.logger.info(f"Producer: Sliding window context length: {len(prev_text)} chars")
+                    if context:
+                        self.logger.info(f"Producer: RAG context preserved in continuation: {len(context)} chars")
+
+                    # Reset for next pass
+                    current_chunk = ""
+                    token_count = 0
+                    hit_limit = False
+                    loop_idx += 1
+
+                    continue
+                else:
+                    # Natural completion - should not reach here as model handles completion in streaming loop
+                    final_total_tokens = len(complete_output.split())
+                    self.logger.info(f"Producer: Generation complete after {loop_idx + 1} passes")
+                    self.logger.info(f"Producer: FINAL TOTAL TOKENS: {final_total_tokens}")
+                    self.logger.info(f"Producer finished: hit_limit={hit_limit}, loop_idx={loop_idx}")
+                    self.token_buffer.put(
+                        {"status": "complete", "total_passes": loop_idx + 1, "total_tokens": final_total_tokens})
+                    return
+
+        except Exception as e:
+            self.logger.error(f"Producer error: {str(e)}")
+            self.token_buffer.put({"status": "error", "error": str(e)})
+
+    def _token_consumer(self):
+        """
+        Consumer: Simply streams buffered tokens to user with 50ms delay for smooth UX.
+        Just consumes whatever producer generates - no complex logic.
+        """
+        try:
+            while True:
+                try:
+                    # Get token from buffer (wait if needed) - 5 minute timeout for very slow model startup
+                    token_data = self.token_buffer.get(timeout=300)  # 5 minute timeout
+
+                    if token_data.get("status") == "error":
+                        yield {
+                            "type": "error",
+                            "error": token_data.get("error", "Unknown error"),
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        break
+
+                    elif token_data.get("status") == "complete":
+                        # Producer finished all passes
+                        total_passes = token_data.get("total_passes", 1)
+                        total_tokens = token_data.get("total_tokens", 0)
+                        self.logger.info(
+                            f"Consumer: Producer completed all {total_passes} passes with {total_tokens} tokens")
+
+                        yield {
+                            "type": "complete",
+                            "total_passes": total_passes,
+                            "total_tokens": total_tokens,
+                            "timestamp": int(time.time() * 1000)
+                        }
+                        break
+
+                    elif token_data.get("status") == "pass_complete":
+                        # Producer completed a pass, log it but don't yield to user
+                        pass_num = token_data.get("pass", 1)
+                        tokens_in_pass = token_data.get("tokens_in_pass", 0)
+                        total_tokens_so_far = token_data.get("total_tokens_so_far", 0)
+                        self.logger.info(
+                            f"Consumer: Pass {pass_num} completed with {tokens_in_pass} tokens (total: {total_tokens_so_far})")
+                        # Don't yield - just continue to next token
+                        continue
+
+                    elif token_data.get("status") == "streaming":
+                        # Get token content (producer sends 'token', UI expects 'content')
+                        token_content = token_data.get("token", "")
+
+                        # Log first few tokens received by consumer
+                        if token_data.get("token_count", 0) <= 3:
+                            self.logger.info(
+                                f"Consumer received token {token_data.get('token_count', 0)} from pass {token_data.get('pass', 1)}: '{token_content}'")
+
+                        # Stream token to user with 50ms delay (UI expects 'type': 'token')
+                        yield {
+                            "type": "token",
+                            "content": token_content,
+                            "pass": token_data.get("pass", 1),
+                            "token_count": token_data.get("token_count", 0),
+                            "timestamp": int(time.time() * 1000)
+                        }
+
+                        # 50ms delay for smooth user experience
+                        time.sleep(0.05)
+
+                except queue.Empty:
+                    self.logger.warning("Consumer timeout waiting for tokens")
+                    yield {
+                        "type": "error",
+                        "error": "Generation timeout",
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    break
+
+        except Exception as e:
+            self.logger.error(f"Consumer error: {str(e)}")
+            yield {
+                "type": "error",
+                "error": str(e),
+                "timestamp": int(time.time() * 1000)
+            }
 
     def should_use_streaming(self, query: str, context: str = None) -> bool:
         """
@@ -67,12 +312,13 @@ class StreamingService:
         if last_period > max_context_chars * 0.8:  # If we can keep 80% and end at sentence
             truncated = truncated[:last_period + 1]
 
-        self.logger.info(f"Truncated context from {len(context)} to {len(truncated)} characters to fit within token limits")
+        self.logger.info(
+            f"Truncated context from {len(context)} to {len(truncated)} characters to fit within token limits")
         return truncated
 
     def generate_streaming_response(self, query: str, context: str = None) -> Generator[Dict[str, Any], None, None]:
         """
-        Generate streaming response using native token streaming
+        Generate streaming response with sliding window continuation for long responses
 
         Args:
             query: User query
@@ -82,7 +328,7 @@ class StreamingService:
             Dictionary containing streaming response tokens
         """
         try:
-            self.logger.info(f"Starting native streaming response for query: '{query[:50]}...'")
+            self.logger.info(f"Starting streaming response with continuation for query: '{query[:50]}...'")
 
             # Get RAG context if not provided
             if context is None:
@@ -102,39 +348,10 @@ class StreamingService:
                 "timestamp": int(time.time() * 1000)
             }
 
-            # Stream response directly from LLM model
-            model_instance = self.llm_service.get_model_instance()
-
-            if context and context.strip():
-                # Use RAG context with streaming
-                if hasattr(model_instance, 'generate_streaming_with_context'):
-                    yield from self._stream_tokens_with_context(model_instance, query, context)
-                else:
-                    # Fallback to non-streaming with context
-                    response = self.llm_service.generate_response(query, use_rag=False, context=context)
-                    if response.get("status") == "success":
-                        yield from self._stream_text_as_tokens(response.get("response", ""))
-                    else:
-                        yield {
-                            "type": "error",
-                            "error": response.get("error", "Failed to generate response"),
-                            "timestamp": int(time.time() * 1000)
-                        }
-            else:
-                # Direct response without context
-                if hasattr(model_instance, 'generate_streaming_response'):
-                    yield from self._stream_tokens_direct(model_instance, query)
-                else:
-                    # Fallback to non-streaming
-                    response = self.llm_service.generate_response(query, use_rag=False)
-                    if response.get("status") == "success":
-                        yield from self._stream_text_as_tokens(response.get("response", ""))
-                    else:
-                        yield {
-                            "type": "error",
-                            "error": response.get("error", "Failed to generate response"),
-                            "timestamp": int(time.time() * 1000)
-                        }
+            # Always use sliding window continuation with streaming
+            self.logger.info(
+                f"Using sliding window continuation with streaming (MAX_NEW_TOKENS={Config.MAX_NEW_TOKENS})")
+            yield from self._generate_with_sliding_window(query, context)
 
             # Send completion metadata
             yield {
@@ -150,245 +367,163 @@ class StreamingService:
                 "timestamp": int(time.time() * 1000)
             }
 
-    def _stream_tokens_with_context(self, model_instance, query: str, context: str) -> Generator[Dict[str, Any], None, None]:
-        """Stream tokens from model with RAG context"""
-        try:
-            for token_data in model_instance.generate_streaming_with_context(query, context):
-                if token_data.get("status") == "streaming":
-                    token_text = token_data.get("token", "")
-                    if token_text:
-                        yield {
-                            "type": "token",
-                            "content": token_text,
-                            "timestamp": int(time.time() * 1000)
-                        }
-                        # Native streaming delay
-                        if Config.ENABLE_STREAMING:
-                            time.sleep(Config.STREAM_DELAY_MS / 1000.0)
-
-                elif token_data.get("status") == "complete":
-                    break
-                elif token_data.get("status") == "error":
-                    yield {
-                        "type": "error",
-                        "error": token_data.get("error", "Unknown error"),
-                        "timestamp": int(time.time() * 1000)
-                    }
-                    break
-        except Exception as e:
-            yield {
-                "type": "error",
-                "error": str(e),
-                "timestamp": int(time.time() * 1000)
-            }
-
-    def _stream_tokens_direct(self, model_instance, query: str) -> Generator[Dict[str, Any], None, None]:
-        """Stream tokens from model without context"""
-        try:
-            for token_data in model_instance.generate_streaming_response(query):
-                if token_data.get("status") == "streaming":
-                    token_text = token_data.get("token", "")
-                    if token_text:
-                        yield {
-                            "type": "token",
-                            "content": token_text,
-                            "timestamp": int(time.time() * 1000)
-                        }
-                        # Native streaming delay
-                        if Config.ENABLE_STREAMING:
-                            time.sleep(Config.STREAM_DELAY_MS / 1000.0)
-
-                elif token_data.get("status") == "complete":
-                    break
-                elif token_data.get("status") == "error":
-                    yield {
-                        "type": "error",
-                        "error": token_data.get("error", "Unknown error"),
-                        "timestamp": int(time.time() * 1000)
-                    }
-                    break
-        except Exception as e:
-            yield {
-                "type": "error",
-                "error": str(e),
-                "timestamp": int(time.time() * 1000)
-            }
-
-    def _stream_text_as_tokens(self, text: str) -> Generator[Dict[str, Any], None, None]:
-        """Stream text as individual tokens for fallback"""
-        if not text:
-            return
-
-        # Split into characters for token-like streaming
-        for char in text:
-            yield {
-                "type": "token",
-                "content": char,
-                "timestamp": int(time.time() * 1000)
-            }
-            # Delay for typing effect
-            if Config.ENABLE_STREAMING:
-                time.sleep(Config.STREAM_DELAY_MS / 1000.0)
-
-    def _generate_direct_streaming_response(self, query: str) -> Generator[Dict[str, Any], None, None]:
-        """Generate streaming response without RAG context"""
-        try:
-            # Send metadata
-            yield {
-                "type": "metadata",
-                "total_chunks": 1,
-                "query": query,
-                "response_type": "direct",
-                "timestamp": int(time.time() * 1000)
-            }
-
-            # Stream response directly from LLM model
-            model_instance = self.llm_service.get_model_instance()
-            if hasattr(model_instance, 'generate_streaming_response'):
-                # Use streaming generation
-                accumulated_text = ""
-                word_index = 0
-
-                for token_data in model_instance.generate_streaming_response(query):
-                    if token_data.get("status") == "streaming":
-                        token_text = token_data.get("token", "")
-                        accumulated_text += token_text
-
-                        # Check if we have complete words to stream
-                        words = accumulated_text.split()
-                        if len(words) > word_index:
-                            # Stream new complete words
-                            for i in range(word_index, len(words)):
-                                word = words[i]
-                                word_with_space = word if i == 0 else " " + word
-
-                                yield {
-                                    "type": "text",
-                                    "content": word_with_space,
-                                    "chunk_index": 0,
-                                    "total_chunks": 1,
-                                    "word_index": i,
-                                    "total_words": len(words),
-                                    "timestamp": int(time.time() * 1000)
-                                }
-
-                                # Delay for typing effect
-                                if Config.ENABLE_STREAMING:
-                                    time.sleep(Config.STREAM_DELAY_MS / 1000.0)
-
-                            word_index = len(words)
-
-                    elif token_data.get("status") == "complete":
-                        # Handle any remaining partial text
-                        if accumulated_text and not accumulated_text.endswith(' '):
-                            remaining_text = accumulated_text[len(' '.join(accumulated_text.split()[:word_index])):]
-                            if remaining_text.strip():
-                                yield {
-                                    "type": "text",
-                                    "content": remaining_text,
-                                    "chunk_index": 0,
-                                    "total_chunks": 1,
-                                    "word_index": word_index,
-                                    "total_words": word_index + 1,
-                                    "timestamp": int(time.time() * 1000)
-                                }
-                        break
-
-                    elif token_data.get("status") == "error":
-                        yield {
-                            "type": "error",
-                            "error": token_data.get("error", "Unknown error"),
-                            "timestamp": int(time.time() * 1000)
-                        }
-                        return
-            else:
-                # Fallback to non-streaming method
-                response = self.llm_service.generate_response(query, use_rag=False)
-
-                if response.get("status") == "success":
-                    response_text = response.get("response", "")
-                    yield from self._stream_text(response_text, 0, 1)
-                else:
-                    yield {
-                        "type": "error",
-                        "error": response.get("error", "Failed to generate response"),
-                        "timestamp": int(time.time() * 1000)
-                    }
-                    return
-
-            # Send completion
-            yield {
-                "type": "complete",
-                "total_chunks": 1,
-                "timestamp": int(time.time() * 1000)
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error in direct streaming response: {str(e)}")
-            yield {
-                "type": "error",
-                "error": str(e),
-                "timestamp": int(time.time() * 1000)
-            }
-
-    def _stream_text(self, text: str, chunk_index: int, total_chunks: int) -> Generator[Dict[str, Any], None, None]:
+    def _generate_with_sliding_window(self, query: str, context: str = None) -> Generator[Dict[str, Any], None, None]:
         """
-        Stream text with typing effect
-        
-        Args:
-            text: Text to stream
-            chunk_index: Current chunk index
-            total_chunks: Total number of chunks
-            
-        Yields:
-            Dictionary containing text chunks for streaming
-        """
-        if not text:
-            return
-            
-        # Split text into words for better streaming effect
-        words = text.split()
-        
-        for i, word in enumerate(words):
-            # Add space except for first word
-            word_with_space = word if i == 0 else " " + word
-            
-            yield {
-                "type": "text",
-                "content": word_with_space,
-                "chunk_index": chunk_index,
-                "total_chunks": total_chunks,
-                "word_index": i,
-                "total_words": len(words),
-                "timestamp": int(time.time() * 1000)
-            }
-            
-            # Delay for typing effect
-            if Config.ENABLE_STREAMING:
-                time.sleep(Config.STREAM_DELAY_MS / 1000.0)
+        Generate response using sliding window continuation with producer-consumer pattern.
+        Producer independently generates all tokens across multiple passes.
+        Consumer simply streams whatever producer generates.
 
-    async def generate_async_streaming_response(self, query: str, context: str = None) -> AsyncGenerator[Dict[str, Any], None]:
-        """
-        Async version of streaming response generation
-        
         Args:
             query: User query
-            context: Optional context for RAG
-            
+            context: RAG context
+
         Yields:
-            Dictionary containing streaming response chunks
+            Dictionary containing streaming response tokens
         """
         try:
-            # Convert sync generator to async
-            for chunk in self.generate_streaming_response(query, context):
-                yield chunk
-                # Allow other coroutines to run
-                await asyncio.sleep(0)
-                
+            # Clear previous state
+            self.token_buffer = queue.Queue()
+            self.generation_complete.clear()
+            self.continuation_ready.clear()
+
+            # Start single producer thread that handles all passes independently
+            producer_thread = threading.Thread(
+                target=self._token_producer,
+                args=(query, context),
+                daemon=True
+            )
+            producer_thread.start()
+
+            # Start consumer to stream tokens to user
+            for token_data in self._token_consumer():
+                if token_data.get("type") == "error":
+                    yield {
+                        "type": "error",
+                        "error": token_data.get("error"),
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    break
+
+                elif token_data.get("type") == "token":
+                    content = token_data.get("content", "")
+
+                    # Stream token to client (consumer already has 50ms delay)
+                    yield {
+                        "type": "token",
+                        "content": content,
+                        "pass": token_data.get("pass", 1),
+                        "timestamp": int(time.time() * 1000)
+                    }
+
+                elif token_data.get("type") == "complete":
+                    # Producer finished all passes
+                    total_passes = token_data.get("total_passes", 1)
+                    total_tokens = token_data.get("total_tokens", 0)
+
+                    yield {
+                        "type": "complete",
+                        "total_passes": total_passes,
+                        "total_tokens": total_tokens,
+                        "timestamp": int(time.time() * 1000)
+                    }
+                    break
+
+            # Wait for producer thread to complete
+            producer_thread.join(timeout=10)
+
         except Exception as e:
-            self.logger.error(f"Error in async streaming response: {str(e)}")
+            self.logger.error(f"Error in sliding window generation: {str(e)}")
             yield {
                 "type": "error",
                 "error": str(e),
                 "timestamp": int(time.time() * 1000)
             }
+
+    def _get_sliding_window_context(self, complete_output: str, history_tokens: int) -> str:
+        """
+        Get sliding window context from complete output
+
+        Args:
+            complete_output: Full generated text so far
+            history_tokens: Number of tokens to keep for context
+
+        Returns:
+            Truncated text containing last N tokens (approximately)
+        """
+        if not complete_output:
+            return ""
+
+        try:
+            # Approximate token-based truncation
+            # Average ~4 characters per token for most models
+            chars_per_token = 4
+            target_chars = history_tokens * chars_per_token
+
+            if len(complete_output) <= target_chars:
+                return complete_output
+
+            # Keep last N characters (approximately N/4 tokens)
+            sliding_window_text = complete_output[-target_chars:]
+
+            # Try to start at a word boundary to avoid cutting words in half
+            first_space = sliding_window_text.find(' ')
+            if first_space > 0 and first_space < 50:  # Only if space is near the beginning
+                sliding_window_text = sliding_window_text[first_space + 1:]
+
+            actual_chars = len(sliding_window_text)
+            estimated_tokens = actual_chars // chars_per_token
+
+            self.logger.info(
+                f"Sliding window: kept last ~{estimated_tokens} tokens ({actual_chars} chars) from {len(complete_output)} total chars")
+            return sliding_window_text
+
+        except Exception as e:
+            self.logger.error(f"Error creating sliding window: {str(e)}")
+            return complete_output[-2000:]  # Fallback: keep last 2000 characters
+
+    def _build_initial_prompt(self, query: str, context: str = None) -> str:
+        """
+        Build initial prompt for first generation
+
+        Args:
+            query: User query
+            context: RAG context
+
+        Returns:
+            Formatted prompt string
+        """
+        if context and context.strip():
+            return Config.RAG_PROMPT_TEMPLATE.format(
+                context=context[:Config.MAX_CONTEXT_LENGTH],
+                question=query
+            )
+        else:
+            return Config.FALLBACK_PROMPT_TEMPLATE.format(question=query)
+
+    def _build_continuation_prompt(self, query: str, context: str, prev_text: str) -> str:
+        """
+        Build continuation prompt with sliding window context
+
+        For continuation passes, we SKIP the RAG context since it was already
+        provided in the initial prompt. Only use sliding window for continuity.
+
+        Args:
+            query: Original user query
+            context: RAG context (IGNORED for continuation - already used in initial prompt)
+            prev_text: Previous output (sliding window)
+
+        Returns:
+            Formatted continuation prompt (without RAG context)
+        """
+        # For continuation passes, ALWAYS use direct continuation without RAG context
+        # The RAG context was already provided in the initial prompt
+        continuation_template = """Question: {question}
+
+Previous response: {previous}
+
+Continue the response naturally:"""
+
+        return continuation_template.format(
+            question=query,
+            previous=prev_text
+        )

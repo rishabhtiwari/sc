@@ -114,11 +114,17 @@ services:
       - RETRIEVER_TIMEOUT=300
       - MODEL_LOAD_TIMEOUT=300
       - MAX_CONTEXT_LENGTH=4800
+      - LLM_MAX_NEW_TOKENS=2048
       # Streaming Configuration
       - N_CTX=2048
       - N_BATCH=8192
       - ENABLE_STREAMING=true
       - STREAM_DELAY_MS=50
+      # Sliding Window Continuation Configuration
+      - ENABLE_CONTINUATION=true
+      - MAX_CONTINUATION_LOOPS=5
+      - SLIDING_WINDOW_TOKENS=300
+      - CONTINUATION_THRESHOLD=0.9
     volumes:
       - ./llm/llm-prompt-generation/logs:/app/logs
       - llm-model-cache:/app/cache  # Use named volume for persistent model cache

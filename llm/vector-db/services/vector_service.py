@@ -22,7 +22,7 @@ from services.embedding_factory import embedding_factory, EmbeddingModelConfig
 
 class VectorService:
     """Core vector database service using ChromaDB"""
-    
+
     def __init__(self):
         self.logger = logging.getLogger('vector-db')
         self.client = None
@@ -31,34 +31,34 @@ class VectorService:
         self.config = Config()
         self._cleanup_timer = None
         self._start_cleanup_scheduler()
-        
+
     def initialize(self) -> bool:
         """Initialize ChromaDB client and embedding model"""
         try:
             self.logger.info("Initializing Vector Service...")
-            
+
             # Initialize ChromaDB client
             self._initialize_chroma_client()
-            
+
             # Initialize embedding model
             self._initialize_embedding_model()
-            
+
             # Create or get collection
             self._initialize_collection()
-            
+
             self.logger.info("Vector Service initialized successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize Vector Service: {str(e)}")
             return False
-    
+
     def _initialize_chroma_client(self):
         """Initialize ChromaDB client"""
         try:
             # Ensure data directory exists
             os.makedirs(self.config.CHROMA_PERSIST_DIRECTORY, exist_ok=True)
-            
+
             # Create ChromaDB client with persistence
             self.client = chromadb.PersistentClient(
                 path=self.config.CHROMA_PERSIST_DIRECTORY,
@@ -67,13 +67,13 @@ class VectorService:
                     allow_reset=True
                 )
             )
-            
+
             self.logger.info(f"ChromaDB client initialized with persistence: {self.config.CHROMA_PERSIST_DIRECTORY}")
-            
+
         except Exception as e:
             self.logger.error(f"Failed to initialize ChromaDB client: {str(e)}")
             raise
-    
+
     def _initialize_embedding_model(self):
         """Initialize embedding model using factory pattern"""
         try:
@@ -97,7 +97,7 @@ class VectorService:
         except Exception as e:
             self.logger.error(f"Failed to load embedding model: {str(e)}")
             raise
-    
+
     def _initialize_collection(self):
         """Initialize or get ChromaDB collection"""
         try:
@@ -107,7 +107,7 @@ class VectorService:
                     name=self.config.CHROMA_COLLECTION_NAME
                 )
                 self.logger.info(f"Using existing collection: {self.config.CHROMA_COLLECTION_NAME}")
-                
+
             except Exception:
                 # Create new collection if it doesn't exist
                 self.collection = self.client.create_collection(
@@ -115,7 +115,7 @@ class VectorService:
                     metadata={"description": "Document embeddings for RAG"}
                 )
                 self.logger.info(f"Created new collection: {self.config.CHROMA_COLLECTION_NAME}")
-                
+
         except Exception as e:
             self.logger.error(f"Failed to initialize collection: {str(e)}")
             raise
@@ -171,7 +171,7 @@ class VectorService:
         except Exception as e:
             self.logger.error(f"Failed to update document metadata: {str(e)}")
             return False
-    
+
     def health_check(self) -> Dict[str, Any]:
         """Check service health"""
         try:
@@ -181,10 +181,10 @@ class VectorService:
                     "error": "Service not properly initialized",
                     "timestamp": int(time.time() * 1000)
                 }
-            
+
             # Get collection info
             collection_count = self.collection.count()
-            
+
             return {
                 "status": "healthy",
                 "collections": 1,
@@ -192,20 +192,20 @@ class VectorService:
                 "embedding_model": self.config.EMBEDDING_MODEL,
                 "timestamp": int(time.time() * 1000)
             }
-            
+
         except Exception as e:
             return {
                 "status": "unhealthy",
                 "error": str(e),
                 "timestamp": int(time.time() * 1000)
             }
-    
+
     def add_documents(
-        self,
-        documents: List[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None,
-        ids: Optional[List[str]] = None,
-        skip_duplicates: bool = True
+            self,
+            documents: List[str],
+            metadatas: Optional[List[Dict[str, Any]]] = None,
+            ids: Optional[List[str]] = None,
+            skip_duplicates: bool = True
     ) -> Dict[str, Any]:
         """Add documents to the vector database with deduplication"""
         try:
@@ -214,7 +214,11 @@ class VectorService:
 
             # Prepare metadata - ChromaDB requires non-empty metadata
             if not metadatas:
-                metadatas = [{"source": "api", "timestamp": int(time.time())} for _ in documents]
+                return {"status": "error", "error": "No documents metadata provided"}
+                # metadatas = [{"source": "api", "timestamp": int(time.time())} for _ in documents]
+
+            if not len(metadatas) == len(documents):
+                return {"status": "error", "error": "Metadata entries must match documents entries"}
 
             # Process documents for deduplication
             new_documents = []
@@ -227,7 +231,8 @@ class VectorService:
                 content_hash = self._generate_content_hash(doc)
 
                 # Add content hash to metadata
-                current_metadata = metadatas[i] if i < len(metadatas) else {"source": "api"}
+                # current_metadata = metadatas[i] if i < len(metadatas) else {"source": "api"}
+                current_metadata = metadatas[i]
                 current_metadata["content_hash"] = content_hash
                 current_metadata["timestamp"] = int(time.time())
 
@@ -301,10 +306,10 @@ class VectorService:
             }
 
     def search_documents(
-        self,
-        query: str,
-        n_results: int = None,
-        where: Optional[Dict[str, Any]] = None
+            self,
+            query: str,
+            n_results: int = None,
+            where: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Search for similar documents"""
         try:
@@ -402,6 +407,7 @@ class VectorService:
 
     def _start_cleanup_scheduler(self):
         """Start the cleanup scheduler"""
+
         def schedule_cleanup():
             try:
                 # Schedule cleanup to run every 24 hours
@@ -554,7 +560,8 @@ class VectorService:
             dimension_changed = old_config.get('dimension') != new_config.get('dimension')
 
             if dimension_changed and self.collection.count() > 0:
-                self.logger.warning(f"Model dimension changed ({old_config.get('dimension')} -> {new_config.get('dimension')}). Existing data will be cleared.")
+                self.logger.warning(
+                    f"Model dimension changed ({old_config.get('dimension')} -> {new_config.get('dimension')}). Existing data will be cleared.")
                 # Clear existing data since embeddings are incompatible
                 self.clear_all_documents()
 

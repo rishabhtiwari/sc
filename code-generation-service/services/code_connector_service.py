@@ -490,10 +490,13 @@ class CodeConnectorService:
             start_time = time.time()
 
             def process_file_batch(file_batch: List[Dict[str, Any]]) -> Dict[str, Any]:
-                """Process a batch of files in a single thread"""
+                """Process a batch of files in a single thread with true batching"""
                 batch_processed = 0
                 batch_failed = 0
                 batch_document_ids = []
+
+                # Prepare all documents in the batch for a single request
+                documents = []
 
                 for file_info in file_batch:
                     try:
@@ -513,13 +516,13 @@ class CodeConnectorService:
                             self.logger.debug(f"Skipping empty file: {file_info['path']}")
                             continue
 
-                        # Create individual document for each file
+                        # Create document for batch processing
                         file_content = f"File: {file_info['path']}\n" + \
                                       f"Language: {file_info['language']}\n" + \
                                       f"Repository: {repo_id}\n" + \
                                       f"Content:\n{content}"
 
-                        # Prepare metadata for individual file processing
+                        # Prepare metadata for batch processing
                         metadata = {
                             "type": "code_file",
                             "repository_id": repo_id,
@@ -529,32 +532,40 @@ class CodeConnectorService:
                             "file_size": len(content)
                         }
 
-                        # Process individual file using bulk documents endpoint
-                        documents = [{
+                        # Add to batch documents
+                        documents.append({
                             "content": file_content,
                             "metadata": metadata
-                        }]
+                        })
 
+                    except Exception as e:
+                        self.logger.warning(f"Failed to read file {file_info['path']}: {str(e)}")
+                        batch_failed += 1
+                        continue
+
+                # Send entire batch in a single request
+                if documents:
+                    try:
                         response = requests.post(
                             f"{embedding_service_url}/embed/documents",
                             json={"documents": documents},
-                            timeout=60,
+                            timeout=120,  # Increased timeout for batch processing
                             headers={'Content-Type': 'application/json'}
                         )
 
                         if response.status_code == 200:
                             result = response.json()
+                            batch_processed = len(documents)
                             if result.get("document_ids"):
                                 batch_document_ids.extend(result["document_ids"])
-                            batch_processed += 1
+                            self.logger.debug(f"Successfully processed batch of {len(documents)} files")
                         else:
-                            self.logger.warning(f"Failed to process file {file_info['path']}: {response.status_code} - {response.text}")
-                            batch_failed += 1
+                            self.logger.warning(f"Failed to process batch of {len(documents)} files: {response.status_code} - {response.text}")
+                            batch_failed += len(documents)
 
                     except Exception as e:
-                        self.logger.warning(f"Failed to process file {file_info['path']}: {str(e)}")
-                        batch_failed += 1
-                        continue
+                        self.logger.warning(f"Failed to send batch of {len(documents)} files: {str(e)}")
+                        batch_failed += len(documents)
 
                 return {
                     "processed": batch_processed,
