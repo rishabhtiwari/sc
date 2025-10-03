@@ -352,3 +352,56 @@ def get_mcp_provider_resources(provider_id):
         JSON response with provider resources
     """
     return MCPHandler.handle_get_provider_resources(provider_id)
+
+
+@mcp_bp.route('/mcp/providers/<provider_id>/connect', methods=['POST'])
+def connect_mcp_provider(provider_id):
+    """
+    POST /api/mcp/providers/<provider_id>/connect - Connect to MCP provider
+
+    For remote_host provider:
+    {
+        "name": "My Server",
+        "protocol": "ssh",
+        "host": "example.com",
+        "port": 22,
+        "username": "user",
+        "password": "pass",
+        "private_key": "...",
+        "base_path": "/"
+    }
+
+    Returns:
+        JSON response with connection result
+    """
+    return MCPHandler.handle_connect_provider(provider_id)
+
+
+@mcp_bp.route('/mcp/providers/<provider_id>/disconnect', methods=['POST'])
+def disconnect_mcp_provider(provider_id):
+    """
+    POST /api/mcp/providers/<provider_id>/disconnect - Disconnect from MCP provider
+
+    Expected JSON payload:
+    {
+        "connection_id": "connection_uuid"
+    }
+
+    Returns:
+        JSON response with disconnection result
+    """
+    return MCPHandler.handle_disconnect_provider(provider_id)
+
+
+@mcp_bp.route('/mcp/providers/<provider_id>/connections', methods=['GET'])
+def get_provider_connections(provider_id):
+    """
+    GET /api/mcp/providers/<provider_id>/connections - Get connections for a specific MCP provider
+
+    Args:
+        provider_id: The ID of the provider to get connections for
+
+    Returns:
+        JSON response with provider connections
+    """
+    return MCPHandler.handle_get_provider_connections(provider_id)

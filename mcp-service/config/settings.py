@@ -184,6 +184,72 @@ class MCPConfig:
                 }
             ]
         },
+        'remote_host': {
+            'name': 'Remote Host',
+            'description': 'Connect to remote hosts via SSH, SFTP, FTP, HTTP, RSYNC',
+            'oauth_required': False,
+            'enabled': True,
+            'config_fields': [
+                {
+                    'name': 'name',
+                    'label': 'Connection Name',
+                    'type': 'text',
+                    'required': True,
+                    'description': 'Friendly name for this connection'
+                },
+                {
+                    'name': 'protocol',
+                    'label': 'Protocol',
+                    'type': 'select',
+                    'required': True,
+                    'options': ['ssh', 'sftp', 'ftp', 'http', 'https', 'rsync'],
+                    'description': 'Connection protocol'
+                },
+                {
+                    'name': 'host',
+                    'label': 'Host',
+                    'type': 'text',
+                    'required': True,
+                    'description': 'Remote host address or IP'
+                },
+                {
+                    'name': 'port',
+                    'label': 'Port',
+                    'type': 'number',
+                    'required': False,
+                    'description': 'Port number (default: 22 for SSH/SFTP, 21 for FTP, 80/443 for HTTP/HTTPS)'
+                },
+                {
+                    'name': 'username',
+                    'label': 'Username',
+                    'type': 'text',
+                    'required': True,
+                    'description': 'Username for authentication'
+                },
+                {
+                    'name': 'password',
+                    'label': 'Password',
+                    'type': 'password',
+                    'required': False,
+                    'description': 'Password for authentication (optional if using private key)'
+                },
+                {
+                    'name': 'private_key',
+                    'label': 'Private Key',
+                    'type': 'textarea',
+                    'required': False,
+                    'description': 'SSH private key content (optional if using password)'
+                },
+                {
+                    'name': 'base_path',
+                    'label': 'Base Path',
+                    'type': 'text',
+                    'required': False,
+                    'default': '/',
+                    'description': 'Base directory path for file operations'
+                }
+            ]
+        },
         # Future providers can be added here
         'gitlab': {
             'name': 'GitLab',

@@ -181,10 +181,15 @@ class ApiService {
     });
   }
 
-  async disconnectMCPProvider(providerId) {
+  async disconnectMCPProvider(providerId, data = null) {
     return this.request(`/mcp/providers/${providerId}/disconnect`, {
       method: 'POST',
+      body: data ? JSON.stringify(data) : undefined,
     });
+  }
+
+  async getRemoteHostConnections() {
+    return this.request('/mcp/providers/remote_host/connections');
   }
 
   async configureMCPProvider(providerId, config) {
