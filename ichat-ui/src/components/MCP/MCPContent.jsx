@@ -287,6 +287,73 @@ const MCPContent = () => {
     }
   };
 
+  const handleTestConnection = async (providerId, connectionId) => {
+    try {
+      console.log(`🧪 Testing connection for provider: ${providerId}, connection: ${connectionId}`);
+
+      if (providerId === 'remote_host') {
+        // Test remote host connection
+        const response = await apiService.testMCPProviderConnection(providerId, connectionId);
+
+        if (response.status === 'success') {
+          alert('Connection test successful! ✅');
+          await loadConnections(); // Refresh to show updated status
+        } else {
+          alert(`Connection test failed: ${response.message || 'Unknown error'} ❌`);
+        }
+      } else {
+        alert('Connection testing is currently only supported for remote host connections.');
+      }
+    } catch (error) {
+      console.error('Failed to test connection:', error);
+      alert(`Failed to test connection: ${error.message || 'Unknown error'} ❌`);
+    }
+  };
+
+  const handleTestConnectionInWizard = async () => {
+    try {
+      console.log('🧪 Testing connection in wizard with config:', connectionConfig);
+
+      // Validate required fields
+      const requiredFields = selectedProvider.config_fields?.filter(field => {
+        const selectedProtocol = connectionConfig.protocol;
+        const isHttpProtocol = selectedProtocol === 'http' || selectedProtocol === 'https';
+        const isFieldRequired = field.required && !(isHttpProtocol && (field.name === 'username' || field.name === 'password'));
+        return isFieldRequired;
+      }) || [];
+
+      for (const field of requiredFields) {
+        if (!connectionConfig[field.name]) {
+          alert(`Please fill in the required field: ${field.label}`);
+          return;
+        }
+      }
+
+      // Create a temporary connection config for testing
+      let testConfig = { ...connectionConfig };
+
+      // Test the connection configuration via API server (which handles localhost conversion)
+      const response = await fetch('http://localhost:8080/api/mcp/providers/remote_host/test-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(testConfig),
+      });
+
+      const result = await response.json();
+
+      if (result.status === 'success') {
+        alert('Connection test successful! ✅ You can now connect.');
+      } else {
+        alert(`Connection test failed: ${result.message || 'Unknown error'} ❌`);
+      }
+    } catch (error) {
+      console.error('Failed to test connection in wizard:', error);
+      alert(`Failed to test connection: ${error.message || 'Unknown error'} ❌`);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -462,6 +529,7 @@ const MCPContent = () => {
                     }`}>
                       {connection.connected ? 'Connected' : 'Disconnected'}
                     </span>
+
                     <button
                       onClick={() => handleDisconnect('remote_host', connection.id)}
                       className="px-3 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors text-sm"
@@ -532,11 +600,24 @@ const MCPContent = () => {
                 </div>
 
                 <div className="space-y-4">
-                  {selectedProvider.config_fields?.map((field) => (
+                  {selectedProvider.config_fields?.map((field) => {
+                    // Hide username and password fields for HTTP/HTTPS protocols
+                    const selectedProtocol = connectionConfig.protocol;
+                    const isHttpProtocol = selectedProtocol === 'http' || selectedProtocol === 'https';
+                    const shouldHideField = isHttpProtocol && (field.name === 'username' || field.name === 'password');
+
+                    if (shouldHideField) {
+                      return null;
+                    }
+
+                    // Make username and password optional for HTTP/HTTPS
+                    const isFieldRequired = field.required && !(isHttpProtocol && (field.name === 'username' || field.name === 'password'));
+
+                    return (
                     <div key={field.name}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {field.label}
-                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                        {isFieldRequired && <span className="text-red-500 ml-1">*</span>}
                       </label>
                       {field.type === 'select' ? (
                         <select
@@ -589,22 +670,31 @@ const MCPContent = () => {
                         />
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                <div className="flex gap-3 mt-6">
+                <div className="flex gap-3 mt-6 justify-end">
                   <button
                     onClick={() => {
                       setSelectedProvider(null);
                       setConnectionConfig({});
                     }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
+                  {selectedProvider.id === 'remote_host' && (
+                    <button
+                      onClick={() => handleTestConnectionInWizard()}
+                      className="px-4 py-2 border border-blue-500 text-blue-500 rounded-md hover:bg-blue-50 transition-colors"
+                    >
+                      Test Connection
+                    </button>
+                  )}
                   <button
                     onClick={() => handleConnect(selectedProvider.id)}
-                    className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                    className="px-6 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
                   >
                     {selectedProvider.id === 'github' ? 'Connect with OAuth' : 'Connect'}
                   </button>

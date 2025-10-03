@@ -137,6 +137,26 @@ class RemoteHostMCPService:
                 conn.commit()
             
             logger.info(f"Added remote host connection: {config['name']}")
+
+            # Test the connection immediately after creation and update status
+            try:
+                test_result = self.test_connection(connection_id)
+                if test_result['status'] == 'success':
+                    # Update status to active if test is successful
+                    with sqlite3.connect(self.db_path) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            UPDATE remote_host_connections
+                            SET status = 'active', last_tested = CURRENT_TIMESTAMP, test_result = ?
+                            WHERE id = ?
+                        ''', (json.dumps(test_result), connection_id))
+                        conn.commit()
+                    logger.info(f"Connection {config['name']} tested successfully and set to active")
+                else:
+                    logger.warning(f"Connection {config['name']} test failed, keeping inactive status")
+            except Exception as test_error:
+                logger.warning(f"Failed to test connection after creation: {str(test_error)}")
+
             return {
                 "status": "success",
                 "connection_id": connection_id,
@@ -183,7 +203,45 @@ class RemoteHostMCPService:
                 "status": "error",
                 "message": f"Connection test failed: {str(e)}"
             }
-    
+
+    def test_connection_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Test connection configuration without saving to database"""
+        try:
+            # Validate required fields
+            required_fields = ['protocol', 'host', 'port']
+            for field in required_fields:
+                if field not in config or not config[field]:
+                    return {
+                        "status": "error",
+                        "message": f"Missing required field: {field}"
+                    }
+
+            # Create a temporary connection object for testing
+            temp_connection = {
+                'protocol': config['protocol'],
+                'host': config['host'],
+                'port': int(config['port']),
+                'base_path': config.get('base_path', '/'),
+                'username': config.get('username'),
+            }
+
+            # Create temporary credentials
+            temp_credentials = {
+                'password': config.get('password', '')
+            }
+
+            # Test connection based on protocol
+            result = self._test_protocol_connection(temp_connection, temp_credentials)
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error testing connection config: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Configuration test failed: {str(e)}"
+            }
+
     def get_connection(self, connection_id: str) -> Optional[Dict[str, Any]]:
         """Get connection details by ID"""
         with sqlite3.connect(self.db_path) as conn:

@@ -188,6 +188,12 @@ class ApiService {
     });
   }
 
+  async testMCPProviderConnection(providerId, connectionId) {
+    return this.request(`/mcp/providers/${providerId}/connections/${connectionId}/test`, {
+      method: 'POST',
+    });
+  }
+
   async getRemoteHostConnections() {
     return this.request('/mcp/providers/remote_host/connections');
   }
