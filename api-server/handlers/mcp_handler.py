@@ -570,6 +570,11 @@ class MCPHandler:
                 }), 400
 
             if provider_id == 'remote_host':
+                # Convert localhost to host.docker.internal for Docker compatibility
+                if data.get('host') == 'localhost':
+                    data['host'] = 'host.docker.internal'
+                    logging.info(f"🔄 Converted localhost to host.docker.internal for Docker compatibility")
+
                 # Connect to remote host via MCP service
                 result = MCPHandler._make_mcp_request('POST', '/mcp/remote-host/connections', data)
                 return jsonify(result)
@@ -640,4 +645,58 @@ class MCPHandler:
             return jsonify({
                 "status": "error",
                 "error": f"Failed to get provider connections: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_test_provider_connection(provider_id: str, connection_id: str):
+        """Handle POST /api/mcp/providers/<provider_id>/connections/<connection_id>/test"""
+        try:
+            if provider_id == 'remote_host':
+                # Test remote host connection via MCP service
+                result = MCPHandler._make_mcp_request('POST', f'/mcp/remote-host/connections/{connection_id}/test')
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Provider '{provider_id}' connection testing not supported via this endpoint"
+                }), 400
+
+        except Exception as e:
+            logging.error(f"❌ Test provider connection failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to test provider connection: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_test_provider_config(provider_id: str):
+        """Handle POST /api/mcp/providers/<provider_id>/test-config"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    "status": "error",
+                    "error": "No configuration data provided"
+                }), 400
+
+            if provider_id == 'remote_host':
+                # Convert localhost to host.docker.internal for Docker compatibility
+                if data.get('host') == 'localhost':
+                    data['host'] = 'host.docker.internal'
+                    logging.info(f"🔄 Converted localhost to host.docker.internal for Docker compatibility")
+
+                # Test remote host configuration via MCP service
+                result = MCPHandler._make_mcp_request('POST', '/mcp/remote-host/test-config', data)
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Provider '{provider_id}' configuration testing not supported"
+                }), 400
+
+        except Exception as e:
+            logging.error(f"❌ Test provider config failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to test provider config: {str(e)}"
             }), 500

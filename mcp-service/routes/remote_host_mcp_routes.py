@@ -115,6 +115,30 @@ def test_remote_host_connection(connection_id):
             "message": f"Connection test failed: {str(e)}"
         }), 500
 
+@remote_host_mcp_bp.route('/remote-host/test-config', methods=['POST'])
+def test_remote_host_config():
+    """Test remote host connection configuration without saving"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "No configuration data provided"
+            }), 400
+
+        # Test the configuration directly
+        result = remote_host_service.test_connection_config(data)
+
+        status_code = 200 if result['status'] == 'success' else 400
+        return jsonify(result), status_code
+
+    except Exception as e:
+        logger.error(f"Error testing remote host configuration: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to test configuration: {str(e)}"
+        }), 500
+
 @remote_host_mcp_bp.route('/remote-host/connections/<connection_id>/sync-session', methods=['POST'])
 def create_sync_session(connection_id):
     """Create sync session for remote-host-syncer"""

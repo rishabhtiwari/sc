@@ -405,3 +405,32 @@ def get_provider_connections(provider_id):
         JSON response with provider connections
     """
     return MCPHandler.handle_get_provider_connections(provider_id)
+
+
+@mcp_bp.route('/mcp/providers/<provider_id>/connections/<connection_id>/test', methods=['POST'])
+def test_provider_connection(provider_id, connection_id):
+    """
+    POST /api/mcp/providers/<provider_id>/connections/<connection_id>/test - Test connection
+
+    Args:
+        provider_id: The ID of the provider
+        connection_id: The ID of the connection to test
+
+    Returns:
+        JSON response with test result
+    """
+    return MCPHandler.handle_test_provider_connection(provider_id, connection_id)
+
+
+@mcp_bp.route('/mcp/providers/<provider_id>/test-config', methods=['POST'])
+def test_provider_config(provider_id):
+    """
+    POST /api/mcp/providers/<provider_id>/test-config - Test connection configuration
+
+    Args:
+        provider_id: The ID of the provider
+
+    Returns:
+        JSON response with test result
+    """
+    return MCPHandler.handle_test_provider_config(provider_id)
