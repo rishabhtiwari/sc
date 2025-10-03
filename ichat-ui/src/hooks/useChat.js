@@ -86,10 +86,16 @@ export const useChat = () => {
         },
         // onChunk callback
         (chunk) => {
-          console.log('Received chunk:', chunk);
-          console.log('Chunk keys:', Object.keys(chunk));
-          console.log('Chunk type:', chunk.type);
-          console.log('Chunk content:', chunk.content);
+          // Only log detailed chunk info for content chunks to reduce noise
+          if (chunk.type === 'token' || chunk.content) {
+            console.log('Content chunk:', { type: chunk.type, content: chunk.content?.substring(0, 50) + '...' });
+          } else if (chunk.type === 'complete') {
+            console.log('✅ Stream completed successfully');
+          } else if (chunk.type === 'metadata') {
+            console.log('📋 Stream metadata received');
+          } else {
+            console.log(`📦 Chunk: ${chunk.type}`, chunk);
+          }
 
           // Handle different chunk formats
           if (chunk.type === 'token' && chunk.content) {
@@ -115,20 +121,22 @@ export const useChat = () => {
             ));
           } else if (chunk.type === 'metadata') {
             setConnectionStatus('connected');
-            console.log('Streaming metadata:', chunk);
           } else if (chunk.type === 'chunk_start') {
-            console.log(`Starting chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
+            console.log(`🚀 Starting chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
           } else if (chunk.type === 'chunk_complete') {
-            console.log(`Completed chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
+            console.log(`✅ Completed chunk ${chunk.chunk_index + 1}/${chunk.total_chunks}`);
           } else if (chunk.type === 'complete') {
-            console.log('Stream completed');
+            // Stream completion - this is expected and normal
+            console.log('🎉 Streaming completed successfully');
+          } else if (chunk.type === 'error') {
+            console.error('❌ Stream error:', chunk.error);
           } else {
-            console.log('Unknown chunk format:', chunk);
+            console.log('❓ Unknown chunk format:', chunk);
           }
         },
         // onComplete callback
         () => {
-          console.log('Streaming completed');
+          console.log('🏁 Stream connection closed - response complete');
           setIsTyping(false);
           setCurrentStreamController(null);
           // Mark message as no longer streaming

@@ -434,3 +434,57 @@ def test_provider_config(provider_id):
         JSON response with test result
     """
     return MCPHandler.handle_test_provider_config(provider_id)
+
+
+# Remote Host Sync Routes
+
+@mcp_bp.route('/mcp/sync/trigger', methods=['POST'])
+def trigger_sync():
+    """
+    POST /api/mcp/sync/trigger - Trigger sync for all remote host connections
+
+    Returns:
+        JSON response with sync trigger result
+    """
+    return MCPHandler.handle_trigger_sync()
+
+
+@mcp_bp.route('/mcp/sync/connection/<connection_id>', methods=['POST'])
+def trigger_connection_sync(connection_id):
+    """
+    POST /api/mcp/sync/connection/<connection_id> - Trigger sync for specific connection
+
+    Args:
+        connection_id: The ID of the connection to sync
+
+    Returns:
+        JSON response with sync trigger result
+    """
+    return MCPHandler.handle_trigger_connection_sync(connection_id)
+
+
+@mcp_bp.route('/mcp/sync/status', methods=['GET'])
+def get_sync_status():
+    """
+    GET /api/mcp/sync/status - Get current sync status
+
+    Returns:
+        JSON response with sync status
+    """
+    return MCPHandler.handle_get_sync_status()
+
+
+@mcp_bp.route('/mcp/sync/history', methods=['GET'])
+def get_sync_history():
+    """
+    GET /api/mcp/sync/history - Get sync history
+
+    Query parameters:
+        limit: Number of records to return (default: 50)
+        days: Number of days to look back (default: 7)
+        connection_id: Filter by specific connection ID
+
+    Returns:
+        JSON response with sync history
+    """
+    return MCPHandler.handle_get_sync_history()

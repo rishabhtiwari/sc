@@ -28,6 +28,14 @@ const ContextContent = () => {
     }
   }, [activeTab]);
 
+  // Load MCP providers when switching to MCP providers tab
+  useEffect(() => {
+    if (activeTab === 'mcp') {
+      console.log('🔄 MCP Providers tab activated - loading MCP providers...');
+      loadMCPProviders();
+    }
+  }, [activeTab]);
+
   const loadData = async () => {
     try {
       console.log('🚀 Starting to load context data...');
@@ -50,12 +58,12 @@ const ContextContent = () => {
       console.log('🔄 Loading connected repositories...');
       const response = await apiService.getConnectedRepositories();
       console.log('📦 Connected repositories response:', response);
-      if (response.status === 'success' && response.repositories) {
+      if (response.status === 'success' && response.resources) {
+        // Get repositories from the new customer context API response
+        const repositories = response.resources.repositories || [];
         // Filter for manual resources (those without MCP provider info)
-        // Also exclude repositories with git_ prefix which are MCP resources
-        const manualResources = response.repositories.filter(resource =>
-          !resource.provider_id && !resource.token_id &&
-          !(resource.repository_id && resource.repository_id.startsWith('git_'))
+        const manualResources = repositories.filter(resource =>
+          !resource.provider_id || resource.provider_id === 'manual'
         );
         console.log('📋 Manual resources found:', manualResources);
         setConnectedRepos(manualResources);
@@ -74,21 +82,38 @@ const ContextContent = () => {
       console.log('🔄 Loading MCP resources...');
       const response = await apiService.getMCPResources();
       console.log('📦 MCP resources response:', response);
-      if (response.status === 'success' && response.repositories) {
-        // Filter for MCP resources (those with MCP provider info or git_ prefix)
-        const mcpResources = response.repositories.filter(resource =>
-          resource.provider_id || resource.token_id ||
-          (resource.repository_id && resource.repository_id.startsWith('git_'))
+      if (response.status === 'success' && response.resources) {
+        // Get all MCP resources from the new customer context API response
+        const repositories = response.resources.repositories || [];
+        const remoteHosts = response.resources.remote_hosts || [];
+        const documents = response.resources.documents || [];
+
+        // Filter for MCP resources (those with MCP provider info)
+        const mcpRepositories = repositories.filter(resource =>
+          resource.provider_id && resource.provider_id !== 'manual'
         ).map(resource => ({
-          id: resource.repository_id || resource.id,
+          id: resource.id,
           resource_name: getRepositoryDisplayName(resource),
-          resource_type: resource.type || 'repository',
-          provider_id: resource.provider_id || 'unknown',
+          resource_type: 'repository',
+          provider_id: resource.provider_id,
           created_at: resource.created_at,
           ...resource
         }));
-        console.log('📋 MCP resources found:', mcpResources);
-        setMcpResources(mcpResources);
+
+        // Add remote hosts as MCP resources
+        const mcpRemoteHosts = remoteHosts.map(resource => ({
+          id: resource.id,
+          resource_name: resource.name,
+          resource_type: 'remote_host',
+          provider_id: resource.provider_id || 'remote_host',
+          created_at: resource.created_at,
+          ...resource
+        }));
+
+        // Combine all MCP resources
+        const allMcpResources = [...mcpRepositories, ...mcpRemoteHosts, ...documents];
+        console.log('📋 MCP resources found:', allMcpResources);
+        setMcpResources(allMcpResources);
       } else {
         console.log('⚠️ No MCP resources found or invalid response');
         setMcpResources([]);
@@ -102,14 +127,24 @@ const ContextContent = () => {
   const loadMCPProviders = async () => {
     try {
       console.log('🔄 Loading connected MCP providers...');
-      const response = await apiService.getMCPConnectedProviders();
-      console.log('📦 Connected MCP providers response:', response);
 
-      if (response.status === 'success' && response.tokens && Array.isArray(response.tokens)) {
-        console.log('📋 Connected OAuth tokens found:', response.tokens);
+      // Load both OAuth providers (tokens) and direct connections
+      const [tokensResponse, connectionsResponse] = await Promise.all([
+        apiService.getMCPConnectedProviders(),
+        apiService.getMCPConnections()
+      ]);
+
+      console.log('📦 Connected MCP providers response:', tokensResponse);
+      console.log('📦 Connected MCP connections response:', connectionsResponse);
+
+      const allProviders = [];
+
+      // Add OAuth-based providers (like GitHub)
+      if (tokensResponse.status === 'success' && tokensResponse.tokens && Array.isArray(tokensResponse.tokens)) {
+        console.log('📋 Connected OAuth tokens found:', tokensResponse.tokens);
 
         // Transform tokens to provider format for UI
-        const providers = response.tokens.map(token => ({
+        const oauthProviders = tokensResponse.tokens.map(token => ({
           id: token.token_id,
           name: token.user_login ? `${token.provider} (${token.user_login})` : `${token.provider} Provider`,
           type: token.provider,
@@ -121,12 +156,31 @@ const ContextContent = () => {
           scope: token.scope
         }));
 
-        console.log('📋 Transformed providers for UI:', providers);
-        setMcpProviders(providers);
-      } else {
-        console.log('⚠️ No connected MCP providers found or invalid response');
-        setMcpProviders([]);
+        allProviders.push(...oauthProviders);
       }
+
+      // Add direct connection providers (like Remote Host)
+      if (connectionsResponse.status === 'success' && connectionsResponse.connections && Array.isArray(connectionsResponse.connections)) {
+        console.log('📋 Connected MCP connections found:', connectionsResponse.connections);
+
+        // Transform connections to provider format for UI
+        const connectionProviders = connectionsResponse.connections.map(connection => ({
+          id: connection.connection_id,
+          name: `${connection.name || connection.host} (${connection.protocol})`,
+          type: 'remote_host',
+          status: 'connected', // Always show remote host connections as "connected" for consistent UI
+          description: `Remote host connection via ${connection.protocol.toUpperCase()}`,
+          created_at: connection.created_at,
+          connection_id: connection.connection_id,
+          host: connection.host,
+          protocol: connection.protocol
+        }));
+
+        allProviders.push(...connectionProviders);
+      }
+
+      console.log('📋 All transformed providers for UI:', allProviders);
+      setMcpProviders(allProviders);
     } catch (error) {
       console.error('❌ Failed to load connected MCP providers:', error);
       setMcpProviders([]);
@@ -147,73 +201,108 @@ const ContextContent = () => {
     setShowConfigureModal(true);
 
     try {
-      // Load available resources for this provider
-      // Use provider type (e.g., 'github') and token_id for the API call
-      const response = await apiService.getMCPProviderResources(provider.type, provider.token_id);
-      console.log('📦 Provider resources response:', response);
+      let resources = [];
 
-      if (response.status === 'success' && response.resources) {
-        setProviderResources(response.resources);
+      if (provider.type === 'remote_host') {
+        // For remote host providers, the connection itself is the resource
+        resources = [{
+          id: provider.connection_id,
+          name: provider.name,
+          type: 'remote_host',
+          description: provider.description,
+          host: provider.host,
+          protocol: provider.protocol,
+          status: provider.status
+        }];
+        console.log('📦 Remote host connection as resource:', resources);
+      } else {
+        // For other providers (like GitHub), load available resources
+        const response = await apiService.getMCPProviderResources(provider.type, provider.token_id);
+        console.log('📦 Provider resources response:', response);
 
+        if (response.status === 'success' && response.resources) {
+          resources = response.resources;
+        }
+      }
+
+      setProviderResources(resources);
+
+      // Check for connected resources for all provider types
+      if (resources.length > 0) {
         // Get fresh context data directly from API instead of relying on state
         console.log('🔄 Getting fresh context data for comparison...');
-        const [connectedReposResponse, mcpResourcesResponse] = await Promise.all([
-          apiService.getConnectedRepositories(),
-          apiService.getMCPResources()
-        ]);
+        const contextResponse = await apiService.getMCPContextResources();
+        console.log('📦 Fresh context data:', contextResponse);
 
-        console.log('📦 Fresh connected repos:', connectedReposResponse);
-        console.log('📦 Fresh MCP resources:', mcpResourcesResponse);
-
-        // Check which resources are already connected by comparing with fresh context data
-        const connectedRepoUrls = new Set();
-
-        // Check connected repositories - normalize URLs
-        if (connectedReposResponse.status === 'success' && connectedReposResponse.repositories) {
-          const manualResources = connectedReposResponse.repositories.filter(resource =>
-            !resource.provider_id && !resource.token_id &&
-            !(resource.repository_id && resource.repository_id.startsWith('git_'))
-          );
-          manualResources.forEach(repo => {
-            if (repo.url) {
-              connectedRepoUrls.add(normalizeUrl(repo.url));
-            }
-          });
-        }
-
-        // Check MCP resources - normalize URLs
-        if (mcpResourcesResponse.status === 'success' && mcpResourcesResponse.repositories) {
-          const mcpResources = mcpResourcesResponse.repositories.filter(resource =>
-            resource.provider_id || resource.token_id ||
-            (resource.repository_id && resource.repository_id.startsWith('git_'))
-          );
-          mcpResources.forEach(resource => {
-            if (resource.url) {
-              connectedRepoUrls.add(normalizeUrl(resource.url));
-            }
-          });
-        }
-
-        console.log('🔗 Connected repo URLs (normalized):', Array.from(connectedRepoUrls));
-
-        // Mark resources as connected if they're already in context
         const connectedResourceIds = new Set();
-        response.resources.forEach(resource => {
-          const resourceUrl = resource.clone_url || resource.url;
-          if (resourceUrl) {
-            const normalizedResourceUrl = normalizeUrl(resourceUrl);
-            console.log(`🔍 Checking resource: ${resource.name} (${normalizedResourceUrl})`);
-            if (connectedRepoUrls.has(normalizedResourceUrl)) {
-              console.log(`✅ Resource already connected: ${resource.name}`);
-              connectedResourceIds.add(resource.id);
-            }
+
+        if (contextResponse.status === 'success' && contextResponse.resources) {
+          if (provider.type === 'github') {
+            // For GitHub repositories, check by URL
+            const allConnectedRepos = [
+              ...(contextResponse.resources.repositories || [])
+            ];
+
+            const connectedRepoUrls = new Set();
+            allConnectedRepos.forEach(repo => {
+              if (repo.url) {
+                connectedRepoUrls.add(normalizeUrl(repo.url));
+              }
+            });
+
+            console.log('🔗 Connected repo URLs (normalized):', Array.from(connectedRepoUrls));
+
+            resources.forEach(resource => {
+              const resourceUrl = resource.clone_url || resource.url;
+              if (resourceUrl) {
+                const normalizedResourceUrl = normalizeUrl(resourceUrl);
+                console.log(`🔍 Checking GitHub resource: ${resource.name} (${normalizedResourceUrl})`);
+                if (connectedRepoUrls.has(normalizedResourceUrl)) {
+                  console.log(`✅ GitHub resource already connected: ${resource.name}`);
+                  connectedResourceIds.add(resource.id);
+                }
+              }
+            });
+
+          } else if (provider.type === 'remote_host') {
+            // For remote host connections, check by connection ID or host+protocol
+            const allConnectedHosts = [
+              ...(contextResponse.resources.remote_hosts || [])
+            ];
+
+            const connectedHostIds = new Set();
+            const connectedHostKeys = new Set();
+
+            allConnectedHosts.forEach(host => {
+              if (host.connection_id) {
+                connectedHostIds.add(host.connection_id);
+              }
+              if (host.host && host.protocol) {
+                connectedHostKeys.add(`${host.host}:${host.protocol}`);
+              }
+            });
+
+            console.log('🔗 Connected host IDs:', Array.from(connectedHostIds));
+            console.log('🔗 Connected host keys:', Array.from(connectedHostKeys));
+
+            resources.forEach(resource => {
+              const isConnectedById = resource.id && connectedHostIds.has(resource.id);
+              const isConnectedByKey = resource.host && resource.protocol &&
+                connectedHostKeys.has(`${resource.host}:${resource.protocol}`);
+
+              console.log(`🔍 Checking remote host resource: ${resource.name} (ID: ${resource.id}, Key: ${resource.host}:${resource.protocol})`);
+
+              if (isConnectedById || isConnectedByKey) {
+                console.log(`✅ Remote host resource already connected: ${resource.name}`);
+                connectedResourceIds.add(resource.id);
+              }
+            });
           }
-        });
+        }
 
         console.log('🎯 Connected resource IDs:', Array.from(connectedResourceIds));
         setConnectedResources(connectedResourceIds);
       } else {
-        setProviderResources([]);
         setConnectedResources(new Set());
       }
     } catch (error) {
@@ -233,17 +322,30 @@ const ContextContent = () => {
       console.log('🔄 Adding resource to context:', resource);
       console.log('🔄 Selected provider:', selectedProvider);
 
-      const response = await apiService.addMCPResourceToContext(
-        selectedProvider.type, // provider type (e.g., 'github')
-        selectedProvider.token_id, // token ID
-        {
-          resource_id: resource.id,
-          resource_type: resource.type,
-          resource_name: resource.name,
-          clone_url: resource.clone_url,
-          default_branch: resource.default_branch
-        }
-      );
+      let response;
+
+      if (selectedProvider.type === 'remote_host') {
+        // For remote host, add the connection itself as a resource
+        response = await apiService.addMCPResourceToContext(
+          selectedProvider.type, // 'remote_host'
+          selectedProvider.connection_id, // connection ID instead of token ID
+          {
+            resource_id: resource.id,
+            resource_type: 'remote_host',
+            resource_name: resource.name,
+            host: resource.host,
+            protocol: resource.protocol
+          }
+        );
+      } else {
+        // For other providers (like GitHub)
+        // Pass the complete resource object to ensure all fields are available
+        response = await apiService.addMCPResourceToContext(
+          selectedProvider.type, // provider type (e.g., 'github')
+          selectedProvider.token_id, // token ID
+          resource // Pass the complete resource object
+        );
+      }
 
       console.log('📦 Add resource response:', response);
 

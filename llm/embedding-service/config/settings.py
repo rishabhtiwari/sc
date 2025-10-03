@@ -19,9 +19,19 @@ class Config:
     # File Upload Configuration
     MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', 50))
     MAX_CONTENT_LENGTH = MAX_FILE_SIZE_MB * 1024 * 1024  # Convert to bytes
-    ALLOWED_EXTENSIONS = {
-        'pdf', 'doc', 'docx', 'txt', 'rtf', 'odt',
-        'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'
+
+    # Blacklisted file extensions (files to reject for embedding)
+    BLACKLISTED_EXTENSIONS = {
+        # Disk/VM images
+        'iso', 'img', 'vdi', 'vmdk', 'qcow2', 'vhd', 'wim',
+        # Binary executables
+        'exe', 'dll', 'so', 'dylib', 'bin', 'app', 'deb', 'rpm', 'msi', 'dmg', 'pkg', 'snap', 'run',
+        # Archive files
+        'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'tar.gz', 'tar.bz2', 'tar.xz', 'tgz', 'tbz2', 'txz',
+        # Audio files
+        'mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a', 'opus', 'aiff', 'au',
+        # Video files
+        'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv', 'm4v', '3gp', 'mpg', 'mpeg', 'm2v', 'divx', 'xvid'
     }
     
     # External Services
@@ -76,7 +86,7 @@ class Config:
             },
             'file_upload': {
                 'max_size_mb': cls.MAX_FILE_SIZE_MB,
-                'allowed_extensions': list(cls.ALLOWED_EXTENSIONS)
+                'blacklisted_extensions': list(cls.BLACKLISTED_EXTENSIONS)
             },
             'external_services': {
                 'ocr_service': cls.OCR_SERVICE_URL,
@@ -97,11 +107,22 @@ class Config:
     
     @classmethod
     def is_allowed_file(cls, filename: str) -> bool:
-        """Check if file extension is allowed"""
+        """Check if file extension is allowed (not blacklisted)"""
         if not filename:
             return False
-        return '.' in filename and \
-               filename.rsplit('.', 1)[1].lower() in cls.ALLOWED_EXTENSIONS
+        if '.' not in filename:
+            return True  # Files without extensions are allowed
+
+        filename_lower = filename.lower()
+
+        # Check compound extensions first (e.g., .tar.gz, .tar.bz2)
+        for ext in cls.BLACKLISTED_EXTENSIONS:
+            if '.' in ext and filename_lower.endswith('.' + ext):
+                return False
+
+        # Check single extension
+        extension = filename.rsplit('.', 1)[1].lower()
+        return extension not in cls.BLACKLISTED_EXTENSIONS
     
     @classmethod
     def get_ocr_url(cls, endpoint: str = '') -> str:

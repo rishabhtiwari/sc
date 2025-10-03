@@ -36,11 +36,25 @@ const MCPContent = () => {
   const [activeTab, setActiveTab] = useState('github');
   const [githubConnections, setGithubConnections] = useState([]);
   const [remoteHostConnections, setRemoteHostConnections] = useState([]);
+  const [syncStatus, setSyncStatus] = useState({});
+  const [syncHistory, setSyncHistory] = useState([]);
+  const [activeJobs, setActiveJobs] = useState({});
 
   useEffect(() => {
     console.log('MCPContent mounted, loading providers...');
     loadProviders();
     loadConnections();
+    loadSyncHistory();
+    loadActiveJobs();
+
+    // Set up periodic polling for active jobs (every 30 seconds)
+    const activeJobsInterval = setInterval(() => {
+      loadActiveJobs();
+    }, 30000);
+
+    return () => {
+      clearInterval(activeJobsInterval);
+    };
   }, []);
 
   // Initialize connectionConfig with default values when provider is selected
@@ -354,6 +368,212 @@ const MCPContent = () => {
     }
   };
 
+  const handleSyncConnection = async (connectionId) => {
+    try {
+      console.log(`🔄 Starting sync for connection: ${connectionId}`);
+
+      // Set sync status to loading
+      setSyncStatus(prev => ({
+        ...prev,
+        [connectionId]: { status: 'syncing', message: 'Starting sync...', progress: 0 }
+      }));
+
+      const response = await apiService.triggerSyncConnection(connectionId);
+
+      if (response.status === 'success' && response.job_id) {
+        // Update sync status with immediate job information from response
+        const job = response.job || {};
+        const message = job.status === 'pending'
+          ? 'Preparing sync...'
+          : job.status === 'running'
+          ? `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`
+          : 'Starting sync...';
+
+        setSyncStatus(prev => ({
+          ...prev,
+          [connectionId]: {
+            status: 'syncing',
+            message: message,
+            progress: job.progress || 0,
+            jobId: response.job_id
+          }
+        }));
+
+        // Start polling job status
+        pollJobStatus(connectionId, response.job_id);
+      } else if (response.status === 'error' && response.error && response.error.includes('409')) {
+        // Handle concurrent sync error - extract job_id if available
+        const errorMatch = response.error.match(/job_id":"([^"]+)"/);
+        if (errorMatch) {
+          const existingJobId = errorMatch[1];
+          console.log(`🔄 Sync already in progress, polling existing job: ${existingJobId}`);
+          pollJobStatus(connectionId, existingJobId);
+        } else {
+          setSyncStatus(prev => ({
+            ...prev,
+            [connectionId]: { status: 'error', message: 'Sync already in progress' }
+          }));
+        }
+      } else {
+        setSyncStatus(prev => ({
+          ...prev,
+          [connectionId]: { status: 'error', message: response.message || response.error || 'Sync failed' }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to sync connection:', error);
+
+      // Handle 409 error (sync already in progress)
+      if (error.message && error.message.includes('409')) {
+        setSyncStatus(prev => ({
+          ...prev,
+          [connectionId]: { status: 'error', message: 'Sync already in progress' }
+        }));
+      } else {
+        setSyncStatus(prev => ({
+          ...prev,
+          [connectionId]: { status: 'error', message: error.message || 'Sync failed' }
+        }));
+      }
+    }
+  };
+
+  const pollJobStatus = async (connectionId, jobId) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await apiService.getJobStatus(jobId);
+
+        if (response.status === 'success' && response.job) {
+          const job = response.job;
+
+          // Update sync status based on job status
+          if (job.status === 'pending') {
+            setSyncStatus(prev => ({
+              ...prev,
+              [connectionId]: {
+                status: 'syncing',
+                message: 'Preparing sync...',
+                progress: 0,
+                jobId: jobId
+              }
+            }));
+          } else if (job.status === 'running') {
+            setSyncStatus(prev => ({
+              ...prev,
+              [connectionId]: {
+                status: 'syncing',
+                message: `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`,
+                progress: job.progress || 0,
+                jobId: jobId
+              }
+            }));
+          } else if (job.status === 'completed') {
+            setSyncStatus(prev => ({
+              ...prev,
+              [connectionId]: {
+                status: 'success',
+                message: `Sync completed: ${job.processed_files || 0} files processed`,
+                progress: 100,
+                jobId: jobId
+              }
+            }));
+
+            // Load sync history to show updated results
+            await loadSyncHistory();
+
+            // Clear success status after 5 seconds
+            setTimeout(() => {
+              setSyncStatus(prev => ({
+                ...prev,
+                [connectionId]: null
+              }));
+            }, 5000);
+
+            clearInterval(pollInterval);
+          } else if (job.status === 'failed') {
+            setSyncStatus(prev => ({
+              ...prev,
+              [connectionId]: {
+                status: 'error',
+                message: job.error_message || 'Sync failed',
+                jobId: jobId
+              }
+            }));
+            clearInterval(pollInterval);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll job status:', error);
+        // Don't clear interval on polling errors, just log them
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Clear interval after 5 minutes to prevent infinite polling
+    setTimeout(() => {
+      clearInterval(pollInterval);
+    }, 300000);
+  };
+
+  const loadSyncHistory = async () => {
+    try {
+      const response = await apiService.getSyncHistory({ limit: 10 });
+      if (response.status === 'success') {
+        setSyncHistory(response.history || []);
+      }
+    } catch (error) {
+      console.warn('Failed to load sync history:', error);
+    }
+  };
+
+  const loadActiveJobs = async () => {
+    try {
+      const response = await apiService.getActiveJobs();
+      if (response.status === 'success' && response.jobs) {
+        // Group active jobs by connection_id
+        const jobsByConnection = {};
+        const newSyncStatus = {};
+
+        response.jobs.forEach(job => {
+          if (!jobsByConnection[job.connection_id]) {
+            jobsByConnection[job.connection_id] = [];
+          }
+          jobsByConnection[job.connection_id].push(job);
+
+          // Initialize sync status for active jobs to maintain UI consistency
+          if (job.status === 'running' || job.status === 'pending') {
+            newSyncStatus[job.connection_id] = {
+              status: 'syncing',
+              message: job.status === 'pending'
+                ? 'Preparing sync...'
+                : `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`,
+              progress: job.progress || 0,
+              jobId: job.id
+            };
+          }
+        });
+
+        setActiveJobs(jobsByConnection);
+
+        // Update sync status for connections with active jobs
+        setSyncStatus(prev => ({
+          ...prev,
+          ...newSyncStatus
+        }));
+
+        // Start polling for any active jobs found on page load
+        Object.keys(newSyncStatus).forEach(connectionId => {
+          const job = response.jobs.find(j => j.connection_id === connectionId && (j.status === 'running' || j.status === 'pending'));
+          if (job) {
+            console.log(`🔄 Found active job on page load, starting polling for connection ${connectionId}, job ${job.id}`);
+            pollJobStatus(connectionId, job.id);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load active jobs:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -484,13 +704,66 @@ const MCPContent = () => {
               <p className="text-sm text-gray-500">Connect to remote servers via SSH, SFTP, FTP, HTTP</p>
             </div>
           </div>
-          <button
-            onClick={() => setSelectedProvider(remoteHostProvider)}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
-          >
-            <i className="fas fa-plus"></i>
-            Add Remote Host
-          </button>
+          <div className="flex items-center gap-2">
+            {remoteHostConnections.length > 0 && (
+              <>
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await apiService.triggerSyncAll();
+                      if (response.status === 'success') {
+                        // Show immediate feedback with job information
+                        const job = response.job || {};
+                        const message = job.status === 'pending'
+                          ? 'Sync started - preparing...'
+                          : 'Sync started for all connections!';
+                        alert(`${message} 🔄`);
+
+                        // Refresh data immediately
+                        await loadSyncHistory();
+                        await loadActiveJobs();
+                      }
+                    } catch (error) {
+                      alert(`Failed to start sync: ${error.message}`);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center gap-2"
+                >
+                  <i className="fas fa-sync-alt text-xs"></i>
+                  Sync All
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (window.confirm('⚠️ This will cancel all active sync jobs. Are you sure?')) {
+                      try {
+                        const response = await apiService.emergencyCleanupJobs();
+                        if (response.status === 'success') {
+                          alert(`✅ Emergency cleanup completed! ${response.stale_count} jobs cancelled.`);
+                          await loadSyncHistory();
+                          await loadActiveJobs();
+                        }
+                      } catch (error) {
+                        alert(`❌ Failed to cleanup jobs: ${error.message}`);
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
+                  title="Cancel all active sync jobs"
+                >
+                  <i className="fas fa-broom text-xs"></i>
+                  Cleanup Jobs
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setSelectedProvider(remoteHostProvider)}
+              className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors flex items-center gap-2"
+            >
+              <i className="fas fa-plus text-xs"></i>
+              Add Remote Host
+            </button>
+          </div>
         </div>
 
         {remoteHostConnections.length === 0 ? (
@@ -529,6 +802,108 @@ const MCPContent = () => {
                     }`}>
                       {connection.connected ? 'Connected' : 'Disconnected'}
                     </span>
+
+                    {/* Sync Status - Simple status indicator only */}
+                    {syncStatus[connection.id] && !activeJobs[connection.id]?.length && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        syncStatus[connection.id].status === 'success'
+                          ? 'bg-green-100 text-green-800'
+                          : syncStatus[connection.id].status === 'error'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {syncStatus[connection.id].status === 'success' ? 'Synced' :
+                         syncStatus[connection.id].status === 'error' ? 'Sync Failed' : 'Ready'}
+                      </span>
+                    )}
+
+                    {/* Sync Button - only show when no active jobs */}
+                    {(!activeJobs[connection.id] || activeJobs[connection.id].length === 0) && (
+                      <button
+                        onClick={() => handleSyncConnection(connection.id)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+                        title="Sync files from this connection"
+                      >
+                        <i className="fas fa-sync-alt mr-1"></i>
+                        Sync
+                      </button>
+                    )}
+
+
+
+                    {/* Active Jobs - Compact and elegant design */}
+                    {activeJobs[connection.id] && activeJobs[connection.id].length > 0 && (
+                      <div className="space-y-2">
+                        {activeJobs[connection.id].map(job => (
+                          <div key={job.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-3 shadow-sm">
+                            {/* Header with status and cancel button */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="relative">
+                                  <i className="fas fa-sync-alt fa-spin text-blue-600 text-sm"></i>
+                                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-blue-800 text-sm">
+                                    {job.status === 'pending' ? 'Preparing...' : 'Syncing'}
+                                  </span>
+                                  <div className="text-xs text-blue-600">
+                                    {job.processed_files || 0} of {job.total_files || 0} files
+                                  </div>
+                                </div>
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(`Cancel sync job?`)) {
+                                    try {
+                                      const response = await apiService.cancelJob(job.id);
+                                      if (response.status === 'success') {
+                                        alert('✅ Job cancelled successfully!');
+                                        await loadActiveJobs();
+                                        await loadSyncHistory();
+                                      }
+                                    } catch (error) {
+                                      alert(`❌ Failed to cancel job: ${error.message}`);
+                                    }
+                                  }
+                                }}
+                                className="group px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-md hover:bg-red-50 hover:border-red-300 transition-all duration-200 text-xs font-medium shadow-sm"
+                                title="Cancel sync job"
+                              >
+                                <i className="fas fa-times mr-1 group-hover:scale-110 transition-transform"></i>
+                                Cancel
+                              </button>
+                            </div>
+
+                            {/* Compact Progress Bar */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center">
+                                <span className="text-xs font-medium text-gray-600">Progress</span>
+                                <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                  {job.progress || 0}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                                  style={{ width: `${job.progress || 0}%` }}
+                                ></div>
+                              </div>
+                            </div>
+
+                            {/* Status message */}
+                            {job.message && (
+                              <div className="mt-2 p-2 bg-white bg-opacity-60 rounded-md border border-blue-100">
+                                <div className="text-xs text-gray-700 truncate" title={job.message}>
+                                  <i className="fas fa-info-circle text-blue-500 mr-1"></i>
+                                  {job.message}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     <button
                       onClick={() => handleDisconnect('remote_host', connection.id)}

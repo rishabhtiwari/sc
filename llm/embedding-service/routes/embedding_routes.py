@@ -62,7 +62,7 @@ def process_document():
         if not Config.is_allowed_file(file.filename):
             return jsonify({
                 "status": "error",
-                "error": f"File type not allowed. Supported types: {', '.join(Config.ALLOWED_EXTENSIONS)}",
+                "error": f"File type not allowed. Blacklisted types: {', '.join(sorted(Config.BLACKLISTED_EXTENSIONS))}",
                 "timestamp": int(time.time() * 1000)
             }), 400
         

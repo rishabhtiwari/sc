@@ -40,7 +40,7 @@ class Config:
 
     # Generation Parameters
     MAX_LENGTH = int(os.getenv('LLM_MAX_LENGTH', 512))
-    MAX_NEW_TOKENS = int(os.getenv('LLM_MAX_NEW_TOKENS', 150))
+    MAX_NEW_TOKENS = int(os.getenv('LLM_MAX_NEW_TOKENS', 2048))
     TEMPERATURE = float(os.getenv('LLM_TEMPERATURE', 0.7))
     TOP_P = float(os.getenv('LLM_TOP_P', 0.9))
     TOP_K = int(os.getenv('LLM_TOP_K', 50))
@@ -52,10 +52,10 @@ class Config:
     MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.7))
 
     # Streaming Configuration
-    N_CTX = int(os.getenv('N_CTX', 2048))  # Context window for LLM
-    N_BATCH = int(os.getenv('N_BATCH', 8192))  # Batch size for LLM
+    N_CTX = int(os.getenv('N_CTX', 4096))  # Context window for LLM
+    N_BATCH = int(os.getenv('N_BATCH', 512))  # Batch size for LLM
     ENABLE_STREAMING = os.getenv('ENABLE_STREAMING', 'true').lower() == 'true'
-    STREAM_DELAY_MS = int(os.getenv('STREAM_DELAY_MS', 50))  # Delay between streaming tokens
+    STREAM_DELAY_MS = int(os.getenv('STREAM_DELAY_MS', 100))  # Delay between streaming tokens
 
     # Sliding Window Continuation Configuration
     ENABLE_CONTINUATION = os.getenv('ENABLE_CONTINUATION', 'true').lower() == 'true'
