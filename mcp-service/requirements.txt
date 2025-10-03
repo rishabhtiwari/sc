@@ -9,6 +9,7 @@ GitPython==3.1.40
 authlib==1.2.1
 cryptography==41.0.7
 sqlalchemy==2.0.23
+paramiko==3.3.1
 
 # Database drivers
 psycopg2-binary==2.9.9

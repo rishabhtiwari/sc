@@ -316,6 +316,56 @@ services:
       start_period: 40s
     restart: unless-stopped
 
+  # Remote Host Syncer Service for Document Synchronization
+  ichat-remote-host-syncer:
+    build:
+      context: ./document/remote-host-syncer
+      dockerfile: Dockerfile
+    container_name: ichat-remote-host-syncer
+    ports:
+      - "8091:8091"
+    environment:
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8091
+      - FLASK_DEBUG=false
+      - FLASK_ENV=production
+      - DATABASE_URL=sqlite:///data/remote_host_syncer.db
+      - LOG_LEVEL=INFO
+      - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
+      - VECTOR_DB_URL=http://ichat-vector-db:8084
+      - OCR_SERVICE_URL=http://ichat-ocr-service:8081
+      - SYNC_INTERVAL_MINUTES=30
+      - MAX_FILE_SIZE_MB=100
+      - ENCRYPTION_ENABLED=true
+      - PRIVACY_MODE=strict
+      - AUDIT_ENABLED=true
+      - EMBEDDING_THREADS=5
+      - EMBEDDING_BATCH_SIZE=10
+      - MAX_CONCURRENT_SYNCS=5
+      - INCREMENTAL_SYNC_ENABLED=true
+      - ENABLE_DEDUPLICATION=true
+      - CONNECTION_TIMEOUT=30
+      - MAX_RETRY_ATTEMPTS=3
+    volumes:
+      - ./document/remote-host-syncer/data:/app/data
+      - ./document/remote-host-syncer/logs:/app/logs
+      - ./document/remote-host-syncer/temp:/app/temp
+      - ./document/remote-host-syncer/sync_cache:/app/sync_cache
+      - ./document/remote-host-syncer/keys:/app/keys
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8091/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - embedding-service
+      - ichat-vector-db
+      - ocr-service
+
 networks:
   ichat-network:
     driver: bridge

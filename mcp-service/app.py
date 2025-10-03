@@ -4,19 +4,25 @@ MCP Service - Model Context Protocol Integration Service
 """
 
 import os
+import sys
 import logging
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 
 from routes.mcp_routes import mcp_bp
 from routes.health_routes import health_bp
+from routes.remote_host_mcp_routes import remote_host_mcp_bp
 from config.settings import MCPConfig
 
 def create_app():
     """
     Application factory pattern - creates and configures Flask app
     """
+    print("Creating Flask app...")
+    sys.stdout.flush()
     app = Flask(__name__)
+    print("Flask app created")
+    sys.stdout.flush()
     
     # Load configuration
     app.config.from_object(MCPConfig)
@@ -31,8 +37,29 @@ def create_app():
     CORS(app)
     
     # Register blueprints (routes)
-    app.register_blueprint(mcp_bp, url_prefix='/')
-    app.register_blueprint(health_bp, url_prefix='/')
+    print("=" * 50)
+    print("REGISTERING BLUEPRINTS...")
+    print("=" * 50)
+    sys.stdout.flush()
+    try:
+        app.register_blueprint(mcp_bp, url_prefix='/')
+        print("✓ Registered mcp_bp")
+        app.register_blueprint(health_bp, url_prefix='/')
+        print("✓ Registered health_bp")
+        app.register_blueprint(remote_host_mcp_bp, url_prefix='/mcp')
+        print("✓ Registered remote_host_mcp_bp")
+        print("=" * 50)
+        print("ALL BLUEPRINTS REGISTERED SUCCESSFULLY")
+        print("=" * 50)
+    except Exception as e:
+        print(f"❌ ERROR REGISTERING BLUEPRINTS: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # Add request logging
+    @app.before_request
+    def log_request():
+        print(f"REQUEST: {request.method} {request.path}")
     
     # Root endpoint
     @app.route('/', methods=['GET'])
@@ -73,7 +100,9 @@ def main():
         print("🛑 Press Ctrl+C to stop the server")
         print("=" * 50)
         
+        print("Calling create_app()...")
         app = create_app()
+        print("App created successfully")
         app.run(
             host=os.getenv('FLASK_HOST', '0.0.0.0'),
             port=int(os.getenv('FLASK_PORT', 8089)),

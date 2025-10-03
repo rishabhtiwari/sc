@@ -45,7 +45,7 @@ class MCPHandler:
                 timeout=30
             )
             
-            if response.status_code == 200:
+            if response.status_code in [200, 201]:
                 return response.json()
             else:
                 return {
@@ -542,12 +542,102 @@ class MCPHandler:
             # Forward query parameters (like token_id)
             params = request.args.to_dict()
 
-            result = MCPHandler._make_mcp_request('GET', f'/provider/{provider_id}/resources', params=params)
-            return jsonify(result)
+            if provider_id == 'remote_host':
+                # Remote host provider resources
+                result = MCPHandler._make_mcp_request('GET', '/mcp/remote-host/providers')
+                return jsonify(result)
+            else:
+                # Other providers
+                result = MCPHandler._make_mcp_request('GET', f'/provider/{provider_id}/resources', params=params)
+                return jsonify(result)
 
         except Exception as e:
             logging.error(f"❌ Get provider resources failed: {str(e)}")
             return jsonify({
                 "status": "error",
                 "error": f"Failed to get provider resources: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_connect_provider(provider_id: str):
+        """Handle POST /api/mcp/providers/<provider_id>/connect"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    "status": "error",
+                    "error": "Request body is required"
+                }), 400
+
+            if provider_id == 'remote_host':
+                # Connect to remote host via MCP service
+                result = MCPHandler._make_mcp_request('POST', '/mcp/remote-host/connections', data)
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Provider '{provider_id}' connection not supported via this endpoint"
+                }), 400
+
+        except Exception as e:
+            logging.error(f"❌ Connect provider failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to connect provider: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_disconnect_provider(provider_id: str):
+        """Handle POST /api/mcp/providers/<provider_id>/disconnect"""
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({
+                    "status": "error",
+                    "error": "Request body is required"
+                }), 400
+
+            connection_id = data.get('connection_id')
+            if not connection_id:
+                return jsonify({
+                    "status": "error",
+                    "error": "connection_id is required"
+                }), 400
+
+            if provider_id == 'remote_host':
+                # Disconnect from remote host via MCP service
+                result = MCPHandler._make_mcp_request('DELETE', f'/mcp/remote-host/connections/{connection_id}')
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Provider '{provider_id}' disconnection not supported via this endpoint"
+                }), 400
+
+        except Exception as e:
+            logging.error(f"❌ Disconnect provider failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to disconnect provider: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_get_provider_connections(provider_id: str):
+        """Handle GET /api/mcp/providers/<provider_id>/connections"""
+        try:
+            if provider_id == 'remote_host':
+                # Get remote host connections via MCP service
+                result = MCPHandler._make_mcp_request('GET', '/mcp/remote-host/connections')
+                return jsonify(result)
+            else:
+                return jsonify({
+                    "status": "error",
+                    "error": f"Provider '{provider_id}' connections not supported via this endpoint"
+                }), 400
+
+        except Exception as e:
+            logging.error(f"❌ Get provider connections failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to get provider connections: {str(e)}"
             }), 500
