@@ -262,3 +262,49 @@ def get_sync_credentials(session_id):
             "status": "error",
             "message": f"Failed to get credentials: {str(e)}"
         }), 500
+
+@remote_host_mcp_bp.route('/remote-host/connections/<connection_id>/files', methods=['GET'])
+def list_connection_files(connection_id):
+    """List files from a remote host connection"""
+    try:
+        path = request.args.get('path', None)
+        result = remote_host_service.list_files(connection_id, path)
+
+        if result['status'] == 'success':
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"Error listing files for connection {connection_id}: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to list files: {str(e)}"
+        }), 500
+
+@remote_host_mcp_bp.route('/remote-host/connections/<connection_id>/files/content', methods=['POST'])
+def get_file_content(connection_id):
+    """Get file content from a remote host connection"""
+    try:
+        data = request.get_json()
+        file_path = data.get('file_path')
+
+        if not file_path:
+            return jsonify({
+                "status": "error",
+                "message": "file_path is required"
+            }), 400
+
+        result = remote_host_service.get_file_content(connection_id, file_path)
+
+        if result['status'] == 'success':
+            return jsonify(result)
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        logger.error(f"Error getting file content for connection {connection_id}: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get file content: {str(e)}"
+        }), 500

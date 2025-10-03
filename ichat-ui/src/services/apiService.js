@@ -1,8 +1,11 @@
 class ApiService {
   constructor() {
-    this.baseURL = process.env.NODE_ENV === 'production' 
-      ? 'http://localhost:8080/api' 
+    this.baseURL = process.env.NODE_ENV === 'production'
+      ? 'http://localhost:8080/api'
       : 'http://localhost:8080/api';
+    this.mcpServiceUrl = process.env.NODE_ENV === 'production'
+      ? 'http://localhost:8089'
+      : 'http://localhost:8089';
   }
 
   async request(endpoint, options = {}) {
@@ -169,6 +172,11 @@ class ApiService {
     return this.request('/mcp/tokens');
   }
 
+  async getMCPConnections() {
+    // Get all MCP connections (including remote hosts) via API server proxy
+    return this.request('/mcp/providers/remote_host/connections');
+  }
+
   // Deprecated - use the method below with token_id
   async getMCPProviderResourcesOld(providerId) {
     return this.request(`/mcp/providers/${providerId}/resources`);
@@ -282,48 +290,145 @@ class ApiService {
       providerId,
       tokenId,
       resourceData,
-      actualResource,
-      clone_url: actualResource.clone_url,
-      default_branch: actualResource.default_branch
+      actualResource
     });
 
-    const requestBody = {
-      type: 'git',
-      url: actualResource.clone_url,
-      branch: actualResource.default_branch || 'main',
-      session_id: tokenId,
-      credentials: {
-        username: '',
-        token: ''
-      }
-    };
+    // Get customer ID (default for now, could be from user session)
+    const customerId = 'default';
 
-    console.log('📤 Sending request body:', requestBody);
+    // Handle different provider types
+    if (providerId === 'github') {
+      // Add GitHub repository to customer context
+      const requestBody = {
+        customer_id: customerId,
+        token_id: tokenId,
+        repository_data: {
+          name: actualResource.name || actualResource.full_name,
+          full_name: actualResource.full_name,
+          clone_url: actualResource.clone_url,
+          html_url: actualResource.html_url,
+          default_branch: actualResource.default_branch || 'main',
+          description: actualResource.description || '',
+          language: actualResource.language,
+          stars: actualResource.stargazers_count || actualResource.stars || 0,
+          private: actualResource.private || false
+        }
+      };
 
-    return this.request('/code/connect', {
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
+      console.log('📤 Adding GitHub repository to context:', requestBody);
+      return this.request('/mcp/github/connect-to-context', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+    } else if (providerId === 'remote_host') {
+      // Add remote host to customer context
+      const requestBody = {
+        customer_id: customerId,
+        token_id: tokenId,
+        host_data: {
+          name: actualResource.name || `${actualResource.protocol}://${actualResource.host}`,
+          protocol: actualResource.protocol,
+          host: actualResource.host,
+          port: actualResource.port,
+          username: actualResource.username,
+          base_path: actualResource.base_path || '/',
+          connection_id: actualResource.connection_id || actualResource.id
+        }
+      };
+
+      console.log('📤 Adding remote host to context:', requestBody);
+      return this.request('/mcp/remote-host/connect-to-context', {
+        method: 'POST',
+        body: JSON.stringify(requestBody),
+      });
+
+    } else {
+      // Fallback for unknown providers
+      console.warn('⚠️ Unknown provider type:', providerId);
+      return Promise.reject(new Error(`Unsupported provider type: ${providerId}`));
+    }
   }
 
   async getConnectedRepositories() {
-    return this.request('/code/repositories');
+    // Use new customer context API for better organization
+    const customerId = 'default'; // Could be from user session
+    return this.request(`/context/customer/${customerId}`);
   }
 
   async getMCPResources() {
-    // For now, MCP resources are stored as repositories with MCP provider info
-    // In the future, this might be a separate endpoint
-    return this.request('/code/repositories');
+    // Use new customer context API to get all MCP resources
+    const customerId = 'default'; // Could be from user session
+    return this.request(`/context/customer/${customerId}`);
   }
 
   async getMCPContextResources() {
-    return this.request('/code/repositories');
+    // Use new customer context API
+    const customerId = 'default'; // Could be from user session
+    return this.request(`/context/customer/${customerId}`);
   }
 
   async removeMCPResourceFromContext(resourceId) {
-    return this.request(`/code/repositories/${resourceId}`, {
+    const customerId = 'default'; // Could be from user session
+    return this.request(`/context/customer/${customerId}/resource/${resourceId}`, {
       method: 'DELETE',
     });
+  }
+
+  // Syncer API methods
+  async triggerSyncConnection(connectionId) {
+    return this.request(`/syncer/sync/connection/${connectionId}`, {
+      method: 'POST',
+    });
+  }
+
+  async triggerSyncAll() {
+    return this.request('/syncer/sync', {
+      method: 'POST',
+    });
+  }
+
+  async getSyncStatus() {
+    return this.request('/syncer/status');
+  }
+
+  async getSyncHistory(params = {}) {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.days) queryParams.append('days', params.days);
+    if (params.connection_id) queryParams.append('connection_id', params.connection_id);
+
+    const queryString = queryParams.toString();
+    return this.request(`/syncer/history${queryString ? '?' + queryString : ''}`);
+  }
+
+  async getSyncConnections() {
+    return this.request('/syncer/connections');
+  }
+
+  // Job tracking API methods
+  async getJobStatus(jobId) {
+    return this.request(`/syncer/job/${jobId}`);
+  }
+
+  async getActiveJobs() {
+    return this.request('/syncer/jobs/active');
+  }
+
+  async cancelJob(jobId) {
+    return this.request(`/syncer/job/${jobId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async emergencyCleanupJobs() {
+    return this.request('/syncer/jobs/cleanup-all-stale', {
+      method: 'POST',
+    });
+  }
+
+  async getConnectionJobs(connectionId, limit = 10) {
+    return this.request(`/syncer/jobs/connection/${connectionId}?limit=${limit}`);
   }
 }
 

@@ -700,3 +700,151 @@ class MCPHandler:
                 "status": "error",
                 "error": f"Failed to test provider config: {str(e)}"
             }), 500
+
+    @staticmethod
+    def _get_syncer_service_url() -> str:
+        """Get Remote Host Syncer service URL"""
+        return f"http://{AppConfig.SYNCER_SERVICE_HOST}:{AppConfig.SYNCER_SERVICE_PORT}"
+
+    @staticmethod
+    def _make_syncer_request(method: str, endpoint: str, data: Optional[Dict] = None,
+                           params: Optional[Dict] = None) -> Dict[str, Any]:
+        """
+        Make request to Remote Host Syncer service
+
+        Args:
+            method: HTTP method
+            endpoint: API endpoint
+            data: Request data
+            params: Query parameters
+
+        Returns:
+            Response from Syncer service
+        """
+        try:
+            url = f"{MCPHandler._get_syncer_service_url()}{endpoint}"
+
+            response = requests.request(
+                method=method,
+                url=url,
+                json=data,
+                params=params,
+                timeout=30
+            )
+
+            if response.status_code in [200, 201]:
+                return response.json()
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Syncer service returned {response.status_code}: {response.text}"
+                }
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"❌ Syncer service request failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Failed to connect to syncer service: {str(e)}"
+            }
+        except Exception as e:
+            logging.error(f"❌ Unexpected error in syncer request: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Unexpected error: {str(e)}"
+            }
+
+    @staticmethod
+    def handle_trigger_sync():
+        """
+        Handle trigger sync for all remote host connections
+
+        Returns:
+            JSON response with sync trigger result
+        """
+        try:
+            logging.info("🚀 Triggering sync for all remote host connections")
+
+            result = MCPHandler._make_syncer_request('POST', '/sync')
+            return jsonify(result)
+
+        except Exception as e:
+            logging.error(f"❌ Trigger sync failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to trigger sync: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_trigger_connection_sync(connection_id: str):
+        """
+        Handle trigger sync for specific connection
+
+        Args:
+            connection_id: The ID of the connection to sync
+
+        Returns:
+            JSON response with sync trigger result
+        """
+        try:
+            logging.info(f"🚀 Triggering sync for connection: {connection_id}")
+
+            result = MCPHandler._make_syncer_request('POST', f'/sync/connection/{connection_id}')
+            return jsonify(result)
+
+        except Exception as e:
+            logging.error(f"❌ Trigger connection sync failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to trigger connection sync: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_get_sync_status():
+        """
+        Handle get sync status
+
+        Returns:
+            JSON response with sync status
+        """
+        try:
+            logging.info("📊 Getting sync status")
+
+            result = MCPHandler._make_syncer_request('GET', '/status')
+            return jsonify(result)
+
+        except Exception as e:
+            logging.error(f"❌ Get sync status failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to get sync status: {str(e)}"
+            }), 500
+
+    @staticmethod
+    def handle_get_sync_history():
+        """
+        Handle get sync history
+
+        Returns:
+            JSON response with sync history
+        """
+        try:
+            logging.info("📜 Getting sync history")
+
+            # Get query parameters from request
+            params = {}
+            if request.args.get('limit'):
+                params['limit'] = request.args.get('limit')
+            if request.args.get('days'):
+                params['days'] = request.args.get('days')
+            if request.args.get('connection_id'):
+                params['connection_id'] = request.args.get('connection_id')
+
+            result = MCPHandler._make_syncer_request('GET', '/history', params=params)
+            return jsonify(result)
+
+        except Exception as e:
+            logging.error(f"❌ Get sync history failed: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "error": f"Failed to get sync history: {str(e)}"
+            }), 500

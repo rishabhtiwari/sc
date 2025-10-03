@@ -41,6 +41,10 @@ class AppConfig:
     LLM_SERVICE_PORT = int(os.environ.get('LLM_SERVICE_PORT', 8087))
     LLM_SERVICE_URL = os.environ.get('LLM_SERVICE_URL', 'http://localhost:8083')
 
+    # Remote Host Syncer Service integration
+    SYNCER_SERVICE_HOST = os.environ.get('SYNCER_SERVICE_HOST', 'job-remote-host-syncer')
+    SYNCER_SERVICE_PORT = int(os.environ.get('SYNCER_SERVICE_PORT', 8091))
+
 
 class DevelopmentConfig(AppConfig):
     """

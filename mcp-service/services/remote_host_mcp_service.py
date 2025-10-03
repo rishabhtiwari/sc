@@ -15,6 +15,10 @@ import paramiko
 import requests
 from ftplib import FTP
 import subprocess
+import os
+import stat
+import io
+from urllib.parse import urljoin
 
 logger = logging.getLogger(__name__)
 
@@ -532,6 +536,46 @@ class RemoteHostMCPService:
                 "status": "error",
                 "message": f"RSYNC connection failed: {str(e)}"
             }
+
+    def _list_files_by_protocol(self, connection: Dict[str, Any], credentials: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
+        """List files based on protocol"""
+        protocol = connection['protocol'].lower()
+
+        try:
+            if protocol == 'ssh':
+                return self._list_files_ssh(connection, credentials, path)
+            elif protocol == 'sftp':
+                return self._list_files_sftp(connection, credentials, path)
+            elif protocol == 'ftp':
+                return self._list_files_ftp(connection, credentials, path)
+            elif protocol in ['http', 'https']:
+                return self._list_files_http(connection, credentials, path)
+            else:
+                logger.warning(f"File listing not supported for protocol: {protocol}")
+                return []
+        except Exception as e:
+            logger.error(f"Error listing files via {protocol}: {str(e)}")
+            return []
+
+    def _get_file_content_by_protocol(self, connection: Dict[str, Any], credentials: Dict[str, Any], file_path: str) -> str:
+        """Get file content based on protocol"""
+        protocol = connection['protocol'].lower()
+
+        try:
+            if protocol == 'ssh':
+                return self._get_file_content_ssh(connection, credentials, file_path)
+            elif protocol == 'sftp':
+                return self._get_file_content_sftp(connection, credentials, file_path)
+            elif protocol == 'ftp':
+                return self._get_file_content_ftp(connection, credentials, file_path)
+            elif protocol in ['http', 'https']:
+                return self._get_file_content_http(connection, credentials, file_path)
+            else:
+                logger.warning(f"File content retrieval not supported for protocol: {protocol}")
+                return ""
+        except Exception as e:
+            logger.error(f"Error getting file content via {protocol}: {str(e)}")
+            return ""
     
     def delete_connection(self, connection_id: str) -> Dict[str, Any]:
         """Delete a remote host connection"""
@@ -590,6 +634,64 @@ class RemoteHostMCPService:
                 "message": f"Failed to delete connection: {str(e)}"
             }
 
+    def list_files(self, connection_id: str, path: str = None) -> Dict[str, Any]:
+        """List files from remote host connection"""
+        try:
+            connection = self.get_connection(connection_id)
+            if not connection:
+                return {"status": "error", "message": "Connection not found"}
+
+            # Decrypt credentials
+            credentials = self._decrypt_credentials(connection)
+
+            # Use base_path if no specific path provided
+            if path is None:
+                path = connection.get('base_path', '/')
+
+            # List files based on protocol
+            files = self._list_files_by_protocol(connection, credentials, path)
+
+            return {
+                "status": "success",
+                "files": files,
+                "connection_id": connection_id,
+                "path": path
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to list files for connection {connection_id}: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to list files: {str(e)}"
+            }
+
+    def get_file_content(self, connection_id: str, file_path: str) -> Dict[str, Any]:
+        """Get file content from remote host connection"""
+        try:
+            connection = self.get_connection(connection_id)
+            if not connection:
+                return {"status": "error", "message": "Connection not found"}
+
+            # Decrypt credentials
+            credentials = self._decrypt_credentials(connection)
+
+            # Get file content based on protocol
+            content = self._get_file_content_by_protocol(connection, credentials, file_path)
+
+            return {
+                "status": "success",
+                "content": content,
+                "connection_id": connection_id,
+                "file_path": file_path
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get file content for {file_path} from connection {connection_id}: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"Failed to get file content: {str(e)}"
+            }
+
     def _get_default_port(self, protocol: str) -> int:
         """Get default port for protocol"""
         defaults = {
@@ -601,3 +703,312 @@ class RemoteHostMCPService:
             'rsync': 873
         }
         return defaults.get(protocol.lower(), 22)
+
+    def _list_files_ssh(self, connection: Dict[str, Any], credentials: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
+        """List files via SSH"""
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+            # Connect
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                client.connect(
+                    connection['host'],
+                    port=connection['port'],
+                    username=connection['username'],
+                    pkey=private_key,
+                    timeout=10
+                )
+            else:
+                client.connect(
+                    connection['host'],
+                    port=connection['port'],
+                    username=connection['username'],
+                    password=credentials.get('password', ''),
+                    timeout=10
+                )
+
+            # List files recursively using find command (no limit)
+            stdin, stdout, stderr = client.exec_command(f'find "{path}" -type f -exec ls -la {{}} \\; 2>/dev/null')
+            output = stdout.read().decode('utf-8')
+
+            files = []
+            for line in output.strip().split('\n'):
+                if line.strip():
+                    parts = line.split()
+                    if len(parts) >= 9:
+                        file_path = ' '.join(parts[8:])
+                        files.append({
+                            'path': file_path,
+                            'name': os.path.basename(file_path),
+                            'size': int(parts[4]) if parts[4].isdigit() else 0,
+                            'modified_time': ' '.join(parts[5:8]),
+                            'type': 'file'
+                        })
+
+            return files  # No limit - return all files
+
+        except Exception as e:
+            logger.error(f"SSH file listing failed: {str(e)}")
+            return []
+        finally:
+            client.close()
+
+    def _list_files_sftp(self, connection: Dict[str, Any], credentials: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
+        """List files via SFTP"""
+        transport = paramiko.Transport((connection['host'], connection['port']))
+
+        try:
+            # Connect
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                transport.connect(username=connection['username'], pkey=private_key)
+            else:
+                transport.connect(username=connection['username'], password=credentials.get('password', ''))
+
+            sftp = paramiko.SFTPClient.from_transport(transport)
+
+            files = []
+
+            def _recursive_list_sftp(current_path):
+                """Recursively list all files in directory and subdirectories"""
+                try:
+                    file_list = sftp.listdir_attr(current_path)
+                    for file_attr in file_list:
+                        if not file_attr.filename.startswith('.'):
+                            file_path = os.path.join(current_path, file_attr.filename).replace('\\', '/')
+
+                            if stat.S_ISDIR(file_attr.st_mode):
+                                # Recursively process subdirectory
+                                _recursive_list_sftp(file_path)
+                            else:
+                                # Add file to list
+                                files.append({
+                                    'path': file_path,
+                                    'name': file_attr.filename,
+                                    'size': file_attr.st_size or 0,
+                                    'modified_time': file_attr.st_mtime,
+                                    'type': 'file'
+                                })
+                except Exception as e:
+                    logger.warning(f"Could not list directory {current_path}: {str(e)}")
+
+            _recursive_list_sftp(path)
+            return files  # No limit - return all files
+
+        except Exception as e:
+            logger.error(f"SFTP file listing failed: {str(e)}")
+            return []
+        finally:
+            transport.close()
+
+    def _list_files_ftp(self, connection: Dict[str, Any], credentials: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
+        """List files via FTP"""
+        try:
+            ftp = FTP()
+            ftp.connect(connection['host'], connection['port'])
+            ftp.login(connection['username'], credentials.get('password', ''))
+
+            files = []
+
+            def _recursive_list_ftp(current_path):
+                """Recursively list all files in directory and subdirectories"""
+                try:
+                    ftp.cwd(current_path)
+                    file_list = []
+                    ftp.retrlines('LIST', file_list.append)
+
+                    for line in file_list:  # No limit - process all files
+                        parts = line.split()
+                        if len(parts) >= 9:
+                            filename = ' '.join(parts[8:])
+                            if not filename.startswith('.') and filename not in ['.', '..']:
+                                file_path = os.path.join(current_path, filename).replace('\\', '/')
+
+                                if line.startswith('d'):
+                                    # Directory - recurse into it
+                                    _recursive_list_ftp(file_path)
+                                else:
+                                    # File - add to list
+                                    files.append({
+                                        'path': file_path,
+                                        'name': filename,
+                                        'size': int(parts[4]) if parts[4].isdigit() else 0,
+                                        'modified_time': ' '.join(parts[5:8]),
+                                        'type': 'file'
+                                    })
+                except Exception as e:
+                    logger.warning(f"Could not list FTP directory {current_path}: {str(e)}")
+
+            _recursive_list_ftp(path)
+            ftp.quit()
+            return files  # No limit - return all files
+
+        except Exception as e:
+            logger.error(f"FTP file listing failed: {str(e)}")
+            return []
+
+    def _list_files_http(self, connection: Dict[str, Any], credentials: Dict[str, Any], path: str) -> List[Dict[str, Any]]:
+        """List files via HTTP (basic directory listing)"""
+        try:
+            base_url = f"{connection['protocol']}://{connection['host']}"
+            if connection['port'] not in [80, 443]:
+                base_url += f":{connection['port']}"
+
+            url = urljoin(base_url, path)
+
+            auth = None
+            if connection.get('username') and credentials.get('password'):
+                auth = (connection['username'], credentials['password'])
+
+            response = requests.get(url, auth=auth, timeout=10)
+            response.raise_for_status()
+
+            files = []
+            visited_urls = set()  # Track visited URLs to avoid infinite loops
+
+            def _recursive_list_http(current_url, current_path=""):
+                """Recursively list all files from HTTP directory listings"""
+                if current_url in visited_urls:
+                    return
+                visited_urls.add(current_url)
+
+                try:
+                    auth = None
+                    if connection.get('username') and credentials.get('password'):
+                        auth = (connection['username'], credentials['password'])
+
+                    response = requests.get(current_url, auth=auth, timeout=10)
+                    response.raise_for_status()
+
+                    # Simple HTML parsing for directory listings
+                    content = response.text.lower()
+                    if 'index of' in content or '<a href=' in content:
+                        import re
+                        links = re.findall(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', response.text, re.IGNORECASE)
+
+                        for href, text in links:  # No limit - process all links
+                            if not href.startswith('..') and not href.startswith('http') and href != '/':
+                                full_url = urljoin(current_url, href)
+
+                                if href.endswith('/'):
+                                    # Directory - recurse into it
+                                    _recursive_list_http(full_url, os.path.join(current_path, href.rstrip('/')))
+                                elif '.' in href:
+                                    # File - add to list
+                                    file_path = os.path.join(current_path, href).replace('\\', '/') if current_path else href
+                                    files.append({
+                                        'path': full_url,
+                                        'name': href,
+                                        'size': 0,  # Size not available from basic HTML listing
+                                        'modified_time': '',
+                                        'type': 'file'
+                                    })
+                except Exception as e:
+                    logger.warning(f"Could not list HTTP directory {current_url}: {str(e)}")
+
+            _recursive_list_http(url)
+            return files  # No limit - return all files
+
+        except Exception as e:
+            logger.error(f"HTTP file listing failed: {str(e)}")
+            return []
+
+    def _get_file_content_ssh(self, connection: Dict[str, Any], credentials: Dict[str, Any], file_path: str) -> str:
+        """Get file content via SSH"""
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+            # Connect
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                client.connect(
+                    connection['host'],
+                    port=connection['port'],
+                    username=connection['username'],
+                    pkey=private_key,
+                    timeout=10
+                )
+            else:
+                client.connect(
+                    connection['host'],
+                    port=connection['port'],
+                    username=connection['username'],
+                    password=credentials.get('password', ''),
+                    timeout=10
+                )
+
+            # Get file content
+            stdin, stdout, stderr = client.exec_command(f'cat "{file_path}"')
+            content = stdout.read().decode('utf-8', errors='ignore')
+
+            return content
+
+        except Exception as e:
+            logger.error(f"SSH file content retrieval failed: {str(e)}")
+            return ""
+        finally:
+            client.close()
+
+    def _get_file_content_sftp(self, connection: Dict[str, Any], credentials: Dict[str, Any], file_path: str) -> str:
+        """Get file content via SFTP"""
+        transport = paramiko.Transport((connection['host'], connection['port']))
+
+        try:
+            # Connect
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                transport.connect(username=connection['username'], pkey=private_key)
+            else:
+                transport.connect(username=connection['username'], password=credentials.get('password', ''))
+
+            sftp = paramiko.SFTPClient.from_transport(transport)
+
+            # Get file content
+            with sftp.open(file_path, 'r') as file:
+                content = file.read().decode('utf-8', errors='ignore')
+
+            return content
+
+        except Exception as e:
+            logger.error(f"SFTP file content retrieval failed: {str(e)}")
+            return ""
+        finally:
+            transport.close()
+
+    def _get_file_content_ftp(self, connection: Dict[str, Any], credentials: Dict[str, Any], file_path: str) -> str:
+        """Get file content via FTP"""
+        try:
+            ftp = FTP()
+            ftp.connect(connection['host'], connection['port'])
+            ftp.login(connection['username'], credentials.get('password', ''))
+
+            # Get file content
+            content_lines = []
+            ftp.retrlines(f'RETR {file_path}', content_lines.append)
+            content = '\n'.join(content_lines)
+
+            ftp.quit()
+            return content
+
+        except Exception as e:
+            logger.error(f"FTP file content retrieval failed: {str(e)}")
+            return ""
+
+    def _get_file_content_http(self, connection: Dict[str, Any], credentials: Dict[str, Any], file_path: str) -> str:
+        """Get file content via HTTP"""
+        try:
+            auth = None
+            if connection.get('username') and credentials.get('password'):
+                auth = (connection['username'], credentials['password'])
+
+            response = requests.get(file_path, auth=auth, timeout=10)
+            response.raise_for_status()
+
+            return response.text
+
+        except Exception as e:
+            logger.error(f"HTTP file content retrieval failed: {str(e)}")
+            return ""

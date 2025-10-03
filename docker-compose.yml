@@ -47,6 +47,7 @@ services:
       - LLM_SERVICE_URL=http://ichat-llm-service:8083
     volumes:
       - ./api-server/logs:/app/logs
+      - ./api-server/data:/app/data
     networks:
       - ichat-network
     healthcheck:
@@ -110,6 +111,14 @@ services:
       - LLM_USE_GPU=false
       - MODEL_CACHE_DIR=/app/cache
       - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
+      # Context Window Configuration
+      - N_CTX=4096
+      - N_BATCH=512
+      - LLM_MAX_NEW_TOKENS=2048
+      - ENABLE_CONTINUATION=true
+      - SLIDING_WINDOW_TOKENS=300
+      # Streaming Configuration
+      - STREAM_DELAY_MS=100
       - MIN_SIMILARITY_THRESHOLD=0.7
       - RETRIEVER_TIMEOUT=300
       - MODEL_LOAD_TIMEOUT=300
@@ -316,42 +325,38 @@ services:
       start_period: 40s
     restart: unless-stopped
 
-  # Remote Host Syncer Service for Document Synchronization
-  ichat-remote-host-syncer:
+  # Remote Host Syncer Job for Document Synchronization
+  job-remote-host-syncer:
     build:
-      context: ./document/remote-host-syncer
+      context: ./jobs/remote-host-syncer
       dockerfile: Dockerfile
-    container_name: ichat-remote-host-syncer
+    container_name: job-remote-host-syncer
     ports:
       - "8091:8091"
     environment:
       - FLASK_HOST=0.0.0.0
       - FLASK_PORT=8091
-      - FLASK_DEBUG=false
-      - FLASK_ENV=production
-      - DATABASE_URL=sqlite:///data/remote_host_syncer.db
-      - LOG_LEVEL=INFO
+      - DOCKER_ENV=true
+      - MCP_SERVICE_URL=http://ichat-mcp-service:8089
+      - API_SERVER_URL=http://ichat-api-server:8080
       - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
-      - VECTOR_DB_URL=http://ichat-vector-db:8084
-      - OCR_SERVICE_URL=http://ichat-ocr-service:8081
-      - SYNC_INTERVAL_MINUTES=30
-      - MAX_FILE_SIZE_MB=100
-      - ENCRYPTION_ENABLED=true
-      - PRIVACY_MODE=strict
-      - AUDIT_ENABLED=true
-      - EMBEDDING_THREADS=5
-      - EMBEDDING_BATCH_SIZE=10
-      - MAX_CONCURRENT_SYNCS=5
-      - INCREMENTAL_SYNC_ENABLED=true
-      - ENABLE_DEDUPLICATION=true
-      - CONNECTION_TIMEOUT=30
-      - MAX_RETRY_ATTEMPTS=3
+      - SYNC_FREQUENCY=daily
+      - SYNC_TIME=02:00
+      - MAX_FILE_SIZE_MB=50
+      - BATCH_SIZE=100
+      - MAX_CONCURRENT_CONNECTIONS=3
+      - MAX_RETRIES=3
+      - RETRY_DELAY_SECONDS=5
+      - LOG_LEVEL=INFO
+      - SUPPORTED_EXTENSIONS=.txt,.md,.py,.js,.java,.cpp,.c,.h,.json,.xml,.yaml,.yml,.csv,.log
+      - RUN_INITIAL_SYNC=false
+      - AUTO_RESTART_INTERRUPTED_JOBS=false
+      - HEALTH_CHECK_PORT=8091
+      - DB_PATH=data/syncer.db
+      - LOG_FILE=logs/remote-host-syncer.log
     volumes:
-      - ./document/remote-host-syncer/data:/app/data
-      - ./document/remote-host-syncer/logs:/app/logs
-      - ./document/remote-host-syncer/temp:/app/temp
-      - ./document/remote-host-syncer/sync_cache:/app/sync_cache
-      - ./document/remote-host-syncer/keys:/app/keys
+      - ./jobs/remote-host-syncer/data:/app/data
+      - ./jobs/remote-host-syncer/logs:/app/logs
     networks:
       - ichat-network
     healthcheck:
@@ -362,9 +367,9 @@ services:
       start_period: 40s
     restart: unless-stopped
     depends_on:
+      - ichat-mcp-service
+      - ichat-api
       - embedding-service
-      - ichat-vector-db
-      - ocr-service
 
 networks:
   ichat-network:

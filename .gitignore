@@ -36,3 +36,17 @@ bin/
 ### Java Libraries ###
 lib/
 *.jar
+
+### Database files ###
+*.db
+
+### Temporary directories ###
+code-generation-service/temp/
+
+### LLM cache and data directories ###
+llm/vector-db/cache/
+llm/vector-db/data/
+llm/llm-prompt-generation/cache/
+
+### Python virtual environment ###
+.venv/
