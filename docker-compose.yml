@@ -123,10 +123,6 @@ services:
       - RETRIEVER_TIMEOUT=300
       - MODEL_LOAD_TIMEOUT=300
       - MAX_CONTEXT_LENGTH=4800
-      - LLM_MAX_NEW_TOKENS=2048
-      # Streaming Configuration
-      - N_CTX=2048
-      - N_BATCH=8192
       - ENABLE_STREAMING=true
       - STREAM_DELAY_MS=50
       # Sliding Window Continuation Configuration
@@ -361,6 +357,54 @@ services:
       - ichat-network
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8091/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    depends_on:
+      - ichat-mcp-service
+      - ichat-api
+      - embedding-service
+
+  # GitHub Repository Syncer Job for Repository Synchronization
+  job-github-repo-syncer:
+    build:
+      context: ./jobs/github-repo-syncer
+      dockerfile: Dockerfile
+    container_name: job-github-repo-syncer
+    ports:
+      - "8092:8092"
+    environment:
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8092
+      - DOCKER_ENV=true
+      - MCP_SERVICE_URL=http://ichat-mcp-service:8089
+      - API_SERVER_URL=http://ichat-api-server:8080
+      - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
+      - SYNC_FREQUENCY=daily
+      - SYNC_TIME=03:00
+      - MAX_FILE_SIZE_MB=10
+      - BATCH_SIZE=50
+      - MAX_CONCURRENT_REPOSITORIES=2
+      - MAX_RETRIES=3
+      - RETRY_DELAY_SECONDS=5
+      - LOG_LEVEL=INFO
+      - CLONE_DEPTH=1
+      - REQUEST_TIMEOUT=30
+      - GITHUB_API_TIMEOUT=30
+      - RUN_INITIAL_SYNC=false
+      - AUTO_RESTART_INTERRUPTED_JOBS=false
+      - HEALTH_CHECK_PORT=8092
+      - DB_PATH=data/github_syncer.db
+      - LOG_FILE=logs/github-repo-syncer.log
+    volumes:
+      - ./jobs/github-repo-syncer/data:/app/data
+      - ./jobs/github-repo-syncer/logs:/app/logs
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8092/health" ]
       interval: 30s
       timeout: 10s
       retries: 3

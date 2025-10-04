@@ -120,20 +120,7 @@ def list_connection_resources(connection_id):
     """List resources for connection"""
     return mcp_controller.list_resources(connection_id)
 
-@mcp_bp.route('/tokens', methods=['GET'])
-def list_tokens():
-    """List OAuth tokens"""
-    return mcp_controller.list_tokens()
 
-@mcp_bp.route('/tokens/<token_id>', methods=['GET'])
-def get_token(token_id):
-    """Get specific OAuth token"""
-    return mcp_controller.get_token(token_id)
-
-@mcp_bp.route('/token/<token_id>/revoke', methods=['POST'])
-def revoke_token(token_id):
-    """Revoke OAuth token"""
-    return mcp_controller.revoke_token(token_id)
 
 @mcp_bp.route('/test', methods=['GET'])
 def test_service():
@@ -141,6 +128,21 @@ def test_service():
     return mcp_controller.test_service()
 
 # GitHub-specific routes
+@mcp_bp.route('/github/tokens', methods=['GET'])
+def github_tokens():
+    """List GitHub OAuth tokens"""
+    return mcp_controller.list_tokens()
+
+@mcp_bp.route('/github/token/<token_id>', methods=['GET'])
+def github_token(token_id):
+    """Get specific GitHub OAuth token"""
+    return mcp_controller.get_token(token_id)
+
+@mcp_bp.route('/github/token/<token_id>/revoke', methods=['POST'])
+def revoke_github_token(token_id):
+    """Revoke GitHub OAuth token"""
+    return mcp_controller.revoke_token(token_id)
+
 @mcp_bp.route('/github/repositories', methods=['GET'])
 def github_repositories():
     """List GitHub repositories"""

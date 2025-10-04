@@ -24,19 +24,36 @@ jobs/
 ### remote-host-syncer
 - **Purpose**: Syncs data from connected remote host MCP servers to embedding service
 - **Frequency**: Daily (configurable)
+- **Port**: 8091
 - **Description**: Fetches files and documents from active remote host connections and indexes them in the embedding service for RAG functionality
+
+### github-repo-syncer
+- **Purpose**: Syncs GitHub repositories to embedding service for code RAG functionality
+- **Frequency**: Daily (configurable)
+- **Port**: 8092
+- **Description**: Clones connected GitHub repositories, processes source code files, and indexes them in the embedding service for code-aware RAG responses
 
 ## Running Jobs
 
 ### Development
 ```bash
+# Remote host syncer
 cd jobs/remote-host-syncer
+python app.py
+
+# GitHub repo syncer
+cd jobs/github-repo-syncer
 python app.py
 ```
 
 ### Production (Docker)
 ```bash
+# Start specific job
 docker-compose up -d job-remote-host-syncer
+docker-compose up -d job-github-repo-syncer
+
+# Start all jobs
+docker-compose up -d job-remote-host-syncer job-github-repo-syncer
 ```
 
 ## Job Configuration

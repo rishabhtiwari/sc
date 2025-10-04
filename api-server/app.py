@@ -15,6 +15,7 @@ from routes.document_routes import document_bp
 from routes.llm_routes import llm_bp
 from routes.mcp_routes import mcp_bp
 from routes.syncer_routes import syncer_bp
+from routes.github_syncer_routes import github_syncer_bp
 
 from config.app_config import AppConfig
 
@@ -50,6 +51,7 @@ def create_app():
     from routes.customer_context_routes import customer_context_bp
     from routes.code_routes import code_bp
     from routes.syncer_routes import syncer_bp
+    from routes.github_syncer_routes import github_syncer_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -61,6 +63,7 @@ def create_app():
     app.register_blueprint(customer_context_bp, url_prefix='/api')
     app.register_blueprint(code_bp, url_prefix='/api')
     app.register_blueprint(syncer_bp, url_prefix='/api')
+    app.register_blueprint(github_syncer_bp, url_prefix='/api')
 
     
     # Root endpoint
