@@ -4,7 +4,7 @@ Embedding Service Client - Interface for communicating with the embedding servic
 
 import requests
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from werkzeug.datastructures import FileStorage
 
@@ -124,9 +124,10 @@ class EmbeddingServiceClient:
         """
         try:
             payload = {
-                "query": query
+                "query": query,
+                "use_hybrid": False  # Explicitly use regular search
             }
-            
+
             if limit is not None:
                 payload["limit"] = limit
             
@@ -164,6 +165,94 @@ class EmbeddingServiceClient:
                 
         except Exception as e:
             error_msg = f"Embedding search client error: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "error": error_msg,
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+
+    def search_documents_hybrid(
+        self,
+        query: str,
+        metadata_filters: Dict[str, Any] = None,
+        context_resources: List[str] = None,
+        file_types: List[str] = None,
+        folders: List[str] = None,
+        content_types: List[str] = None,
+        limit: Optional[int] = None,
+        min_similarity: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """
+        Hybrid search combining metadata filtering and semantic similarity
+
+        Args:
+            query: Search query text
+            metadata_filters: Custom exact match filters
+            context_resources: List of resource IDs to include
+            file_types: File extensions to include ['.py', '.js']
+            folders: Folder paths to include
+            content_types: Content types to include ['code', 'documentation']
+            limit: Maximum number of results to return
+            min_similarity: Minimum similarity threshold
+
+        Returns:
+            Dict containing search results or error
+        """
+        try:
+            payload = {
+                "query": query,
+                "use_hybrid": True  # Enable hybrid search
+            }
+
+            # Add optional parameters
+            if metadata_filters:
+                payload["metadata_filters"] = metadata_filters
+            if context_resources:
+                payload["context_resources"] = context_resources
+            if file_types:
+                payload["file_types"] = file_types
+            if folders:
+                payload["folders"] = folders
+            if content_types:
+                payload["content_types"] = content_types
+            if limit is not None:
+                payload["limit"] = limit
+            if min_similarity is not None:
+                payload["min_similarity"] = min_similarity
+
+            self.logger.info(f"Hybrid search via embedding service: {query[:50]}...")
+
+            response = requests.post(
+                f"{self.base_url}/embed/search",
+                json=payload,
+                timeout=self.timeout,
+                headers={'Content-Type': 'application/json'}
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                total_results = result.get('total_results', 0)
+                search_type = result.get('search_type', 'hybrid')
+                self.logger.info(f"Hybrid search completed: {total_results} results, type={search_type}")
+                return result
+            else:
+                error_msg = f"Hybrid search error: {response.status_code}"
+                self.logger.error(error_msg)
+                try:
+                    error_data = response.json()
+                    error_msg = error_data.get("error", error_msg)
+                except:
+                    pass
+
+                return {
+                    "status": "error",
+                    "error": error_msg,
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+
+        except Exception as e:
+            error_msg = f"Hybrid search client error: {str(e)}"
             self.logger.error(error_msg)
             return {
                 "status": "error",

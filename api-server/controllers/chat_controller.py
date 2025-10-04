@@ -103,13 +103,72 @@ class ChatController:
                                 temperature=0.7
                             )
                     else:
-                        # Use regular RAG-enabled generation
-                        llm_result = llm_client.generate_with_rag(
-                            query=message.strip(),
-                            max_tokens=150,
-                            temperature=0.7
-                        )
+                        # Use context-aware RAG if available, otherwise regular RAG
+                        try:
+                            # 🐛 DEBUG: Log RAG decision making process
+                            current_app.logger.debug(f"🤔 DEBUG - RAG Decision Process:")
+                            current_app.logger.debug(f"  📝 Message: '{message.strip()}'")
+                            current_app.logger.debug(f"  🎯 Customer ID: default")
+                            current_app.logger.debug(f"  🔢 Max Chunks: 5")
+                            current_app.logger.debug(f"  🚀 Attempting context-aware RAG first...")
+
+                            context_result = cls.build_context_aware_rag(
+                                query=message.strip(),
+                                customer_id="default",  # TODO: Get from session
+                                max_chunks=5
+                            )
+
+                            if context_result.get('status') == 'success' and context_result.get('context'):
+                                # 🐛 DEBUG: Log successful context-aware RAG
+                                current_app.logger.debug(f"✅ DEBUG - Context-Aware RAG Success:")
+                                current_app.logger.debug(f"  📊 Total Chunks: {context_result.get('total_chunks', 0)}")
+                                current_app.logger.debug(f"  📏 Context Length: {context_result.get('context_length', 0)} chars")
+                                current_app.logger.debug(f"  📂 Resources Used: {context_result.get('context_resources', [])}")
+
+                                current_app.logger.info(f"🎯 Using context-aware RAG with {context_result.get('total_chunks', 0)} chunks")
+                                # Use context-aware RAG
+                                llm_result = llm_client.generate_with_context(
+                                    query=message.strip(),
+                                    context=context_result['context'],
+                                    max_tokens=150,
+                                    temperature=0.7
+                                )
+                            else:
+                                # 🐛 DEBUG: Log fallback to global RAG
+                                current_app.logger.debug(f"⚠️ DEBUG - Falling back to Global RAG:")
+                                current_app.logger.debug(f"  🚫 Context-aware RAG status: {context_result.get('status', 'unknown')}")
+                                current_app.logger.debug(f"  📝 Context available: {bool(context_result.get('context'))}")
+
+                                current_app.logger.info("🌐 Falling back to global RAG")
+                                # Fallback to regular RAG
+                                llm_result = llm_client.generate_with_rag(
+                                    query=message.strip(),
+                                    max_tokens=150,
+                                    temperature=0.7
+                                )
+                        except Exception as e:
+                            # 🐛 DEBUG: Log exception details
+                            current_app.logger.debug(f"💥 DEBUG - Context-Aware RAG Exception:")
+                            current_app.logger.debug(f"  🚫 Exception Type: {type(e).__name__}")
+                            current_app.logger.debug(f"  📝 Exception Message: {str(e)}")
+                            current_app.logger.debug(f"  🔄 Falling back to global RAG...")
+
+                            current_app.logger.warning(f"Context-aware RAG failed: {str(e)}, using regular RAG")
+                            # Fallback to regular RAG
+                            llm_result = llm_client.generate_with_rag(
+                                query=message.strip(),
+                                max_tokens=150,
+                                temperature=0.7
+                            )
                 else:
+                    # 🐛 DEBUG: Log regular chat (non-RAG) usage
+                    current_app.logger.debug(f"💬 DEBUG - Using Regular Chat (Non-RAG):")
+                    current_app.logger.debug(f"  📝 Message: '{message.strip()}'")
+                    current_app.logger.debug(f"  🆔 Conversation ID: {conversation_id}")
+                    current_app.logger.debug(f"  🎛️ Use RAG: {use_rag}")
+                    current_app.logger.debug(f"  🌡️ Temperature: 0.7")
+                    current_app.logger.debug(f"  🔢 Max Tokens: 150")
+
                     # Use regular chat
                     llm_result = llm_client.chat_with_llm(
                         message=message.strip(),
@@ -277,6 +336,13 @@ class ChatController:
         try:
             current_app.logger.info(f"🧠 Building RAG context: {query[:50]}...")
 
+            # 🐛 DEBUG: Log global RAG context building details
+            current_app.logger.debug(f"🌐 DEBUG - Building Global RAG Context:")
+            current_app.logger.debug(f"  📝 Query: '{query}'")
+            current_app.logger.debug(f"  🔢 Max Chunks: {max_chunks}")
+            current_app.logger.debug(f"  📄 Document IDs: {document_ids}")
+            current_app.logger.debug(f"  🎯 Context Type: {'Specific Documents' if document_ids else 'Global Search'}")
+
             # Build context using retriever service
             if document_ids:
                 # Use specific documents for context building
@@ -324,10 +390,142 @@ class ChatController:
             }
 
     @staticmethod
+    def build_context_aware_rag(
+        query: str,
+        customer_id: str = "default",
+        max_chunks: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Build RAG context using hybrid filtering based on current context
+
+        Args:
+            query: User query for context building
+            customer_id: Customer identifier for context retrieval
+            max_chunks: Maximum number of chunks to include
+
+        Returns:
+            Dict[str, Any]: Context-aware RAG context data
+        """
+        try:
+            current_app.logger.info(f"🧠 Building context-aware RAG: {query[:50]}...")
+
+            # Import here to avoid circular imports
+            from controllers.customer_context_controller import CustomerContextController
+
+            # 1. Get current context resources
+            context_result = CustomerContextController.get_all_context_resources(customer_id)
+
+            if context_result["status"] != "success" or context_result["total_count"] == 0:
+                current_app.logger.info("No context resources found, falling back to global RAG")
+                return ChatController.build_rag_context(query, max_chunks)
+
+            # 2. Extract resource names by type and build context filters
+            repository_names = []
+            remote_host_names = []
+            document_names = []
+            file_types = []
+            content_types = []
+
+            resources = context_result["resources"]
+
+            # Extract repository resource names and infer file types
+            for repo in resources.get("repositories", []):
+                repository_names.append(repo["name"])
+
+                # Infer preferred file types from repository language
+                language = repo.get("language", "").lower()
+                if language == "python":
+                    file_types.extend([".py", ".pyx", ".pyi"])
+                    content_types.append("code")
+                elif language == "javascript":
+                    file_types.extend([".js", ".jsx", ".ts", ".tsx"])
+                    content_types.append("code")
+                elif language == "java":
+                    file_types.extend([".java", ".jsp"])
+                    content_types.append("code")
+
+            # Extract remote host resource names
+            for host in resources.get("remote_hosts", []):
+                remote_host_names.append(host["name"])
+
+            # Extract document resource names
+            for doc in resources.get("documents", []):
+                document_names.append(doc["name"])
+                content_types.append("documentation")
+
+            # Remove duplicates
+            file_types = list(set(file_types))
+            content_types = list(set(content_types))
+
+            # Calculate total resources
+            total_resources = len(repository_names) + len(remote_host_names) + len(document_names)
+
+            current_app.logger.info(f"Context filters: resources={total_resources}, "
+                                  f"file_types={file_types}, content_types={content_types}")
+
+            # 🐛 DEBUG: Log detailed context information being sent to retriever service
+            current_app.logger.debug(f"🔍 DEBUG - Sending to Retriever Service:")
+            current_app.logger.debug(f"  📝 Query: '{query}'")
+            current_app.logger.debug(f"  📂 Repository Names ({len(repository_names)}): {repository_names}")
+            current_app.logger.debug(f"  🌐 Remote Host Names ({len(remote_host_names)}): {remote_host_names}")
+            current_app.logger.debug(f"  📄 Document Names ({len(document_names)}): {document_names}")
+            current_app.logger.debug(f"  📁 File Types: {file_types}")
+            current_app.logger.debug(f"  🏷️  Content Types: {content_types}")
+            current_app.logger.debug(f"  🔢 Max Chunks: {max_chunks}")
+            current_app.logger.debug(f"  🎯 Customer ID: {customer_id}")
+
+            # 3. Use context-aware RAG from retriever service
+            context_result = retriever_client.build_context_aware_rag(
+                query=query,
+                repository_names=repository_names if repository_names else None,
+                remote_host_names=remote_host_names if remote_host_names else None,
+                document_names=document_names if document_names else None,
+                file_types=file_types if file_types else None,
+                content_types=content_types if content_types else None,
+                max_chunks=max_chunks
+            )
+
+            if context_result.get("status") == "success":
+                context_data = context_result.get("data", {})
+
+                # 🐛 DEBUG: Log detailed response from retriever service
+                current_app.logger.debug(f"✅ DEBUG - Received from Retriever Service:")
+                current_app.logger.debug(f"  📊 Total Chunks: {context_data.get('total_chunks', 0)}")
+                current_app.logger.debug(f"  📏 Context Length: {context_data.get('context_length', 0)} chars")
+                current_app.logger.debug(f"  🔍 Search Type: {context_data.get('search_type', 'unknown')}")
+                current_app.logger.debug(f"  📝 Context Preview: '{context_data.get('context', '')[:200]}...'")
+
+                current_app.logger.info(f"Context-aware RAG: {context_data.get('total_chunks', 0)} chunks")
+                return {
+                    "status": "success",
+                    "context": context_data.get('context', ''),
+                    "chunks": context_data.get('chunks', []),
+                    "context_length": context_data.get('context_length', 0),
+                    "total_chunks": context_data.get('total_chunks', 0),
+                    "search_type": "context_aware_hybrid",
+                    "context_resources": context_resources,
+                    "timestamp": int(time.time() * 1000)
+                }
+            else:
+                # 🐛 DEBUG: Log retriever service failure details
+                current_app.logger.debug(f"❌ DEBUG - Retriever Service Failed:")
+                current_app.logger.debug(f"  🚫 Error: {context_result.get('error', 'Unknown error')}")
+                current_app.logger.debug(f"  📋 Full Response: {context_result}")
+
+                current_app.logger.warning(f"Context-aware RAG failed: {context_result.get('error')}")
+                # Fall back to global RAG
+                return ChatController.build_rag_context(query, max_chunks)
+
+        except Exception as e:
+            current_app.logger.error(f"❌ Context-aware RAG failed: {str(e)}")
+            # Fall back to global RAG
+            return ChatController.build_rag_context(query, max_chunks)
+
+    @staticmethod
     def get_chat_stats() -> Dict[str, Any]:
         """
         Get chat statistics (placeholder for future implementation)
-        
+
         Returns:
             Dict[str, Any]: Chat statistics
         """

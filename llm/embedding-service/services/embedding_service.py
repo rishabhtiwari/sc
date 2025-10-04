@@ -285,17 +285,23 @@ class EmbeddingService:
                 if len(chunk_text.strip()) < Config.MIN_CHUNK_SIZE:
                     break
 
-                # Create chunk metadata
+                # Create enhanced chunk metadata for hybrid filtering
+                file_extension = os.path.splitext(filename)[1].lower() if filename else ""
+                folder_path = os.path.dirname(filename) if filename else ""
+
                 chunk_data = {
                     "id": f"{document_id}_chunk_{chunk_index}",
                     "text": chunk_text.strip(),
                     "metadata": {
                         "document_id": document_id,
                         "filename": filename,
+                        "file_extension": file_extension,
+                        "folder_path": folder_path,
                         "chunk_index": chunk_index,
                         "chunk_size": len(chunk_text),
                         "start_position": start,
                         "end_position": end,
+                        "content_type": self._detect_content_type(chunk_text, file_extension),
                         "created_at": int(time.time() * 1000)
                     }
                 }
@@ -388,6 +394,232 @@ class EmbeddingService:
             self.logger.error(f"Error searching vector DB: {str(e)}")
             raise e
 
+    def search_documents_hybrid(
+        self,
+        query: str,
+        metadata_filters: Dict[str, Any] = None,
+        repository_names: List[str] = None,
+        remote_host_names: List[str] = None,
+        document_names: List[str] = None,
+        file_types: List[str] = None,
+        folders: List[str] = None,
+        content_types: List[str] = None,
+        limit: int = None,
+        min_similarity: float = None
+    ) -> Dict[str, Any]:
+        """
+        Hybrid search: Exact metadata match + semantic similarity with separated resource types
+
+        Args:
+            query: Semantic search query
+            metadata_filters: Custom exact match filters
+            repository_names: List of repository names to include
+            remote_host_names: List of remote host names to include
+            document_names: List of document names to include
+            file_types: File extensions to include ['.py', '.js']
+            folders: Folder paths to include
+            content_types: Content types to include ['code', 'documentation']
+            limit: Maximum results
+            min_similarity: Minimum similarity threshold
+
+        Returns:
+            Dictionary containing filtered and ranked results
+        """
+        try:
+            # Build comprehensive metadata filter using ChromaDB's $and operator
+            filter_conditions = []
+
+            # 1. Context resource filtering - separated by resource type for precise filtering
+            resource_filters = []
+
+            # Repository filtering
+            if repository_names:
+                self.logger.debug(f"🏗️ Adding repository filters for: {repository_names}")
+                for repo_name in repository_names:
+                    resource_filters.append({"repository_name": repo_name})
+
+            # Remote host filtering
+            if remote_host_names:
+                self.logger.debug(f"🌐 Adding remote host filters for: {remote_host_names}")
+                for host_name in remote_host_names:
+                    resource_filters.append({"remote_host_name": host_name})
+
+            # Document filtering
+            if document_names:
+                self.logger.debug(f"📄 Adding document filters for: {document_names}")
+                for doc_name in document_names:
+                    resource_filters.append({"document_name": doc_name})
+                    resource_filters.append({"filename": doc_name})  # Also check filename field
+
+            # Combine all resource filters with OR (any resource match)
+            if resource_filters:
+                self.logger.debug(f"🔗 Combined resource filters: {len(resource_filters)} conditions")
+                filter_conditions.append({"$or": resource_filters})
+            else:
+                self.logger.debug("⚠️ No resource filters applied - will search all documents")
+
+            # 3. File type filtering - apply post-search for compatibility with existing data
+            # 4. Content type filtering - apply post-search for compatibility with existing data
+
+            # 5. Custom metadata filters (exact match)
+            if metadata_filters:
+                for key, value in metadata_filters.items():
+                    filter_conditions.append({key: value})
+
+            # Combine all conditions with $and
+            if len(filter_conditions) == 0:
+                where_clause = None
+            elif len(filter_conditions) == 1:
+                where_clause = filter_conditions[0]
+            else:
+                where_clause = {"$and": filter_conditions}
+
+            # Set defaults
+            if limit is None:
+                limit = Config.DEFAULT_SEARCH_LIMIT
+            if min_similarity is None:
+                min_similarity = Config.MIN_SIMILARITY_THRESHOLD
+
+            self.logger.info(f"Hybrid search: query='{query[:50]}...', filters={where_clause}")
+
+            # Prepare search parameters
+            search_params = {
+                "query": query,
+                "n_results": limit * 2,  # Get more results for better filtering
+                "where": where_clause if where_clause else None
+            }
+
+            # Execute search with metadata pre-filtering
+            search_result = self._search_vector_db(search_params)
+
+            if search_result.get("status") != "success":
+                return search_result
+
+            # Apply similarity threshold filtering
+            filtered_results = []
+            for result in search_result.get("results", []):
+                # Convert distance to similarity (distance is inverse of similarity)
+                distance = result.get("distance", 1.0)
+                similarity = 1.0 - distance  # Convert distance to similarity
+                result["similarity"] = similarity  # Add similarity field
+
+                if similarity >= min_similarity:
+                    # Add hybrid search metadata
+                    result["search_type"] = "hybrid"
+                    result["applied_filters"] = self._get_applied_filters(
+                        result.get("metadata", {}), where_clause
+                    )
+                    filtered_results.append(result)
+
+            # Sort by similarity (highest first) and limit results
+            filtered_results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+            filtered_results = filtered_results[:limit]
+
+            self.logger.info(f"Hybrid search found {len(filtered_results)} results above threshold")
+
+            return {
+                "status": "success",
+                "query": query,
+                "metadata_filters": where_clause,
+                "results": filtered_results,
+                "total_results": len(filtered_results),
+                "search_type": "hybrid",
+                "parameters": {
+                    "limit": limit,
+                    "min_similarity": min_similarity,
+                    "applied_filters": list(where_clause.keys()) if where_clause else []
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+
+        except Exception as e:
+            self.logger.error(f"Hybrid search failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": f"Hybrid search failed: {str(e)}",
+                "timestamp": int(time.time() * 1000)
+            }
+
+    def _detect_content_type(self, text: str, file_extension: str) -> str:
+        """
+        Detect content type based on text content and file extension
+
+        Args:
+            text: Text content to analyze
+            file_extension: File extension (e.g., '.py', '.md')
+
+        Returns:
+            Content type string
+        """
+        # Code file extensions
+        code_extensions = {
+            '.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.cpp', '.c', '.h',
+            '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt', '.scala',
+            '.r', '.m', '.sh', '.bat', '.ps1'
+        }
+
+        # Documentation file extensions
+        doc_extensions = {
+            '.md', '.rst', '.txt', '.doc', '.docx', '.pdf'
+        }
+
+        # Configuration file extensions
+        config_extensions = {
+            '.json', '.yaml', '.yml', '.xml', '.ini', '.conf', '.cfg',
+            '.env', '.properties', '.toml'
+        }
+
+        # Data file extensions
+        data_extensions = {
+            '.csv', '.tsv', '.xlsx', '.xls', '.sql', '.db', '.sqlite'
+        }
+
+        if file_extension in code_extensions:
+            return "code"
+        elif file_extension in doc_extensions:
+            return "documentation"
+        elif file_extension in config_extensions:
+            return "configuration"
+        elif file_extension in data_extensions:
+            return "data"
+        else:
+            # Analyze content for unknown extensions
+            text_lower = text.lower()
+            if any(keyword in text_lower for keyword in ['def ', 'function', 'class ', 'import ', 'from ']):
+                return "code"
+            elif any(keyword in text_lower for keyword in ['# ', '## ', '### ', 'readme', 'documentation']):
+                return "documentation"
+            elif any(keyword in text_lower for keyword in ['{', '}', ':', '=', 'config']):
+                return "configuration"
+            else:
+                return "text"
+
+    def _get_applied_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> List[str]:
+        """
+        Get list of filters that were applied to this result
+
+        Args:
+            metadata: Document metadata
+            filters: Applied filters (can be None)
+
+        Returns:
+            List of matched filter descriptions
+        """
+        matched = []
+
+        if filters is None:
+            return matched
+
+        for key, value in filters.items():
+            if key in metadata:
+                if isinstance(value, dict) and "$in" in value:
+                    if metadata[key] in value["$in"]:
+                        matched.append(f"{key}={metadata[key]}")
+                elif metadata[key] == value:
+                    matched.append(f"{key}={value}")
+
+        return matched
+
     def _delete_from_vector_db(self, ids: List[str]) -> Dict[str, Any]:
         """Delete documents from vector database"""
         try:
@@ -455,12 +687,25 @@ class EmbeddingService:
                     # Chunk the text content
                     chunks = self._chunk_text(content, document_id, filename)
 
-                    # Add metadata to each chunk
+                    # Add enhanced metadata to each chunk for hybrid filtering
+                    file_extension = os.path.splitext(filename)[1].lower() if filename else ""
+                    folder_path = os.path.dirname(filename) if filename else ""
+
                     for chunk in chunks:
+                        # Update with original metadata
                         chunk['metadata'].update(metadata)
+
+                        # Add enhanced metadata for hybrid filtering
                         chunk['metadata']['document_id'] = document_id
                         chunk['metadata']['filename'] = filename
+                        chunk['metadata']['file_extension'] = file_extension
+                        chunk['metadata']['folder_path'] = folder_path
+                        chunk['metadata']['content_type'] = self._detect_content_type(chunk['text'], file_extension)
                         chunk['metadata']['source'] = 'bulk_processing'
+
+                        # Add resource_id if provided in metadata
+                        if 'resource_id' in metadata:
+                            chunk['metadata']['resource_id'] = metadata['resource_id']
 
                     # Store chunks in vector database
                     if chunks:

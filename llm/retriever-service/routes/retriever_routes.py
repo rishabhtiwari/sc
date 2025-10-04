@@ -15,7 +15,7 @@ health_controller = HealthController()
 # Retriever endpoints
 @retriever_bp.route('/retrieve/search', methods=['POST'])
 def search_documents():
-    """Search for documents using semantic search"""
+    """Unified search endpoint supporting both hybrid and regular search"""
     response, status_code = retriever_controller.search_documents()
     return response, status_code
 
@@ -30,6 +30,14 @@ def build_rag_context():
     """Build RAG context for a query"""
     response, status_code = retriever_controller.build_rag_context()
     return response, status_code
+
+@retriever_bp.route('/retrieve/rag/context-aware', methods=['POST'])
+def build_context_aware_rag():
+    """Build context-aware RAG using hybrid filtering"""
+    response, status_code = retriever_controller.build_context_aware_rag()
+    return response, status_code
+
+
 
 # Health endpoints
 @retriever_bp.route('/health', methods=['GET'])

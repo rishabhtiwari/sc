@@ -34,6 +34,7 @@ class StreamingService:
             complete_output = ""
             history_tokens = Config.SLIDING_WINDOW_TOKENS
             max_loops = Config.MAX_CONTINUATION_LOOPS
+            cumulative_token_count = 0  # Track total tokens across all passes
 
             # Start with first prompt
             current_prompt = self._build_initial_prompt(query, context)
@@ -98,10 +99,11 @@ class StreamingService:
                         if isinstance(chunk, dict) and 'finish_reason' in chunk:
                             finish_reason = chunk.get('finish_reason')
 
-                        total_tokens_so_far = len(complete_output.split()) + len(current_chunk.split())
+                        # Update cumulative token count
+                        cumulative_token_count += token_count
                         self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
                         self.logger.info(f"Producer: Finish reason: {finish_reason}")
-                        self.logger.info(f"Producer: Total tokens so far: {total_tokens_so_far}")
+                        self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
 
                         # NEW LOGIC: Check finish_reason for continuation decision
                         if finish_reason == 'length':
@@ -111,12 +113,11 @@ class StreamingService:
                             break
                         elif finish_reason in ['stop', 'eos_token'] or finish_reason is None:
                             # Natural completion - STOP
-                            total_tokens_final = total_tokens_so_far
                             self.logger.info(
                                 f"Producer: finish_reason='{finish_reason}' - NATURAL COMPLETION - STOPPING")
-                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {total_tokens_final}")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
                             self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
-                                                   "total_tokens": total_tokens_final})
+                                                   "total_tokens": cumulative_token_count})
                             return
                         else:
                             # Unknown finish_reason - log and stop to be safe
@@ -132,16 +133,16 @@ class StreamingService:
 
                 # If we hit limit, prepare next pass
                 if hit_limit:
-                    total_tokens_so_far = len(complete_output.split())
+                    cumulative_token_count += token_count  # Add current pass tokens to cumulative count
                     self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
-                    self.logger.info(f"Producer: Total tokens accumulated: {total_tokens_so_far}")
+                    self.logger.info(f"Producer: Total tokens accumulated: {cumulative_token_count}")
 
                     # Signal end of current pass to consumer
                     self.token_buffer.put({
                         "status": "pass_complete",
                         "pass": loop_idx + 1,
                         "tokens_in_pass": token_count,
-                        "total_tokens_so_far": total_tokens_so_far
+                        "total_tokens_so_far": cumulative_token_count
                     })
 
                     # Small delay to let consumer process the pass completion
@@ -168,12 +169,12 @@ class StreamingService:
                     continue
                 else:
                     # Natural completion - should not reach here as model handles completion in streaming loop
-                    final_total_tokens = len(complete_output.split())
+                    cumulative_token_count += token_count  # Add final pass tokens
                     self.logger.info(f"Producer: Generation complete after {loop_idx + 1} passes")
-                    self.logger.info(f"Producer: FINAL TOTAL TOKENS: {final_total_tokens}")
+                    self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
                     self.logger.info(f"Producer finished: hit_limit={hit_limit}, loop_idx={loop_idx}")
                     self.token_buffer.put(
-                        {"status": "complete", "total_passes": loop_idx + 1, "total_tokens": final_total_tokens})
+                        {"status": "complete", "total_passes": loop_idx + 1, "total_tokens": cumulative_token_count})
                     return
 
         except Exception as e:

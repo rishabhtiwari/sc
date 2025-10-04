@@ -335,6 +335,143 @@ class RetrieverServiceClient:
                 }
 
         except Exception as e:
+            error_msg = f"Error building RAG context from documents: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "error": error_msg,
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+
+    def build_context_aware_rag(
+        self,
+        query: str,
+        repository_names: List[str] = None,
+        remote_host_names: List[str] = None,
+        document_names: List[str] = None,
+        file_types: List[str] = None,
+        content_types: List[str] = None,
+        max_chunks: int = 5
+    ) -> Dict[str, Any]:
+        """
+        Build context-aware RAG using hybrid filtering with separated resource types
+
+        Args:
+            query: Search query
+            repository_names: List of repository names to search within
+            remote_host_names: List of remote host names to search within
+            document_names: List of document names to search within
+            file_types: File extensions to prioritize
+            content_types: Content types to prioritize
+            max_chunks: Maximum number of chunks to retrieve
+
+        Returns:
+            Dict containing RAG context or error
+        """
+        try:
+            payload = {
+                "query": query,
+                "max_chunks": max_chunks
+            }
+
+            # Add context filtering parameters by resource type
+            if repository_names:
+                payload["repository_names"] = repository_names
+            if remote_host_names:
+                payload["remote_host_names"] = remote_host_names
+            if document_names:
+                payload["document_names"] = document_names
+            if file_types:
+                payload["file_types"] = file_types
+            if content_types:
+                payload["content_types"] = content_types
+
+            # Calculate total resources for logging
+            total_resources = (len(repository_names) if repository_names else 0) + \
+                            (len(remote_host_names) if remote_host_names else 0) + \
+                            (len(document_names) if document_names else 0)
+
+            # 🐛 DEBUG: Log detailed payload being sent to retriever service
+            self.logger.debug(f"🚀 DEBUG - Retriever Service Client Payload:")
+            self.logger.debug(f"  🌐 URL: {self.base_url}/retrieve/rag/context-aware")
+            self.logger.debug(f"  📝 Query: '{query}'")
+            self.logger.debug(f"  📂 Repository Names ({len(repository_names) if repository_names else 0}): {repository_names}")
+            self.logger.debug(f"  🌐 Remote Host Names ({len(remote_host_names) if remote_host_names else 0}): {remote_host_names}")
+            self.logger.debug(f"  📄 Document Names ({len(document_names) if document_names else 0}): {document_names}")
+            self.logger.debug(f"  📁 File Types: {file_types}")
+            self.logger.debug(f"  🏷️  Content Types: {content_types}")
+            self.logger.debug(f"  🔢 Max Chunks: {max_chunks}")
+            self.logger.debug(f"  📦 Full Payload: {payload}")
+
+            # 🐛 DEBUG: Log the complete JSON payload that will be sent
+            import json
+            self.logger.debug(f"🌐 DEBUG - Complete HTTP Request:")
+            self.logger.debug(f"  📡 Method: POST")
+            self.logger.debug(f"  🔗 URL: {self.base_url}/retrieve/rag/context-aware")
+            self.logger.debug(f"  📋 Headers: {{'Content-Type': 'application/json'}}")
+            self.logger.debug(f"  📦 JSON Body:")
+            self.logger.debug(json.dumps(payload, indent=4))
+
+            self.logger.info(f"Building context-aware RAG from {total_resources} resources")
+
+            response = requests.post(
+                f"{self.base_url}/retrieve/rag/context-aware",
+                json=payload,
+                timeout=self.timeout,
+                headers={'Content-Type': 'application/json'}
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                context_length = result.get('context_length', 0)
+                total_chunks = result.get('total_chunks', 0)
+
+                # 🐛 DEBUG: Log detailed response from retriever service
+                self.logger.debug(f"✅ DEBUG - Retriever Service Response:")
+                self.logger.debug(f"  🌐 Status Code: {response.status_code}")
+                self.logger.debug(f"  📊 Total Chunks: {total_chunks}")
+                self.logger.debug(f"  📏 Context Length: {context_length} chars")
+                self.logger.debug(f"  🔍 Search Type: {result.get('search_type', 'unknown')}")
+                self.logger.debug(f"  📝 Context Preview: '{result.get('context', '')[:200]}...'")
+                self.logger.debug(f"  📋 Full Response Keys: {list(result.keys())}")
+
+                self.logger.info(f"Built context-aware RAG: {context_length} chars, {total_chunks} chunks")
+                return {
+                    "status": "success",
+                    "data": result,
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+            else:
+                # 🐛 DEBUG: Log detailed error response from retriever service
+                self.logger.debug(f"❌ DEBUG - Retriever Service Error:")
+                self.logger.debug(f"  🌐 Status Code: {response.status_code}")
+                self.logger.debug(f"  📝 Response Text: {response.text}")
+                self.logger.debug(f"  📦 Request Payload: {payload}")
+
+                error_msg = f"Context-aware RAG error: {response.status_code} - {response.text}"
+                self.logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "error": error_msg,
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+
+        except Exception as e:
+            # 🐛 DEBUG: Log detailed exception information
+            self.logger.debug(f"💥 DEBUG - Client Exception:")
+            self.logger.debug(f"  🚫 Exception Type: {type(e).__name__}")
+            self.logger.debug(f"  📝 Exception Message: {str(e)}")
+            self.logger.debug(f"  📦 Request Payload: {payload}")
+
+            error_msg = f"Context-aware RAG client error: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "error": error_msg,
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+
+        except Exception as e:
             error_msg = f"Context building client error: {str(e)}"
             self.logger.error(error_msg)
             return {

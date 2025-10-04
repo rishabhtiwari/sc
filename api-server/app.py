@@ -5,6 +5,8 @@ iChat API Server - Main Application Entry Point
 
 import time
 import random
+import logging
+import sys
 
 from flask import Flask
 from flask_cors import CORS
@@ -25,9 +27,28 @@ def create_app():
     Application factory pattern - creates and configures Flask app
     """
     app = Flask(__name__)
-    
+
     # Load configuration
     app.config.from_object(AppConfig)
+
+    # Configure logging
+    log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO').upper())
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('logs/api-server.log', mode='a')
+        ]
+    )
+
+    # Set Flask app logger level
+    app.logger.setLevel(log_level)
+
+    # Enable debug logging for our modules
+    logging.getLogger('api-server').setLevel(log_level)
+
+    app.logger.info(f"🔧 Logging configured at {app.config.get('LOG_LEVEL', 'INFO')} level")
     
     # Enable CORS for cross-origin requests with comprehensive localhost configuration
     CORS(app,

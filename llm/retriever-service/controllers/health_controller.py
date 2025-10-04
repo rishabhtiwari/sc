@@ -62,6 +62,7 @@ class HealthController:
                     "default_search_limit": Config.DEFAULT_SEARCH_LIMIT,
                     "max_search_limit": Config.MAX_SEARCH_LIMIT,
                     "min_similarity_threshold": Config.MIN_SIMILARITY_THRESHOLD,
+                    "default_use_hybrid": Config.DEFAULT_USE_HYBRID,
                     "context_window_size": Config.CONTEXT_WINDOW_SIZE,
                     "max_context_chunks": Config.MAX_CONTEXT_CHUNKS
                 },
