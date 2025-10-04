@@ -430,6 +430,63 @@ class ApiService {
   async getConnectionJobs(connectionId, limit = 10) {
     return this.request(`/syncer/jobs/connection/${connectionId}?limit=${limit}`);
   }
+
+  // GitHub Repository Syncer API methods
+  async getGitHubRepositories() {
+    return this.request('/github-syncer/repositories');
+  }
+
+  async triggerGitHubSyncAll() {
+    return this.request('/github-syncer/sync', {
+      method: 'POST',
+    });
+  }
+
+  async triggerGitHubRepositorySync(repositoryId) {
+    // Use query parameter approach to handle repository IDs with forward slashes
+    const encodedRepositoryId = encodeURIComponent(repositoryId);
+    return this.request(`/github-syncer/sync/repository?repository_id=${encodedRepositoryId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getGitHubSyncStatus() {
+    return this.request('/github-syncer/status');
+  }
+
+  async getGitHubActiveJobs() {
+    return this.request('/github-syncer/jobs/active');
+  }
+
+  async getGitHubJobStatus(jobId) {
+    return this.request(`/github-syncer/job/${jobId}`);
+  }
+
+  async cancelGitHubJob(jobId) {
+    return this.request(`/github-syncer/job/${jobId}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  async getGitHubRepositoryJobs(repositoryId, limit = 10) {
+    return this.request(`/github-syncer/jobs/repository/${repositoryId}?limit=${limit}`);
+  }
+
+  async getGitHubSyncHistory(params = {}) {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.days) queryParams.append('days', params.days);
+    if (params.repository_id) queryParams.append('repository_id', params.repository_id);
+
+    const queryString = queryParams.toString();
+    return this.request(`/github-syncer/history${queryString ? '?' + queryString : ''}`);
+  }
+
+  async emergencyCleanupGitHubJobs() {
+    return this.request('/github-syncer/cleanup-jobs', {
+      method: 'POST',
+    });
+  }
 }
 
 export default new ApiService();

@@ -210,6 +210,7 @@ class GitHubMCPService:
                 "status": "success",
                 "repositories": [
                     {
+                        "id": repo["id"],
                         "name": repo["name"],
                         "full_name": repo["full_name"],
                         "description": repo.get("description", ""),

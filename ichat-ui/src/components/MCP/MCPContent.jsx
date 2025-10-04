@@ -39,6 +39,8 @@ const MCPContent = () => {
   const [syncStatus, setSyncStatus] = useState({});
   const [syncHistory, setSyncHistory] = useState([]);
   const [activeJobs, setActiveJobs] = useState({});
+  const [githubSyncStatus, setGithubSyncStatus] = useState({});
+  const [githubActiveJobs, setGithubActiveJobs] = useState({});
 
   useEffect(() => {
     console.log('MCPContent mounted, loading providers...');
@@ -46,10 +48,12 @@ const MCPContent = () => {
     loadConnections();
     loadSyncHistory();
     loadActiveJobs();
+    loadGithubActiveJobs();
 
     // Set up periodic polling for active jobs (every 30 seconds)
     const activeJobsInterval = setInterval(() => {
       loadActiveJobs();
+      loadGithubActiveJobs();
     }, 30000);
 
     return () => {
@@ -514,6 +518,153 @@ const MCPContent = () => {
     }, 300000);
   };
 
+  const handleSyncGithubRepository = async (repositoryId, displayName = null) => {
+    try {
+      console.log(`🔄 Starting sync for GitHub repository: ${repositoryId} (${displayName || repositoryId})`);
+
+      // Use display name for sync status tracking, fall back to repository ID
+      const statusKey = displayName || repositoryId;
+
+      // Set sync status to loading
+      setGithubSyncStatus(prev => ({
+        ...prev,
+        [statusKey]: { status: 'syncing', message: 'Starting sync...', progress: 0 }
+      }));
+
+      // Trigger sync using the repository ID directly (API service handles encoding)
+      const response = await apiService.triggerGitHubRepositorySync(repositoryId);
+
+      if (response.status === 'success' && response.job_id) {
+        // Update sync status with immediate job information from response
+        const job = response.job || {};
+        const message = job.status === 'pending'
+          ? 'Preparing sync...'
+          : job.status === 'running'
+          ? `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`
+          : 'Starting sync...';
+
+        setGithubSyncStatus(prev => ({
+          ...prev,
+          [statusKey]: {
+            status: 'syncing',
+            message: message,
+            progress: job.progress || 0,
+            jobId: response.job_id
+          }
+        }));
+
+        // Start polling job status
+        pollGithubJobStatus(statusKey, response.job_id);
+      } else if (response.status === 'error' && response.error && response.error.includes('409')) {
+        // Handle concurrent sync error - extract job_id if available
+        const errorMatch = response.error.match(/job_id":"([^"]+)"/);
+        if (errorMatch) {
+          const existingJobId = errorMatch[1];
+          console.log(`🔄 GitHub sync already in progress, polling existing job: ${existingJobId}`);
+          pollGithubJobStatus(statusKey, existingJobId);
+        } else {
+          setGithubSyncStatus(prev => ({
+            ...prev,
+            [statusKey]: { status: 'error', message: 'Sync already in progress' }
+          }));
+        }
+      } else {
+        setGithubSyncStatus(prev => ({
+          ...prev,
+          [statusKey]: { status: 'error', message: response.message || response.error || 'Sync failed' }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to sync GitHub repository:', error);
+
+      // Handle 409 error (sync already in progress)
+      if (error.message && error.message.includes('409')) {
+        setGithubSyncStatus(prev => ({
+          ...prev,
+          [statusKey]: { status: 'error', message: 'Sync already in progress' }
+        }));
+      } else {
+        setGithubSyncStatus(prev => ({
+          ...prev,
+          [statusKey]: { status: 'error', message: error.message || 'Sync failed' }
+        }));
+      }
+    }
+  };
+
+  const pollGithubJobStatus = async (statusKey, jobId) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await apiService.getGitHubJobStatus(jobId);
+
+        if (response.status === 'success' && response.job) {
+          const job = response.job;
+
+          // Update sync status based on job status
+          if (job.status === 'pending') {
+            setGithubSyncStatus(prev => ({
+              ...prev,
+              [statusKey]: {
+                status: 'syncing',
+                message: 'Preparing sync...',
+                progress: 0,
+                jobId: jobId
+              }
+            }));
+          } else if (job.status === 'running') {
+            setGithubSyncStatus(prev => ({
+              ...prev,
+              [statusKey]: {
+                status: 'syncing',
+                message: `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`,
+                progress: job.progress || 0,
+                jobId: jobId
+              }
+            }));
+          } else if (job.status === 'completed') {
+            setGithubSyncStatus(prev => ({
+              ...prev,
+              [statusKey]: {
+                status: 'success',
+                message: `Sync completed: ${job.processed_files || 0} files processed`,
+                progress: 100,
+                jobId: jobId
+              }
+            }));
+
+            // Clear success status after 5 seconds
+            setTimeout(() => {
+              setGithubSyncStatus(prev => ({
+                ...prev,
+                [statusKey]: null
+              }));
+            }, 5000);
+
+            clearInterval(pollInterval);
+          } else if (job.status === 'failed') {
+            setGithubSyncStatus(prev => ({
+              ...prev,
+              [statusKey]: {
+                status: 'error',
+                message: job.error_message || 'Sync failed',
+                jobId: jobId
+              }
+            }));
+            clearInterval(pollInterval);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll GitHub job status:', error);
+        // Don't clear interval on polling errors, just log them
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Clear interval after 5 minutes to prevent infinite polling
+    setTimeout(() => {
+      clearInterval(pollInterval);
+    }, 300000);
+  };
+
   const loadSyncHistory = async () => {
     try {
       const response = await apiService.getSyncHistory({ limit: 10 });
@@ -574,6 +725,72 @@ const MCPContent = () => {
     }
   };
 
+  const loadGithubActiveJobs = async () => {
+    try {
+      const response = await apiService.getGitHubActiveJobs();
+
+      if (response.status === 'success' && response.jobs) {
+        // Get repository information to map IDs to display names
+        const repoResponse = await apiService.getGitHubRepositories();
+        const repositoryMap = {};
+
+        if (repoResponse.status === 'success' && repoResponse.repositories) {
+          repoResponse.repositories.forEach(repo => {
+            repositoryMap[repo.id] = repo.full_name || repo.name;
+          });
+        }
+
+        // Group active jobs by repository_id
+        const jobsByRepository = {};
+        const newGithubSyncStatus = {};
+
+        response.jobs.forEach(job => {
+          if (!jobsByRepository[job.repository_id]) {
+            jobsByRepository[job.repository_id] = [];
+          }
+          jobsByRepository[job.repository_id].push(job);
+
+          // Initialize sync status for active jobs to maintain UI consistency
+          if (job.status === 'running' || job.status === 'pending') {
+            // Use display_name from job metadata, or look up repository display name, or fall back to repository_id
+            const statusKey = job.display_name || repositoryMap[job.repository_id] || job.repository_id;
+
+            newGithubSyncStatus[statusKey] = {
+              status: 'syncing',
+              message: job.status === 'pending'
+                ? 'Preparing sync...'
+                : `Processing ${job.processed_files || 0}/${job.total_files || 0} files...`,
+              progress: job.progress || 0,
+              jobId: job.id
+            };
+          }
+        });
+
+        setGithubActiveJobs(jobsByRepository);
+
+        // Update sync status for repositories with active jobs
+        setGithubSyncStatus(prev => ({
+          ...prev,
+          ...newGithubSyncStatus
+        }));
+
+        // Start polling for any active jobs found on page load
+        Object.keys(newGithubSyncStatus).forEach(statusKey => {
+          const job = response.jobs.find(j => {
+            const jobKey = j.display_name || repositoryMap[j.repository_id] || j.repository_id;
+            return jobKey === statusKey && (j.status === 'running' || j.status === 'pending');
+          });
+          if (job) {
+            console.log(`🔄 Found active GitHub job on page load, starting polling for repository ${statusKey}, job ${job.id}`);
+            pollGithubJobStatus(statusKey, job.id);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load GitHub active jobs:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -616,13 +833,66 @@ const MCPContent = () => {
               <p className="text-sm text-gray-500">Connect to GitHub repositories</p>
             </div>
           </div>
-          <button
-            onClick={() => setSelectedProvider(githubProvider)}
-            className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 transition-colors flex items-center gap-2"
-          >
-            <i className="fas fa-plus"></i>
-            Add GitHub Account
-          </button>
+          <div className="flex items-center gap-2">
+            {githubConnections.length > 0 && (
+              <>
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await apiService.triggerGitHubSyncAll();
+                      if (response.status === 'success') {
+                        // Show immediate feedback with job information
+                        const job = response.job || {};
+                        const message = job.status === 'pending'
+                          ? 'GitHub sync started - preparing...'
+                          : job.status === 'running'
+                          ? `GitHub sync running: ${job.processed_files || 0}/${job.total_files || 0} files`
+                          : 'GitHub sync started successfully!';
+
+                        alert(`✅ ${message}`);
+                        await loadGithubActiveJobs();
+                      }
+                    } catch (error) {
+                      alert(`❌ Failed to start GitHub sync: ${error.message}`);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center gap-2"
+                  title="Sync all GitHub repositories"
+                >
+                  <i className="fas fa-sync-alt text-xs"></i>
+                  Sync All
+                </button>
+
+                <button
+                  onClick={async () => {
+                    if (window.confirm('⚠️ This will cancel all active GitHub sync jobs. Are you sure?')) {
+                      try {
+                        const response = await apiService.emergencyCleanupGitHubJobs();
+                        if (response.status === 'success') {
+                          alert(`✅ GitHub cleanup completed! ${response.stale_count || 0} jobs cancelled.`);
+                          await loadGithubActiveJobs();
+                        }
+                      } catch (error) {
+                        alert(`❌ Failed to cleanup GitHub jobs: ${error.message}`);
+                      }
+                    }
+                  }}
+                  className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center gap-2"
+                  title="Cancel all active GitHub sync jobs"
+                >
+                  <i className="fas fa-broom text-xs"></i>
+                  Cleanup Jobs
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => setSelectedProvider(githubProvider)}
+              className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 transition-colors flex items-center gap-2"
+            >
+              <i className="fas fa-plus"></i>
+              Add GitHub Account
+            </button>
+          </div>
         </div>
 
         {githubConnections.length === 0 ? (
@@ -669,15 +939,157 @@ const MCPContent = () => {
                 {connection.repositories && connection.repositories.length > 0 && (
                   <div className="border-t border-gray-100 pt-3">
                     <p className="text-sm font-medium text-gray-700 mb-2">Available Repositories:</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {connection.repositories.slice(0, 6).map((repo, index) => (
-                        <div key={index} className="text-sm text-gray-600 bg-gray-50 px-2 py-1 rounded">
-                          {repo.name || repo.full_name || 'Repository'}
-                        </div>
-                      ))}
-                      {connection.repositories.length > 6 && (
-                        <div className="text-sm text-gray-500 px-2 py-1">
-                          +{connection.repositories.length - 6} more...
+                    <div className="space-y-2">
+                      {connection.repositories.slice(0, 8).map((repo, index) => {
+                        const repoDisplayName = repo.full_name || repo.name; // Use display name for sync status matching
+                        const repoId = repo.id; // Keep internal ID for API calls
+                        return (
+                          <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <i className="fab fa-github text-gray-600"></i>
+                              <div>
+                                <span className="text-sm font-medium text-gray-800">
+                                  {repo.name || repo.full_name || 'Repository'}
+                                </span>
+                                {repo.private && (
+                                  <span className="ml-2 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-800 rounded">
+                                    Private
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {/* GitHub Sync Status */}
+                              {githubSyncStatus[repoDisplayName] && !githubActiveJobs[repoId]?.length && (
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  githubSyncStatus[repoDisplayName].status === 'success'
+                                    ? 'bg-green-100 text-green-800'
+                                    : githubSyncStatus[repoDisplayName].status === 'error'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {githubSyncStatus[repoDisplayName].status === 'success' ? 'Synced' :
+                                   githubSyncStatus[repoDisplayName].status === 'error' ? 'Sync Failed' : 'Ready'}
+                                </span>
+                              )}
+
+                              {/* GitHub Sync Button - only show when no active jobs and no syncing status */}
+                              {(!githubActiveJobs[repoId] || githubActiveJobs[repoId].length === 0) &&
+                               (!githubSyncStatus[repoDisplayName] || githubSyncStatus[repoDisplayName].status !== 'syncing') && (
+                                <button
+                                  onClick={() => handleSyncGithubRepository(repoId, repoDisplayName)}
+                                  className="px-2 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-xs"
+                                  title="Sync this repository"
+                                >
+                                  <i className="fas fa-sync-alt mr-1"></i>
+                                  Sync
+                                </button>
+                              )}
+
+                              {/* GitHub Syncing Status - show progress bar when syncing */}
+                              {githubSyncStatus[repoDisplayName] && githubSyncStatus[repoDisplayName].status === 'syncing' && (
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-3 py-2 shadow-sm min-w-[200px]">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-medium text-blue-800">Syncing...</span>
+                                      <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                        {githubSyncStatus[repoDisplayName].progress || 0}%
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                      <div
+                                        className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                                        style={{ width: `${githubSyncStatus[repoDisplayName].progress || 0}%` }}
+                                      ></div>
+                                    </div>
+                                    <div className="text-xs text-blue-600">
+                                      {githubSyncStatus[repoDisplayName].message || 'Processing...'}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Active GitHub Jobs */}
+                              {githubActiveJobs[repoId] && githubActiveJobs[repoId].length > 0 && (
+                                <div className="flex items-center gap-2">
+                                  {githubActiveJobs[repoId].map(job => (
+                                    <div key={job.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-3 py-2 shadow-sm min-w-[200px]">
+                                      <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <div className="relative">
+                                              <i className="fas fa-sync-alt fa-spin text-blue-600 text-sm"></i>
+                                              <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                                            </div>
+                                            <span className="font-semibold text-blue-800 text-sm">
+                                              {job.status === 'pending' ? 'Preparing...' : 'Syncing'}
+                                            </span>
+                                          </div>
+                                          <button
+                                            onClick={async () => {
+                                              if (window.confirm(`Cancel sync job for ${repo.name}?`)) {
+                                                try {
+                                                  const response = await apiService.cancelGitHubJob(job.id);
+                                                  if (response.status === 'success') {
+                                                    alert('✅ GitHub job cancelled successfully!');
+                                                    await loadGithubActiveJobs();
+                                                  }
+                                                } catch (error) {
+                                                  alert(`❌ Failed to cancel GitHub job: ${error.message}`);
+                                                }
+                                              }
+                                            }}
+                                            className="group px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-md hover:bg-red-50 hover:border-red-300 transition-all duration-200 text-xs font-medium shadow-sm"
+                                            title="Cancel sync job"
+                                          >
+                                            <i className="fas fa-times mr-1 group-hover:scale-110 transition-transform"></i>
+                                            Cancel
+                                          </button>
+                                        </div>
+
+                                        {/* Compact Progress Bar */}
+                                        <div className="space-y-1">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-xs font-medium text-gray-600">Progress</span>
+                                            <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                                              {job.progress || 0}%
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                                            <div
+                                              className="bg-gradient-to-r from-blue-500 to-indigo-600 h-1.5 rounded-full transition-all duration-500 ease-out"
+                                              style={{ width: `${job.progress || 0}%` }}
+                                            ></div>
+                                          </div>
+                                        </div>
+
+                                        {/* Files processed info */}
+                                        <div className="text-xs text-blue-600 flex justify-between">
+                                          <span>Files: {job.processed_files || 0}/{job.total_files || 0}</span>
+                                        </div>
+
+                                        {/* Status message */}
+                                        {job.message && (
+                                          <div className="mt-2 p-2 bg-white bg-opacity-60 rounded-md border border-blue-100">
+                                            <div className="text-xs text-gray-700 truncate" title={job.message}>
+                                              <i className="fas fa-info-circle text-blue-500 mr-1"></i>
+                                              {job.message}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {connection.repositories.length > 8 && (
+                        <div className="text-sm text-gray-500 px-3 py-2 text-center">
+                          +{connection.repositories.length - 8} more repositories...
                         </div>
                       )}
                     </div>

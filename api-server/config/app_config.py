@@ -44,6 +44,12 @@ class AppConfig:
     # Remote Host Syncer Service integration
     SYNCER_SERVICE_HOST = os.environ.get('SYNCER_SERVICE_HOST', 'job-remote-host-syncer')
     SYNCER_SERVICE_PORT = int(os.environ.get('SYNCER_SERVICE_PORT', 8091))
+    SYNCER_URL = f"http://{SYNCER_SERVICE_HOST}:{SYNCER_SERVICE_PORT}"
+
+    # GitHub Repository Syncer Service integration
+    GITHUB_SYNCER_SERVICE_HOST = os.environ.get('GITHUB_SYNCER_SERVICE_HOST', 'job-github-repo-syncer')
+    GITHUB_SYNCER_SERVICE_PORT = int(os.environ.get('GITHUB_SYNCER_SERVICE_PORT', 8092))
+    GITHUB_SYNCER_URL = f"http://{GITHUB_SYNCER_SERVICE_HOST}:{GITHUB_SYNCER_SERVICE_PORT}"
 
 
 class DevelopmentConfig(AppConfig):

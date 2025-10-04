@@ -250,9 +250,9 @@ class MCPHandler:
     def handle_list_tokens():
         """Handle GET /api/mcp/tokens"""
         try:
-            result = MCPHandler._make_mcp_request('GET', '/tokens')
+            result = MCPHandler._make_mcp_request('GET', '/github/tokens')
             return jsonify(result)
-            
+
         except Exception as e:
             logging.error(f"❌ List tokens failed: {str(e)}")
             return jsonify({
@@ -264,9 +264,9 @@ class MCPHandler:
     def handle_revoke_token(token_id: str):
         """Handle POST /api/mcp/token/<token_id>/revoke"""
         try:
-            result = MCPHandler._make_mcp_request('POST', f'/token/{token_id}/revoke')
+            result = MCPHandler._make_mcp_request('POST', f'/github/token/{token_id}/revoke')
             return jsonify(result)
-            
+
         except Exception as e:
             logging.error(f"❌ Revoke token failed: {str(e)}")
             return jsonify({
