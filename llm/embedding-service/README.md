@@ -14,7 +14,7 @@ The Embedding Service handles the complete document processing pipeline:
 
 ## Features
 
-- ✅ **Multi-format Support** - PDF, DOC, DOCX, TXT, images
+- ✅ **Multi-format Support** - Programming languages, PDF, DOC, DOCX, images, configuration files, and more
 - ✅ **OCR Integration** - Seamless text extraction via OCR service
 - ✅ **Smart Chunking** - Configurable chunk size with overlap
 - ✅ **Vector Storage** - Integration with Vector DB service
