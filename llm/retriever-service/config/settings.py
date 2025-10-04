@@ -36,13 +36,15 @@ class Config:
     VECTOR_DB_HEALTH_ENDPOINT = '/health'
 
     # Retrieval Configuration
-    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 10))
+    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 20))
     MAX_SEARCH_LIMIT = int(os.getenv('MAX_SEARCH_LIMIT', 20))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.7))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.4))
+    USE_HYBRID_SEARCH = os.getenv('USE_HYBRID_SEARCH', 'true').lower() == 'true'
+    DEFAULT_USE_HYBRID = os.getenv('DEFAULT_USE_HYBRID', 'true').lower() == 'true'
 
     # RAG Configuration
     CONTEXT_WINDOW_SIZE = int(os.getenv('CONTEXT_WINDOW_SIZE', 4000))
-    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 10))
+    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 20))
     CHUNK_OVERLAP_THRESHOLD = float(os.getenv('CHUNK_OVERLAP_THRESHOLD', 0.8))
 
     # Request Timeouts (seconds)
@@ -83,6 +85,8 @@ class Config:
             'default_search_limit': cls.DEFAULT_SEARCH_LIMIT,
             'max_search_limit': cls.MAX_SEARCH_LIMIT,
             'min_similarity_threshold': cls.MIN_SIMILARITY_THRESHOLD,
+            'use_hybrid_search': cls.USE_HYBRID_SEARCH,
+            'default_use_hybrid': cls.DEFAULT_USE_HYBRID,
             'context_window_size': cls.CONTEXT_WINDOW_SIZE,
             'max_context_chunks': cls.MAX_CONTEXT_CHUNKS,
             'log_level': cls.LOG_LEVEL

@@ -52,7 +52,12 @@ class Config:
     CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 1000))
     CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP', 200))
     MIN_CHUNK_SIZE = int(os.getenv('MIN_CHUNK_SIZE', 100))
-    MAX_CHUNKS_PER_DOCUMENT = int(os.getenv('MAX_CHUNKS_PER_DOCUMENT', 1000))
+    MAX_CHUNKS_PER_DOCUMENT = int(os.getenv('MAX_CHUNKS_PER_DOCUMENT', 20))
+
+    # Search Configuration
+    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 20))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.4))
+    DEFAULT_USE_HYBRID = os.getenv('DEFAULT_USE_HYBRID', 'true').lower() == 'true'
     
     # Processing Configuration
     REQUEST_TIMEOUT = int(os.getenv('REQUEST_TIMEOUT', 300))  # 5 minutes
@@ -97,6 +102,11 @@ class Config:
                 'chunk_overlap': cls.CHUNK_OVERLAP,
                 'min_chunk_size': cls.MIN_CHUNK_SIZE,
                 'max_chunks_per_document': cls.MAX_CHUNKS_PER_DOCUMENT
+            },
+            'search': {
+                'default_limit': cls.DEFAULT_SEARCH_LIMIT,
+                'min_similarity_threshold': cls.MIN_SIMILARITY_THRESHOLD,
+                'default_use_hybrid': cls.DEFAULT_USE_HYBRID
             },
             'timeouts': {
                 'request_timeout': cls.REQUEST_TIMEOUT,

@@ -26,7 +26,7 @@ class AppConfig:
     MAX_MESSAGE_LENGTH = int(os.environ.get('MAX_MESSAGE_LENGTH', 100000))  # Increased to 100k characters
     
     # Logging
-    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'DEBUG')  # Enable DEBUG logging by default
 
     # MCP Service integration
     MCP_SERVICE_HOST = os.environ.get('MCP_SERVICE_HOST', 'localhost')

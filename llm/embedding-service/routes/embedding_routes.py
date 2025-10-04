@@ -239,13 +239,22 @@ def process_documents_bulk():
 @embedding_bp.route('/search', methods=['POST'])
 def search_documents():
     """
-    Search across all documents or within specific documents
-    
+    Unified search endpoint supporting both regular and hybrid search
+
     Expected JSON payload:
-    - query: Search query text
-    - document_ids: Optional list of document IDs to search within
-    - limit: Optional result limit (default: 10)
-    
+    {
+        "query": "search query text",
+        "use_hybrid": true/false (optional, default: true),
+        "document_ids": ["doc1", "doc2"] (optional, for regular search),
+        "metadata_filters": {...} (optional, for hybrid search),
+        "context_resources": ["resource1", "resource2"] (optional, for hybrid search),
+        "file_types": [".java", ".py"] (optional, for hybrid search),
+        "folders": ["src/", "lib/"] (optional, for hybrid search),
+        "content_types": ["code", "documentation"] (optional, for hybrid search),
+        "limit": 20 (optional, default from config),
+        "min_similarity": 0.4 (optional, default from config, for hybrid search)
+    }
+
     Returns:
         Relevant text chunks with similarity scores
     """
@@ -257,7 +266,7 @@ def search_documents():
                 "error": "Embedding service not available",
                 "timestamp": int(time.time() * 1000)
             }), 503
-        
+
         # Parse request data
         data = request.get_json()
         if not data:
@@ -266,7 +275,7 @@ def search_documents():
                 "error": "JSON payload required",
                 "timestamp": int(time.time() * 1000)
             }), 400
-        
+
         query = data.get('query', '')
         if not query:
             return jsonify({
@@ -274,36 +283,95 @@ def search_documents():
                 "error": "Query text is required",
                 "timestamp": int(time.time() * 1000)
             }), 400
-        
-        document_ids = data.get('document_ids', [])
-        limit = data.get('limit', 10)
-        
-        # Prepare search parameters
-        search_params = {
-            "query": query,
-            "limit": limit
-        }
-        
-        # Add document filter if specified
-        if document_ids:
-            search_params["filter"] = {"document_id": {"$in": document_ids}}
-        
-        logger.info(f"Searching documents with query: {query[:50]}...")
-        result = embedding_service._search_vector_db(search_params)
-        
+
+        # Check if hybrid search should be used (default from config)
+        use_hybrid = data.get('use_hybrid', Config.DEFAULT_USE_HYBRID)
+        limit = data.get('limit', Config.DEFAULT_SEARCH_LIMIT)
+
+        if use_hybrid:
+            # Hybrid search path
+            logger.info(f"Hybrid search: query='{query[:50]}...'")
+
+            # Extract hybrid search parameters - separated by resource type
+            metadata_filters = data.get('metadata_filters', {})
+            repository_names = data.get('repository_names', [])
+            remote_host_names = data.get('remote_host_names', [])
+            document_names = data.get('document_names', [])
+            file_types = data.get('file_types', [])
+            folders = data.get('folders', [])
+            content_types = data.get('content_types', [])
+            min_similarity = data.get('min_similarity', Config.MIN_SIMILARITY_THRESHOLD)
+
+            # Debug logging for embedding service payload
+            logger.debug(f"🔍 EMBEDDING SERVICE - Received hybrid search request:")
+            logger.debug(f"   Query: '{query}'")
+            logger.debug(f"   Repository names: {repository_names}")
+            logger.debug(f"   Remote host names: {remote_host_names}")
+            logger.debug(f"   Document names: {document_names}")
+            logger.debug(f"   File types: {file_types}")
+            logger.debug(f"   Content types: {content_types}")
+            logger.debug(f"   Limit: {limit}, Min similarity: {min_similarity}")
+
+            # Validate and cap limits
+            if limit > 50:
+                limit = 50  # Cap at reasonable limit
+
+            if min_similarity < 0 or min_similarity > 1:
+                min_similarity = Config.MIN_SIMILARITY_THRESHOLD  # Default to config threshold
+
+            # Execute hybrid search with separated resource types
+            result = embedding_service.search_documents_hybrid(
+                query=query,
+                metadata_filters=metadata_filters,
+                repository_names=repository_names,
+                remote_host_names=remote_host_names,
+                document_names=document_names,
+                file_types=file_types,
+                folders=folders,
+                content_types=content_types,
+                limit=limit,
+                min_similarity=min_similarity
+            )
+
+        else:
+            # Regular search path
+            logger.info(f"Regular search: query='{query[:50]}...'")
+
+            document_ids = data.get('document_ids', [])
+
+            # Prepare search parameters
+            search_params = {
+                "query": query,
+                "limit": limit
+            }
+
+            # Add document filter if specified
+            if document_ids:
+                search_params["filter"] = {"document_id": {"$in": document_ids}}
+
+            result = embedding_service._search_vector_db(search_params)
+
+        # Return unified response format
+        if result.get("status") == "success":
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+
+    except ValueError as e:
+        logger.error(f"Validation error in search: {str(e)}")
         return jsonify({
-            "status": "success",
-            "query": query,
-            "results": result.get("results", []),
-            "total_results": len(result.get("results", [])),
+            "status": "error",
+            "error": str(e),
             "timestamp": int(time.time() * 1000)
-        }), 200
-        
+        }), 400
+
     except Exception as e:
-        logger.error(f"Error searching documents: {str(e)}")
+        logger.error(f"Search failed: {str(e)}")
         return jsonify({
             "status": "error",
             "error": "Failed to search documents",
             "details": str(e),
             "timestamp": int(time.time() * 1000)
         }), 500
+
+
