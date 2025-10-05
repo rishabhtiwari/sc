@@ -26,7 +26,7 @@ class Config:
 
     # Retriever Service Endpoints
     RETRIEVER_SEARCH_ENDPOINT = '/retrieve/search'
-    RETRIEVER_RAG_ENDPOINT = '/retrieve/rag'
+    RETRIEVER_RAG_ENDPOINT = '/retrieve/rag'  # Now context-aware by default
     RETRIEVER_CONTEXT_ENDPOINT = '/retrieve/context'
     RETRIEVER_HEALTH_ENDPOINT = '/health'
 
@@ -47,9 +47,9 @@ class Config:
     DO_SAMPLE = os.getenv('LLM_DO_SAMPLE', 'true').lower() == 'true'
 
     # RAG Configuration
-    MAX_CONTEXT_LENGTH = int(os.getenv('MAX_CONTEXT_LENGTH', 4800))  # ~1200 tokens worth of context
-    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 5))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.7))
+    MAX_CONTEXT_LENGTH = int(os.getenv('MAX_CONTEXT_LENGTH', 4000))  # tokens
+    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 10))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
 
     # Streaming Configuration
     N_CTX = int(os.getenv('N_CTX', 4096))  # Context window for LLM
@@ -61,7 +61,8 @@ class Config:
     ENABLE_CONTINUATION = os.getenv('ENABLE_CONTINUATION', 'true').lower() == 'true'
     MAX_CONTINUATION_LOOPS = int(os.getenv('MAX_CONTINUATION_LOOPS', 5))
     SLIDING_WINDOW_TOKENS = int(os.getenv('SLIDING_WINDOW_TOKENS', 300))  # Tokens to keep for continuity
-    CONTINUATION_THRESHOLD = float(os.getenv('CONTINUATION_THRESHOLD', 0.9))  # When to trigger continuation (90% of max tokens)
+    CONTINUATION_THRESHOLD = float(
+        os.getenv('CONTINUATION_THRESHOLD', 0.9))  # When to trigger continuation (90% of max tokens)
 
     # Prompt Templates
     SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT',

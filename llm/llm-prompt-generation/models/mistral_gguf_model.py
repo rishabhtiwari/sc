@@ -158,11 +158,20 @@ class MistralGGUFModel(BaseLLMModel):
 
                     # Check if this is the final chunk
                     if choice.get('finish_reason') is not None:
-                        yield {"status": "complete"}
+                        finish_reason = choice.get('finish_reason')
+                        self.logger.info(f"Model streaming complete with finish_reason: {finish_reason}")
+                        yield {
+                            "status": "complete",
+                            "finish_reason": finish_reason
+                        }
                         return
 
             # If we exit the loop without a finish_reason, still send complete
-            yield {"status": "complete"}
+            self.logger.info("Model streaming complete without explicit finish_reason (assuming natural stop)")
+            yield {
+                "status": "complete",
+                "finish_reason": "stop"  # Assume natural completion if no explicit reason
+            }
 
         except Exception as e:
             self.logger.error(f"Error in streaming response: {str(e)}")

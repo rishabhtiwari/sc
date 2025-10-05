@@ -6,6 +6,7 @@ import requests
 from typing import Dict, List, Any, Optional
 from config.settings import Config
 from utils.logger import setup_logger
+from services.reranker_service import RerankerService
 
 
 class RetrieverService:
@@ -13,6 +14,7 @@ class RetrieverService:
 
     def __init__(self):
         self.logger = setup_logger('retriever-service')
+        self.reranker = RerankerService()
         self.logger.info("Initializing Retriever Service")
 
         # Service URLs
@@ -50,10 +52,13 @@ class RetrieverService:
             # Call embedding service for search
             search_url = Config.get_embedding_url(Config.EMBEDDING_SEARCH_ENDPOINT)
 
+            # Get more results from embedding service, then filter to top results
+            embedding_limit = Config.EMBEDDING_SEARCH_LIMIT
+
             payload = {
                 "query": query,
                 "use_hybrid": False,  # Regular search, not hybrid
-                "limit": limit
+                "limit": embedding_limit
             }
 
             response = requests.post(
@@ -79,16 +84,31 @@ class RetrieverService:
                     result["similarity"] = similarity
                     filtered_results.append(result)
 
-            self.logger.info(f"Found {len(filtered_results)} documents above similarity threshold")
+            # Apply reranking if enabled
+            if Config.ENABLE_RERANKING and self.reranker.is_available():
+                self.logger.info(f"Applying cross-encoder reranking to {len(filtered_results)} candidates")
+                reranked_results = self.reranker.rerank_documents(query, filtered_results, top_k=limit)
+                top_results = reranked_results
+            else:
+                # Fallback to similarity-based sorting
+                filtered_results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+                top_results = filtered_results[:limit]
+
+            self.logger.info(f"Retrieved {len(search_results.get('results', []))} from embedding service, "
+                           f"filtered to {len(filtered_results)} above threshold, "
+                           f"{'reranked and ' if Config.ENABLE_RERANKING and self.reranker.is_available() else ''}"
+                           f"returning top {len(top_results)} results")
 
             return {
                 "status": "success",
                 "query": query,
-                "results": filtered_results,
-                "total_results": len(filtered_results),
+                "results": top_results,
+                "total_results": len(top_results),
                 "parameters": {
                     "limit": limit,
-                    "min_similarity": min_similarity
+                    "min_similarity": min_similarity,
+                    "embedding_limit": embedding_limit,
+                    "total_filtered": len(filtered_results)
                 },
                 "timestamp": int(time.time() * 1000)
             }
@@ -344,7 +364,11 @@ class RetrieverService:
                 "total_chunks": len(chunks),
                 "context_length": total_context_length,
                 "search_type": "context_aware_hybrid",
-                "context_resources": context_resources,
+                "context_resources": {
+                    "repositories": repository_names or [],
+                    "remote_hosts": remote_host_names or [],
+                    "documents": document_names or []
+                },
                 "parameters": {
                     "max_chunks": max_chunks,
                     "context_window_size": Config.CONTEXT_WINDOW_SIZE,
@@ -409,10 +433,13 @@ class RetrieverService:
             # Call embedding service for hybrid search
             search_url = Config.get_embedding_url("/embed/search")
 
+            # Get more results from embedding service for better ranking
+            embedding_limit = Config.EMBEDDING_SEARCH_LIMIT
+
             payload = {
                 "query": query,
                 "use_hybrid": True,  # Enable hybrid search
-                "limit": limit,
+                "limit": embedding_limit,
                 "min_similarity": min_similarity
             }
 
@@ -443,20 +470,38 @@ class RetrieverService:
             if search_results.get("status") != "success":
                 raise Exception(f"Embedding service error: {search_results.get('error', 'Unknown error')}")
 
-            results = search_results.get("results", [])
+            all_results = search_results.get("results", [])
 
-            self.logger.info(f"Hybrid search found {len(results)} results")
+            # Apply reranking if enabled
+            if Config.ENABLE_RERANKING and self.reranker.is_available():
+                self.logger.info(f"Applying cross-encoder reranking to {len(all_results)} hybrid search candidates")
+                reranked_results = self.reranker.rerank_documents(query, all_results, top_k=limit)
+                top_results = reranked_results
+            else:
+                # Fallback to similarity-based sorting
+                all_results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+                top_results = all_results[:limit]
+
+            self.logger.info(f"Hybrid search retrieved {len(all_results)} from embedding service, "
+                           f"{'reranked and ' if Config.ENABLE_RERANKING and self.reranker.is_available() else ''}"
+                           f"returning top {len(top_results)} results")
 
             return {
                 "status": "success",
                 "query": query,
-                "results": results,
-                "total_results": len(results),
+                "results": top_results,
+                "total_results": len(top_results),
                 "search_type": "hybrid",
                 "parameters": {
                     "limit": limit,
                     "min_similarity": min_similarity,
-                    "context_resources": context_resources,
+                    "embedding_limit": embedding_limit,
+                    "total_retrieved": len(all_results),
+                    "context_resources": {
+                        "repositories": repository_names or [],
+                        "remote_hosts": remote_host_names or [],
+                        "documents": document_names or []
+                    },
                     "file_types": file_types,
                     "content_types": content_types
                 },
@@ -504,6 +549,7 @@ class RetrieverService:
                 "service_name": Config.SERVICE_NAME,
                 "version": Config.SERVICE_VERSION,
                 "dependencies": health_status,
+                "reranker": self.reranker.get_model_info(),
                 "timestamp": int(time.time() * 1000)
             }
 

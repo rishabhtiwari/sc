@@ -1,45 +1,34 @@
-# Multi-stage build for retriever service
-FROM python:3.11-slim as builder
-
-WORKDIR /app
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# Production stage
-FROM python:3.11-slim as production
+# Single-stage build for retriever service
+FROM python:3.11-slim
 
 # Create non-root user
 RUN groupadd -r retrieverservice && useradd -r -g retrieverservice retrieverservice
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python packages from builder stage
-COPY --from=builder /root/.local /home/retrieverservice/.local
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Create necessary directories and set permissions
-RUN mkdir -p /app/logs /app/temp && \
-    chown -R retrieverservice:retrieverservice /app
+RUN mkdir -p /app/logs /app/temp /home/retrieverservice/.cache && \
+    chown -R retrieverservice:retrieverservice /app /home/retrieverservice
 
 # Set environment variables
-ENV PATH=/home/retrieverservice/.local/bin:$PATH
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/home/retrieverservice/.cache/huggingface
+ENV TRANSFORMERS_CACHE=/home/retrieverservice/.cache/transformers
 
 # Switch to non-root user
 USER retrieverservice

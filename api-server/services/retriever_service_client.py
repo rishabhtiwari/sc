@@ -105,31 +105,46 @@ class RetrieverServiceClient:
         self,
         query: str,
         max_chunks: Optional[int] = None,
-        context_window_size: Optional[int] = None
+        context_window_size: Optional[int] = None,
+        repository_names: Optional[list] = None,
+        remote_host_names: Optional[list] = None,
+        document_names: Optional[list] = None,
+        file_types: Optional[list] = None,
+        content_types: Optional[list] = None
     ) -> Dict[str, Any]:
         """
-        Build RAG context for a query
-        
+        Build RAG context for a query with context awareness
+
         Args:
             query: Query text for context building
             max_chunks: Maximum number of chunks to include
             context_window_size: Maximum context size in characters
-            
+            repository_names: List of repository names to filter by
+            remote_host_names: List of remote host names to filter by
+            document_names: List of document names to filter by
+            file_types: List of file types to filter by
+            content_types: List of content types to filter by
+
         Returns:
             Dict containing RAG context or error
         """
         try:
             payload = {
-                "query": query
+                "query": query,
+                "repository_names": repository_names or [],
+                "remote_host_names": remote_host_names or [],
+                "document_names": document_names or [],
+                "file_types": file_types or [],
+                "content_types": content_types or []
             }
-            
+
             if max_chunks is not None:
                 payload["max_chunks"] = max_chunks
             if context_window_size is not None:
                 payload["context_window_size"] = context_window_size
-            
-            self.logger.info(f"Building RAG context for: {query[:50]}...")
-            
+
+            self.logger.info(f"Building context-aware RAG for: {query[:50]}...")
+
             response = requests.post(
                 f"{self.base_url}/retrieve/rag",
                 json=payload,

@@ -319,8 +319,8 @@ class RemoteHostSyncerService:
                     'job_id': job_id
                 }
 
-            # Filter files that need syncing
-            files_to_sync = self._filter_files_for_sync(connection_id, files)
+            # No filtering - process all files
+            files_to_sync = files
 
             # Update job with total files count
             self.job_instance_service.update_job_status(
@@ -330,29 +330,26 @@ class RemoteHostSyncerService:
             )
 
             if not files_to_sync:
-                self.logger.info(f"All files up to date for connection {connection_name}")
+                self.logger.info(f"No files found for connection {connection_name}")
                 self._record_sync_complete(sync_id, 'success', 0, 0)
-                # All files are considered "processed" (skipped) when up to date
-                self.job_instance_service.update_job_status(job_id, 'completed', 100, len(files), 0)
+                self.job_instance_service.update_job_status(job_id, 'completed', 100, 0, 0)
                 return {
                     'connection_id': connection_id,
                     'connection_name': connection_name,
                     'status': 'success',
-                    'message': 'All files up to date (skipped)',
-                    'files_processed': len(files),  # All files are considered processed (skipped)
+                    'message': 'No files to process',
+                    'files_processed': 0,
                     'files_indexed': 0,
-                    'files_skipped': len(files),
+                    'files_skipped': 0,
                     'job_id': job_id
                 }
 
-            # Process files in batches
+            # Process files in batches - no filtering, process all files
             files_indexed = 0
             total_failed_files = 0
             all_failed_files = []
 
-            # Calculate skipped files (files that were filtered out)
-            skipped_files_count = len(files) - len(files_to_sync)
-            self.logger.info(f"Skipping {skipped_files_count} files due to filtering (unsupported types or already synced)")
+            self.logger.info(f"Processing all {len(files_to_sync)} files (no filtering applied)")
 
             for i in range(0, len(files_to_sync), self.config.BATCH_SIZE):
                 # Check for cancellation before processing each batch
@@ -377,10 +374,10 @@ class RemoteHostSyncerService:
                 total_failed_files += batch_result.get('files_failed', 0)
                 all_failed_files.extend(batch_result.get('failed_files', []))
 
-                # Update progress - include skipped files in processed count
+                # Update progress - no skipped files since we process all files
                 files_actually_processed = min(i + self.config.BATCH_SIZE, len(files_to_sync))
-                processed_files = files_actually_processed + skipped_files_count  # Include skipped files
-                progress = int((processed_files / len(files)) * 100)  # Progress based on total files
+                processed_files = files_actually_processed
+                progress = int((processed_files / len(files_to_sync)) * 100)
                 self.job_instance_service.update_job_status(
                     job_id, 'running',
                     progress=progress,
@@ -409,8 +406,8 @@ class RemoteHostSyncerService:
             # Record successful sync
             self._record_sync_complete(sync_id, 'success', len(files_to_sync), files_indexed)
 
-            # Final processed files count includes skipped files
-            final_processed_files = len(files_to_sync) + skipped_files_count
+            # Final processed files count - all files were processed (no skipping)
+            final_processed_files = len(files_to_sync)
 
             # Update job status to completed
             self.job_instance_service.update_job_status(
@@ -421,18 +418,18 @@ class RemoteHostSyncerService:
 
             self.logger.info(
                 f"✅ Sync completed for {connection_name}: "
-                f"{files_indexed}/{len(files_to_sync)} files indexed, {total_failed_files} failed, {skipped_files_count} skipped in {duration_ms}ms"
+                f"{files_indexed}/{len(files_to_sync)} files indexed, {total_failed_files} failed in {duration_ms}ms"
             )
 
             return {
                 'connection_id': connection_id,
                 'connection_name': connection_name,
                 'status': 'success',
-                'message': f'Sync completed: {files_indexed} indexed, {total_failed_files} failed, {skipped_files_count} skipped',
+                'message': f'Sync completed: {files_indexed} indexed, {total_failed_files} failed',
                 'files_processed': final_processed_files,
                 'files_indexed': files_indexed,
                 'files_failed': total_failed_files,
-                'files_skipped': skipped_files_count,
+                'files_skipped': 0,  # No files skipped since we process all files
                 'failed_files': all_failed_files[:10] if all_failed_files else [],  # Limit to first 10 for response size
                 'duration_ms': duration_ms,
                 'job_id': job_id
@@ -517,79 +514,188 @@ class RemoteHostSyncerService:
             self.logger.error(f"Error fetching files from {connection.get('name', 'Unknown')}: {str(e)}")
             return []
 
-    def _fetch_file_content_from_mcp(self, connection_id: str, file_path: str) -> str:
-        """Fetch file content from MCP service"""
+    def _fetch_file_content_directly(self, connection: Dict[str, Any], file_path: str) -> str:
+        """Fetch file content directly from remote host"""
         try:
-            # Call MCP service directly to get file content
-            response = requests.post(
-                f"{self.config.MCP_SERVICE_URL}/mcp/remote-host/connections/{connection_id}/files/content",
-                json={'file_path': file_path},
-                timeout=60
-            )
+            protocol = connection.get('protocol', '').lower()
 
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('status') == 'success':
-                    content = result.get('content', '')
-                    self.logger.debug(f"Retrieved content for file {file_path} ({len(content)} characters)")
-                    return content
-                else:
-                    self.logger.warning(f"MCP service returned error for file {file_path}: {result.get('message', 'Unknown error')}")
-                    return ""
+            if protocol in ['http', 'https']:
+                return self._fetch_file_content_http(connection, file_path)
+            elif protocol == 'ssh':
+                return self._fetch_file_content_ssh(connection, file_path)
+            elif protocol == 'sftp':
+                return self._fetch_file_content_sftp(connection, file_path)
+            elif protocol == 'ftp':
+                return self._fetch_file_content_ftp(connection, file_path)
             else:
-                self.logger.error(f"Failed to get file content from MCP service for {file_path}: HTTP {response.status_code}")
+                self.logger.error(f"Unsupported protocol for file content fetching: {protocol}")
                 return ""
 
         except Exception as e:
             self.logger.error(f"Error fetching file content for {file_path}: {str(e)}")
             return ""
 
-    def _filter_files_for_sync(self, connection_id: str, files: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Filter files that need to be synced based on modification time and sync history"""
-        files_to_sync = []
+    def _fetch_file_content_http(self, connection: Dict[str, Any], file_path: str) -> str:
+        """Fetch file content via HTTP/HTTPS"""
+        try:
+            # Get credentials from MCP service for authentication
+            credentials = self._get_connection_credentials(connection['id'])
 
-        with sqlite3.connect(self.config.DB_PATH) as conn:
-            cursor = conn.cursor()
+            auth = None
+            if credentials and credentials.get('username'):
+                auth = (credentials['username'], credentials.get('password', ''))
 
-            for file_info in files:
-                file_path = file_info['path']
-                file_modified = file_info.get('modified_time')
-                file_size = file_info.get('size', 0)
+            # First try the original URL as-is
+            try:
+                response = requests.get(file_path, auth=auth, timeout=30)
+                response.raise_for_status()
+                self.logger.debug(f"Successfully fetched content using original URL: {file_path}")
+                return response.text
+            except requests.exceptions.RequestException as e1:
+                self.logger.debug(f"Original URL failed ({e1}), trying URL-decoded version")
 
-                # Skip files that are too large
-                if file_size > (self.config.MAX_FILE_SIZE_MB * 1024 * 1024):
-                    self.logger.debug(f"Skipping large file: {file_path} ({file_size} bytes)")
-                    continue
+                # If that fails, try URL-decoded version
+                from urllib.parse import unquote
+                decoded_file_path = unquote(file_path)
+                self.logger.debug(f"Attempting URL-decoded path: {decoded_file_path}")
+                response = requests.get(decoded_file_path, auth=auth, timeout=30)
+                response.raise_for_status()
+                self.logger.debug(f"Successfully fetched content using decoded URL: {decoded_file_path}")
+                return response.text
 
-                # Process all file types (no filtering in syncer - let embedding service handle filtering)
-                file_ext = os.path.splitext(file_path)[1].lower()
-                self.logger.debug(f"Processing file: {file_path} (extension: {file_ext})")
+        except Exception as e:
+            self.logger.error(f"HTTP file content retrieval failed for {file_path}: {str(e)}")
+            return ""
 
-                # Check if file needs syncing
-                cursor.execute('''
-                    SELECT last_modified, last_synced FROM file_sync_state
-                    WHERE connection_id = ? AND file_path = ?
-                ''', (connection_id, file_path))
+    def _fetch_file_content_ssh(self, connection: Dict[str, Any], file_path: str) -> str:
+        """Fetch file content via SSH"""
+        import paramiko
+        import io
 
-                result = cursor.fetchone()
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-                if result is None:
-                    # New file, needs syncing
-                    files_to_sync.append(file_info)
-                else:
-                    last_modified_db, last_synced = result
+        try:
+            # Get credentials from MCP service
+            credentials = self._get_connection_credentials(connection['id'])
+            if not credentials:
+                self.logger.error(f"No credentials found for SSH connection {connection['id']}")
+                return ""
 
-                    # Compare modification times
-                    if file_modified and last_modified_db:
-                        if file_modified > last_modified_db:
-                            # File was modified since last sync
-                            files_to_sync.append(file_info)
-                    elif not last_synced:
-                        # Never synced successfully
-                        files_to_sync.append(file_info)
+            # Connect
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                client.connect(
+                    connection['host'],
+                    port=connection.get('port', 22),
+                    username=connection['username'],
+                    pkey=private_key,
+                    timeout=10
+                )
+            else:
+                client.connect(
+                    connection['host'],
+                    port=connection.get('port', 22),
+                    username=connection['username'],
+                    password=credentials.get('password', ''),
+                    timeout=10
+                )
 
-        self.logger.info(f"Found {len(files_to_sync)} files to sync out of {len(files)} total files")
-        return files_to_sync
+            # Get file content
+            stdin, stdout, stderr = client.exec_command(f'cat "{file_path}"')
+            content = stdout.read().decode('utf-8', errors='ignore')
+
+            return content
+
+        except Exception as e:
+            self.logger.error(f"SSH file content retrieval failed for {file_path}: {str(e)}")
+            return ""
+        finally:
+            client.close()
+
+    def _fetch_file_content_sftp(self, connection: Dict[str, Any], file_path: str) -> str:
+        """Fetch file content via SFTP"""
+        import paramiko
+        import io
+
+        transport = None
+        try:
+            # Get credentials from MCP service
+            credentials = self._get_connection_credentials(connection['id'])
+            if not credentials:
+                self.logger.error(f"No credentials found for SFTP connection {connection['id']}")
+                return ""
+
+            # Create transport
+            transport = paramiko.Transport((connection['host'], connection.get('port', 22)))
+
+            if credentials.get('private_key'):
+                private_key = paramiko.RSAKey.from_private_key(io.StringIO(credentials['private_key']))
+                transport.connect(username=connection['username'], pkey=private_key)
+            else:
+                transport.connect(username=connection['username'], password=credentials.get('password', ''))
+
+            # Create SFTP client
+            sftp = paramiko.SFTPClient.from_transport(transport)
+
+            # Get file content
+            with sftp.open(file_path, 'r') as remote_file:
+                content = remote_file.read().decode('utf-8', errors='ignore')
+
+            return content
+
+        except Exception as e:
+            self.logger.error(f"SFTP file content retrieval failed for {file_path}: {str(e)}")
+            return ""
+        finally:
+            if transport:
+                transport.close()
+
+    def _fetch_file_content_ftp(self, connection: Dict[str, Any], file_path: str) -> str:
+        """Fetch file content via FTP"""
+        from ftplib import FTP
+
+        try:
+            # Get credentials from MCP service
+            credentials = self._get_connection_credentials(connection['id'])
+
+            ftp = FTP()
+            ftp.connect(connection['host'], connection.get('port', 21))
+            ftp.login(connection['username'], credentials.get('password', '') if credentials else '')
+
+            # Get file content
+            content_lines = []
+            ftp.retrlines(f'RETR {file_path}', content_lines.append)
+            content = '\n'.join(content_lines)
+
+            ftp.quit()
+            return content
+
+        except Exception as e:
+            self.logger.error(f"FTP file content retrieval failed for {file_path}: {str(e)}")
+            return ""
+
+    def _get_connection_credentials(self, connection_id: str) -> Dict[str, Any]:
+        """Get decrypted credentials for a connection from MCP service"""
+        try:
+            response = requests.get(
+                f"{self.config.MCP_SERVICE_URL}/mcp/remote-host/connections/{connection_id}/credentials",
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get('status') == 'success':
+                    return result.get('credentials', {})
+
+            self.logger.error(f"Failed to get credentials for connection {connection_id}")
+            return {}
+
+        except Exception as e:
+            self.logger.error(f"Error getting credentials for connection {connection_id}: {str(e)}")
+            return {}
+
+
 
     def _process_file_batch(self, connection: Dict[str, Any], files: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Process a batch of files and send to embedding service"""
@@ -604,8 +710,8 @@ class RemoteHostSyncerService:
             file_path = file_info['path']
 
             try:
-                # Fetch file content from MCP service
-                content = self._fetch_file_content_from_mcp(connection_id, file_path)
+                # Fetch file content directly from remote host
+                content = self._fetch_file_content_directly(connection, file_path)
 
                 if not content:
                     self.logger.warning(f"Could not fetch content for {file_path}, skipping...")

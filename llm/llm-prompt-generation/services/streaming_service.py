@@ -99,11 +99,8 @@ class StreamingService:
                         if isinstance(chunk, dict) and 'finish_reason' in chunk:
                             finish_reason = chunk.get('finish_reason')
 
-                        # Update cumulative token count
-                        cumulative_token_count += token_count
                         self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
                         self.logger.info(f"Producer: Finish reason: {finish_reason}")
-                        self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
 
                         # NEW LOGIC: Check finish_reason for continuation decision
                         if finish_reason == 'length':
@@ -113,6 +110,8 @@ class StreamingService:
                             break
                         elif finish_reason in ['stop', 'eos_token'] or finish_reason is None:
                             # Natural completion - STOP
+                            cumulative_token_count += token_count  # Add final pass tokens
+                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
                             self.logger.info(
                                 f"Producer: finish_reason='{finish_reason}' - NATURAL COMPLETION - STOPPING")
                             self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
@@ -121,11 +120,12 @@ class StreamingService:
                             return
                         else:
                             # Unknown finish_reason - log and stop to be safe
-                            total_tokens_final = total_tokens_so_far
+                            cumulative_token_count += token_count  # Add final pass tokens
+                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
                             self.logger.info(f"Producer: Unknown finish_reason='{finish_reason}' - STOPPING")
-                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {total_tokens_final}")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
                             self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
-                                                   "total_tokens": total_tokens_final})
+                                                   "total_tokens": cumulative_token_count})
                             return
 
                 # Add tokens to complete output for sliding window
@@ -134,7 +134,6 @@ class StreamingService:
                 # If we hit limit, prepare next pass
                 if hit_limit:
                     cumulative_token_count += token_count  # Add current pass tokens to cumulative count
-                    self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
                     self.logger.info(f"Producer: Total tokens accumulated: {cumulative_token_count}")
 
                     # Signal end of current pass to consumer
@@ -284,23 +283,23 @@ class StreamingService:
         if not context:
             return context
 
-        # Estimate token usage:
-        # - N_CTX = 2048 tokens total
-        # - Query tokens (~50-200 tokens depending on length)
-        # - Prompt template tokens (~100-200 tokens)
-        # - Response generation space (~300-500 tokens)
-        # Available for context: ~1200-1600 tokens
+        # Token-based context truncation using configured MAX_CONTEXT_LENGTH (tokens)
+        max_context_tokens = Config.MAX_CONTEXT_LENGTH
 
-        # Conservative estimate: 1 token ≈ 0.75 words ≈ 4 characters
-        # So 1200 tokens ≈ 900 words ≈ 4800 characters
-        max_context_chars = 4800
-
-        # Estimate query tokens (rough approximation)
+        # Estimate query tokens (rough approximation: ~4 chars per token)
         query_chars = len(query)
-        if query_chars > 800:  # Very long query
-            max_context_chars = 3200  # Reduce context space
-        elif query_chars > 400:  # Medium query
-            max_context_chars = 4000
+        estimated_query_tokens = query_chars // 4
+
+        # Reserve tokens for query and prompt template
+        if estimated_query_tokens > 200:  # Very long query
+            max_context_tokens = int(max_context_tokens * 0.67)  # Reserve more space
+        elif estimated_query_tokens > 100:  # Medium query
+            max_context_tokens = int(max_context_tokens * 0.83)  # Reserve some space
+        else:
+            max_context_tokens = int(max_context_tokens * 0.9)  # Reserve minimal space
+
+        # Convert token limit to approximate character limit
+        max_context_chars = max_context_tokens * 4
 
         if len(context) <= max_context_chars:
             return context
@@ -314,16 +313,16 @@ class StreamingService:
             truncated = truncated[:last_period + 1]
 
         self.logger.info(
-            f"Truncated context from {len(context)} to {len(truncated)} characters to fit within token limits")
+            f"Truncated context from ~{len(context)//4} to ~{len(truncated)//4} tokens to fit within token limits")
         return truncated
 
-    def generate_streaming_response(self, query: str, context: str = None) -> Generator[Dict[str, Any], None, None]:
+    def generate_streaming_response(self, query: str, context_info: dict = None) -> Generator[Dict[str, Any], None, None]:
         """
         Generate streaming response with sliding window continuation for long responses
 
         Args:
             query: User query
-            context: Optional context for RAG
+            context_info: Optional context information dict with repository_names, etc.
 
         Yields:
             Dictionary containing streaming response tokens
@@ -331,8 +330,12 @@ class StreamingService:
         try:
             self.logger.info(f"Starting streaming response with continuation for query: '{query[:50]}...'")
 
-            # Get RAG context if not provided
-            if context is None:
+            # Get RAG context with context information
+            context = None
+            if context_info:
+                context_result = self.llm_service._get_rag_context(query, context_info)
+                context = context_result.get("context", "")
+            else:
                 context_result = self.llm_service._get_rag_context(query)
                 context = context_result.get("context", "")
 

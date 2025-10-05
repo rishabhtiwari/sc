@@ -308,3 +308,30 @@ def get_file_content(connection_id):
             "status": "error",
             "message": f"Failed to get file content: {str(e)}"
         }), 500
+
+@remote_host_mcp_bp.route('/remote-host/connections/<connection_id>/credentials', methods=['GET'])
+def get_connection_credentials(connection_id):
+    """Get decrypted credentials for remote host connection (for syncer service)"""
+    try:
+        connection = remote_host_service.get_connection(connection_id)
+
+        if not connection:
+            return jsonify({
+                "status": "error",
+                "message": "Connection not found"
+            }), 404
+
+        # Decrypt credentials
+        credentials = remote_host_service._decrypt_credentials(connection)
+
+        return jsonify({
+            "status": "success",
+            "credentials": credentials
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting credentials for connection {connection_id}: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to get credentials: {str(e)}"
+        }), 500

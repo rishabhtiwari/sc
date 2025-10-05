@@ -54,7 +54,7 @@ class HealthController:
                 "endpoints": {
                     "search": "/retrieve/search (POST)",
                     "context": "/retrieve/context/{document_ids} (GET)",
-                    "rag": "/retrieve/rag (POST)",
+                    "rag": "/retrieve/rag (POST) - Context-aware RAG",
                     "health": "/health (GET)",
                     "status": "/status (GET)"
                 },

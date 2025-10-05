@@ -337,6 +337,12 @@ def search_documents():
             # Regular search path
             logger.info(f"Regular search: query='{query[:50]}...'")
 
+            # Debug logging for embedding service payload
+            logger.debug(f"🔍 EMBEDDING SERVICE - Received regular search request:")
+            logger.debug(f"   Full payload: {data}")
+            logger.debug(f"   Query: '{query}'")
+            logger.debug(f"   Limit: {limit}")
+
             document_ids = data.get('document_ids', [])
 
             # Prepare search parameters

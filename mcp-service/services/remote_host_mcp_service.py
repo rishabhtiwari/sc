@@ -882,29 +882,94 @@ class RemoteHostMCPService:
                     response = requests.get(current_url, auth=auth, timeout=10)
                     response.raise_for_status()
 
-                    # Simple HTML parsing for directory listings
+                    # Enhanced HTML parsing for directory listings with size extraction
                     content = response.text.lower()
                     if 'index of' in content or '<a href=' in content:
                         import re
-                        links = re.findall(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', response.text, re.IGNORECASE)
+                        from datetime import datetime
 
-                        for href, text in links:  # No limit - process all links
-                            if not href.startswith('..') and not href.startswith('http') and href != '/':
-                                full_url = urljoin(current_url, href)
+                        # Parse HTML table rows to extract file information
+                        # Look for patterns like: <a href="file.txt">file.txt</a>    date    size
+                        html_content = response.text
 
-                                if href.endswith('/'):
-                                    # Directory - recurse into it
-                                    _recursive_list_http(full_url, os.path.join(current_path, href.rstrip('/')))
-                                elif '.' in href:
-                                    # File - add to list
-                                    file_path = os.path.join(current_path, href).replace('\\', '/') if current_path else href
-                                    files.append({
-                                        'path': full_url,
-                                        'name': href,
-                                        'size': 0,  # Size not available from basic HTML listing
-                                        'modified_time': '',
-                                        'type': 'file'
-                                    })
+                        # Try to extract file info from table rows or pre-formatted listings
+                        # Pattern 1: Standard Apache/nginx directory listing
+                        table_rows = re.findall(r'<tr[^>]*>.*?</tr>', html_content, re.IGNORECASE | re.DOTALL)
+
+                        if not table_rows:
+                            # Pattern 2: Simple pre-formatted listing
+                            lines = html_content.split('\n')
+                            table_rows = [line for line in lines if '<a href=' in line.lower()]
+
+                        for row in table_rows:
+                            # Extract link
+                            link_match = re.search(r'<a href="([^"]+)"[^>]*>([^<]+)</a>', row, re.IGNORECASE)
+                            if not link_match:
+                                continue
+
+                            href, text = link_match.groups()
+
+                            if href.startswith('..') or href.startswith('http') or href == '/':
+                                continue
+
+                            full_url = urljoin(current_url, href)
+
+                            if href.endswith('/'):
+                                # Directory - recurse into it
+                                _recursive_list_http(full_url, os.path.join(current_path, href.rstrip('/')))
+                            elif '.' in href:
+                                # File - extract size and date if available
+                                file_size = 0
+                                modified_time = ''
+
+                                # Try to extract size from the row
+                                # Look for patterns like "1.2K", "345", "1.5M", etc.
+                                size_patterns = [
+                                    r'(\d+(?:\.\d+)?[KMG]?)\s*(?:bytes?)?',  # 1.2K, 345, 1.5M
+                                    r'>(\d+)<',  # >12345<
+                                    r'\s(\d+)\s',  # space-separated numbers
+                                ]
+
+                                for pattern in size_patterns:
+                                    size_match = re.search(pattern, row, re.IGNORECASE)
+                                    if size_match:
+                                        size_str = size_match.group(1)
+                                        try:
+                                            # Convert size string to bytes
+                                            if size_str.endswith('K'):
+                                                file_size = int(float(size_str[:-1]) * 1024)
+                                            elif size_str.endswith('M'):
+                                                file_size = int(float(size_str[:-1]) * 1024 * 1024)
+                                            elif size_str.endswith('G'):
+                                                file_size = int(float(size_str[:-1]) * 1024 * 1024 * 1024)
+                                            else:
+                                                file_size = int(size_str)
+                                            break
+                                        except (ValueError, IndexError):
+                                            continue
+
+                                # Try to extract date (basic attempt)
+                                date_patterns = [
+                                    r'(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})',  # 2025-07-01 05:23
+                                    r'(\d{2}-\w{3}-\d{4}\s+\d{2}:\d{2})',  # 01-Jul-2025 05:23
+                                ]
+
+                                for pattern in date_patterns:
+                                    date_match = re.search(pattern, row)
+                                    if date_match:
+                                        modified_time = date_match.group(1)
+                                        break
+
+                                file_path = os.path.join(current_path, href).replace('\\', '/') if current_path else href
+                                files.append({
+                                    'path': full_url,
+                                    'name': href,
+                                    'size': file_size,
+                                    'modified_time': modified_time,
+                                    'type': 'file'
+                                })
+
+                                logger.debug(f"Parsed file: {href}, size: {file_size}, modified: {modified_time}")
                 except Exception as e:
                     logger.warning(f"Could not list HTTP directory {current_url}: {str(e)}")
 
@@ -1004,11 +1069,29 @@ class RemoteHostMCPService:
             if connection.get('username') and credentials.get('password'):
                 auth = (connection['username'], credentials['password'])
 
-            response = requests.get(file_path, auth=auth, timeout=10)
-            response.raise_for_status()
+            # The file_path is already a complete URL from _list_files_http
+            # Try both the original URL and URL-decoded version
+            from urllib.parse import unquote
 
-            return response.text
+            logger.debug(f"Attempting to fetch HTTP file content from: {file_path}")
+
+            # First try the original URL as-is
+            try:
+                response = requests.get(file_path, auth=auth, timeout=30)
+                response.raise_for_status()
+                logger.debug(f"Successfully fetched content using original URL: {file_path}")
+                return response.text
+            except requests.exceptions.RequestException as e1:
+                logger.debug(f"Original URL failed ({e1}), trying URL-decoded version")
+
+                # If that fails, try URL-decoded version
+                decoded_file_path = unquote(file_path)
+                logger.debug(f"Attempting URL-decoded path: {decoded_file_path}")
+                response = requests.get(decoded_file_path, auth=auth, timeout=30)
+                response.raise_for_status()
+                logger.debug(f"Successfully fetched content using decoded URL: {decoded_file_path}")
+                return response.text
 
         except Exception as e:
-            logger.error(f"HTTP file content retrieval failed: {str(e)}")
+            logger.error(f"HTTP file content retrieval failed for {file_path}: {str(e)}")
             return ""

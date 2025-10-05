@@ -428,6 +428,9 @@ class ChatHandler:
                     mimetype='application/json'
                 )
 
+            # Log full request payload at DEBUG level
+            current_app.logger.debug(f"🔍 API SERVER - Stream chat request payload: {data}")
+
             # Extract required fields
             message = data.get('message', '').strip()
             if not message:

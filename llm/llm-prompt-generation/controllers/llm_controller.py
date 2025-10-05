@@ -310,12 +310,25 @@ class LLMController:
                     mimetype='application/json'
                 )
 
-            self.logger.info(f"Starting streaming chat for query: '{query[:50]}...'")
+            # Extract context information
+            repository_names = data.get('repository_names', [])
+            remote_host_names = data.get('remote_host_names', [])
+            document_names = data.get('document_names', [])
 
-            # Create streaming generator (will automatically use RAG)
+            context_info = {
+                'repository_names': repository_names,
+                'remote_host_names': remote_host_names,
+                'document_names': document_names
+            }
+
+            self.logger.info(f"Starting streaming chat for query: '{query[:50]}...'")
+            if repository_names or remote_host_names or document_names:
+                self.logger.info(f"Using context: {len(repository_names)} repos, {len(remote_host_names)} hosts, {len(document_names)} docs")
+
+            # Create streaming generator (will automatically use RAG with context)
             def generate():
                 try:
-                    for chunk in self.streaming_service.generate_streaming_response(query):
+                    for chunk in self.streaming_service.generate_streaming_response(query, context_info):
                         # Format as Server-Sent Events
                         yield f"data: {json.dumps(chunk)}\n\n"
                 except Exception as e:

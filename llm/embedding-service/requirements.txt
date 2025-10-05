@@ -10,3 +10,6 @@ Werkzeug==2.3.7
 
 # Utilities
 python-dotenv==1.0.0
+
+# Tokenization
+tiktoken==0.5.1

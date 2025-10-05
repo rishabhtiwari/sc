@@ -78,9 +78,13 @@ class RetrieverController:
                 file_types = data.get('file_types', [])
                 content_types = data.get('content_types', [])
 
+                # For now, treat all context_resources as repository names
+                # TODO: Parse context_resources to separate repository_names, remote_host_names, document_names
                 result = self.retriever_service.search_documents_hybrid(
                     query=query,
-                    context_resources=context_resources,
+                    repository_names=context_resources,
+                    remote_host_names=None,
+                    document_names=None,
                     file_types=file_types,
                     content_types=content_types,
                     limit=limit,
@@ -130,58 +134,6 @@ class RetrieverController:
             self.logger.error(f"Error in get_document_context: {str(e)}")
             return self.error_response(f"Context retrieval failed: {str(e)}", 500)
     
-    def build_rag_context(self) -> Tuple[Dict[str, Any], int]:
-        """
-        Build RAG context for a query
-        
-        Expected JSON payload:
-        {
-            "query": "user query text",
-            "max_chunks": 10  // optional
-        }
-        
-        Returns:
-            Tuple of (response_dict, status_code)
-        """
-        try:
-            # Validate request
-            if not request.is_json:
-                return self.error_response("Request must be JSON", 400)
-            
-            data = request.get_json()
-            if not data:
-                return self.error_response("Empty request body", 400)
-            
-            # Extract parameters
-            query = data.get('query', '').strip()
-            if not query:
-                return self.error_response("Query is required", 400)
-            
-            max_chunks = data.get('max_chunks', Config.MAX_CONTEXT_CHUNKS)
-            
-            # Validate parameters
-            try:
-                max_chunks = int(max_chunks)
-            except (ValueError, TypeError):
-                return self.error_response("max_chunks must be an integer", 400)
-            
-            if max_chunks <= 0 or max_chunks > Config.MAX_CONTEXT_CHUNKS * 2:
-                return self.error_response(f"max_chunks must be between 1 and {Config.MAX_CONTEXT_CHUNKS * 2}", 400)
-            
-            self.logger.info(f"RAG context request: query='{query}', max_chunks={max_chunks}")
-            
-            # Build RAG context
-            result = self.retriever_service.build_rag_context(
-                query=query,
-                max_chunks=max_chunks
-            )
-            
-            return self.success_response(result), 200
-            
-        except Exception as e:
-            self.logger.error(f"Error in build_rag_context: {str(e)}")
-            return self.error_response(f"RAG context building failed: {str(e)}", 500)
-
     def build_context_aware_rag(self) -> Tuple[Dict[str, Any], int]:
         """
         Build context-aware RAG using hybrid filtering
@@ -203,6 +155,9 @@ class RetrieverController:
             data = request.get_json()
             if not data:
                 return self.error_response("No JSON data provided", 400)
+
+            # Log full request payload at DEBUG level
+            self.logger.debug(f"Context-aware RAG request payload: {data}")
 
             # Extract required query
             query = data.get('query', '').strip()
@@ -253,10 +208,29 @@ class RetrieverController:
 
 
     
+    def get_reranker_info(self) -> Tuple[Dict[str, Any], int]:
+        """
+        Get reranker model information
+
+        Returns:
+            Tuple of (response_dict, status_code)
+        """
+        try:
+            info = self.retriever_service.reranker.get_model_info()
+            return {
+                "status": "success",
+                "reranker": info,
+                "timestamp": int(__import__('time').time() * 1000)
+            }, 200
+
+        except Exception as e:
+            self.logger.error(f"Failed to get reranker info: {str(e)}")
+            return self.error_response(f"Failed to get reranker info: {str(e)}"), 500
+
     def success_response(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a success response"""
         return data
-    
+
     def error_response(self, message: str, status_code: int = 400) -> Dict[str, Any]:
         """Create an error response"""
         return {
