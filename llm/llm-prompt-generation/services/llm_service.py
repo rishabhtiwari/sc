@@ -267,7 +267,7 @@ class LLMService:
             self.logger.error(f"Error generating response: {str(e)}")
             raise e
     
-    def _get_rag_context(self, query: str) -> Dict[str, Any]:
+    def _get_rag_context(self, query: str, context_info: dict = None) -> Dict[str, Any]:
         """
         Get RAG context from retriever service
 
@@ -283,10 +283,27 @@ class LLMService:
             # Call retriever service
             rag_url = Config.get_retriever_url(Config.RETRIEVER_RAG_ENDPOINT)
 
-            payload = {
-                "query": query,
-                "max_chunks": Config.MAX_CONTEXT_CHUNKS
-            }
+            # Use context information if provided
+            if context_info:
+                payload = {
+                    "query": query,
+                    "max_chunks": Config.MAX_CONTEXT_CHUNKS,
+                    "repository_names": context_info.get('repository_names', []),
+                    "remote_host_names": context_info.get('remote_host_names', []),
+                    "document_names": context_info.get('document_names', []),
+                    "file_types": [],
+                    "content_types": []
+                }
+            else:
+                payload = {
+                    "query": query,
+                    "max_chunks": Config.MAX_CONTEXT_CHUNKS,
+                    "repository_names": [],
+                    "remote_host_names": [],
+                    "document_names": [],
+                    "file_types": [],
+                    "content_types": []
+                }
 
             response = requests.post(
                 rag_url,

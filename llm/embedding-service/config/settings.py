@@ -64,15 +64,15 @@ class Config:
     VECTOR_DB_HEALTH_ENDPOINT = '/health'
     VECTOR_DB_COLLECTIONS_ENDPOINT = '/vector/collections'
 
-    # Text Processing Configuration
-    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 1000))
-    CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP', 200))
-    MIN_CHUNK_SIZE = int(os.getenv('MIN_CHUNK_SIZE', 100))
-    MAX_CHUNKS_PER_DOCUMENT = int(os.getenv('MAX_CHUNKS_PER_DOCUMENT', 20))
+    # Text Processing Configuration (token-based)
+    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 1024))  # tokens
+    CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP', 200))  # tokens
+    MIN_CHUNK_SIZE = int(os.getenv('MIN_CHUNK_SIZE', 100))  # tokens
+    MAX_CHUNKS_PER_DOCUMENT = int(os.getenv('MAX_CHUNKS_PER_DOCUMENT', 100))
 
     # Search Configuration
-    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 20))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.4))
+    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 100))
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
     DEFAULT_USE_HYBRID = os.getenv('DEFAULT_USE_HYBRID', 'true').lower() == 'true'
 
     # Processing Configuration

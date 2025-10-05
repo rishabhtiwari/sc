@@ -726,8 +726,32 @@ class ChatController:
                     # Use direct streaming endpoint
                     stream_url = f"{llm_service_url}/llm/stream"
 
+                # Get current context if using RAG
+                context_info = {}
+                if use_rag:
+                    try:
+                        # Import here to avoid circular imports
+                        from controllers.customer_context_controller import CustomerContextController
+
+                        # Get current context resources
+                        context_result = CustomerContextController.get_all_context_resources("default")
+
+                        if context_result["status"] == "success" and context_result["total_count"] > 0:
+                            resources = context_result["resources"]
+                            context_info = {
+                                "repository_names": [repo["name"] for repo in resources.get("repositories", [])],
+                                "remote_host_names": [host["name"] for host in resources.get("remote_hosts", [])],
+                                "document_names": [doc["name"] for doc in resources.get("documents", [])]
+                            }
+                            current_app.logger.info(f"🔍 Using context: {len(resources.get('repositories', []))} repos, {len(resources.get('remote_hosts', []))} hosts, {len(resources.get('documents', []))} docs")
+                        else:
+                            current_app.logger.info("🔍 No context resources found, using global search")
+                    except Exception as e:
+                        current_app.logger.warning(f"Failed to get context: {str(e)}")
+
                 payload = {
-                    "query": message
+                    "query": message,
+                    **context_info
                 }
 
                 current_app.logger.info(f"🌐 Calling LLM streaming service: {stream_url}")

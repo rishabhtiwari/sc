@@ -45,6 +45,7 @@ services:
       - LLM_SERVICE_HOST=ichat-llm-service
       - LLM_SERVICE_PORT=8083
       - LLM_SERVICE_URL=http://ichat-llm-service:8083
+      - LOG_LEVEL=DEBUG
     volumes:
       - ./api-server/logs:/app/logs
       - ./api-server/data:/app/data
@@ -119,10 +120,10 @@ services:
       - SLIDING_WINDOW_TOKENS=300
       # Streaming Configuration
       - STREAM_DELAY_MS=100
-      - MIN_SIMILARITY_THRESHOLD=0.7
+      - MIN_SIMILARITY_THRESHOLD=0.5
       - RETRIEVER_TIMEOUT=300
       - MODEL_LOAD_TIMEOUT=300
-      - MAX_CONTEXT_LENGTH=4800
+      - MAX_CONTEXT_LENGTH=4000
       - ENABLE_STREAMING=true
       - STREAM_DELAY_MS=50
       # Sliding Window Continuation Configuration
@@ -169,6 +170,14 @@ services:
       - REQUEST_TIMEOUT=300
       - OCR_TIMEOUT=300
       - VECTOR_DB_TIMEOUT=300
+      - LOG_LEVEL=DEBUG
+      # Token-based chunking configuration
+      - CHUNK_SIZE=1024
+      - CHUNK_OVERLAP=200
+      - MIN_CHUNK_SIZE=100
+      # Search configuration
+      - DEFAULT_SEARCH_LIMIT=100
+      - MIN_SIMILARITY_THRESHOLD=0.5
     volumes:
       - ./llm/embedding-service/logs:/app/logs
     networks:
@@ -228,6 +237,21 @@ services:
       - EMBEDDING_SERVICE_URL=http://ichat-embedding-service:8085
       - EMBEDDING_TIMEOUT=300
       - VECTOR_DB_TIMEOUT=300
+      - LOG_LEVEL=DEBUG
+      # Search Configuration
+      - DEFAULT_SEARCH_LIMIT=100
+      - MAX_SEARCH_LIMIT=100
+      - EMBEDDING_SEARCH_LIMIT=100
+      - MIN_SIMILARITY_THRESHOLD=0.5
+      # Context Configuration (characters)
+      - CONTEXT_WINDOW_SIZE=10000
+      - MAX_CONTEXT_CHUNKS=3
+      # Reranking Configuration
+      - ENABLE_RERANKING=true
+      - RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+      - RERANKER_BATCH_SIZE=32
+      - RERANKER_MAX_WORKERS=4
+      - RERANKER_TIMEOUT=30
     volumes:
       - ./llm/retriever-service/logs:/app/logs
     networks:

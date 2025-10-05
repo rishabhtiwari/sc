@@ -21,7 +21,9 @@ Environment variables (see `config/settings.py`):
 - `SYNC_TIME`: Time for daily/weekly sync (default: 02:00)
 - `MAX_FILE_SIZE_MB`: Maximum file size to process (default: 50)
 - `BATCH_SIZE`: Number of connections to process concurrently (default: 5)
-- `SUPPORTED_EXTENSIONS`: File extensions to sync (default: .txt,.md,.py,.js,.json,.xml,.csv)
+- `MAX_FILE_SIZE_MB`: Maximum file size to process (default: 50MB)
+
+**Note**: File type filtering is now handled by the embedding service whitelist. The remote host syncer processes all files and lets the embedding service determine which file types to accept.
 
 ## API Endpoints
 

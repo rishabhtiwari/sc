@@ -27,13 +27,7 @@ def get_document_context(document_ids):
 
 @retriever_bp.route('/retrieve/rag', methods=['POST'])
 def build_rag_context():
-    """Build RAG context for a query"""
-    response, status_code = retriever_controller.build_rag_context()
-    return response, status_code
-
-@retriever_bp.route('/retrieve/rag/context-aware', methods=['POST'])
-def build_context_aware_rag():
-    """Build context-aware RAG using hybrid filtering"""
+    """Build RAG context for a query with context awareness"""
     response, status_code = retriever_controller.build_context_aware_rag()
     return response, status_code
 
@@ -51,4 +45,10 @@ def health_check():
 def service_info():
     """Service information endpoint"""
     response, status_code = health_controller.service_info()
+    return response, status_code
+
+@retriever_bp.route('/reranker/info', methods=['GET'])
+def reranker_info():
+    """Get reranker model information"""
+    response, status_code = retriever_controller.get_reranker_info()
     return response, status_code

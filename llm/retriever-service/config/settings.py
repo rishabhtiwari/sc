@@ -36,16 +36,24 @@ class Config:
     VECTOR_DB_HEALTH_ENDPOINT = '/health'
 
     # Retrieval Configuration
-    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 20))
-    MAX_SEARCH_LIMIT = int(os.getenv('MAX_SEARCH_LIMIT', 20))
-    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.4))
+    DEFAULT_SEARCH_LIMIT = int(os.getenv('DEFAULT_SEARCH_LIMIT', 100))  # Return top 100 to LLM
+    MAX_SEARCH_LIMIT = int(os.getenv('MAX_SEARCH_LIMIT', 100))  # Max 100 to LLM
+    EMBEDDING_SEARCH_LIMIT = int(os.getenv('EMBEDDING_SEARCH_LIMIT', 100))  # Get 100 from embedding service
+    MIN_SIMILARITY_THRESHOLD = float(os.getenv('MIN_SIMILARITY_THRESHOLD', 0.5))
     USE_HYBRID_SEARCH = os.getenv('USE_HYBRID_SEARCH', 'true').lower() == 'true'
     DEFAULT_USE_HYBRID = os.getenv('DEFAULT_USE_HYBRID', 'true').lower() == 'true'
 
     # RAG Configuration
-    CONTEXT_WINDOW_SIZE = int(os.getenv('CONTEXT_WINDOW_SIZE', 4000))
-    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 20))
+    CONTEXT_WINDOW_SIZE = int(os.getenv('CONTEXT_WINDOW_SIZE', 8000))  # characters (8k chars)
+    MAX_CONTEXT_CHUNKS = int(os.getenv('MAX_CONTEXT_CHUNKS', 7))
     CHUNK_OVERLAP_THRESHOLD = float(os.getenv('CHUNK_OVERLAP_THRESHOLD', 0.8))
+
+    # Reranking Configuration
+    ENABLE_RERANKING = os.getenv('ENABLE_RERANKING', 'true').lower() == 'true'
+    RERANKER_MODEL = os.getenv('RERANKER_MODEL', 'cross-encoder/ms-marco-MiniLM-L-6-v2')
+    RERANKER_BATCH_SIZE = int(os.getenv('RERANKER_BATCH_SIZE', 32))
+    RERANKER_MAX_WORKERS = int(os.getenv('RERANKER_MAX_WORKERS', 4))
+    RERANKER_TIMEOUT = int(os.getenv('RERANKER_TIMEOUT', 30))
 
     # Request Timeouts (seconds)
     EMBEDDING_TIMEOUT = int(os.getenv('EMBEDDING_TIMEOUT', 300))
@@ -89,5 +97,9 @@ class Config:
             'default_use_hybrid': cls.DEFAULT_USE_HYBRID,
             'context_window_size': cls.CONTEXT_WINDOW_SIZE,
             'max_context_chunks': cls.MAX_CONTEXT_CHUNKS,
+            'enable_reranking': cls.ENABLE_RERANKING,
+            'reranker_model': cls.RERANKER_MODEL,
+            'reranker_batch_size': cls.RERANKER_BATCH_SIZE,
+            'reranker_max_workers': cls.RERANKER_MAX_WORKERS,
             'log_level': cls.LOG_LEVEL
         }

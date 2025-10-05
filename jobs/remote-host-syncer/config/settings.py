@@ -32,28 +32,8 @@ class Config:
     # Sync Settings
     MAX_FILE_SIZE_MB = int(os.getenv('MAX_FILE_SIZE_MB', '50'))  # Max file size to sync
 
-    # Blacklisted file extensions (files to skip during indexing)
-    BLACKLISTED_EXTENSIONS = os.getenv('BLACKLISTED_EXTENSIONS',
-        # Video files
-        '.mp4,.avi,.mov,.wmv,.flv,.webm,.mkv,.m4v,.3gp,.mpg,.mpeg,.m2v,.divx,.xvid,'
-        # Audio files
-        '.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a,.opus,.aiff,.au,'
-        # Image files (large binary)
-        '.jpg,.jpeg,.png,.gif,.bmp,.tiff,.tif,.webp,.ico,.svg,.psd,.ai,.eps,'
-        # Archive files
-        '.zip,.rar,.7z,.tar,.gz,.bz2,.xz,.tar.gz,.tar.bz2,.tar.xz,.tgz,.tbz2,.txz,'
-        # Binary executables
-        '.exe,.dll,.so,.dylib,.bin,.app,.deb,.rpm,.msi,.dmg,.pkg,.snap,'
-        # Office/PDF files (binary)
-        '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,'
-        # Database files
-        '.db,.sqlite,.sqlite3,.mdb,.accdb,'
-        # Other binary formats
-        '.iso,.img,.vdi,.vmdk,.qcow2,.vhd,.wim'
-    ).split(',')
-
-    # Remove any empty strings and strip whitespace
-    BLACKLISTED_EXTENSIONS = [ext.strip() for ext in BLACKLISTED_EXTENSIONS if ext.strip()]
+    # File filtering is now handled by embedding service whitelist
+    # Remote host syncer will send all files and let embedding service filter
     
     # Batch Processing
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', '20'))  # Files to process in one batch (reduced for better cancellation responsiveness)

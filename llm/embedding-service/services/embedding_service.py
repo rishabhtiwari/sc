@@ -13,6 +13,7 @@ import time
 import uuid
 import requests
 import tempfile
+import tiktoken
 from typing import Dict, List, Optional, Tuple, Any
 from werkzeug.datastructures import FileStorage
 
@@ -27,6 +28,8 @@ class EmbeddingService:
         self.ocr_service_url = Config.get_ocr_url()
         self.vector_db_url = Config.get_vector_db_url()
         self.initialized = False
+        # Initialize tokenizer for token-based chunking
+        self.tokenizer = tiktoken.get_encoding("cl100k_base")  # GPT-4 tokenizer
         
     def initialize(self) -> bool:
         """Initialize the embedding service and check external dependencies"""
@@ -267,23 +270,30 @@ class EmbeddingService:
             raise e
 
     def _chunk_text(self, text: str, document_id: str, filename: str) -> List[Dict[str, Any]]:
-        """Split text into chunks for vector storage"""
+        """Split text into chunks for vector storage using token-based chunking"""
         try:
             chunks = []
-            chunk_size = Config.CHUNK_SIZE
-            overlap = Config.CHUNK_OVERLAP
+            chunk_size_tokens = Config.CHUNK_SIZE  # tokens
+            overlap_tokens = Config.CHUNK_OVERLAP  # tokens
+            min_chunk_tokens = Config.MIN_CHUNK_SIZE  # tokens
 
-            # Simple text chunking with overlap
-            start = 0
+            # Tokenize the entire text
+            tokens = self.tokenizer.encode(text)
+
+            # Token-based chunking with overlap
+            start_token = 0
             chunk_index = 0
 
-            while start < len(text):
-                end = start + chunk_size
-                chunk_text = text[start:end]
+            while start_token < len(tokens):
+                end_token = min(start_token + chunk_size_tokens, len(tokens))
+                chunk_tokens = tokens[start_token:end_token]
 
                 # Skip chunks that are too small
-                if len(chunk_text.strip()) < Config.MIN_CHUNK_SIZE:
+                if len(chunk_tokens) < min_chunk_tokens:
                     break
+
+                # Decode tokens back to text
+                chunk_text = self.tokenizer.decode(chunk_tokens)
 
                 # Create enhanced chunk metadata for hybrid filtering
                 file_extension = os.path.splitext(filename)[1].lower() if filename else ""
@@ -298,9 +308,10 @@ class EmbeddingService:
                         "file_extension": file_extension,
                         "folder_path": folder_path,
                         "chunk_index": chunk_index,
-                        "chunk_size": len(chunk_text),
-                        "start_position": start,
-                        "end_position": end,
+                        "chunk_size": len(chunk_tokens),  # token count
+                        "chunk_size_chars": len(chunk_text),  # character count for reference
+                        "start_position": start_token,  # token position
+                        "end_position": end_token,  # token position
                         "content_type": self._detect_content_type(chunk_text, file_extension),
                         "created_at": int(time.time() * 1000)
                     }
@@ -309,8 +320,19 @@ class EmbeddingService:
                 chunks.append(chunk_data)
                 chunk_index += 1
 
-                # Move start position with overlap
-                start = end - overlap
+                # Calculate next start position with overlap
+                next_start = end_token - overlap_tokens
+
+                # Ensure we make progress - if next_start would be <= current start_token,
+                # move forward by at least 1 token to avoid infinite loops
+                if next_start <= start_token:
+                    next_start = start_token + 1
+
+                # If we've reached the end of the document, break
+                if end_token >= len(tokens):
+                    break
+
+                start_token = next_start
 
                 # Prevent infinite loops and respect max chunks limit
                 if chunk_index >= Config.MAX_CHUNKS_PER_DOCUMENT:
@@ -442,7 +464,12 @@ class EmbeddingService:
             if remote_host_names:
                 self.logger.debug(f"🌐 Adding remote host filters for: {remote_host_names}")
                 for host_name in remote_host_names:
-                    resource_filters.append({"remote_host_name": host_name})
+                    # Extract host from URL format (e.g., "http://host.docker.internal" -> "host.docker.internal")
+                    if host_name.startswith(('http://', 'https://')):
+                        host_only = host_name.split('://', 1)[1].split(':')[0]  # Remove protocol and port
+                    else:
+                        host_only = host_name.split(':')[0]  # Remove port if present
+                    resource_filters.append({"host": host_only})
 
             # Document filtering
             if document_names:
@@ -454,7 +481,12 @@ class EmbeddingService:
             # Combine all resource filters with OR (any resource match)
             if resource_filters:
                 self.logger.debug(f"🔗 Combined resource filters: {len(resource_filters)} conditions")
-                filter_conditions.append({"$or": resource_filters})
+                if len(resource_filters) == 1:
+                    # Single filter - don't wrap in $or (ChromaDB requires at least 2 conditions for $or)
+                    filter_conditions.append(resource_filters[0])
+                else:
+                    # Multiple filters - use $or
+                    filter_conditions.append({"$or": resource_filters})
             else:
                 self.logger.debug("⚠️ No resource filters applied - will search all documents")
 
@@ -681,6 +713,11 @@ class EmbeddingService:
                     # Create a synthetic filename from metadata
                     file_path = metadata.get('file_path', f'document_{i}')
                     filename = os.path.basename(file_path) if file_path else f'document_{i}.txt'
+
+                    # Apply whitelist filtering (same as single document processing)
+                    if not Config.is_allowed_file(filename):
+                        self.logger.info(f"Skipping document {i+1}/{len(documents)}: {filename} (file type not whitelisted)")
+                        continue
 
                     self.logger.info(f"Processing document {i+1}/{len(documents)}: {filename}")
 
