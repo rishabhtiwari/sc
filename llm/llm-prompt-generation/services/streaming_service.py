@@ -4,6 +4,7 @@ Streaming Service for multi-pass chunked responses with buffered background gene
 import time
 import asyncio
 import json
+import re
 import threading
 import queue
 from typing import Dict, List, Any, Generator, AsyncGenerator
@@ -31,154 +32,45 @@ class StreamingService:
         Doesn't rely on consumer - just keeps generating until LLM says complete or natural end.
         """
         try:
-            complete_output = ""
-            history_tokens = Config.SLIDING_WINDOW_TOKENS
-            max_loops = Config.MAX_CONTINUATION_LOOPS
-            cumulative_token_count = 0  # Track total tokens across all passes
+            # Get sub-queries for complex query decomposition
+            sub_queries = self._get_sub_queries(query)
 
-            # Start with first prompt
-            current_prompt = self._build_initial_prompt(query, context)
+            # Process each sub-query and collect results
+            self.logger.info(f"Processing {len(sub_queries)} sub-queries in sequence")
 
-            # Debug: Log context usage
-            if context and context.strip():
-                self.logger.info(f"Producer: Using RAG context ({len(context)} chars)")
-                self.logger.info(f"Producer: Context preview: '{context[:100]}...'")
-            else:
-                self.logger.info("Producer: No RAG context provided")
+            # Process each sub-query
+            for i, sub_query in enumerate(sub_queries, 1):
+                self.logger.info(f"Processing sub-query {i}/{len(sub_queries)}: '{sub_query[:50]}...'")
 
-            self.logger.info(f"Producer: Initial prompt length: {len(current_prompt)} chars")
+                # Get context for this specific sub-query
+                sub_context = context  # Use same context for now, could be optimized per sub-query
 
-            loop_idx = 0
-            while True:
-                self.logger.info(f"Producer starting pass {loop_idx + 1}")
+                # Build prompt for this sub-query
+                sub_prompt = self._build_initial_prompt(sub_query, context)
 
-                # Get model instance for streaming
-                model_instance = self.llm_service.get_model_instance()
-                if not model_instance:
-                    self.token_buffer.put({"status": "error", "error": "Model instance not available"})
-                    return
+                # Process this sub-query with streaming
+                self._process_single_query_streaming(sub_query, sub_prompt, sub_context)
 
-                # Generate tokens from model (no delays here)
-                token_count = 0
-                current_chunk = ""
-
-                # Always use streaming method - no fallbacks
-                self.logger.info(f"Producer: Starting streaming generation for pass {loop_idx + 1}")
-                self.logger.info(f"Producer: Model instance type: {type(model_instance)}")
-
-                # Get streaming generator from model
-                stream_generator = model_instance.generate_streaming_response(current_prompt)
-
-                self.logger.info(f"Producer starting to iterate through stream for pass {loop_idx + 1}")
-                chunk_count = 0
-                hit_limit = False
-
-                for chunk in stream_generator:
-                    chunk_count += 1
-
-                    if chunk.get("status") == "error":
-                        self.token_buffer.put({"status": "error", "error": chunk.get("error")})
-                        return
-
-                    if chunk.get("status") == "streaming":
-                        token_text = chunk.get("token", "")
-                        if token_text:
-                            current_chunk += token_text
-                            token_count += 1
-                            # Stream token to consumer immediately
-                            self.token_buffer.put({
-                                "status": "streaming",
-                                "token": token_text,
-                                "pass": loop_idx + 1,
-                                "token_count": token_count
-                            })
-
-                    elif chunk.get("status") == "complete":
-                        # Check if this was a forced truncation or natural completion
-                        finish_reason = None
-                        if isinstance(chunk, dict) and 'finish_reason' in chunk:
-                            finish_reason = chunk.get('finish_reason')
-
-                        self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
-                        self.logger.info(f"Producer: Finish reason: {finish_reason}")
-
-                        # NEW LOGIC: Check finish_reason for continuation decision
-                        if finish_reason == 'length':
-                            # Model hit token limit - FORCE CONTINUATION (no max_loops restriction)
-                            self.logger.info(f"Producer: finish_reason='length' - MODEL HIT TOKEN LIMIT - CONTINUING")
-                            hit_limit = True
-                            break
-                        elif finish_reason in ['stop', 'eos_token'] or finish_reason is None:
-                            # Natural completion - STOP
-                            cumulative_token_count += token_count  # Add final pass tokens
-                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
-                            self.logger.info(
-                                f"Producer: finish_reason='{finish_reason}' - NATURAL COMPLETION - STOPPING")
-                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
-                            self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
-                                                   "total_tokens": cumulative_token_count})
-                            return
-                        else:
-                            # Unknown finish_reason - log and stop to be safe
-                            cumulative_token_count += token_count  # Add final pass tokens
-                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
-                            self.logger.info(f"Producer: Unknown finish_reason='{finish_reason}' - STOPPING")
-                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
-                            self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
-                                                   "total_tokens": cumulative_token_count})
-                            return
-
-                # Add tokens to complete output for sliding window
-                complete_output += current_chunk
-
-                # If we hit limit, prepare next pass
-                if hit_limit:
-                    cumulative_token_count += token_count  # Add current pass tokens to cumulative count
-                    self.logger.info(f"Producer: Total tokens accumulated: {cumulative_token_count}")
-
-                    # Signal end of current pass to consumer
+                # Add separator between sub-queries (except for the last one)
+                if i < len(sub_queries):
+                    separator = "\n\n---\n\n"
                     self.token_buffer.put({
-                        "status": "pass_complete",
-                        "pass": loop_idx + 1,
-                        "tokens_in_pass": token_count,
-                        "total_tokens_so_far": cumulative_token_count
+                        "status": "streaming",
+                        "token": separator,
+                        "pass": 1,
+                        "token_count": 0
                     })
-
-                    # Small delay to let consumer process the pass completion
-                    import time
-                    time.sleep(0.1)  # 100ms delay between passes
-
-                    self.logger.info(f"Producer preparing next pass {loop_idx + 2}")
-                    # Build next prompt with sliding window context
-                    prev_text = self._get_sliding_window_context(complete_output, history_tokens)
-                    current_prompt = self._build_continuation_prompt(query, context, prev_text)
-
-                    # Debug: Log continuation prompt details
-                    self.logger.info(f"Producer: Continuation prompt length: {len(current_prompt)} chars")
-                    self.logger.info(f"Producer: Sliding window context length: {len(prev_text)} chars")
-                    if context:
-                        self.logger.info(f"Producer: RAG context preserved in continuation: {len(context)} chars")
-
-                    # Reset for next pass
-                    current_chunk = ""
-                    token_count = 0
-                    hit_limit = False
-                    loop_idx += 1
-
-                    continue
-                else:
-                    # Natural completion - should not reach here as model handles completion in streaming loop
-                    cumulative_token_count += token_count  # Add final pass tokens
-                    self.logger.info(f"Producer: Generation complete after {loop_idx + 1} passes")
-                    self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
-                    self.logger.info(f"Producer finished: hit_limit={hit_limit}, loop_idx={loop_idx}")
-                    self.token_buffer.put(
-                        {"status": "complete", "total_passes": loop_idx + 1, "total_tokens": cumulative_token_count})
-                    return
 
         except Exception as e:
             self.logger.error(f"Producer error: {str(e)}")
-            self.token_buffer.put({"status": "error", "error": str(e)})
+            self.token_buffer.put({
+                "status": "error",
+                "error": str(e),
+                "timestamp": int(time.time() * 1000)
+            })
+        self.token_buffer.put({"status": "complete"})
+        # Mark generation as complete
+        self.generation_complete.set()
 
     def _token_consumer(self):
         """
@@ -190,6 +82,17 @@ class StreamingService:
                 try:
                     # Get token from buffer (wait if needed) - 5 minute timeout for very slow model startup
                     token_data = self.token_buffer.get(timeout=300)  # 5 minute timeout
+
+                    # Safety check: handle unexpected string values
+                    if isinstance(token_data, str):
+                        self.logger.warning(f"Consumer received unexpected string: '{token_data[:50]}...'")
+                        # Convert string to proper token format
+                        token_data = {
+                            "status": "streaming",
+                            "token": token_data,
+                            "pass": 1,
+                            "token_count": 0
+                        }
 
                     if token_data.get("status") == "error":
                         yield {
@@ -313,10 +216,11 @@ class StreamingService:
             truncated = truncated[:last_period + 1]
 
         self.logger.info(
-            f"Truncated context from ~{len(context)//4} to ~{len(truncated)//4} tokens to fit within token limits")
+            f"Truncated context from ~{len(context) // 4} to ~{len(truncated) // 4} tokens to fit within token limits")
         return truncated
 
-    def generate_streaming_response(self, query: str, context_info: dict = None) -> Generator[Dict[str, Any], None, None]:
+    def generate_streaming_response(self, query: str, context_info: dict = None) -> Generator[
+        Dict[str, Any], None, None]:
         """
         Generate streaming response with sliding window continuation for long responses
 
@@ -531,3 +435,340 @@ Continue the response naturally:"""
             question=query,
             previous=prev_text
         )
+
+    def _get_sub_queries(self, query: str) -> List[str]:
+        """
+        Generate sub-queries by decomposing the main query using LLM
+        Returns a list of sub-queries (or [query] if atomic).
+        """
+        self.logger.debug(f"Analyzing query for decomposition: '{query[:3000]}...'")
+        if hasattr(self, 'llm_service') and self.llm_service:
+            try:
+                prompt = Config.DECOMPOSITION_PROMPT_TEMPLATE.format(query=query)
+                result = self.llm_service.generate_response(
+                    prompt,
+                    use_rag=False  # Don't use RAG for decomposition
+                )
+                if result.get('status') == 'success':
+                    response_text = result.get('response', '').strip()
+                    self.logger.debug(f"LLM decomposition response: {response_text}")
+                    self.logger.debug(f"Response length: {len(response_text)} chars")
+
+                    # Extract and parse JSON array with improved robustness
+                    json_start = response_text.find('[')
+                    if json_start >= 0:
+                        # Find the matching closing bracket
+                        bracket_count = 0
+                        json_end = -1
+                        for i in range(json_start, len(response_text)):
+                            if response_text[i] == '[':
+                                bracket_count += 1
+                            elif response_text[i] == ']':
+                                bracket_count -= 1
+                                if bracket_count == 0:
+                                    json_end = i + 1
+                                    break
+
+                        if json_end > json_start:
+                            json_str = response_text[json_start:json_end]
+                            self.logger.debug(f"Extracted JSON string: '{json_str}'")
+
+                            # Try multiple parsing strategies
+                            sub_queries = self._parse_json_with_fallbacks(json_str)
+                            if sub_queries:
+                                if sub_queries == ["SINGLE_QUERY"]:
+                                    self.logger.debug("LLM decided to treat as atomic query.")
+                                    return [query]
+                                self.logger.debug(f"LLM generated sub-queries: {sub_queries}")
+                                return sub_queries
+                    else:
+                        self.logger.debug("No JSON array found in LLM decomposition response")
+            except Exception as e:
+                self.logger.error(f"Exception during LLM sub-query generation: {e}")
+
+        # Fallback: use heuristics
+        self.logger.debug("Using fallback decomposition logic.")
+        try:
+            return self._fallback_decomposition(query)
+        except Exception as e:
+            self.logger.error(f"Error in fallback decomposition: {e}")
+            return [query]
+
+    def _parse_json_with_fallbacks(self, json_str):
+        """
+        Try multiple strategies to parse potentially malformed JSON from LLM.
+        """
+        # Strategy 1: Direct JSON parsing
+        try:
+            sub_queries = json.loads(json_str)
+            if isinstance(sub_queries, list) and sub_queries:
+                return sub_queries
+        except json.JSONDecodeError as e:
+            self.logger.debug(f"Direct JSON parsing failed: {e}")
+
+        # Strategy 2: Fix common JSON issues
+        try:
+            # Remove trailing commas
+            fixed_json = re.sub(r',\s*]', ']', json_str)
+            fixed_json = re.sub(r',\s*}', '}', fixed_json)
+
+            # Fix unescaped quotes in strings
+            fixed_json = self._fix_unescaped_quotes(fixed_json)
+
+            self.logger.debug(f"Attempting to parse fixed JSON: '{fixed_json}'")
+            sub_queries = json.loads(fixed_json)
+            if isinstance(sub_queries, list) and sub_queries:
+                return sub_queries
+        except json.JSONDecodeError as e:
+            self.logger.debug(f"Fixed JSON parsing failed: {e}")
+
+        # Strategy 3: Extract strings manually using regex
+        try:
+            # Find all quoted strings in the array
+            string_pattern = r'"([^"\\]*(\\.[^"\\]*)*)"'
+            matches = re.findall(string_pattern, json_str)
+            if matches:
+                # Extract the first part of each match (the actual string content)
+                sub_queries = [match[0] if isinstance(match, tuple) else match for match in matches]
+                if sub_queries:
+                    self.logger.debug(f"Extracted queries using regex: {sub_queries}")
+                    return sub_queries
+        except Exception as e:
+            self.logger.debug(f"Regex extraction failed: {e}")
+
+        # Strategy 4: Simple line-based extraction
+        try:
+            # Look for lines that look like query strings
+            lines = json_str.replace('[', '').replace(']', '').split(',')
+            sub_queries = []
+            for line in lines:
+                line = line.strip().strip('"').strip("'")
+                if line and len(line) > 10:  # Reasonable query length
+                    sub_queries.append(line)
+            if sub_queries:
+                self.logger.debug(f"Extracted queries using line parsing: {sub_queries}")
+                return sub_queries
+        except Exception as e:
+            self.logger.debug(f"Line-based extraction failed: {e}")
+
+        self.logger.warning(f"All JSON parsing strategies failed for: '{json_str}'")
+        return None
+
+    def _fix_unescaped_quotes(self, json_str):
+        """
+        Fix unescaped quotes within JSON strings.
+        """
+        try:
+            # This is a simple approach - in a real implementation you'd want more sophisticated parsing
+            # For now, just escape any unescaped quotes that aren't at string boundaries
+            result = json_str
+            # Replace unescaped quotes that are not at the beginning/end of strings
+            # This is a heuristic and may not catch all cases
+            result = re.sub(r'(?<!\\)"(?![,\]\}])', '\\"', result)
+            return result
+        except Exception:
+            return json_str
+
+    def _fallback_decomposition(self, query: str) -> List[str]:
+        """
+        Fallback decomposition using simple heuristics
+
+        Args:
+            query: Original user query
+
+        Returns:
+            List of sub-queries or original query
+        """
+        # Simple heuristics for decomposition
+        query_lower = query.lower()
+
+        # Check for multiple topics or questions
+        if any(word in query_lower for word in ['and', 'also', 'additionally', 'furthermore']):
+            # Try to split on conjunctions
+            parts = []
+            for separator in [' and ', ' also ', ' additionally ', ' furthermore ']:
+                if separator in query_lower:
+                    parts = [part.strip() for part in query.split(separator) if part.strip()]
+                    break
+
+            if len(parts) > 1:
+                self.logger.debug(f"Fallback decomposition found {len(parts)} parts: {parts}")
+                return parts
+
+        # Check for multiple questions
+        if query.count('?') > 1:
+            parts = [part.strip() + '?' for part in query.split('?') if part.strip()]
+            if len(parts) > 1:
+                self.logger.debug(f"Fallback decomposition found {len(parts)} questions: {parts}")
+                return parts
+
+        # Default: return original query
+        self.logger.debug("Fallback decomposition: keeping as single query")
+        return [query]
+
+    def _process_single_query_streaming(self, query: str, prompt: str, context: str = None):
+        """
+        Process a single query with streaming output
+
+        Args:
+            query: The query to process
+            prompt: The formatted prompt
+            context: Optional context
+        """
+        try:
+            complete_output = ""
+            history_tokens = Config.SLIDING_WINDOW_TOKENS
+            cumulative_token_count = 0  # Track total tokens across all passes
+
+            # Single query processing (original logic)
+            self.logger.info("Processing single query")
+            current_prompt = self._build_initial_prompt(query, context)
+
+            # Debug: Log context usage
+            if context and context.strip():
+                self.logger.info(f"Producer: Using RAG context ({len(context)} chars)")
+                self.logger.info(f"Producer: Context preview: '{context[:100]}...'")
+            else:
+                self.logger.info("Producer: No RAG context provided")
+
+            self.logger.info(f"Producer: Initial prompt length: {len(current_prompt)} chars")
+
+            loop_idx = 0
+            while True:
+                self.logger.info(f"Producer starting pass {loop_idx + 1}")
+
+                # Get model instance for streaming
+                model_instance = self.llm_service.get_model_instance()
+                if not model_instance:
+                    self.token_buffer.put({"status": "error", "error": "Model instance not available"})
+                    return
+
+                # Generate tokens from model (no delays here)
+                token_count = 0
+                current_chunk = ""
+
+                # Always use streaming method - no fallbacks
+                self.logger.info(f"Producer: Starting streaming generation for pass {loop_idx + 1}")
+                self.logger.info(f"Producer: Model instance type: {type(model_instance)}")
+
+                # Get streaming generator from model
+                stream_generator = model_instance.generate_streaming_response(current_prompt)
+
+                self.logger.info(f"Producer starting to iterate through stream for pass {loop_idx + 1}")
+                chunk_count = 0
+                hit_limit = False
+
+                for chunk in stream_generator:
+                    chunk_count += 1
+
+                    if chunk.get("status") == "error":
+                        self.token_buffer.put({"status": "error", "error": chunk.get("error")})
+                        return
+
+                    if chunk.get("status") == "streaming":
+                        token_text = chunk.get("token", "")
+                        if token_text:
+                            current_chunk += token_text
+                            token_count += 1
+                            # Stream token to consumer immediately
+                            self.token_buffer.put({
+                                "status": "streaming",
+                                "token": token_text,
+                                "pass": loop_idx + 1,
+                                "token_count": token_count
+                            })
+
+                    elif chunk.get("status") == "complete":
+                        # Check if this was a forced truncation or natural completion
+                        finish_reason = None
+                        if isinstance(chunk, dict) and 'finish_reason' in chunk:
+                            finish_reason = chunk.get('finish_reason')
+
+                        self.logger.info(f"Producer: Pass {loop_idx + 1} completed with {token_count} tokens")
+                        self.logger.info(f"Producer: Finish reason: {finish_reason}")
+
+                        # NEW LOGIC: Check finish_reason for continuation decision
+                        if finish_reason == 'length':
+                            # Model hit token limit - FORCE CONTINUATION (no max_loops restriction)
+                            self.logger.info(f"Producer: finish_reason='length' - MODEL HIT TOKEN LIMIT - CONTINUING")
+                            hit_limit = True
+                            break
+                        elif finish_reason in ['stop', 'eos_token'] or finish_reason is None:
+                            # Natural completion - STOP
+                            cumulative_token_count += token_count  # Add final pass tokens
+                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
+                            self.logger.info(
+                                f"Producer: finish_reason='{finish_reason}' - NATURAL COMPLETION - STOPPING")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
+                            # self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
+                            #                        "total_tokens": cumulative_token_count})
+                            return
+                        else:
+                            # Unknown finish_reason - log and stop to be safe
+                            cumulative_token_count += token_count  # Add final pass tokens
+                            self.logger.info(f"Producer: Total tokens so far: {cumulative_token_count}")
+                            self.logger.info(f"Producer: Unknown finish_reason='{finish_reason}' - STOPPING")
+                            self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
+                            self.token_buffer.put({"status": "complete", "total_passes": loop_idx + 1,
+                                                   "total_tokens": cumulative_token_count})
+                            return
+
+                # Add tokens to complete output for sliding window
+                complete_output += current_chunk
+
+                # If we hit limit, prepare next pass
+                if hit_limit:
+                    cumulative_token_count += token_count  # Add current pass tokens to cumulative count
+                    self.logger.info(f"Producer: Total tokens accumulated: {cumulative_token_count}")
+
+                    # Signal end of current pass to consumer
+                    # self.token_buffer.put({
+                    #     "status": "pass_complete",
+                    #     "pass": loop_idx + 1,
+                    #     "tokens_in_pass": token_count,
+                    #     "total_tokens_so_far": cumulative_token_count
+                    # })
+
+                    self.logger.info(f"Producer preparing next pass {loop_idx + 2}")
+                    # Build next prompt with sliding window context
+                    prev_text = self._get_sliding_window_context(complete_output, history_tokens)
+                    current_prompt = self._build_continuation_prompt(query, context, prev_text)
+
+                    # Debug: Log continuation prompt details
+                    self.logger.info(f"Producer: Continuation prompt length: {len(current_prompt)} chars")
+                    self.logger.info(f"Producer: Sliding window context length: {len(prev_text)} chars")
+                    if context:
+                        self.logger.info(f"Producer: RAG context preserved in continuation: {len(context)} chars")
+                    loop_idx += 1
+                    continue
+                else:
+                    # Natural completion - should not reach here as model handles completion in streaming loop
+                    cumulative_token_count += token_count  # Add final pass tokens
+                    self.logger.info(f"Producer: Generation complete after {loop_idx + 1} passes")
+                    self.logger.info(f"Producer: FINAL TOTAL TOKENS: {cumulative_token_count}")
+                    self.logger.info(f"Producer finished: hit_limit={hit_limit}, loop_idx={loop_idx}")
+                    # self.token_buffer.put(
+                    #     {"status": "complete", "total_passes": loop_idx + 1, "total_tokens": cumulative_token_count})
+                    return
+
+        except Exception as e:
+            self.logger.error(f"Producer error: {str(e)}")
+            self.token_buffer.put({"status": "error", "error": str(e)})
+
+    def _stream_text_chunks(self, text: str, chunk_size: int = 50):
+        """
+        Stream text in chunks to the token buffer
+
+        Args:
+            text: Text to stream
+            chunk_size: Size of each chunk
+        """
+        for i in range(0, len(text), chunk_size):
+            chunk = text[i:i + chunk_size]
+            self.token_buffer.put({
+                "status": "streaming",
+                "token": chunk,
+                "pass": 1,
+                "token_count": i // chunk_size + 1
+            })
+            time.sleep(0.05)  # Small delay for streaming effect
