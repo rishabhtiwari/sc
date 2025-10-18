@@ -68,13 +68,19 @@ class Config:
     SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT',
                               "You are a helpful AI assistant. Use the provided context to answer questions accurately and concisely.")
 
-    RAG_PROMPT_TEMPLATE = """Answer the following question using the provided context. Be helpful, accurate, and concise.
+    RAG_PROMPT_TEMPLATE = """Answer the following question using ONLY the provided context. 
+Be helpful, accurate, and concise. Restate the question in your answer for clarity.
 
-Context: {context}
+Context:
+{context}
 
-Question: {question}
+Question:
+{question}
 
-Answer:"""
+Your response should begin with: "Question: ..." followed by "Answer: ..."
+
+Response:
+"""
 
     FALLBACK_PROMPT_TEMPLATE = """Answer the following question. Be helpful, accurate, and concise.
 
@@ -97,6 +103,24 @@ Requirements:
 Please provide your response with the code wrapped in appropriate code blocks using markdown formatting (```language).
 
 Answer:"""
+
+    DECOMPOSITION_PROMPT_TEMPLATE = """You are an expert query analyst. Analyze the following user query and decide if it should be broken down into independent, answerable sub-queries.
+Query: "{query}"
+Instructions:
+- If the query contains multiple requests, topics, or can be more effectively answered by addressing each part separately, decompose it into distinct sub-queries.
+- Each sub-query should be self-contained and not reference other sub-queries.
+- If the query is already focused or atomic, and should not be broken down, return: ["SINGLE_QUERY"]
+Output format:
+- Always respond with a JSON array.
+- For complex queries, list each sub-query as a separate string in the array.
+- For simple queries, respond exactly with ["SINGLE_QUERY"]
+Examples:
+Q: "Who wrote Hamlet and what is the capital of Denmark?"
+A: ["Who wrote Hamlet?", "What is the capital of Denmark?"]
+Q: "Summarize the climate of Japan."
+A: ["SINGLE_QUERY"]
+Now, analyze and respond in JSON:
+"""
 
     # Request Timeouts (seconds)
     RETRIEVER_TIMEOUT = int(os.getenv('RETRIEVER_TIMEOUT', 300))
