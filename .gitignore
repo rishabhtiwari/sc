@@ -12,6 +12,8 @@ lib/
 
 ### Database files ###
 *.db
+*.sqlite
+*.sqlite3
 
 ### Temporary directories ###
 code-generation-service/temp/
@@ -19,6 +21,9 @@ code-generation-service/temp/
 ### LLM cache and data directories ###
 **/cache/
 **/data/
+
+### MongoDB data directory ###
+mongodb/data/
 
 ### Python virtual environment ###
 .venv/

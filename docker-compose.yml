@@ -46,6 +46,13 @@ services:
       - LLM_SERVICE_PORT=8083
       - LLM_SERVICE_URL=http://ichat-llm-service:8083
       - LOG_LEVEL=DEBUG
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
     volumes:
       - ./api-server/logs:/app/logs
       - ./api-server/data:/app/data
@@ -58,6 +65,8 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    depends_on:
+      - ichat-mongodb
 
   # OCR Document Converter Service
   ocr-service:
@@ -331,6 +340,13 @@ services:
       - MCP_TEMP_PATH=/app/temp
       - OAUTH_STATE_EXPIRY=600
       - LOG_LEVEL=INFO
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
     volumes:
       - ./mcp-service/logs:/app/logs
       - ./mcp-service/data:/app/data
@@ -344,6 +360,8 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+    depends_on:
+      - ichat-mongodb
 
   # Remote Host Syncer Job for Document Synchronization
   job-remote-host-syncer:
@@ -374,6 +392,13 @@ services:
       - HEALTH_CHECK_PORT=8091
       - DB_PATH=data/syncer.db
       - LOG_FILE=logs/remote-host-syncer.log
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
     volumes:
       - ./jobs/remote-host-syncer/data:/app/data
       - ./jobs/remote-host-syncer/logs:/app/logs
@@ -390,6 +415,7 @@ services:
       - ichat-mcp-service
       - ichat-api
       - embedding-service
+      - ichat-mongodb
 
   # GitHub Repository Syncer Job for Repository Synchronization
   job-github-repo-syncer:
@@ -422,6 +448,13 @@ services:
       - HEALTH_CHECK_PORT=8092
       - DB_PATH=data/github_syncer.db
       - LOG_FILE=logs/github-repo-syncer.log
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
     volumes:
       - ./jobs/github-repo-syncer/data:/app/data
       - ./jobs/github-repo-syncer/logs:/app/logs
@@ -438,6 +471,39 @@ services:
       - ichat-mcp-service
       - ichat-api
       - embedding-service
+      - ichat-mongodb
+
+  # MongoDB Database Service
+  ichat-mongodb:
+    build:
+      context: ./mongodb
+      dockerfile: Dockerfile
+    container_name: ichat-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=ichat_admin
+      - MONGO_INITDB_ROOT_PASSWORD=ichat_secure_password_2024
+      - MONGO_INITDB_DATABASE=ichat_db
+    volumes:
+      - ./mongodb/data:/data/db
+      - ./mongodb/logs:/var/log/mongodb
+    networks:
+      - ichat-network
+    command: ["mongod", "--auth", "--bind_ip_all", "--logpath", "/var/log/mongodb/mongod.log", "--logappend"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
 networks:
   ichat-network:
@@ -481,4 +547,5 @@ volumes:
       type: none
       o: bind
       device: ./llm/llm-prompt-generation/cache
+
 
