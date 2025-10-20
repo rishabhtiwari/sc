@@ -15,8 +15,10 @@ class Config:
     FLASK_ENV = os.getenv('FLASK_ENV', 'production')
 
     # Job Configuration
-    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 60))  # Run every hour
+    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 60))  # Run every hour (fallback)
+    JOB_INTERVAL_SECONDS = int(os.getenv('JOB_INTERVAL_SECONDS', 0))  # Run every N seconds (takes priority)
     MAX_THREADS = int(os.getenv('MAX_THREADS', '1'))  # Threading support
+    MAX_PARALLEL_TASKS = int(os.getenv('MAX_PARALLEL_TASKS', '3'))  # Parallel task support
 
     # MongoDB Configuration
     MONGODB_HOST = os.getenv('MONGODB_HOST', 'localhost')
@@ -52,6 +54,10 @@ class Config:
     # News Processing Configuration
     MAX_ARTICLES_PER_FETCH = int(os.getenv('MAX_ARTICLES_PER_FETCH', 100))
     DUPLICATE_CHECK_HOURS = int(os.getenv('DUPLICATE_CHECK_HOURS', 24))
+
+    # LLM Service Configuration - Direct service communication
+    LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://ichat-llm-service:8083')
+    LLM_TIMEOUT = int(os.getenv('LLM_TIMEOUT', 30))
 
     @classmethod
     def validate_config(cls):
