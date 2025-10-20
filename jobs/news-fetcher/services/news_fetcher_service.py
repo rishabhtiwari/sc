@@ -44,7 +44,7 @@ class NewsFetcherService:
         self.news_client.admin.command('ping')
         self.logger.info("🔧 NewsFetcherService initialized successfully")
 
-    def fetch_all_due_news(self, is_on_demand: bool = False) -> Dict[str, Any]:
+    def fetch_all_due_news(self, is_on_demand: bool = False, job_id: str = None) -> Dict[str, Any]:
         """
         Fetch news from all seed URLs that are due for execution
 
@@ -194,7 +194,11 @@ class NewsFetcherService:
             if mock_data:
                 response_data = mock_data
             else:
-                response_data = {}
+                # Provide valid fallback mock data when mock file is missing
+                response_data = {
+                    "totalArticles": 0,
+                    "articles": []
+                }
             # Get appropriate parser for this provider
             parser = ParserFactory.create_parser(seed_url['partner_name'])
 

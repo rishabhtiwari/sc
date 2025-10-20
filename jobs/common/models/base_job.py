@@ -1,14 +1,16 @@
 """
-Base Job Class - Common framework for all job implementations
+Base Job Class - Common framework for all job implementations with parallel task support
 """
 
 import os
 import sys
 import threading
 import time
+import uuid
+import concurrent.futures
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Callable
 from flask import Flask, jsonify, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -35,6 +37,10 @@ class BaseJob(ABC):
         self.current_threads = 0
         self.thread_lock = threading.Lock()
 
+        # Parallel task configuration
+        self.max_parallel_tasks = getattr(config_class, 'MAX_PARALLEL_TASKS', 3)
+        self.task_executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_parallel_tasks)
+
         # Initialize Flask app
         self.app = Flask(__name__)
         self.app.config.from_object(config_class)
@@ -50,7 +56,8 @@ class BaseJob(ABC):
         self._setup_routes()
 
         # Setup scheduled job if interval is specified
-        if hasattr(config_class, 'JOB_INTERVAL_MINUTES') and config_class.JOB_INTERVAL_MINUTES > 0:
+        if (hasattr(config_class, 'JOB_INTERVAL_MINUTES') and config_class.JOB_INTERVAL_MINUTES > 0) or \
+           (hasattr(config_class, 'JOB_INTERVAL_SECONDS') and config_class.JOB_INTERVAL_SECONDS > 0):
             self._setup_scheduled_job()
     
     @abstractmethod
@@ -72,19 +79,142 @@ class BaseJob(ABC):
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         pass
-    
+
+    def get_parallel_tasks(self) -> List[Dict[str, Any]]:
+        """
+        Override this method to define parallel tasks for the job
+
+        Returns:
+            List of task definitions, each containing:
+            {
+                'name': 'task_name',
+                'function': callable_function,
+                'args': tuple_of_args,
+                'kwargs': dict_of_kwargs
+            }
+        """
+        return []
+
     def validate_job_params(self, params: Dict) -> Dict[str, str]:
         """
         Validate job parameters
-        
+
         Args:
             params: Parameters to validate
-            
+
         Returns:
             Dict of validation errors (empty if valid)
         """
         return {}
-    
+
+    def run_parallel_tasks(self, job_id: str, **kwargs) -> Dict[str, Any]:
+        """
+        Execute all parallel tasks defined by the job
+
+        Args:
+            job_id: Unique identifier for this job execution
+            **kwargs: Additional parameters passed to tasks
+
+        Returns:
+            Dict containing results from all tasks
+        """
+        tasks = self.get_parallel_tasks()
+        if not tasks:
+            self.logger.info(f"No parallel tasks defined for job {job_id}")
+            return {'tasks': [], 'total_tasks': 0}
+
+        self.logger.info(f"🔄 Starting {len(tasks)} parallel tasks for job {job_id}")
+
+        # Prepare task results
+        task_results = {
+            'tasks': [],
+            'total_tasks': len(tasks),
+            'successful_tasks': 0,
+            'failed_tasks': 0,
+            'task_details': {}
+        }
+
+        # Submit all tasks to thread pool
+        future_to_task = {}
+        for task in tasks:
+            task_name = task.get('name', 'unnamed_task')
+            task_function = task.get('function')
+            task_args = task.get('args', ())
+            task_kwargs = task.get('kwargs', {})
+
+            if not callable(task_function):
+                self.logger.error(f"❌ Task '{task_name}' function is not callable")
+                task_results['failed_tasks'] += 1
+                task_results['task_details'][task_name] = {
+                    'status': 'failed',
+                    'error': 'Task function is not callable'
+                }
+                continue
+
+            # Add job_id to task kwargs
+            task_kwargs['job_id'] = job_id
+            task_kwargs.update(kwargs)
+
+            self.logger.info(f"🚀 Submitting task: {task_name}")
+            future = self.task_executor.submit(
+                self._execute_task_with_logging,
+                task_name,
+                task_function,
+                task_args,
+                task_kwargs
+            )
+            future_to_task[future] = task_name
+
+        # Wait for all tasks to complete
+        for future in concurrent.futures.as_completed(future_to_task):
+            task_name = future_to_task[future]
+            try:
+                result = future.result()
+                task_results['successful_tasks'] += 1
+                task_results['task_details'][task_name] = {
+                    'status': 'completed',
+                    'result': result
+                }
+                self.logger.info(f"✅ Task '{task_name}' completed successfully")
+
+            except Exception as e:
+                task_results['failed_tasks'] += 1
+                task_results['task_details'][task_name] = {
+                    'status': 'failed',
+                    'error': str(e)
+                }
+                self.logger.error(f"❌ Task '{task_name}' failed: {str(e)}")
+
+        self.logger.info(f"🏁 Parallel tasks completed: {task_results['successful_tasks']} successful, {task_results['failed_tasks']} failed")
+        return task_results
+
+    def _execute_task_with_logging(self, task_name: str, task_function: Callable, args: tuple, kwargs: dict) -> Any:
+        """
+        Execute a single task with proper logging and error handling
+
+        Args:
+            task_name: Name of the task
+            task_function: Function to execute
+            args: Positional arguments for the function
+            kwargs: Keyword arguments for the function
+
+        Returns:
+            Result from the task function
+        """
+        start_time = datetime.utcnow()
+        self.logger.info(f"🔧 Executing task: {task_name}")
+
+        try:
+            result = task_function(*args, **kwargs)
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.logger.info(f"⏱️ Task '{task_name}' completed in {execution_time:.2f} seconds")
+            return result
+
+        except Exception as e:
+            execution_time = (datetime.utcnow() - start_time).total_seconds()
+            self.logger.error(f"💥 Task '{task_name}' failed after {execution_time:.2f} seconds: {str(e)}")
+            raise
+
     def _setup_routes(self):
         """Setup common Flask routes"""
         
@@ -266,13 +396,13 @@ class BaseJob(ABC):
             job_id = None
             try:
                 # Check if there's already a running job of this type
-                running_jobs = self.job_instance_service.collection.find({
+                running_jobs_count = self.job_instance_service.collection.count_documents({
                     'job_type': self.get_job_type(),
                     'status': {'$in': ['pending', 'running']},
                     'cancelled': {'$ne': True}
                 })
 
-                if running_jobs.count() > 0:
+                if running_jobs_count > 0:
                     self.logger.info(f"Skipping scheduled {self.get_job_type()} job - previous job still running")
                     return
 
@@ -318,16 +448,24 @@ class BaseJob(ABC):
                     )
         
         # Schedule the job with overlap prevention
+        # Support both minutes and seconds configuration
+        if hasattr(self.config, 'JOB_INTERVAL_SECONDS') and self.config.JOB_INTERVAL_SECONDS > 0:
+            trigger = IntervalTrigger(seconds=self.config.JOB_INTERVAL_SECONDS)
+            interval_desc = f"{self.config.JOB_INTERVAL_SECONDS} seconds"
+        else:
+            trigger = IntervalTrigger(minutes=self.config.JOB_INTERVAL_MINUTES)
+            interval_desc = f"{self.config.JOB_INTERVAL_MINUTES} minutes"
+
         self.scheduler.add_job(
             func=scheduled_job_wrapper,
-            trigger=IntervalTrigger(minutes=self.config.JOB_INTERVAL_MINUTES),
+            trigger=trigger,
             id=f'{self.job_name}_scheduled_job',
             name=f'Scheduled {self.job_name} job',
             replace_existing=False,  # Don't replace existing scheduled jobs
             max_instances=1  # Only allow one instance of this job to run at a time
         )
-        
-        self.logger.info(f"Scheduled job setup: {self.job_name} every {self.config.JOB_INTERVAL_MINUTES} minutes")
+
+        self.logger.info(f"Scheduled job setup: {self.job_name} every {interval_desc}")
     
     def run_flask_app(self):
         """Run the Flask application"""

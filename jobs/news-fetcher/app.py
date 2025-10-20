@@ -8,6 +8,8 @@ import os
 import sys
 from datetime import datetime
 from typing import Dict, Any, List
+from flask import jsonify
+from typing import List
 
 # Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,6 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common.models.base_job import BaseJob
 from config.settings import Config
 from services.news_fetcher_service import NewsFetcherService
+from services.news_enrichment_service import NewsEnrichmentService
 
 class NewsFetcherJob(BaseJob):
     """
@@ -25,10 +28,33 @@ class NewsFetcherJob(BaseJob):
     def __init__(self):
         super().__init__('news-fetcher', Config)
         self.news_fetcher_service = NewsFetcherService(logger=self.logger)
+        self.news_enrichment_service = NewsEnrichmentService(Config, logger=self.logger)
 
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         return 'news_fetch'
+
+    def get_parallel_tasks(self) -> List[Dict[str, Any]]:
+        """
+        Define parallel tasks for news fetcher job
+
+        Returns:
+            List of task definitions for parallel execution
+        """
+        return [
+            {
+                'name': 'news_fetching',
+                'function': self.news_fetcher_service.fetch_all_due_news,
+                'args': (),
+                'kwargs': {}
+            },
+            {
+                'name': 'news_enrichment',
+                'function': self.news_enrichment_service.enrich_news_articles,
+                'args': (),
+                'kwargs': {}
+            }
+        ]
 
     def validate_job_params(self, params: Dict[str, Any]) -> List[str]:
         """
@@ -46,7 +72,7 @@ class NewsFetcherJob(BaseJob):
 
     def run_job(self, job_id: str, is_on_demand: bool = False, **kwargs) -> Dict[str, Any]:
         """
-        Main job execution method - fetches news from all due seed URLs
+        Main job execution method - runs parallel tasks for news fetching and enrichment
 
         Args:
             job_id: Job instance ID for tracking
@@ -57,16 +83,17 @@ class NewsFetcherJob(BaseJob):
             Job execution results
         """
         try:
-            self.logger.info(f"Starting news fetch job {job_id}")
+            self.logger.info(f"🚀 Starting news fetch job {job_id} with parallel tasks")
 
             # Check if job was cancelled before starting
             if self.job_instance_service.is_job_cancelled(job_id):
                 self.logger.info(f"Job {job_id} was cancelled before execution")
                 return {'status': 'cancelled', 'message': 'Job was cancelled'}
 
-            # Fetch news from all due seed URLs
             start_time = datetime.utcnow()
-            fetch_results = self.news_fetcher_service.fetch_all_due_news(is_on_demand=is_on_demand)
+
+            # Execute all parallel tasks
+            task_results = self.run_parallel_tasks(job_id, is_on_demand=is_on_demand, **kwargs)
 
             # Check if job was cancelled during execution
             if self.job_instance_service.is_job_cancelled(job_id):
@@ -78,35 +105,74 @@ class NewsFetcherJob(BaseJob):
             # Calculate execution time
             execution_time = (end_time - start_time).total_seconds()
 
-            # Prepare job results
+            # Extract results from parallel tasks
+            fetch_task_result = task_results['task_details'].get('news_fetching', {}).get('result', {})
+            enrichment_task_result = task_results['task_details'].get('news_enrichment', {}).get('result', {})
+
+            # Determine job status based on task results
+            job_status = 'completed'
+            if task_results['failed_tasks'] > 0:
+                if task_results['successful_tasks'] == 0:
+                    job_status = 'failed'  # All tasks failed
+                else:
+                    job_status = 'partial_failure'  # Some tasks failed, some succeeded
+
+            # Prepare job results combining both tasks
             job_results = {
                 'job_id': job_id,
-                'status': 'completed',
+                'status': job_status,
                 'execution_time_seconds': execution_time,
                 'start_time': start_time.isoformat(),
                 'end_time': end_time.isoformat(),
-                'total_seed_urls': fetch_results['total_seed_urls'],
-                'processed_seed_urls': fetch_results['processed_seed_urls'],
-                'skipped_seed_urls': fetch_results['skipped_seed_urls'],
-                'total_articles_fetched': fetch_results['total_articles_fetched'],
-                'total_articles_saved': fetch_results['total_articles_saved'],
-                'processed_partners': fetch_results['processed_partners'],
-                'errors': fetch_results['errors']
+                'parallel_tasks': task_results,
+                # News fetching results
+                'total_seed_urls': fetch_task_result.get('total_seed_urls', 0),
+                'processed_seed_urls': fetch_task_result.get('processed_seed_urls', 0),
+                'skipped_seed_urls': fetch_task_result.get('skipped_seed_urls', 0),
+                'total_articles_fetched': fetch_task_result.get('total_articles_fetched', 0),
+                'total_articles_saved': fetch_task_result.get('total_articles_saved', 0),
+                'processed_partners': fetch_task_result.get('processed_partners', []),
+                # News enrichment results
+                'articles_enriched': enrichment_task_result.get('articles_enriched', 0),
+                'articles_failed_enrichment': enrichment_task_result.get('articles_failed', 0),
+                'total_articles_processed_for_enrichment': enrichment_task_result.get('articles_processed', 0),
+                # Combined errors
+                'errors': fetch_task_result.get('errors', []) + enrichment_task_result.get('errors', [])
             }
 
             # Update job instance with results
             self.job_instance_service.update_job_instance(
                 job_id,
-                status='completed',
+                status=job_status,
                 result=job_results,
-                progress=fetch_results['processed_seed_urls'],
-                total_items=fetch_results['total_seed_urls']
+                progress=task_results['successful_tasks'],
+                total_items=task_results['total_tasks']
             )
 
-            self.logger.info(f"News fetch job {job_id} completed successfully. "
-                           f"Processed {fetch_results['processed_seed_urls']}/{fetch_results['total_seed_urls']} seed URLs, "
-                           f"fetched {fetch_results['total_articles_fetched']} articles, "
-                           f"saved {fetch_results['total_articles_saved']} new articles")
+            # Log appropriate message based on job status
+            if job_status == 'completed':
+                self.logger.info(f"🏁 News job {job_id} completed successfully with parallel tasks. "
+                               f"Tasks: {task_results['successful_tasks']}/{task_results['total_tasks']} successful, "
+                               f"Fetched: {job_results['total_articles_fetched']} articles, "
+                               f"Saved: {job_results['total_articles_saved']} new articles, "
+                               f"Enriched: {job_results['articles_enriched']} articles")
+            elif job_status == 'partial_failure':
+                self.logger.warning(f"⚠️ News job {job_id} completed with partial failures. "
+                                  f"Tasks: {task_results['successful_tasks']}/{task_results['total_tasks']} successful, "
+                                  f"{task_results['failed_tasks']} failed, "
+                                  f"Fetched: {job_results['total_articles_fetched']} articles, "
+                                  f"Saved: {job_results['total_articles_saved']} new articles, "
+                                  f"Enriched: {job_results['articles_enriched']} articles")
+            else:  # failed
+                self.logger.error(f"❌ News job {job_id} failed - all parallel tasks failed. "
+                                f"Tasks: {task_results['failed_tasks']}/{task_results['total_tasks']} failed")
+                # Raise exception so base job framework marks job as failed
+                failed_task_errors = []
+                for task_name, task_detail in task_results['task_details'].items():
+                    if task_detail.get('status') == 'failed':
+                        failed_task_errors.append(f"{task_name}: {task_detail.get('error', 'Unknown error')}")
+
+                raise Exception(f"All parallel tasks failed: {'; '.join(failed_task_errors)}")
 
             return job_results
 
@@ -156,15 +222,27 @@ news_fetcher_job = NewsFetcherJob()
 # Get Flask app from base job
 app = news_fetcher_job.app
 
-# Add custom endpoint for seed URL status
+# Add custom endpoints
 @app.route('/seed-urls/status', methods=['GET'])
 def get_seed_urls_status():
     """Get status of all seed URLs"""
     try:
         result = news_fetcher_job.get_seed_url_status()
-        return news_fetcher_job.jsonify(result)
+        return jsonify(result)
     except Exception as e:
-        return news_fetcher_job.jsonify({
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/enrichment/status', methods=['GET'])
+def get_enrichment_status():
+    """Get news enrichment status and statistics"""
+    try:
+        result = news_fetcher_job.news_enrichment_service.get_enrichment_status()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
             'status': 'error',
             'error': str(e)
         }), 500
