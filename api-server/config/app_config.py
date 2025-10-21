@@ -51,6 +51,12 @@ class AppConfig:
     GITHUB_SYNCER_SERVICE_PORT = int(os.environ.get('GITHUB_SYNCER_SERVICE_PORT', 8092))
     GITHUB_SYNCER_URL = f"http://{GITHUB_SYNCER_SERVICE_HOST}:{GITHUB_SYNCER_SERVICE_PORT}"
 
+    # News Service integration
+    NEWS_SERVICE_HOST = os.environ.get('NEWS_SERVICE_HOST', 'ichat-news-fetcher')
+    NEWS_SERVICE_PORT = int(os.environ.get('NEWS_SERVICE_PORT', 8093))
+    NEWS_SERVICE_URL = f"http://{NEWS_SERVICE_HOST}:{NEWS_SERVICE_PORT}"
+    NEWS_SERVICE_TIMEOUT = int(os.environ.get('NEWS_SERVICE_TIMEOUT', 30))
+
 
 class DevelopmentConfig(AppConfig):
     """
