@@ -12,7 +12,7 @@ from pymongo import MongoClient
 from urllib.parse import urlparse
 import re
 
-from config.settings import Config
+from config.settings import Config, ArticleStatus
 from parsers.parser_factory import ParserFactory
 
 
@@ -171,7 +171,7 @@ class NewsFetcherService:
             # Debug: Show seed URL details
             self.logger.info(f"🔍 Processing Seed URL:")
             self.logger.info(f"   Name: {seed_url.get('name', 'N/A')}")
-            self.logger.info(f"   Partner: {seed_url.get('partner_name', 'N/A')}")
+            self.logger.info(f"   Partner: {seed_url.get('partner_name', seed_url.get('provider', 'N/A'))}")
             self.logger.info(f"   Base URL: {seed_url.get('url', 'N/A')}")
             self.logger.info(f"   API Params: {seed_url.get('metadata', {}).get('api_params', {})}")
 
@@ -199,15 +199,16 @@ class NewsFetcherService:
                     "totalArticles": 0,
                     "articles": []
                 }
-            # Get appropriate parser for this provider
-            parser = ParserFactory.create_parser(seed_url['partner_name'])
+            # Get appropriate parser for this provider - handle both partner_name and provider fields
+            partner_name = seed_url.get('partner_name', seed_url.get('provider', 'gnews'))
+            parser = ParserFactory.create_parser(partner_name)
 
             # Parse the response
             articles = parser.parse_response(response_data)
             result['articles_fetched'] = len(articles)
 
-            # Save articles to database
-            saved_count = self._save_articles(articles)
+            # Save articles to database with category information
+            saved_count = self._save_articles(articles, seed_url)
             result['articles_saved'] = saved_count
 
             return result
@@ -218,7 +219,7 @@ class NewsFetcherService:
 
             self.logger.error(f"❌ Error in _fetch_and_store_from_seed_url:")
             self.logger.error(f"   Seed URL: {seed_url.get('name', 'unknown')}")
-            self.logger.error(f"   Provider: {seed_url.get('provider', 'unknown')}")
+            self.logger.error(f"   Provider: {seed_url.get('partner_name', seed_url.get('provider', 'unknown'))}")
             self.logger.error(f"   URL: {seed_url.get('url', 'unknown')}")
             self.logger.error(f"   Error: {str(e)}")
             self.logger.error(f"   Stacktrace:")
@@ -280,17 +281,30 @@ class NewsFetcherService:
         self.logger.info(f"🌐 Final URL: {actual_url}")
         return actual_url
 
-    def _save_articles(self, articles: List[Dict[str, Any]]) -> int:
+    def _save_articles(self, articles: List[Dict[str, Any]], seed_url: Dict[str, Any] = None) -> int:
         """
         Save articles to the news database, avoiding duplicates
-        
+
         Args:
             articles: List of standardized articles
-            
+            seed_url: Seed URL document containing category information
+
         Returns:
             Number of articles actually saved
         """
         saved_count = 0
+
+        # Extract category from seed URL
+        category = Config.DEFAULT_FILTER_CATEGORY  # Default category from config
+        if seed_url:
+            # Try to get category from metadata.api_params first
+            metadata = seed_url.get('metadata', {})
+            api_params = metadata.get('api_params', {})
+            if 'category' in api_params:
+                category = api_params['category']
+            # Fallback to direct category field
+            elif 'category' in seed_url:
+                category = seed_url['category']
 
         for article in articles:
             try:
@@ -298,21 +312,25 @@ class NewsFetcherService:
                 existing = self.news_collection.find_one({'id': article['id']})
 
                 if not existing:
-                    # Insert new article with status='progress' and empty short_summary
-                    article['status'] = 'progress'
+                    # Insert new article with status='progress', empty short_summary, and category
+                    article['status'] = ArticleStatus.PROGRESS.value
                     article['short_summary'] = ''
+                    article['category'] = category
                     self.news_collection.insert_one(article)
                     saved_count += 1
+                    self.logger.info(f"✅ Saved new article with category '{category}': {article.get('title', 'N/A')[:50]}...")
                 else:
-                    # Optionally update existing article with newer data
+                    # Optionally update existing article with newer data and category
                     self.news_collection.update_one(
                         {'id': article['id']},
                         {'$set': {
                             'updated_at': datetime.utcnow(),
-                            'status': 'progress',
-                            'short_summary': ''
+                            'status': ArticleStatus.PROGRESS.value,
+                            'short_summary': '',
+                            'category': category
                         }}
                     )
+                    self.logger.info(f"🔄 Updated existing article with category '{category}': {article.get('title', 'N/A')[:50]}...")
 
             except Exception as e:
                 self.logger.error(f"Error saving article {article.get('id', 'unknown')}: {str(e)}")

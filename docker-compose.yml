@@ -507,6 +507,13 @@ services:
       - HTTP_TIMEOUT=30
       - HTTP_RETRIES=3
       - MAX_ARTICLES_PER_FETCH=100
+      # News API Configuration
+      - DEFAULT_PAGE_SIZE=10
+      - MAX_PAGE_SIZE=50
+      # Default API Filter Values
+      - DEFAULT_FILTER_CATEGORY=general
+      - DEFAULT_FILTER_LANGUAGE=en
+      - DEFAULT_FILTER_COUNTRY=in
     volumes:
       - ./jobs/news-fetcher/logs:/app/logs
       - ./jobs/news-fetcher/data:/app/data

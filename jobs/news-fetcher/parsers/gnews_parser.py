@@ -143,7 +143,7 @@ class GNewsParser(BaseNewsParser):
                 'id': source_data.get('name', '').lower().replace(' ', '_'),
                 'name': source_data.get('name', ''),
                 'url': source_data.get('url', ''),
-                'country': 'unknown'  # GNews doesn't provide country in source
+                'country': source_data.get('country', 'unknown')  # Extract country if available
             }
         elif isinstance(source_data, str):
             # Sometimes source is just a string
