@@ -18,6 +18,7 @@ from routes.llm_routes import llm_bp
 from routes.mcp_routes import mcp_bp
 from routes.syncer_routes import syncer_bp
 from routes.github_syncer_routes import github_syncer_bp
+from routes.news_routes import news_bp
 
 from config.app_config import AppConfig
 
@@ -73,6 +74,7 @@ def create_app():
     from routes.code_routes import code_bp
     from routes.syncer_routes import syncer_bp
     from routes.github_syncer_routes import github_syncer_bp
+    from routes.news_routes import news_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -85,6 +87,7 @@ def create_app():
     app.register_blueprint(code_bp, url_prefix='/api')
     app.register_blueprint(syncer_bp, url_prefix='/api')
     app.register_blueprint(github_syncer_bp, url_prefix='/api')
+    app.register_blueprint(news_bp, url_prefix='/api')
 
     
     # Root endpoint
@@ -106,6 +109,7 @@ def create_app():
                 "mcp": "/api/mcp/* (GET/POST)",
                 "context": "/api/context/* (GET/POST/DELETE)",
                 "code": "/api/code/* (GET/POST)",
+                "news": "/api/news/* (GET)",
                 "home": "/ (GET)"
             },
             "timestamp": int(time.time() * 1000)
@@ -123,6 +127,7 @@ def main():
         print("📍 Server will be available at: http://localhost:8080")
         print("🔗 Chat endpoint: http://localhost:8080/api/chat")
         print("📄 Document processing: http://localhost:8080/api/documents")
+        print("📰 News API: http://localhost:8080/api/news")
         print("❤️  Health check: http://localhost:8080/api/health")
         print("🛑 Press Ctrl+C to stop the server")
         print("=" * 50)
