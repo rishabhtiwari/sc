@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Dict, List, Any
 from pymongo import MongoClient
 
+from config.settings import ArticleStatus
+
 
 class NewsEnrichmentService:
     """Service to enrich news articles with AI-generated summaries"""
@@ -47,7 +49,7 @@ class NewsEnrichmentService:
         try:
             # Step 1: Fetch all articles with status='progress'
             articles = list(self.news_collection.find({
-                'status': 'progress',
+                'status': ArticleStatus.PROGRESS.value,
                 '$or': [
                     {'short_summary': {'$exists': False}},
                     {'short_summary': ''},
@@ -89,7 +91,7 @@ class NewsEnrichmentService:
                             {
                                 '$set': {
                                     'short_summary': summary,
-                                    'status': 'completed',  # Step 6: Mark as completed
+                                    'status': ArticleStatus.COMPLETED.value,  # Step 6: Mark as completed
                                     'updated_at': datetime.utcnow(),
                                     'enriched_at': datetime.utcnow()
                                 }
@@ -195,8 +197,8 @@ class NewsEnrichmentService:
         """
         try:
             total_articles = self.news_collection.count_documents({})
-            progress_articles = self.news_collection.count_documents({'status': 'progress'})
-            completed_articles = self.news_collection.count_documents({'status': 'completed'})
+            progress_articles = self.news_collection.count_documents({'status': ArticleStatus.PROGRESS.value})
+            completed_articles = self.news_collection.count_documents({'status': ArticleStatus.COMPLETED.value})
             enriched_articles = self.news_collection.count_documents({
                 'short_summary': {'$exists': True, '$ne': '', '$ne': None}
             })

@@ -3,6 +3,22 @@ Configuration settings for News Fetcher Job Service
 """
 
 import os
+from enum import Enum
+
+
+class ArticleStatus(Enum):
+    """Enum for article processing status"""
+    PROGRESS = 'progress'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
+
+class JobStatus(Enum):
+    """Enum for job execution status"""
+    RUNNING = 'running'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+    PARTIAL_FAILURE = 'partial_failure'
 
 
 class Config:
@@ -54,6 +70,15 @@ class Config:
     # News Processing Configuration
     MAX_ARTICLES_PER_FETCH = int(os.getenv('MAX_ARTICLES_PER_FETCH', 100))
     DUPLICATE_CHECK_HOURS = int(os.getenv('DUPLICATE_CHECK_HOURS', 24))
+
+    # News API Configuration
+    DEFAULT_PAGE_SIZE = int(os.getenv('DEFAULT_PAGE_SIZE', 10))
+    MAX_PAGE_SIZE = int(os.getenv('MAX_PAGE_SIZE', 50))
+
+    # Default API Filter Values
+    DEFAULT_FILTER_CATEGORY = os.getenv('DEFAULT_FILTER_CATEGORY', 'general')
+    DEFAULT_FILTER_LANGUAGE = os.getenv('DEFAULT_FILTER_LANGUAGE', 'en')
+    DEFAULT_FILTER_COUNTRY = os.getenv('DEFAULT_FILTER_COUNTRY', 'in')
 
     # LLM Service Configuration - Direct service communication
     LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://ichat-llm-service:8083')

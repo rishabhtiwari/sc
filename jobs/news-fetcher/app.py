@@ -8,16 +8,17 @@ import os
 import sys
 from datetime import datetime
 from typing import Dict, Any, List
-from flask import jsonify
+from flask import jsonify, request
 from typing import List
 
 # Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.models.base_job import BaseJob
-from config.settings import Config
+from config.settings import Config, JobStatus
 from services.news_fetcher_service import NewsFetcherService
 from services.news_enrichment_service import NewsEnrichmentService
+from services.news_query_service import NewsQueryService
 
 class NewsFetcherJob(BaseJob):
     """
@@ -29,6 +30,7 @@ class NewsFetcherJob(BaseJob):
         super().__init__('news-fetcher', Config)
         self.news_fetcher_service = NewsFetcherService(logger=self.logger)
         self.news_enrichment_service = NewsEnrichmentService(Config, logger=self.logger)
+        self.news_query_service = NewsQueryService(logger=self.logger)
 
     def get_job_type(self) -> str:
         """Return the job type identifier"""
@@ -110,12 +112,12 @@ class NewsFetcherJob(BaseJob):
             enrichment_task_result = task_results['task_details'].get('news_enrichment', {}).get('result', {})
 
             # Determine job status based on task results
-            job_status = 'completed'
+            job_status = JobStatus.COMPLETED.value
             if task_results['failed_tasks'] > 0:
                 if task_results['successful_tasks'] == 0:
-                    job_status = 'failed'  # All tasks failed
+                    job_status = JobStatus.FAILED.value  # All tasks failed
                 else:
-                    job_status = 'partial_failure'  # Some tasks failed, some succeeded
+                    job_status = JobStatus.PARTIAL_FAILURE.value  # Some tasks failed, some succeeded
 
             # Prepare job results combining both tasks
             job_results = {
@@ -183,13 +185,13 @@ class NewsFetcherJob(BaseJob):
             # Update job instance with error
             self.job_instance_service.update_job_instance(
                 job_id,
-                status='failed',
+                status=JobStatus.FAILED.value,
                 error_message=error_msg
             )
 
             return {
                 'job_id': job_id,
-                'status': 'failed',
+                'status': JobStatus.FAILED.value,
                 'error': error_msg,
                 'execution_time_seconds': 0
             }
@@ -245,6 +247,97 @@ def get_enrichment_status():
         return jsonify({
             'status': 'error',
             'error': str(e)
+        }), 500
+
+@app.route('/news', methods=['GET'])
+def get_news():
+    """
+    Get news articles with category, language, and country filtering and pagination
+
+    Query Parameters:
+        category (optional): News category to filter by (e.g., 'sports', 'technology')
+                           If not provided or 'general', returns only general category
+                           If specific category, returns that category + general
+        language (optional): Language code to filter by (e.g., 'en', 'es', 'fr')
+        country (optional): Country code to filter by (e.g., 'us', 'in', 'uk')
+        page (optional): Page number (default: 1)
+        page_size (optional): Number of articles per page (default: 10, max: 50)
+
+    Returns:
+        JSON response with news articles and pagination info
+    """
+    try:
+        # Get query parameters
+        category = request.args.get('category', Config.DEFAULT_FILTER_CATEGORY)
+        language = request.args.get('language', Config.DEFAULT_FILTER_LANGUAGE)
+        country = request.args.get('country', Config.DEFAULT_FILTER_COUNTRY)
+        page = request.args.get('page', 1, type=int)
+        page_size = request.args.get('page_size', type=int)
+
+        # Query news using the news query service
+        result = news_fetcher_job.news_query_service.get_news_by_category(
+            category=category,
+            language=language,
+            country=country,
+            page=page,
+            page_size=page_size
+        )
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'articles': [],
+            'pagination': {
+                'current_page': 1,
+                'page_size': 10,
+                'total_articles': 0,
+                'total_pages': 0,
+                'has_next': False,
+                'has_prev': False,
+                'next_page': None,
+                'prev_page': None
+            }
+        }), 500
+
+@app.route('/news/categories', methods=['GET'])
+def get_news_categories():
+    """
+    Get available news categories with article counts
+
+    Returns:
+        JSON response with available categories and their counts
+    """
+    try:
+        result = news_fetcher_job.news_query_service.get_available_categories()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'categories': {},
+            'total_articles': 0
+        }), 500
+
+@app.route('/news/filters', methods=['GET'])
+def get_news_filters():
+    """
+    Get available news filters (languages and countries) with article counts
+
+    Returns:
+        JSON response with available languages and countries and their counts
+    """
+    try:
+        result = news_fetcher_job.news_query_service.get_available_filters()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'languages': {},
+            'countries': {}
         }), 500
 
 if __name__ == '__main__':
