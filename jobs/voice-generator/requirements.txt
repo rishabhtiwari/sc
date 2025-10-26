@@ -1,0 +1,13 @@
+# Core libraries for job framework
+flask>=2.0.0
+pymongo>=4.0.0
+requests>=2.25.0
+
+# Audio file validation (optional)
+librosa>=0.9.0
+soundfile
+
+# Utilities
+python-dateutil
+uuid
+apscheduler>=3.10.0

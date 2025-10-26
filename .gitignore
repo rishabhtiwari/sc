@@ -27,3 +27,11 @@ mongodb/data/
 
 ### Python virtual environment ###
 .venv/
+
+### Voice cloning directories ###
+voices/hub/
+voices/output/
+voices/speakers/
+
+### macOS system files ###
+.DS_Store
