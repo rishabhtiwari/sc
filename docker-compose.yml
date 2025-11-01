@@ -666,6 +666,36 @@ services:
         reservations:
           memory: 512M
 
+  # React Native Frontend (sh-fr1)
+  shortnews-ai:
+    build:
+      context: shortnews-ai-frontend
+      dockerfile: Dockerfile
+    container_name: shortnews-ai-dev
+    ports:
+      - "3002:8081"   # Expo web dev server
+      - "19000:19000" # Expo dev tools
+      - "19001:19001" # Expo dev server
+      - "19002:19002" # Expo dev server (alternative)
+    volumes:
+      - ./sh-fr1:/app
+      - /app/node_modules  # Prevent node_modules from being overwritten
+    environment:
+      - NODE_ENV=development
+      - EXPO_DEVTOOLS_LISTEN_ADDRESS=0.0.0.0
+      - API_BASE_URL=http://ichat-api:8080
+    networks:
+      - ichat-network
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
 networks:
   ichat-network:
     driver: bridge

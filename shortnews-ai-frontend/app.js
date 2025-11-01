@@ -4,8 +4,7 @@ import {
   NavigationContainer,
 } from "@react-navigation/native";
 import React from "react";
-import { ThemeController } from "./src/controllers/ThemeController";
-import AppNavigator from "./src/navigation/AppNavigator";
+import { ThemeController, AppNavigator } from "./src";
 
 export default function App() {
   const [theme, toggleTheme] = ThemeController.useTheme();

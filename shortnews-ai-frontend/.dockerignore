@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.expo
+.expo-shared
+dist
+.next
+.DS_Store
+*.log
+.git
+.gitignore
+README.md
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -1,7 +1,7 @@
 import { createStackNavigator } from "@react-navigation/stack";
-import ArticleScreen from "@views/article/Article";
-import Bookmarks from "@views/bookmarks/Bookmarks";
-import Home from "@views/home/Home";
+import ArticleScreen from "../views/article/Article";
+import Bookmarks from "../views/bookmarks/Bookmarks";
+import Home from "../views/home/Home";
 import React from "react";
 
 export type RootStackParamList = {
