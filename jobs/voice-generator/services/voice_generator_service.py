@@ -35,6 +35,13 @@ class VoiceGeneratorService:
         
         # Configuration
         self.max_text_length = getattr(config, 'MAX_TEXT_LENGTH', 2000)  # XTTS can handle longer text
+
+        # Chunking configuration
+        self.chunking_threshold = getattr(config, 'CHUNKING_THRESHOLD', 300)  # Use chunking for texts > 300 chars
+        self.max_chunk_length = getattr(config, 'MAX_CHUNK_LENGTH', 200)  # Max chars per chunk
+        self.max_workers = getattr(config, 'MAX_WORKERS', 3)  # Parallel workers for chunks
+        self.enable_chunking = getattr(config, 'ENABLE_CHUNKING', True)  # Enable chunking feature
+
         self.supported_languages = {
             'en': 'English',
             'es': 'Spanish', 
@@ -57,7 +64,11 @@ class VoiceGeneratorService:
         
         self.logger.info("VoiceGeneratorService initialized with XTTS Voice Cloning Service")
         self.logger.info(f"Voice service URL: {self.voice_service_url}")
-        
+        self.logger.info(f"Chunking enabled: {self.enable_chunking}")
+        self.logger.info(f"Chunking threshold: {self.chunking_threshold} characters")
+        self.logger.info(f"Max chunk length: {self.max_chunk_length} characters")
+        self.logger.info(f"Max parallel workers: {self.max_workers}")
+
         # Test connection to voice service
         self._test_voice_service_connection()
 
@@ -144,95 +155,24 @@ class VoiceGeneratorService:
                         request_id, 10, "Starting XTTS voice generation..."
                     )
 
-                # Prepare request to voice cloning service
-                try:
-                    with open(reference_audio_path, 'rb') as audio_file:
-                        files = {
-                            'speaker_wav': audio_file
-                        }
-                        data = {
-                            'text': text_script,
-                            'language': language
-                        }
+                # Determine whether to use chunked processing
+                use_chunking = (
+                    self.enable_chunking and
+                    len(text_script) > self.chunking_threshold
+                )
 
-                        # Update progress: Uploading
-                        if voice_request_service and request_id:
-                            voice_request_service.update_request_progress(
-                                request_id, 20, "Uploading reference audio and text..."
-                            )
-
-                        self.logger.info("Sending request to voice cloning service...")
-                        response = requests.post(
-                            f"{self.voice_service_url}/clone_voice",
-                            files=files,
-                            data=data,
-                            timeout=self.voice_service_timeout
-                        )
-
-                        # Update progress: Processing
-                        if voice_request_service and request_id:
-                            voice_request_service.update_request_progress(
-                                request_id, 50, "Voice cloning in progress..."
-                            )
-
-                        if response.status_code == 200:
-                            # Save the generated audio
-                            with open(output_path, 'wb') as output_file:
-                                output_file.write(response.content)
-
-                            # Update progress: Completed
-                            if voice_request_service and request_id:
-                                voice_request_service.update_request_progress(
-                                    request_id, 100, "Voice generation completed successfully"
-                                )
-
-                            processing_time = time.time() - start_time
-                            file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-
-                            self.logger.info(f"Voice generation completed successfully: {output_path}")
-                            self.logger.info(f"Processing time: {processing_time:.2f} seconds")
-                            self.logger.info(f"Output file size: {file_size_mb:.2f} MB")
-
-                            return {
-                                'success': True,
-                                'message': "Voice generation completed successfully",
-                                'generated_audio_path': output_path,
-                                'output_filename': output_filename,
-                                'processing_time_seconds': processing_time,
-                                'output_size_mb': round(file_size_mb, 2),
-                                'request_id': request_id
-                            }
-                        else:
-                            error_msg = f"Voice service returned error: {response.status_code} - {response.text}"
-                            self.logger.error(error_msg)
-                            
-                            if voice_request_service and request_id:
-                                voice_request_service.update_request_progress(
-                                    request_id, 0, f"Generation failed: {response.status_code}"
-                                )
-
-                            return {
-                                'success': False,
-                                'error': error_msg,
-                                'processing_time_seconds': time.time() - start_time,
-                                'request_id': request_id
-                            }
-
-                except requests.exceptions.Timeout:
-                    error_msg = "Voice generation timed out"
-                    self.logger.error(error_msg)
-                    
-                    if voice_request_service and request_id:
-                        voice_request_service.update_request_progress(
-                            request_id, 0, "Generation timed out"
-                        )
-
-                    return {
-                        'success': False,
-                        'error': error_msg,
-                        'processing_time_seconds': time.time() - start_time,
-                        'request_id': request_id
-                    }
+                if use_chunking:
+                    self.logger.info(f"Using chunked processing for text length: {len(text_script)} characters")
+                    return self._generate_voice_chunked(
+                        reference_audio_path, text_script, language,
+                        request_id, voice_request_service, output_path, output_filename
+                    )
+                else:
+                    self.logger.info(f"Using regular processing for text length: {len(text_script)} characters")
+                    return self._generate_voice_regular(
+                        reference_audio_path, text_script, language,
+                        request_id, voice_request_service, output_path, output_filename
+                    )
 
         except Exception as e:
             processing_time = time.time() - start_time
@@ -251,6 +191,200 @@ class VoiceGeneratorService:
                 'request_id': request_id
             }
 
+    def _generate_voice_regular(self, reference_audio_path, text_script, language,
+                               request_id, voice_request_service, output_path, output_filename):
+        """Generate voice using regular (non-chunked) processing"""
+        start_time = time.time()
+
+        try:
+            with open(reference_audio_path, 'rb') as audio_file:
+                files = {
+                    'speaker_wav': audio_file
+                }
+                data = {
+                    'text': text_script,
+                    'language': language
+                }
+
+                # Update progress: Uploading
+                if voice_request_service and request_id:
+                    voice_request_service.update_request_progress(
+                        request_id, 20, "Uploading reference audio and text..."
+                    )
+
+                self.logger.info("Sending request to voice cloning service (regular)...")
+                response = requests.post(
+                    f"{self.voice_service_url}/clone_voice",
+                    files=files,
+                    data=data,
+                    timeout=self.voice_service_timeout
+                )
+
+                # Update progress: Processing
+                if voice_request_service and request_id:
+                    voice_request_service.update_request_progress(
+                        request_id, 50, "Voice cloning in progress..."
+                    )
+
+                if response.status_code == 200:
+                    # Save the generated audio
+                    with open(output_path, 'wb') as output_file:
+                        output_file.write(response.content)
+
+                    # Update progress: Completed
+                    if voice_request_service and request_id:
+                        voice_request_service.update_request_progress(
+                            request_id, 100, "Voice generation completed successfully"
+                        )
+
+                    processing_time = time.time() - start_time
+                    file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+
+                    self.logger.info(f"Voice generation completed successfully: {output_path}")
+                    self.logger.info(f"Processing time: {processing_time:.2f} seconds")
+                    self.logger.info(f"Output file size: {file_size_mb:.2f} MB")
+
+                    return {
+                        'success': True,
+                        'message': "Voice generation completed successfully",
+                        'generated_audio_path': output_path,
+                        'output_filename': output_filename,
+                        'processing_time_seconds': processing_time,
+                        'output_size_mb': round(file_size_mb, 2),
+                        'request_id': request_id
+                    }
+                else:
+                    error_msg = f"Voice service returned error: {response.status_code} - {response.text}"
+                    self.logger.error(error_msg)
+
+                    if voice_request_service and request_id:
+                        voice_request_service.update_request_progress(
+                            request_id, 0, f"Generation failed: {response.status_code}"
+                        )
+
+                    return {
+                        'success': False,
+                        'error': error_msg,
+                        'processing_time_seconds': time.time() - start_time,
+                        'request_id': request_id
+                    }
+
+        except requests.exceptions.Timeout:
+            error_msg = "Voice generation timed out"
+            self.logger.error(error_msg)
+
+            if voice_request_service and request_id:
+                voice_request_service.update_request_progress(
+                    request_id, 0, "Generation timed out"
+                )
+
+            return {
+                'success': False,
+                'error': error_msg,
+                'processing_time_seconds': time.time() - start_time,
+                'request_id': request_id
+            }
+
+    def _generate_voice_chunked(self, reference_audio_path, text_script, language,
+                               request_id, voice_request_service, output_path, output_filename):
+        """Generate voice using chunked processing for faster generation of long texts"""
+        start_time = time.time()
+
+        try:
+            with open(reference_audio_path, 'rb') as audio_file:
+                files = {
+                    'speaker_wav': audio_file
+                }
+                data = {
+                    'text': text_script,
+                    'language': language,
+                    'max_chunk_length': self.max_chunk_length,
+                    'max_workers': self.max_workers,
+                    'enable_chunking': True
+                }
+
+                # Update progress: Uploading
+                if voice_request_service and request_id:
+                    voice_request_service.update_request_progress(
+                        request_id, 20, "Uploading reference audio and text for chunked processing..."
+                    )
+
+                self.logger.info("Sending request to voice cloning service (chunked)...")
+                self.logger.info(f"Chunk settings: max_length={self.max_chunk_length}, max_workers={self.max_workers}")
+
+                response = requests.post(
+                    f"{self.voice_service_url}/clone_voice_chunked",
+                    files=files,
+                    data=data,
+                    timeout=self.voice_service_timeout
+                )
+
+                # Update progress: Processing
+                if voice_request_service and request_id:
+                    voice_request_service.update_request_progress(
+                        request_id, 50, "Chunked voice cloning in progress..."
+                    )
+
+                if response.status_code == 200:
+                    # Save the generated audio
+                    with open(output_path, 'wb') as output_file:
+                        output_file.write(response.content)
+
+                    # Update progress: Completed
+                    if voice_request_service and request_id:
+                        voice_request_service.update_request_progress(
+                            request_id, 100, "Chunked voice generation completed successfully"
+                        )
+
+                    processing_time = time.time() - start_time
+                    file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+
+                    self.logger.info(f"Chunked voice generation completed successfully: {output_path}")
+                    self.logger.info(f"Processing time: {processing_time:.2f} seconds")
+                    self.logger.info(f"Output file size: {file_size_mb:.2f} MB")
+
+                    return {
+                        'success': True,
+                        'message': "Chunked voice generation completed successfully",
+                        'generated_audio_path': output_path,
+                        'output_filename': output_filename,
+                        'processing_time_seconds': processing_time,
+                        'output_size_mb': round(file_size_mb, 2),
+                        'request_id': request_id,
+                        'processing_method': 'chunked'
+                    }
+                else:
+                    error_msg = f"Chunked voice service returned error: {response.status_code} - {response.text}"
+                    self.logger.error(error_msg)
+
+                    if voice_request_service and request_id:
+                        voice_request_service.update_request_progress(
+                            request_id, 0, f"Chunked generation failed: {response.status_code}"
+                        )
+
+                    return {
+                        'success': False,
+                        'error': error_msg,
+                        'processing_time_seconds': time.time() - start_time,
+                        'request_id': request_id
+                    }
+
+        except requests.exceptions.Timeout:
+            error_msg = "Chunked voice generation timed out"
+            self.logger.error(error_msg)
+
+            if voice_request_service and request_id:
+                voice_request_service.update_request_progress(
+                    request_id, 0, "Chunked generation timed out"
+                )
+
+            return {
+                'success': False,
+                'error': error_msg,
+                'processing_time_seconds': time.time() - start_time,
+                'request_id': request_id
+            }
+
     def get_engine_info(self):
         """Get information about the voice generation service"""
         try:
@@ -261,14 +395,18 @@ class VoiceGeneratorService:
             service_status = "disconnected"
 
         return {
-            "service": "XTTS Voice Cloning Service",
-            "version": "2.0",
+            "service": "XTTS Voice Cloning Service with Chunking",
+            "version": "2.1",
             "status": service_status,
-            "description": "High-quality voice cloning using XTTS technology",
+            "description": "High-quality voice cloning using XTTS technology with chunked processing for faster generation",
             "service_url": self.voice_service_url,
             "supported_languages": self.supported_languages,
             "max_text_length": self.max_text_length,
-            "timeout_seconds": self.voice_service_timeout
+            "timeout_seconds": self.voice_service_timeout,
+            "chunking_enabled": self.enable_chunking,
+            "chunking_threshold": self.chunking_threshold,
+            "max_chunk_length": self.max_chunk_length,
+            "max_workers": self.max_workers
         }
 
     def cleanup_old_files(self, max_age_days=7):

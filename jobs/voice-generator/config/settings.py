@@ -30,6 +30,12 @@ class Config:
     VOICE_SERVICE_TIMEOUT = int(os.environ.get('VOICE_SERVICE_TIMEOUT', 10800))  # 3 hours
     DEFAULT_LANGUAGE = os.environ.get('DEFAULT_LANGUAGE', 'en')
     MAX_TEXT_LENGTH = int(os.environ.get('MAX_TEXT_LENGTH', 2000))  # XTTS can handle longer text
+
+    # Chunking Configuration for Faster Processing
+    ENABLE_CHUNKING = os.environ.get('ENABLE_CHUNKING', 'True').lower() == 'true'
+    CHUNKING_THRESHOLD = int(os.environ.get('CHUNKING_THRESHOLD', 300))  # Use chunking for texts > 300 chars
+    MAX_CHUNK_LENGTH = int(os.environ.get('MAX_CHUNK_LENGTH', 200))  # Max characters per chunk
+    MAX_WORKERS = int(os.environ.get('MAX_WORKERS', 10))  # Parallel workers for chunk processing
     
     # File Storage Configuration
     DATA_DIR = os.environ.get('DATA_DIR', '/app/data')

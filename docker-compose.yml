@@ -563,6 +563,11 @@ services:
       - VOICE_SERVICE_TIMEOUT=10800
       - DEFAULT_LANGUAGE=en
       - MAX_TEXT_LENGTH=2000
+      # Chunking Configuration
+      - ENABLE_CHUNKING=true
+      - CHUNKING_THRESHOLD=300
+      - MAX_CHUNK_LENGTH=200
+      - MAX_WORKERS=10
       # File Storage Configuration
       - DATA_DIR=/app/data
       - MAX_FILE_SIZE_MB=50
