@@ -21,6 +21,7 @@ export default function ArticleScreen({ route }: ArticleProps) {
   useEffect(() => {
     (async () => {
       const all = await BookmarksController.getAll();
+      console.log("RAM12", all)
       setBookmarked(!!all.find((a) => a.id === article.id));
     })();
   }, []);
@@ -37,9 +38,9 @@ export default function ArticleScreen({ route }: ArticleProps) {
 
   return (
     <ScrollView style={{ flex: 1, padding: 12 }}>
-      {article.imageUrl && (
+      {article.image && (
         <Image
-          source={{ uri: article.imageUrl }}
+          source={{ uri: article.image }}
           style={{ height: 200, borderRadius: 8 }}
         />
       )}

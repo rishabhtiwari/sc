@@ -5,7 +5,7 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Install system dependencies for React Native and Expo
-RUN apk add --no-cache \
+RUN apk add \
     git \
     bash \
     curl \
@@ -24,7 +24,7 @@ RUN npm install
 COPY . .
 
 # Expose ports for Expo dev server
-EXPOSE 8081 19000 19001 19002
+EXPOSE 3002 3003 8081 19000 19001 19002
 
 # Default command to start Expo development server
 CMD ["npx", "expo", "start", "--web", "--port", "8081", "--host", "lan"]

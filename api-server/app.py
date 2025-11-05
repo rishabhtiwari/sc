@@ -57,7 +57,14 @@ def create_app():
              'http://localhost:3001',
              'http://127.0.0.1:3001',
              'http://[::1]:3001',  # IPv6 localhost
-             'http://0.0.0.0:3001'  # All interfaces
+             'http://0.0.0.0:3001',  # All interfaces
+             'http://localhost:3002',  # shortnews-ai frontend
+             'http://127.0.0.1:3002',
+             'http://localhost:3003',  # shortnews-ai frontend (new port)
+             'http://127.0.0.1:3003',
+             'http://192.168.29.163:3003',  # Mobile device access
+             'http://localhost:19006',  # Expo web dev server
+             'http://localhost:8081'   # Alternative Expo port
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
          allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept', 'Accept-Encoding', 'Cache-Control'],

@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 from typing import Dict, Any, List
 from flask import jsonify, request
+from flask_cors import CORS
 from typing import List
 
 # Add parent directories to path for imports
@@ -223,6 +224,13 @@ news_fetcher_job = NewsFetcherJob()
 
 # Get Flask app from base job
 app = news_fetcher_job.app
+
+# Configure CORS to allow requests from frontend
+CORS(app,
+     origins=["http://localhost:3002", "http://localhost:19006", "http://localhost:8081", "http://localhost:3000"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=True)
 
 # Add custom endpoints
 @app.route('/seed-urls/status', methods=['GET'])

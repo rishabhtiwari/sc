@@ -669,16 +669,18 @@ services:
   # React Native Frontend (sh-fr1)
   shortnews-ai:
     build:
-      context: shortnews-ai-frontend
+      context: ./shortnews-ai-frontend
       dockerfile: Dockerfile
     container_name: shortnews-ai-dev
     ports:
-      - "3002:8081"   # Expo web dev server
+      - "3002:3002"   # Expo web dev server
+      - "3003:3003"   # Expo dev server (alternative port)
+      - "8081:8081"   # Expo default port
       - "19000:19000" # Expo dev tools
       - "19001:19001" # Expo dev server
       - "19002:19002" # Expo dev server (alternative)
     volumes:
-      - ./sh-fr1:/app
+      - ./shortnews-ai-frontend:/app
       - /app/node_modules  # Prevent node_modules from being overwritten
     environment:
       - NODE_ENV=development
@@ -689,6 +691,8 @@ services:
     stdin_open: true
     tty: true
     restart: unless-stopped
+    depends_on:
+      - job-news-fetcher
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8081/" ]
       interval: 30s
