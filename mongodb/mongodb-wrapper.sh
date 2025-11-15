@@ -22,8 +22,8 @@ else
     
     # Wait for MongoDB to be ready
     echo "Waiting for MongoDB to be ready..."
-    local max_attempts=30
-    local attempt=1
+    max_attempts=30
+    attempt=1
     
     while [ $attempt -le $max_attempts ]; do
         if mongosh --authenticationDatabase admin -u ichat_app -p ichat_app_password_2024 --eval "print('MongoDB ready')" > /dev/null 2>&1; then

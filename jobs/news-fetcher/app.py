@@ -218,6 +218,96 @@ class NewsFetcherJob(BaseJob):
                 'total_seed_urls': 0
             }
 
+    def add_seed_url(self, seed_url_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Add a new seed URL to the database
+
+        Args:
+            seed_url_data: Dictionary containing seed URL information
+
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            from datetime import datetime
+
+            # Set default values
+            seed_url = {
+                'partner_id': seed_url_data['partner_id'],
+                'url': seed_url_data['url'],
+                'partner_name': seed_url_data['partner_name'],
+                'name': seed_url_data.get('name', seed_url_data['partner_name']),
+                'provider': seed_url_data.get('provider', 'gnews'),
+                'category': seed_url_data.get('category', 'general'),
+                'country': seed_url_data.get('country', 'in'),
+                'language': seed_url_data.get('language', 'en'),
+                'frequency_minutes': seed_url_data.get('frequency_minutes', 60),
+                'frequency_hours': seed_url_data.get('frequency_hours', 1),
+                'is_active': seed_url_data.get('is_active', True),
+                'last_run': None,
+                'last_fetched_at': None,
+                'fetch_count': 0,
+                'success_count': 0,
+                'error_count': 0,
+                'last_error': None,
+                'parameters': seed_url_data.get('parameters', {}),
+                'metadata': seed_url_data.get('metadata', {}),
+                'created_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
+            }
+
+            # Check if partner_id already exists
+            existing_partner_id = self.news_fetcher_service.seed_urls_collection.find_one({
+                'partner_id': seed_url['partner_id']
+            })
+
+            if existing_partner_id:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL with partner_id "{seed_url["partner_id"]}" already exists'
+                }
+
+            # Check if partner_name already exists
+            existing_partner_name = self.news_fetcher_service.seed_urls_collection.find_one({
+                'partner_name': seed_url['partner_name']
+            })
+
+            if existing_partner_name:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL with partner_name "{seed_url["partner_name"]}" already exists'
+                }
+
+            # Check if URL + metadata combination already exists (as per unique index)
+            existing_url_combo = self.news_fetcher_service.seed_urls_collection.find_one({
+                'url': seed_url['url'],
+                'metadata.api_params': seed_url['metadata'].get('api_params', {})
+            })
+
+            if existing_url_combo:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL with same URL and API parameters already exists'
+                }
+
+            # Insert the seed URL
+            result = self.news_fetcher_service.seed_urls_collection.insert_one(seed_url)
+
+            return {
+                'status': 'success',
+                'message': 'Seed URL added successfully',
+                'seed_url_id': str(result.inserted_id),
+                'partner_id': seed_url['partner_id'],
+                'partner_name': seed_url['partner_name']
+            }
+
+        except Exception as e:
+            self.logger.error(f"Error adding seed URL: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
 # Create job instance
 news_fetcher_job = NewsFetcherJob()
 
@@ -230,6 +320,58 @@ def get_seed_urls_status():
     """Get status of all seed URLs"""
     try:
         result = news_fetcher_job.get_seed_url_status()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/seed-urls', methods=['GET'])
+def get_seed_urls():
+    """Get all seed URLs"""
+    try:
+        result = news_fetcher_job.get_all_seed_urls()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/seed-urls', methods=['POST'])
+def add_seed_url():
+    """Add a new seed URL for news fetching"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'No JSON data provided'
+            }), 400
+
+        # Validate required fields
+        required_fields = ['partner_id', 'url', 'partner_name']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'status': 'error',
+                    'error': f'Missing required field: {field}'
+                }), 400
+
+        result = news_fetcher_job.add_seed_url(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/seed-urls/<partner_id>', methods=['DELETE'])
+def delete_seed_url(partner_id):
+    """Delete a seed URL by partner_id"""
+    try:
+        result = news_fetcher_job.delete_seed_url(partner_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({

@@ -1,1 +1,160 @@
-{"information":{"realTimeArticles":{"message":"Real-time news data is only available on paid plans. Free plan has a 12-hour delay. Upgrade your plan here to remove the delay: https://gnews.io/change-plan"}},"totalArticles":125688,"articles":[{"id":"c8391ab9e1ba08b89bbede25fc7335fa","title":"सूर्यकुमार यादव ने मोहसिन नकवी को दिखाई उसकी औकात, ट्रॉफी विवाद पर बोल डाली दिल की बात","description":"ऑस्ट्रेलिया के खिलाफ टी20 सीरीज जीतने के बाद, भारतीय कप्तान सूर्यकुमार यादव ने एशिया कप ट्रॉफी विवाद पर पहली बार सार्वजनिक रूप से बात की। उन्होंने पाकिस्तान क्रिकेट बोर्ड के प्रमुख मोहसिन नकवी पर भी तंज कसा।","content":"Curated by : ऋषिकेश कुमार सिंह|नवभारतटाइम्स.कॉम•9 Nov 2025, 9:46 am\nऑस्ट्रेलिया के खिलाफ टी20 सीरीज जीतने के बाद, भारतीय कप्तान सूर्यकुमार यादव ने एशिया कप ट्रॉफी विवाद पर पहली बार सार्वजनिक रूप से बात की। उन्होंने पाकिस्तान क्रिकेट बोर्ड के प्रमुख म... [2459 chars]","url":"https://navbharattimes.indiatimes.com/sports/cricket/cricket-news/suryakumar-yadav-on-asia-cup-trophy-controversy-finally-got-a-chance-to-touch-the-trophy/articleshow/125196735.cms","image":"https://static.langimg.com/photo/imgsize-64220,msid-125196854/navbharat-times.jpg","publishedAt":"2025-11-09T04:16:27Z","lang":"hi","source":{"id":"a989be5f0ffeb1f6cb8be04dd07637cc","name":"Navbharat Times","url":"https://navbharattimes.indiatimes.com"}},{"id":"41fd0b326f46da5afb8613f355d66740","title":"वर्ल्ड कप जीतने के बाद ऋचा घोष बनीं DSP, फाइनल में जितने रन बनाए; उतने लाख रुपये का मिला चेक","description":"भारतीय महिला क्रिकेट टीम की विकेटकीपर ऋचा घोष को पश्चिम बंगाल में डीएसपी नियुक्त किया गया है। वह महिला वनडे वर्ल्ड कप 2025 जीतने वाली टीम का हिस्सा हैं। ऋचा ने टूर्नामेंट में 235 रन बनाए।, Cricket Hindi News - Hindustan","content":"संक्षेप: भारतीय महिला क्रिकेट टीम की विकेटकीपर ऋचा घोष को पश्चिम बंगाल में डीएसपी नियुक्त किया गया है। वह महिला वनडे वर्ल्ड कप 2025 जीतने वाली टीम का हिस्सा हैं। ऋचा ने टूर्नामेंट में 235 रन बनाए।\nSun, 9 Nov 2025 09:25 AMMd.Akram लाइव हिन्दुस्तान\nSha... [2105 chars]","url":"https://www.livehindustan.com/cricket/richa-ghosh-appointed-dsp-of-west-bengal-police-after-world-cup-victory-got-rs-34-lakh-cheque-symbolic-of-her-final-runs-201762658078287.html","image":"https://www.livehindustan.com/lh-img/smart/img/smart/2025/11/09/1600x900/logo/PTI11-02-2025-000436B-0_1762658315857_1762658336810.jpg","publishedAt":"2025-11-09T03:55:44Z","lang":"hi","source":{"id":"aa4a4cc64ed3abc97e8c428681f7fa5c","name":"Hindustan","url":"https://www.livehindustan.com"}},{"id":"52493f3924b5875c79d53489e7094680","title":"PAK vs SA: वनडे सीरीज में रहे फ्लॉप, फिर भी एक बड़ा रिकॉर्ड बना गए बाबर आजम; स्पेशल क्लब में मारी एंट्री","description":"PAK vs SA: बाबर आजम Babar Azam ने साउथ अफ्रीका के खिलाफ तीसरे वनडे मैच में 23 रन बनाकर अपने अंतरराष्ट्रीय क्रिकेट में 15,000 रन पूरे कर लिए हैं। ऐसा करने वाले वह पांचवें पाकिस्तानी खिलाड़ी बन गए हैं। बाबर आजम वैसे तो वनडे सीरीज में फ्लॉप ही रहे, लेकिन उन्होंने ये रिकॉर्ड अपने नाम कर ही लिया। वहीं, सीरीज की बात करें तो पाकिस्तान ने दक्षिण अफ्रीका के खिलाफ घरेलू मैदान पर वनडे सीरीज 2-1 से जीतकर इतिहास रचा।","content":"स्पोर्ट्स डेस्क, नई दिल्ली। Babar Azam 15,000 International Runs: पाकिस्तान क्रिकेट के स्टार बल्लेबाज और पूर्व कप्तान बाबर आजम ने एक बड़ा रिकॉर्ड हासल किया है।\nदक्षिण अफ्रीका के खिलाफ खेले गए तीसरे वनडे मुकाबले के दौरान बाबर ने इंटरनेशनल क्रिकेट में ... [791 chars]","url":"https://www.jagran.com/cricket/bouncer-pak-vs-sa-babar-azam-15000-international-runs-milestone-40033571.html","image":"https://www.jagranimages.com/images/2025/11/09/article/image/Babar-azam-(1)-1762659268580_m.webp","publishedAt":"2025-11-09T03:34:00Z","lang":"hi","source":{"id":"bd2943effe815797b9eb6d34cf88699a","name":"Jagran","url":"https://www.jagran.com"}},{"id":"bc6612584c02f18965a3e240029f8f3b","title":"क्रिकेट के मैदान पर ही खत्म हो गई इन 7 खिलाड़ियों की जिंदगी, ये है सबसे दर्दनाक पल","description":"क्रिकेट को भले ही “जेंटलमैन गेम” कहा जाता हो, लेकिन इसके इतिहास में कुछ ऐसे पल भी दर्ज हैं जिन्होंने दुनिया को झकझोर दिया.जानिए 7 क्रिकेटर्स की दर्दनाक कहानियां जिनकी खेलते हुए मैदान पर ही मौत हो गई.","content":"क्रिकेट को अक्सर “जेंटलमैन गेम” कहा जाता है. हालांकि कभी-कभी इस खेल में कुछ दर्दनाक घटनाएं ऐसी भी हुई हैं जिन्होंने इस खेल को हमेशा के लिए बदल दिया. बल्ले और गेंद की टक्कर के बीच कभी-कभी मौत भी मैदान पर ही दस्तक दे देती है. आइए जानते हैं उन क्रिकेटरो... [2463 chars]","url":"https://www.abplive.com/sports/list-of-7-cricketers-who-tragically-died-on-the-field-3040408","image":"https://feeds.abplive.com/onecms/images/uploaded-images/2025/11/08/38072931c0fa1e9ad601304a0af086de17625802566711252_original.jpg?impolicy=abp_cdn&imwidth=1200","publishedAt":"2025-11-09T03:14:32Z","lang":"hi","source":{"id":"8552312ad629fa67affbb353904863aa","name":"abplive.com","url":"https://www.abplive.com"}},{"id":"a5d62236040d2e4252b36aeccfd4a2f1","title":"'कॉफी विद करण' पर क्यों नहीं आएंगे विराट कोहली? फिल्ममेकर ने बताई वजह, बोले- जो हुआ उसके बाद...","description":"फिल्ममेकर से टेनिस प्लेयर सानिया मिर्जा ने पूछा कि उनके टॉक शो में कौन-कौनसे सेलेब्स आने से मना कर देते हैं, तो करण ने रणबीर कपूर का नाम लिया. आगे जब उनसे पूछा गया कि कौनसा ऐसा स्टार है जिसे वो शो पर","content":"करण का शो पिछले 20 सालों से चला आ रहा है, जिसमें कई सारे सितारे आ चुके हैं. हाल ही में उन्होंने 'कॉफी विद करण' को लेकर कुछ बातें की, जो अब काफी वायरल हो रही हैं.\nफिल्ममेकर से टेनिस प्लेयर सानिया मिर्जा ने पूछा कि उनके टॉक शो में कौन-कौनसे सेलेब्स आने... [715 chars]","url":"https://www.aajtak.in/visualstories/entertainment/karan-johar-reacts-inviting-virat-kohli-koffee-with-karan-tmovj-266622-09-11-2025","image":"https://cf-img-a-in.tosshub.com/sites/visualstory/wp/2025/11/viratITG-1762597827702.jpg?size=*:675","publishedAt":"2025-11-09T03:10:00Z","lang":"hi","source":{"id":"a6562debca80d022ce8c83a0fc5e4f43","name":"AajTak","url":"https://www.aajtak.in"}},{"id":"fb53a52c99b750cda16664c503c505a4","title":"सौरव गांगुली को ये बात बुरी लग सकती है… CM ममता बनर्जी ने सरेआम बोल दिया एक 'कड़वा सच'","description":"मुख्यमंत्री ममता बनर्जी ने सौरव गांगुली को लेकर सरेआम एक 'कड़वा सच' बोला है। उन्होंने कहा कि गांगुली को अब तक आईसीसी का अध्यक्ष बन जाना चाहिए था। पूर्व भारतीय कप्तान गांगुली बीसीसीआई अध्यक्ष रह चुके हैं।, Cricket Hindi News - Hindustan","content":"पश्चिम बंगाल की मुख्यमंत्री ममता बनर्जी ने एक बार फिर सौरव गांगुली का समर्थन करते हुए कहा कि पूर्व भारतीय कप्तान को अब तक अंतरराष्ट्रीय क्रिकेट परिषद (आईसीसी) का अध्यक्ष बन जाना चाहिए था। ममता ने अपने चिरपरिचित अंदाज में कहा कि ‘उन्हें रोकना इतना आसा... [1604 chars]","url":"https://www.livehindustan.com/cricket/sourav-ganguly-may-get-disappointed-cm-mamata-banerjee-tells-a-bitter-truth-that-he-deserved-to-be-icc-president-201762655712160.html","image":"https://www.livehindustan.com/lh-img/smart/img/smart/2025/11/09/1600x900/logo/Sourav_Ganguly_CM_Mamata_Banerjee_1762656414557_1762656430206.jpg","publishedAt":"2025-11-09T02:58:37Z","lang":"hi","source":{"id":"aa4a4cc64ed3abc97e8c428681f7fa5c","name":"Hindustan","url":"https://www.livehindustan.com"}},{"id":"bf0d7562609ad33a6bf1eb818dcaab5a","title":"'हम आग और बर्फ नहीं'- शुभमन गिल के साथ अपनी पार्टनरशिप पर अभिषेक शर्मा ने कह दी बड़ी बात","description":"अभिषेक शर्मा ने T20I सीरीज के बाद शुभमन गिल के प्रदर्शन की जमकर तारीफ की है। उन्होंने अपनी जोड़ी को लेकर कहा कि वह दोनों आग और बर्फ नहीं हैं बल्कि आग और आग हैं।","content":"ऑस्ट्रेलिया के खिलाफ हाल ही में समाप्त हुए टी-20 सीरीज में अभिषेक शर्मा और शुभमन गिल ने शानदार बल्लेबाजी की। सीरीज का पांचवां मैच ब्रिस्बेन में खेला गया, जो बारिश की वजह से रद्द हो गया था। इस बीच सीरीज के खत्म होने के बाद अभिषेक शर्मा ने शुभमन गिल के... [1717 chars]","url":"https://www.indiatv.in/sports/cricket/no-longer-ice-and-fire-it-s-fire-and-fire-this-is-what-abhishek-sharma-said-on-partnership-with-shubman-gill-2025-11-09-1174848","image":"https://resize.indiatv.in/resize/newbucket/1200_-/2025/11/india-tv-37-1762653583.jpg","publishedAt":"2025-11-09T02:26:56Z","lang":"hi","source":{"id":"22c8b8bc361cefc0aa92b67f6bee8497","name":"India TV Hindi","url":"https://www.indiatv.in"}},{"id":"29ad20e31afda2ff93f742310b45d278","title":"शुभमन गिल के स्ट्राइक रेट पर सूर्यकुमार यादव ने तोड़ी चुप्पी, कप्तान ने कहा- उनका और अभिषेक का…","description":"कप्तान सूर्यकुमार यादव ने ऑस्ट्रेलिया सीरीज समाप्त होने के बाद शुभमन गिल के स्ट्राइक रेट को लेकर रिएक्ट किया। शुभमन ने आखिरी मुकाबले में ताबड़तोड़ बल्लेबाजी की। हालांकि, यह मैच बारिश की भेंट चढ़ गया।, Cricket Hindi News - Hindustan","content":"शुभमन गिल ने एशिया कप 2025 से भारतीय टी20 टीम में वापसी की थी। तभी से उनके स्ट्राइक रेट पर लगातार सवाल उठ रहे हैं। भारत के टेस्ट और वनडे कप्तान शुभमन ने ऑस्ट्रेलिया के खिलाफ चौथे टी20 मैच में 39 गेंदों पर 46 रन बनाए। भारत ने यह मैच 48 रनों से जीता ले... [2004 chars]","url":"https://www.livehindustan.com/cricket/suryakumar-yadav-broke-silence-on-shubman-gill-strike-rate-debate-india-captain-said-his-and-abhishek-sharma-combination-201762653268366.html","image":"https://www.livehindustan.com/lh-img/smart/img/smart/2025/11/09/1600x900/logo/PTI11-08-2025-000293A-0_1762653523461_1762653554108.jpg","publishedAt":"2025-11-09T02:19:49Z","lang":"hi","source":{"id":"aa4a4cc64ed3abc97e8c428681f7fa5c","name":"Hindustan","url":"https://www.livehindustan.com"}},{"id":"f4aaf88bd0a74862b1c3cb65c3b70e53","title":"टीम इंडिया की 5 सबसे बड़ी शर्मनाक हार! जब 100 रन भी नहीं बना पाई पूरी टीम","description":"टीम इंडिया को टी20 में कई यादगार जीतें मिली, लेकिन कुछ दिन ऐसे भी रहे जब उसकी बल्लेबाजी पूरी तरह ढह गई. जानिए भारत के टी20 इतिहास के अब तक के 5 सबसे शर्मनाक स्कोर कौन से रहे हैं.","content":"टीम इंडिया को दुनिया की सबसे मजबूत टी20 टीमों में गिना जाता है. वहीं कई बार ऐसा भी हुआ है जब उसके स्टार बल्लेबाज पूरी तरह नाकाम साबित हुए. भारतीय टीम ने अपने टी20 इतिहास में कई यादगार जीतें दर्ज की हैं, लेकिन कुछ मुकाबले ऐसे भी रहे जिनमें भारत का स्क... [1708 chars]","url":"https://www.abplive.com/sports/team-india-lowest-totals-in-t20i-cricket-5-worst-batting-performances-ever-3040537","image":"https://feeds.abplive.com/onecms/images/uploaded-images/2025/11/08/75d445b89a309b7b2e18679cdc222c6617625923647711252_original.jpg?impolicy=abp_cdn&imwidth=1200","publishedAt":"2025-11-09T02:04:15Z","lang":"hi","source":{"id":"8552312ad629fa67affbb353904863aa","name":"abplive.com","url":"https://www.abplive.com"}},{"id":"3607ca72cd36db8498c533da62e9af1f","title":"वनडे में बिना शतक के सबसे ज्यादा रन बनाने वाले 5 खिलाड़ी, एक भारतीय स्टार का भी नाम","description":"वनडे क्रिकेट मेें कई ऐसे खिलाड़ी रहे, जिनके बल्ले से खूब रन निकले। इसके बाद भी वह शतकीय पारी नहीं खेल पाए।","content":"Curated by : ऋषिकेश कुमार|नवभारतटाइम्स.कॉम•9 Nov 2025, 7:30 am\nवनडे क्रिकेट मेें कई ऐसे खिलाड़ी रहे, जिनके बल्ले से खूब रन निकले। इसके बाद भी वह शतकीय पारी नहीं खेल पाए।\nवनडे क्रिकेट में निचले क्रम के बल्लेबाजों के लिए शतक लगाना थोड़ा मुश्किल है। इसक... [2105 chars]","url":"https://navbharattimes.indiatimes.com/sports/cricket/cricket-news/5-players-with-most-runs-in-odis-without-a-century-ravindra-jadeja/articleshow/125188739.cms","image":"https://static.langimg.com/photo/imgsize-54994,msid-125188739/navbharat-times.jpg","publishedAt":"2025-11-09T02:00:00Z","lang":"hi","source":{"id":"a989be5f0ffeb1f6cb8be04dd07637cc","name":"Navbharat Times","url":"https://navbharattimes.indiatimes.com"}}]}
+{
+  "information": {
+    "realTimeArticles": {
+      "message": "Real-time news data is only available on paid plans. Free plan has a 12-hour delay. Upgrade your plan here to remove the delay: https://gnews.io/change-plan"
+    }
+  },
+  "totalArticles": 254024,
+  "articles": [
+    {
+      "id": "abaabe835f9519c28bcdd96bcf0b9c79",
+      "title": "IPL 2026 Retention List Live Updates: Mohammed Shami Trades To Lucknow Super Giants",
+      "description": "IPL 2026 Retention List Live: The clock is ticking for all ten Indian Premier League (IPL) franchises as the November 15th retention deadline approaches, with teams required to submit their final lists of retained and released players to the BCCI before 5 PM IST on Saturday.",
+      "content": "IPL 2026 Retention List Live: The clock is ticking for all ten Indian Premier League (IPL) franchises as the November 15th retention deadline approaches, with teams required to submit their final lists of retained and released players to the BCCI bef... [657 chars]",
+      "url": "https://zeenews.india.com/cricket/live-updates/ipl-2026-retention-list-live-updates-players-auction-rcb-csk-mi-kkr-rr-dc-pbks-gt-srh-lsg-trade-latest-news-2985061.html",
+      "image": "https://english.cdn.zeenews.com/sites/default/files/2025/11/15/1862207-ipl-2026-retention.jpg",
+      "publishedAt": "2025-11-15T06:38:03Z",
+      "lang": "en",
+      "source": {
+        "id": "06cf65850d8465a5feda17184a020898",
+        "name": "Zee News",
+        "url": "https://zeenews.india.com"
+      }
+    },
+    {
+      "id": "e3088ef1d62459e6bff312356cb0804d",
+      "title": "Jamie Gittens forced off with apparent injury in England U21 match",
+      "description": "Internationals and injuries, a story as old as time",
+      "content": "It wouldn’t be an international break without someone picking some sort of new injury, and the (un)lucky victim this time around looks to be Jamie Gittens. The young winger reportedly “limped off” after “clearly struggling” around the hour mark of En... [794 chars]",
+      "url": "https://weaintgotnohistory.sbnation.com/chelsea-fc-international-duty/163609/jamie-gittens-forced-off-with-apparent-injury-in-england-u21-match",
+      "image": "https://platform.weaintgotnohistory.sbnation.com/wp-content/uploads/sites/178/2025/11/gettyimages-2246161191.jpg?quality=90&strip=all&crop=0%2C2.9820470446403%2C100%2C38.984149188945&w=1200",
+      "publishedAt": "2025-11-15T06:22:00Z",
+      "lang": "en",
+      "source": {
+        "id": "4c1d69bbcbcce4d68b125f14fc61c4c5",
+        "name": "We Ain't Got No History",
+        "url": "https://weaintgotnohistory.sbnation.com"
+      }
+    },
+    {
+      "id": "2c52a2ef81f5c523890640d247103c1d",
+      "title": "Full List of Mumbai Indians Retained and Released Players with price for IPL 2026 Auction",
+      "description": "Mumbai Indians Retained and Released Players Complete List with Price for IPL 2026 Action: Even before the retention deadline day, MI have been active with trades, getting Shardul Thakur and Sherfane Rutherford.",
+      "content": "Markande will return to his former franchise at his existing fee (he was acquired by KKR for a fee of Rs 30 lakh). Markande began his IPL career with MI, representing the franchise in 2018, 2019 and 2022, before turning out for Rajasthan Royals in 20... [1004 chars]",
+      "url": "https://indianexpress.com/article/sports/cricket/mi-retained-released-players-ipl-2026-full-list-mumbai-indians-10366639/",
+      "image": "https://images.indianexpress.com/2025/11/Arjun-Tendulkar.jpg",
+      "publishedAt": "2025-11-15T06:16:10Z",
+      "lang": "en",
+      "source": {
+        "id": "fb9b2a133349e3c8aa9c4ccde8d9400c",
+        "name": "The Indian Express",
+        "url": "https://indianexpress.com"
+      }
+    },
+    {
+      "id": "e287b37f4f8dda53d9d5ea5a7e5a69d6",
+      "title": "Historic! Rishabh Pant surpasses legendary Virender Sehwag to set new record for India",
+      "description": "Cricket News: Rishabh Pant has etched his name in Test cricket history, surpassing Virender Sehwag to become India's leading six-hitter. His aggressive batting prop",
+      "content": "Rishabh Pant has etched his name in Test cricket history, surpassing Virender Sehwag to become India's leading six-hitter. His aggressive batting propelled India to a strong position after Jasprit Bumrah's exceptional bowling performance saw South Af... [2061 chars]",
+      "url": "https://timesofindia.indiatimes.com/sports/cricket/india-vs-south-africa/historic-rishabh-pant-surpasses-legendary-virender-sehwag-to-set-new-record-for-india/articleshow/125342075.cms",
+      "image": "https://static.toiimg.com/thumb/msid-125342343,width-1070,height-580,imgsize-91844,resizemode-75,overlay-toi_sw,pt-32,y_pad-40/photo.jpg",
+      "publishedAt": "2025-11-15T05:57:00Z",
+      "lang": "en",
+      "source": {
+        "id": "9c931d3332c3a87c89b804230892aa64",
+        "name": "The Times of India",
+        "url": "https://timesofindia.indiatimes.com"
+      }
+    },
+    {
+      "id": "25cdc212be0d27bad9d6e65e5844e513",
+      "title": "Australia dealt massive injury blow ahead of Ashes opener",
+      "description": "The injury problems continue to pile on for Australia ahead of the first Test against England, starting 21 November.",
+      "content": "Australia's ace fast bowler Josh Hazlewood has been ruled out of the first Test against England due to a hamstring strain injury.\nHazlewood sustained the injury during the Sheffield Shield games and went off the pitch. Although he was initially clear... [1148 chars]",
+      "url": "https://www.icc-cricket.com/news/australia-dealt-massive-injury-blow-ahead-of-ashes-opener",
+      "image": "https://images.icc-cricket.com/image/upload/t_ratio16_9-size20-webp/prd/fng83zekfletiolgo9rw",
+      "publishedAt": "2025-11-15T05:53:37Z",
+      "lang": "en",
+      "source": {
+        "id": "985cdfe2f767ad35d927fabe1a11c4f2",
+        "name": "ICC",
+        "url": "https://www.icc-cricket.com"
+      }
+    },
+    {
+      "id": "5d3d54d2cc205f35651b0b02a4896da4",
+      "title": "IPL 2026: Royals, Super Kings complete Samson-Jadeja trade",
+      "description": "Rajasthan Royals trade Sanju Samson to Chennai Super Kings for Ravindra Jadeja and Sam Curran ahead of IPL 2026.",
+      "content": "High-profile swaps, the release of expensive assets and a clear shift towards phasing out ageing stars emerged as the dominant themes at the end of the Indian Premier League’s player-retention deadline on Saturday (November 15, 2025).\nThe day began w... [2456 chars]",
+      "url": "https://www.thehindu.com/sport/cricket/indian-premier-league-2026-transfers-player-retention-chennai-super-kings-rajasthan-royals/article70283102.ece",
+      "image": "https://th-i.thgim.com/public/sport/cricket/np0tq8/article70283114.ece/alternates/LANDSCAPE_1200/Samson-Jadeja.jpg",
+      "publishedAt": "2025-11-15T05:53:00Z",
+      "lang": "en",
+      "source": {
+        "id": "b186b851cfda2f4463224771573fadf2",
+        "name": "The Hindu",
+        "url": "https://www.thehindu.com"
+      }
+    },
+    {
+      "id": "6ddb4b949b1dc2e8dbec7b8e6fdd1a14",
+      "title": "RR trade Samson to CSK for Jadeja and Curran",
+      "description": "Mohammed Shami, Mayank Markande, Nitish Rana, Donovan Ferreira and Arjun Tendulkar will also play for new teams in IPL 2026",
+      "content": "Mohammed Shami, Mayank Markande, Nitish Rana, Donovan Ferreira and Arjun Tendulkar will also play for new teams in IPL 2026\nESPNcricinfo staff\n15-Nov-2025 • 3 hrs ago\nRajasthan Royals (RR) and Chennai Super Kings (CSK) have finalised the player trade... [3677 chars]",
+      "url": "https://www.espncricinfo.com/story/ipl-2026-rr-trade-samson-to-csk-for-jadeja-and-curran-1511060",
+      "image": "https://img1.hscicdn.com/image/upload/f_auto/lsci/db/PICTURES/CMS/398200/398275.6.jpg",
+      "publishedAt": "2025-11-15T05:48:45Z",
+      "lang": "en",
+      "source": {
+        "id": "dd9092e5dfee95dfe0b70232a84c450a",
+        "name": "ESPNcricinfo",
+        "url": "https://www.espncricinfo.com"
+      }
+    },
+    {
+      "id": "76aa26965f4204104465a74486250c77",
+      "title": "CSK to release Matheesha Pathirana",
+      "description": "All the updates and news on IPL Retention Deadline Day",
+      "content": "Gujarat Titans have off-loaded five players: Mahipal Lomror, Karim Janat, Gerald Coetzee, Kulwant Khejroliya apart from Dasun Shanka. Shanka is the biggest name from that release, having led Sri Lanka in the past. Sherfane Rutherford has already been... [6041 chars]",
+      "url": "https://www.cricbuzz.com/cricket-news/136330/coming-back-to-rr-feels-special-ravindra-jadeja",
+      "image": "https://static.cricbuzz.com/a/img/v1/540x303/i1/c782769/pathirana-has-been-let-go-by-csk.jpg",
+      "publishedAt": "2025-11-15T05:46:44Z",
+      "lang": "en",
+      "source": {
+        "id": "2333169cc2e375c713ff168fb44b2832",
+        "name": "Cricbuzz.com",
+        "url": "https://www.cricbuzz.com"
+      }
+    },
+    {
+      "id": "bf7c16e83c01471062a7075ae4802213",
+      "title": "Shubman Gill retires hurt with likely sprained neck",
+      "description": "The India captain slog swept the second ball he faced, but was in discomfort right away and had to retire hurt",
+      "content": "India captain Shubman Gill retired hurt in the morning session of the second day's play in Kolkata after what looked like a possible neck sprain. Gill arrived to bat right after the drinks break when Simon Harmer dismissed Washington Sundar.\nThe righ... [395 chars]",
+      "url": "https://www.cricbuzz.com/cricket-news/136329/shubman-gill-retires-hurt-with-likely-sprained-neck",
+      "image": "https://static.cricbuzz.com/a/img/v1/540x303/i1/c782686/shubman-gill-sprained-his-neck-after-playing-a-slog-sweep-against-simon-harmer.jpg",
+      "publishedAt": "2025-11-15T05:43:53Z",
+      "lang": "en",
+      "source": {
+        "id": "2333169cc2e375c713ff168fb44b2832",
+        "name": "Cricbuzz.com",
+        "url": "https://www.cricbuzz.com"
+      }
+    },
+    {
+      "id": "20a0f63d9aa5c1f8b74b34b9f81cd978",
+      "title": "Hazlewood out of Ashes opener with hamstring injury",
+      "description": "Michael Neser has been added to the squad, and Brendan Doggett could be closing in on a Test debut in Perth",
+      "content": "Michael Neser has been added to the squad, and Brendan Doggett could be closing in on a Test debut in Perth\nAndrew McGlashan\n15-Nov-2025 • 6 hrs ago\nAustralia have suffered a huge blow ahead of the Ashes, with Josh Hazlewood ruled out of the opening ... [3657 chars]",
+      "url": "https://www.espncricinfo.com/story/australia-news-josh-hazlewood-out-of-ashes-opener-with-hamstring-injury-1511237",
+      "image": "https://img1.hscicdn.com/image/upload/f_auto/lsci/db/PICTURES/CMS/409100/409169.6.jpg",
+      "publishedAt": "2025-11-15T05:26:15Z",
+      "lang": "en",
+      "source": {
+        "id": "dd9092e5dfee95dfe0b70232a84c450a",
+        "name": "ESPNcricinfo",
+        "url": "https://www.espncricinfo.com"
+      }
+    }
+  ]
+}

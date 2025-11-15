@@ -27,7 +27,17 @@ async function initializeModels() {
     try {
         // Load default MMS Hindi model for Hindi voice generation
         await voiceService.loadModel('mms-tts-hin', true);
-        console.log('Voice models initialized successfully!');
+        console.log('✅ Hindi MMS model loaded successfully!');
+
+        // Load English MMS model for English voice generation
+        await voiceService.loadModel('mms-tts-eng', false);
+        console.log('✅ English MMS model loaded successfully!');
+
+        // Load SpeechT5 English model as alternative English option
+        await voiceService.loadModel('speecht5-tts', false);
+        console.log('✅ SpeechT5 English model loaded successfully!');
+
+        console.log('🎉 All voice models initialized successfully!');
     } catch (error) {
         console.error('Failed to initialize voice models:', error);
         process.exit(1);
@@ -179,12 +189,13 @@ async function startServer() {
 
     // Start HTTP server
     app.listen(PORT, () => {
-        console.log(`Voice Generation Server running on port ${PORT}`);
-        console.log(`Health check: http://localhost:${PORT}/health`);
-        console.log(`TTS endpoint: POST http://localhost:${PORT}/tts`);
-        console.log(`Models info: GET http://localhost:${PORT}/models`);
-        console.log(`Available models: GET http://localhost:${PORT}/models/available`);
-        console.log(`Load model: POST http://localhost:${PORT}/models/load`);
+        console.log(`🚀 Voice Generation Server running on port ${PORT}`);
+        console.log(`📋 Health check: http://localhost:${PORT}/health`);
+        console.log(`🎤 TTS endpoint: POST http://localhost:${PORT}/tts`);
+        console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
+        console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
+        console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
+        console.log(`🌍 Supported Languages: Hindi (mms-tts-hin), English (mms-tts-eng, speecht5-tts)`);
     });
 }
 

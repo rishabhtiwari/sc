@@ -81,7 +81,7 @@ class NewsEnrichmentService:
                         results['articles_failed'] += 1
                         continue
 
-                    # Step 4: Generate 40-70 word summary using LLM
+                    # Step 4: Generate 45-70 word summary using LLM
                     summary = self._generate_summary(content, article_id)
 
                     if summary:
@@ -129,18 +129,18 @@ class NewsEnrichmentService:
 
     def _generate_summary(self, content: str, article_id: str) -> str:
         """
-        Generate a 40-70 word summary using LLM service
+        Generate a 45-70 word summary using LLM service
 
         Args:
             content: Article content to summarize
             article_id: Article identifier for logging
 
         Returns:
-            Generated summary (40-70 words) or empty string if failed
+            Generated summary (45-70 words) or empty string if failed
         """
         try:
-            # Simple and direct Hindi prompt that works better with Mistral
-            prompt = f"""इस समाचार का हिंदी में 40-70 शब्दों में सारांश लिखें:
+            # Simple and direct English prompt that works better with Mistral
+            prompt = f"""Summarize this news article in exactly 45-70 words. Must be at least 45 words:
 
 {content[:2000]}"""
             # Limit content to avoid token limits
@@ -149,7 +149,6 @@ class NewsEnrichmentService:
             payload = {
                 "query": prompt,  # LLM service uses 'query' parameter
                 "use_rag": False,  # Explicitly disable RAG
-                "max_tokens": 120,  # Allow buffer for 40-70 words (~80-100 tokens)
                 "temperature": 0.3  # Lower temperature for more focused summaries
             }
 
