@@ -18,8 +18,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 # Add common directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from services.job_instance_service import JobInstanceService
-from utils.logger import setup_logger
+from common.services.job_instance_service import JobInstanceService
+from common.utils.logger import setup_logger
 
 class BaseJob(ABC):
     """

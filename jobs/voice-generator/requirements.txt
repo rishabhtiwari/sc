@@ -1,13 +1,23 @@
-# Core libraries for job framework
-flask>=2.0.0
-pymongo>=4.0.0
-requests>=2.25.0
+# Voice Generator Job Dependencies
 
-# Audio file validation (optional)
-librosa>=0.9.0
-soundfile
+# Web Framework
+Flask==2.3.3
+Werkzeug==2.3.7
 
-# Utilities
-python-dateutil
-uuid
-apscheduler>=3.10.0
+# Database
+pymongo==4.5.0
+
+# HTTP Requests
+requests==2.31.0
+
+# Job Scheduling
+APScheduler==3.10.4
+
+# Logging and Utilities
+python-dotenv==1.0.0
+
+# Date/Time handling
+python-dateutil==2.8.2
+
+# Type hints support for older Python versions
+typing-extensions==4.8.0

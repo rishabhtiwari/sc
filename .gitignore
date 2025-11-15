@@ -33,5 +33,8 @@ voices/hub/
 voices/output/
 voices/speakers/
 
+### Audio generation public directory ###
+audio-generation/public/
+
 ### macOS system files ###
 .DS_Store

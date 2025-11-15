@@ -12,20 +12,20 @@ from config.settings import ArticleStatus
 
 class NewsEnrichmentService:
     """Service to enrich news articles with AI-generated summaries"""
-    
+
     def __init__(self, config, logger=None):
         self.config = config
         self.logger = logger
-        
+
         # MongoDB connection for news database
         self.news_client = MongoClient(config.NEWS_MONGODB_URL)
         self.news_db = self.news_client[config.NEWS_MONGODB_DATABASE]
         self.news_collection = self.news_db['news_document']
-        
+
         # LLM service configuration - direct service communication
         self.llm_service_url = getattr(config, 'LLM_SERVICE_URL', 'http://ichat-llm-service:8083')
         self.llm_timeout = getattr(config, 'LLM_TIMEOUT', 30)
-        
+
     def enrich_news_articles(self, job_id: str, **kwargs) -> Dict[str, Any]:
         """
         Main enrichment task - processes articles with status='progress'
@@ -45,7 +45,7 @@ class NewsEnrichmentService:
             'articles_failed': 0,
             'errors': []
         }
-        
+
         try:
             # Step 1: Fetch all articles with status='progress'
             articles = list(self.news_collection.find({
@@ -56,34 +56,34 @@ class NewsEnrichmentService:
                     {'short_summary': None}
                 ]
             }))
-            
+
             results['total_articles_found'] = len(articles)
             self.logger.info(f"📰 Found {len(articles)} articles to enrich for job {job_id}")
-            
+
             if not articles:
                 self.logger.info(f"✅ No articles found for enrichment in job {job_id}")
                 return results
-            
+
             # Step 2: Process each article
             for article in articles:
                 try:
                     article_id = article.get('id', 'unknown')
                     self.logger.info(f"🔍 Processing article: {article_id}")
-                    
+
                     # Step 3: Get content field data
                     content = article.get('content', '')
                     if not content:
                         # Fallback to description if content is empty
                         content = article.get('description', '')
-                    
+
                     if not content:
                         self.logger.warning(f"⚠️ Article {article_id} has no content or description to summarize")
                         results['articles_failed'] += 1
                         continue
-                    
+
                     # Step 4: Generate 40-70 word summary using LLM
                     summary = self._generate_summary(content, article_id)
-                    
+
                     if summary:
                         # Step 5: Store summary in short_summary field
                         update_result = self.news_collection.update_one(
@@ -97,7 +97,7 @@ class NewsEnrichmentService:
                                 }
                             }
                         )
-                        
+
                         if update_result.modified_count > 0:
                             results['articles_enriched'] += 1
                             self.logger.info(f"✅ Article {article_id} enriched and marked as completed")
@@ -107,25 +107,26 @@ class NewsEnrichmentService:
                     else:
                         results['articles_failed'] += 1
                         self.logger.error(f"❌ Failed to generate summary for article {article_id}")
-                    
+
                     results['articles_processed'] += 1
-                    
+
                 except Exception as e:
                     results['articles_failed'] += 1
                     error_msg = f"Error processing article {article.get('id', 'unknown')}: {str(e)}"
                     results['errors'].append(error_msg)
                     self.logger.error(error_msg)
                     continue
-            
-            self.logger.info(f"🏁 Enrichment completed for job {job_id}: {results['articles_enriched']} enriched, {results['articles_failed']} failed")
-            
+
+            self.logger.info(
+                f"🏁 Enrichment completed for job {job_id}: {results['articles_enriched']} enriched, {results['articles_failed']} failed")
+
         except Exception as e:
             error_msg = f"Error in news enrichment for job {job_id}: {str(e)}"
             results['errors'].append(error_msg)
             self.logger.error(error_msg)
-        
+
         return results
-    
+
     def _generate_summary(self, content: str, article_id: str) -> str:
         """
         Generate a 40-70 word summary using LLM service
@@ -138,10 +139,11 @@ class NewsEnrichmentService:
             Generated summary (40-70 words) or empty string if failed
         """
         try:
-            # Prepare prompt for 40-70 word summary (avoid trigger words like "provide", "create", "generate")
-            prompt = f"""Summarize the following news article content in exactly 40-70 words. Focus on the key facts, main points, and important details. Keep it informative and well-structured. The summary must be between 40-70 words (strictly enforce this word count):
+            # Simple and direct Hindi prompt that works better with Mistral
+            prompt = f"""इस समाचार का हिंदी में 40-70 शब्दों में सारांश लिखें:
 
-{content[:2000]}"""  # Limit content to avoid token limits
+{content[:2000]}"""
+            # Limit content to avoid token limits
 
             # Make request to LLM service directly (no RAG)
             payload = {
@@ -159,7 +161,7 @@ class NewsEnrichmentService:
                 timeout=self.llm_timeout,
                 headers={'Content-Type': 'application/json'}
             )
-            
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get('status') == 'success':
@@ -177,17 +179,18 @@ class NewsEnrichmentService:
                 else:
                     self.logger.error(f"❌ LLM service returned error for article {article_id}: {result}")
             else:
-                self.logger.error(f"❌ LLM service request failed for article {article_id}: {response.status_code} - {response.text}")
-                
+                self.logger.error(
+                    f"❌ LLM service request failed for article {article_id}: {response.status_code} - {response.text}")
+
         except requests.exceptions.Timeout:
             self.logger.error(f"⏰ LLM service timeout for article {article_id}")
         except requests.exceptions.RequestException as e:
             self.logger.error(f"🌐 LLM service request error for article {article_id}: {str(e)}")
         except Exception as e:
             self.logger.error(f"💥 Unexpected error generating summary for article {article_id}: {str(e)}")
-        
+
         return ""
-    
+
     def get_enrichment_status(self) -> Dict[str, Any]:
         """
         Get current enrichment status and statistics
@@ -202,7 +205,7 @@ class NewsEnrichmentService:
             enriched_articles = self.news_collection.count_documents({
                 'short_summary': {'$exists': True, '$ne': '', '$ne': None}
             })
-            
+
             return {
                 'total_articles': total_articles,
                 'progress_articles': progress_articles,
@@ -211,7 +214,7 @@ class NewsEnrichmentService:
                 'pending_enrichment': progress_articles,
                 'enrichment_rate': round((enriched_articles / total_articles * 100), 2) if total_articles > 0 else 0
             }
-            
+
         except Exception as e:
             self.logger.error(f"Error getting enrichment status: {str(e)}")
             return {'error': str(e)}

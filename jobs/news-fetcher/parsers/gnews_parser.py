@@ -128,8 +128,12 @@ class GNewsParser(BaseNewsParser):
         Extract language from GNews response
         GNews doesn't always provide language, so we use a default
         """
-        # GNews doesn't typically include language in article data
-        # We could infer from the request parameters or use default
+        # First try to get language from article data
+        lang = article.get('lang')
+        if lang:
+            return lang.lower()
+
+        # Fallback to default if not provided
         return 'en'  # Default to English
     
     def extract_source(self, article: Dict[str, Any]) -> Dict[str, Any]:
@@ -137,13 +141,23 @@ class GNewsParser(BaseNewsParser):
         Extract source information from GNews response
         """
         source_data = article.get('source', {})
-        
+
         if isinstance(source_data, dict):
+            # Try to get country from source data, fallback to inferring from URL or use default
+            country = source_data.get('country')
+            if not country:
+                # Infer country from URL domain or use default
+                url = source_data.get('url', '')
+                if '.in' in url or any(domain in url for domain in ['navbharattimes', 'livehindustan', 'jagran', 'abplive', 'aajtak', 'indiatv']):
+                    country = 'in'  # India
+                else:
+                    country = 'in'  # Default to India for Hindi news
+
             return {
                 'id': source_data.get('name', '').lower().replace(' ', '_'),
                 'name': source_data.get('name', ''),
                 'url': source_data.get('url', ''),
-                'country': source_data.get('country', 'unknown')  # Extract country if available
+                'country': country.lower() if country else 'in'
             }
         elif isinstance(source_data, str):
             # Sometimes source is just a string
@@ -151,14 +165,14 @@ class GNewsParser(BaseNewsParser):
                 'id': source_data.lower().replace(' ', '_'),
                 'name': source_data,
                 'url': '',
-                'country': 'unknown'
+                'country': 'in'  # Default to India
             }
         else:
             return {
                 'id': 'unknown',
                 'name': 'Unknown Source',
                 'url': '',
-                'country': 'unknown'
+                'country': 'in'  # Default to India
             }
     
     def generate_short_summary(self, article: Dict[str, Any]) -> str:
