@@ -139,10 +139,20 @@ class NewsEnrichmentService:
             Generated summary (45-70 words) or empty string if failed
         """
         try:
-            # Simple and direct English prompt that works better with Mistral
-            prompt = f"""Summarize this news article in exactly 45-70 words. Must be at least 45 words:
+            # Enhanced prompt to prevent code generation and ensure text-only summaries
+            prompt = f"""You are a news summarizer. Write a clear, factual summary of this news article in plain English text only.
 
-{content[:2000]}"""
+REQUIREMENTS:
+- Write exactly 45-70 words
+- Use only plain text, no code, no programming syntax, no markdown
+- Focus on key facts: who, what, when, where, why
+- Write in complete sentences
+- Do not include any Python code, functions, or programming examples
+
+Article to summarize:
+{content[:2000]}
+
+Summary:"""
             # Limit content to avoid token limits
 
             # Make request to LLM service directly (no RAG)
@@ -171,8 +181,14 @@ class NewsEnrichmentService:
                         summary = result['data'].get('generated_text', '').strip()
 
                     if summary:
-                        self.logger.info(f"✅ Generated summary for article {article_id} ({len(summary.split())} words)")
-                        return summary
+                        # Post-process to ensure it's not code
+                        cleaned_summary = self._clean_summary(summary)
+                        if cleaned_summary:
+                            word_count = len(cleaned_summary.split())
+                            self.logger.info(f"✅ Generated summary for article {article_id} ({word_count} words)")
+                            return cleaned_summary
+                        else:
+                            self.logger.error(f"❌ Summary contained code/invalid content for article {article_id}")
                     else:
                         self.logger.error(f"❌ Empty summary received for article {article_id}")
                 else:
@@ -189,6 +205,65 @@ class NewsEnrichmentService:
             self.logger.error(f"💥 Unexpected error generating summary for article {article_id}: {str(e)}")
 
         return ""
+
+    def _clean_summary(self, summary: str) -> str:
+        """
+        Clean and validate summary to ensure it's proper text, not code
+
+        Args:
+            summary: Raw summary from LLM
+
+        Returns:
+            Cleaned summary or empty string if invalid
+        """
+        try:
+            # Remove any markdown code blocks
+            import re
+
+            # Remove code blocks (```python, ```javascript, etc.)
+            summary = re.sub(r'```[\w]*\n.*?\n```', '', summary, flags=re.DOTALL)
+            summary = re.sub(r'`.*?`', '', summary)  # Remove inline code
+
+            # Check for code-like patterns that shouldn't be in news summaries
+            code_indicators = [
+                'def ', 'function ', 'class ', 'import ', 'from ',
+                'return ', 'print(', 'console.log', '#!/usr/bin',
+                'if __name__', 'try:', 'except:', 'raise ',
+                'Args:', 'Returns:', 'Parameters:', '"""', "'''",
+                'def summarize', 'def get_', 'def fetch_'
+            ]
+
+            # If summary contains multiple code indicators, reject it
+            code_count = sum(1 for indicator in code_indicators if indicator in summary.lower())
+            if code_count >= 2:
+                self.logger.warning(f"⚠️ Summary rejected: contains {code_count} code indicators")
+                return ""
+
+            # Clean up the summary
+            summary = summary.strip()
+
+            # Remove common code artifacts
+            summary = re.sub(r'\n\s*\n', ' ', summary)  # Multiple newlines
+            summary = re.sub(r'\s+', ' ', summary)      # Multiple spaces
+
+            # Ensure it starts with a capital letter and ends with punctuation
+            if summary and not summary[0].isupper():
+                summary = summary[0].upper() + summary[1:]
+
+            if summary and summary[-1] not in '.!?':
+                summary += '.'
+
+            # Check word count (should be reasonable for news summary)
+            word_count = len(summary.split())
+            if word_count < 30:  # Too short, likely not a proper summary
+                self.logger.warning(f"⚠️ Summary too short: {word_count} words")
+                return ""
+
+            return summary
+
+        except Exception as e:
+            self.logger.error(f"💥 Error cleaning summary: {str(e)}")
+            return ""
 
     def get_enrichment_status(self) -> Dict[str, Any]:
         """
