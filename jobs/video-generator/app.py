@@ -4,15 +4,18 @@ Video Generation Job Service - Main Application
 
 import os
 import sys
+import time
 from datetime import datetime
 
 # Add common directory to path for job framework
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 
+from flask import send_file, jsonify
 from common.models.base_job import BaseJob
 from common.utils.logger import setup_logger
 from config.settings import Config
 from services.video_generation_service import VideoGenerationService
+from services.video_merge_service import VideoMergeService
 
 
 class VideoGeneratorJob(BaseJob):
@@ -21,6 +24,7 @@ class VideoGeneratorJob(BaseJob):
     def __init__(self):
         super().__init__("video-generator", Config)
         self.video_service = VideoGenerationService(self.config, self.logger)
+        self.merge_service = VideoMergeService(self.config, self.logger)
 
         # Initialize MongoDB connection
         from pymongo import MongoClient
@@ -299,6 +303,136 @@ class VideoGeneratorJob(BaseJob):
 
         self.logger.info(f"🔍 DEBUG: Database update completed. Success count: {success_count}")
         return success_count
+
+    def _setup_routes(self):
+        """Setup Flask routes including base routes and video merging routes"""
+        # Call parent method to setup base routes
+        super()._setup_routes()
+
+        # Add video merging routes
+        """Setup additional Flask routes for video merging"""
+
+        @self.app.route('/merge-latest', methods=['POST'])
+        def merge_latest_videos():
+            """Merge latest 20 news videos into a single video"""
+            try:
+                self.logger.info("🎬 Starting merge of latest 20 news videos")
+
+                # Get latest news with videos
+                latest_news = list(self.news_collection.find(
+                    {"video_path": {"$exists": True, "$ne": None}},
+                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1}
+                ).sort("created_at", -1).limit(20))
+
+                if not latest_news:
+                    return jsonify({
+                        "error": "No news videos found",
+                        "status": "error"
+                    }), 404
+
+                self.logger.info(f"📊 Found {len(latest_news)} news videos to merge")
+
+                # Return immediate response to user with processing status
+                from threading import Thread
+                import time
+
+                def merge_videos_async():
+                    try:
+                        self.logger.info("🎬 Starting async video merge process...")
+                        start_time = time.time()
+
+                        # Merge videos
+                        result = self.merge_service.merge_latest_videos(latest_news)
+
+                        end_time = time.time()
+                        processing_time = round(end_time - start_time, 2)
+
+                        if result['status'] == 'success':
+                            self.logger.info(f"✅ Video merge completed successfully in {processing_time} seconds - merged {result['video_count']} videos")
+                        else:
+                            self.logger.error(f"❌ Video merge failed: {result['error']}")
+
+                    except Exception as e:
+                        self.logger.error(f"❌ Error in async video merge: {str(e)}")
+
+                # Start async processing
+                thread = Thread(target=merge_videos_async)
+                thread.daemon = True
+                thread.start()
+
+                return jsonify({
+                    "message": f"Video merging started for {len(latest_news)} videos. This process may take 2-5 minutes depending on video length and quality.",
+                    "status": "processing",
+                    "video_count": len(latest_news),
+                    "estimated_time": "2-5 minutes",
+                    "download_url": "/download/latest-20-news.mp4",
+                    "note": "Please wait for processing to complete before downloading. Check server logs for progress updates."
+                })
+
+            except Exception as e:
+                self.logger.error(f"❌ Error starting video merge: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to start video merge: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/merge-status', methods=['GET'])
+        def get_merge_status():
+            """Check the status of video merging process"""
+            try:
+                merged_video_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+
+                if os.path.exists(merged_video_path):
+                    # Get file info
+                    file_stats = os.stat(merged_video_path)
+                    file_size_mb = round(file_stats.st_size / (1024 * 1024), 2)
+                    modified_time = time.ctime(file_stats.st_mtime)
+
+                    return jsonify({
+                        "status": "completed",
+                        "message": "Merged video is ready for download",
+                        "file_size_mb": file_size_mb,
+                        "last_updated": modified_time,
+                        "download_url": "/download/latest-20-news.mp4"
+                    })
+                else:
+                    return jsonify({
+                        "status": "not_found",
+                        "message": "No merged video found. Please start the merge process first using /merge-latest endpoint."
+                    })
+
+            except Exception as e:
+                self.logger.error(f"❌ Error checking merge status: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to check status: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/download/latest-20-news.mp4', methods=['GET'])
+        def download_merged_video():
+            """Download the merged video file"""
+            try:
+                merged_video_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+
+                if not os.path.exists(merged_video_path):
+                    return jsonify({
+                        "error": "Merged video not found. Please run /merge-latest first.",
+                        "status": "error"
+                    }), 404
+
+                return send_file(
+                    merged_video_path,
+                    as_attachment=True,
+                    download_name='latest-20-news.mp4',
+                    mimetype='video/mp4'
+                )
+
+            except Exception as e:
+                self.logger.error(f"❌ Error downloading merged video: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to download video: {str(e)}",
+                    "status": "error"
+                }), 500
 
 
 if __name__ == '__main__':
