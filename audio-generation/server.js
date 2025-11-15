@@ -176,6 +176,95 @@ app.get('/cache/status', (req, res) => {
     }
 });
 
+// API endpoint to serve audio files for video generation service
+app.get('/api/audio/:articleId/:audioType', (req, res) => {
+    try {
+        const { articleId, audioType } = req.params;
+
+        // Validate audio type
+        const validAudioTypes = ['title', 'description', 'content', 'short_summary'];
+        if (!validAudioTypes.includes(audioType)) {
+            return res.status(400).json({
+                error: 'Invalid audio type',
+                valid_types: validAudioTypes
+            });
+        }
+
+        // Construct file path
+        const audioFileName = `${audioType}.wav`;
+        const audioFilePath = path.join(__dirname, 'public', articleId, audioFileName);
+
+        // Check if file exists
+        if (!fs.existsSync(audioFilePath)) {
+            return res.status(404).json({
+                error: 'Audio file not found',
+                path: audioFilePath,
+                article_id: articleId,
+                audio_type: audioType
+            });
+        }
+
+        // Get file stats
+        const stats = fs.statSync(audioFilePath);
+
+        // Set appropriate headers
+        res.setHeader('Content-Type', 'audio/wav');
+        res.setHeader('Content-Length', stats.size);
+        res.setHeader('Content-Disposition', `attachment; filename="${articleId}_${audioType}.wav"`);
+
+        // Stream the file
+        const fileStream = fs.createReadStream(audioFilePath);
+        fileStream.pipe(res);
+
+        console.log(`Serving audio file: ${audioFilePath}`);
+
+    } catch (error) {
+        console.error('Audio file serving error:', error);
+        res.status(500).json({
+            error: 'Failed to serve audio file',
+            details: error.message
+        });
+    }
+});
+
+// API endpoint to check if audio file exists
+app.get('/api/audio/:articleId/:audioType/exists', (req, res) => {
+    try {
+        const { articleId, audioType } = req.params;
+
+        // Validate audio type
+        const validAudioTypes = ['title', 'description', 'content', 'short_summary'];
+        if (!validAudioTypes.includes(audioType)) {
+            return res.status(400).json({
+                error: 'Invalid audio type',
+                valid_types: validAudioTypes
+            });
+        }
+
+        // Construct file path
+        const audioFileName = `${audioType}.wav`;
+        const audioFilePath = path.join(__dirname, 'public', articleId, audioFileName);
+
+        // Check if file exists
+        const exists = fs.existsSync(audioFilePath);
+
+        res.json({
+            exists: exists,
+            article_id: articleId,
+            audio_type: audioType,
+            path: exists ? audioFilePath : null,
+            size: exists ? fs.statSync(audioFilePath).size : null
+        });
+
+    } catch (error) {
+        console.error('Audio file check error:', error);
+        res.status(500).json({
+            error: 'Failed to check audio file',
+            details: error.message
+        });
+    }
+});
+
 // Start server
 async function startServer() {
     // Create public directory for audio files

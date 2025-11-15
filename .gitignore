@@ -36,6 +36,12 @@ voices/speakers/
 ### Audio generation public directory ###
 audio-generation/public/
 
+### Video generation directories ###
+jobs/video-generator/public/
+jobs/video-generator/logs/
+jobs/video-generator/data/
+jobs/video-generator/temp/
+
 ### macOS system files ###
 .DS_Store
 

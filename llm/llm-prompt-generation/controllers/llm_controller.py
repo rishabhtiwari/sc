@@ -49,21 +49,26 @@ class LLMController:
             
             use_rag = data.get('use_rag', True)
             context = data.get('context', None)
-            
+            detect_code = data.get('detect_code', False)  # Default to False
+
             # Validate parameters
             if not isinstance(use_rag, bool):
                 return self.error_response("use_rag must be a boolean", 400)
-            
+
             if context is not None and not isinstance(context, str):
                 return self.error_response("context must be a string", 400)
-            
-            self.logger.info(f"Generate request: query='{query[:50]}...', use_rag={use_rag}")
-            
+
+            if not isinstance(detect_code, bool):
+                return self.error_response("detect_code must be a boolean", 400)
+
+            self.logger.info(f"Generate request: query='{query[:50]}...', use_rag={use_rag}, detect_code={detect_code}")
+
             # Generate response
             result = self.llm_service.generate_response(
                 query=query,
                 use_rag=use_rag,
-                context=context
+                context=context,
+                detect_code=detect_code
             )
             
             return self.success_response(result), 200

@@ -121,7 +121,8 @@ class NewsAudioService:
             audio_fields = {
                 'title': article.get('title', ''),
                 'description': article.get('description', ''),
-                'content': article.get('content', '')
+                'content': article.get('content', ''),
+                'short_summary': article.get('short_summary', '')
             }
 
             total_start_time = time.time()

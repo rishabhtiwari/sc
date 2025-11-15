@@ -159,6 +159,7 @@ Summary:"""
             payload = {
                 "query": prompt,  # LLM service uses 'query' parameter
                 "use_rag": False,  # Explicitly disable RAG
+                "detect_code": False,  # Disable code generation detection for news summaries
                 "temperature": 0.3  # Lower temperature for more focused summaries
             }
 

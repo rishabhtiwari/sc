@@ -151,14 +151,15 @@ class LLMService:
             raise e
     
     def generate_response(self, query: str, use_rag: bool = True,
-                         context: str = None) -> Dict[str, Any]:
+                         context: str = None, detect_code: bool = False) -> Dict[str, Any]:
         """
         Generate response using LLM with optional RAG context
-        
+
         Args:
             query: User query
             use_rag: Whether to use RAG (retrieve context)
             context: Pre-provided context (optional)
+            detect_code: Whether to detect and handle code generation requests (default: True)
             
         Returns:
             Dictionary containing generated response
@@ -177,8 +178,8 @@ class LLMService:
             else:
                 context_chunks = []
             
-            # Detect if this is a code generation request
-            is_code_request = self._is_code_generation_request(query)
+            # Detect if this is a code generation request (only if detect_code is True)
+            is_code_request = detect_code and self._is_code_generation_request(query)
 
             # Build prompt
             if context and context.strip():
@@ -435,8 +436,22 @@ class LLMService:
         Returns:
             True if this appears to be a code generation request
         """
-        code_keywords = [
-            'write', 'create', 'generate', 'build', 'implement', 'develop',
+        query_lower = query.lower()
+
+        # First check for non-code requests that should be excluded
+        non_code_indicators = [
+            'summarize', 'summary', 'news summarizer', 'write a summary',
+            'write a clear', 'write a factual', 'explain', 'describe',
+            'translate', 'paraphrase', 'rewrite', 'article', 'news',
+            'story', 'content', 'text', 'paragraph', 'sentence'
+        ]
+
+        # If it's clearly a non-code request, return False
+        if any(indicator in query_lower for indicator in non_code_indicators):
+            return False
+
+        # Check for specific code-related keywords with context
+        specific_code_keywords = [
             'function', 'class', 'method', 'code', 'script', 'program',
             'algorithm', 'python', 'javascript', 'java', 'cpp', 'c++',
             'html', 'css', 'sql', 'bash', 'shell', 'php', 'ruby', 'go',
@@ -444,8 +459,22 @@ class LLMService:
             'endpoint', 'component', 'module', 'library', 'framework'
         ]
 
-        query_lower = query.lower()
-        return any(keyword in query_lower for keyword in code_keywords)
+        # Check for code-specific patterns
+        code_patterns = [
+            'write code', 'create code', 'generate code', 'build a function',
+            'implement a', 'develop a script', 'write a function', 'create a class',
+            'build an api', 'implement an algorithm'
+        ]
+
+        # Check for specific code patterns first
+        if any(pattern in query_lower for pattern in code_patterns):
+            return True
+
+        # Check for programming language keywords
+        if any(keyword in query_lower for keyword in specific_code_keywords):
+            return True
+
+        return False
 
     def _format_code_response(self, response: str) -> str:
         """

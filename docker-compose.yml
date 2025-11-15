@@ -154,9 +154,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
-          memory: 4G
+          memory: 6G
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8083/health" ]
       interval: 60s
@@ -645,6 +645,66 @@ services:
         reservations:
           memory: 2G
           cpus: '1.0'
+
+  # Video Generator Job Service
+  job-video-generator:
+    build:
+      context: ./jobs
+      dockerfile: video-generator/Dockerfile
+    container_name: ichat-video-generator
+    ports:
+      - "8095:8095"
+    environment:
+      # Basic Configuration
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8095
+      - FLASK_DEBUG=false
+      - FLASK_ENV=production
+      - JOB_INTERVAL_MINUTES=30
+      - LOG_LEVEL=INFO
+      - LOG_FILE=logs/video-generator.log
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db?authSource=admin
+      # News Database Configuration
+      - NEWS_MONGODB_DATABASE=news
+      - NEWS_MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      # Video Generation Configuration
+      - VIDEO_QUALITY=high
+      - VIDEO_WIDTH=1920
+      - VIDEO_HEIGHT=1080
+      - VIDEO_FPS=30
+      - BATCH_SIZE=5
+      - PROCESSING_TIMEOUT=600
+      - IMAGE_DOWNLOAD_TIMEOUT=30
+      - MAX_IMAGE_SIZE_MB=10
+      - MAX_THREADS=2
+      - MAX_PARALLEL_TASKS=3
+      # Text Overlay Configuration
+      - TITLE_FONT_SIZE=48
+      - DESCRIPTION_FONT_SIZE=24
+      - TEXT_COLOR=white
+    volumes:
+      - ./jobs/video-generator/logs:/app/logs
+      - ./jobs/video-generator/public:/app/public
+      - ./audio-generation/public:/app/audio_input:ro  # Read-only access to audio files
+      - ./jobs/video-generator/temp:/app/temp
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8095/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    depends_on:
+      - ichat-mongodb
+      - job-voice-generator
 
 
 
