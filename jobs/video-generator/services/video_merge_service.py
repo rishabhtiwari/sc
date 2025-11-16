@@ -87,34 +87,46 @@ class VideoMergeService:
                         pass
                 raise concat_error
             
-            # Output path
-            output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
-            
+            # Use atomic file operations to prevent partial downloads
+            final_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+            temp_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.tmp.mp4')
+
             # Ensure output directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            # Write final video
-            self.logger.info(f"💾 Writing merged video to: {output_path}")
+            os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
+
+            # Write final video to temporary file first
+            self.logger.info(f"💾 Writing merged video to temporary file: {temp_output_path}")
             self.logger.info(f"📊 Processing {len(valid_videos)} videos with total duration of {final_video.duration:.1f} seconds")
             self.logger.info("⏳ This process may take 2-5 minutes depending on video length and quality. Please wait...")
 
-            # Remove existing file if it exists
-            if os.path.exists(output_path):
-                os.remove(output_path)
-                self.logger.info("🗑️ Removed existing merged video file")
+            # Remove existing temp file if it exists
+            if os.path.exists(temp_output_path):
+                os.remove(temp_output_path)
+                self.logger.info("🗑️ Removed existing temporary video file")
 
+            # Generate video to temporary file
             final_video.write_videofile(
-                output_path,
+                temp_output_path,
                 fps=24,  # Use standard fps for compatibility
                 codec='libx264',  # Use standard codec
                 audio_codec='aac',  # Use standard audio codec
                 verbose=True,  # Enable verbose for debugging
                 logger='bar'  # Show progress bar
             )
-            self.logger.info("✅ Video file written successfully")
+            self.logger.info("✅ Video file written to temporary location successfully")
+
+            # Atomic operation: Move temp file to final location
+            if os.path.exists(final_output_path):
+                self.logger.info("🔄 Replacing existing merged video file")
+            else:
+                self.logger.info("📁 Creating new merged video file")
+
+            # Atomic rename operation (this is instantaneous)
+            os.rename(temp_output_path, final_output_path)
+            self.logger.info(f"✅ Merged video atomically moved to: {final_output_path}")
             
-            # Get file info
-            file_size = os.path.getsize(output_path)
+            # Get file info from final location
+            file_size = os.path.getsize(final_output_path)
             file_size_mb = file_size / (1024 * 1024)
             duration = final_video.duration
             
@@ -137,6 +149,16 @@ class VideoMergeService:
             
         except Exception as e:
             self.logger.error(f"❌ Error merging videos: {str(e)}")
+
+            # Clean up temporary file if it exists
+            try:
+                temp_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.tmp.mp4')
+                if os.path.exists(temp_output_path):
+                    os.remove(temp_output_path)
+                    self.logger.info("🗑️ Cleaned up temporary video file after error")
+            except Exception as cleanup_error:
+                self.logger.warning(f"⚠️ Could not clean up temporary file: {cleanup_error}")
+
             return {
                 'status': 'error',
                 'error': str(e)

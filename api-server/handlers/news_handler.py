@@ -5,13 +5,15 @@ News Handler - Business logic for news operations
 import logging
 from typing import Dict, Any, Optional
 from services.news_service_client import NewsServiceClient
+from services.video_service_client import VideoServiceClient
 
 
 class NewsHandler:
     """Handler for news-related operations"""
-    
+
     def __init__(self):
         self.news_client = NewsServiceClient()
+        self.video_client = VideoServiceClient()
         self.logger = logging.getLogger(__name__)
     
     def get_news(self, 
@@ -174,4 +176,97 @@ class NewsHandler:
                     'service': 'news-fetcher',
                     'error': str(e)
                 }
+            }
+
+    def merge_latest_videos(self) -> Dict[str, Any]:
+        """
+        Merge latest 20 news videos into a single compilation video
+
+        Returns:
+            Dictionary with merge operation status and details
+        """
+        try:
+            self.logger.info("🎬 Starting merge of latest 20 news videos")
+
+            result = self.video_client.merge_latest_videos()
+
+            if result['status'] == 'success':
+                data = result['data']
+                return {
+                    'status': 'success',
+                    'message': f"Video merge started for {data.get('video_count', 0)} videos",
+                    'data': data
+                }
+            else:
+                return result
+
+        except Exception as e:
+            error_msg = f"Error starting video merge: {str(e)}"
+            self.logger.error(f"💥 {error_msg}")
+            return {
+                'status': 'error',
+                'error': error_msg,
+                'data': None
+            }
+
+    def get_video_merge_status(self) -> Dict[str, Any]:
+        """
+        Check the status of video merging process
+
+        Returns:
+            Dictionary with merge status and file info
+        """
+        try:
+            self.logger.info("🔍 Checking video merge status")
+
+            result = self.video_client.get_merge_status()
+
+            if result['status'] == 'success':
+                data = result['data']
+                return {
+                    'status': 'success',
+                    'message': f"Merge status: {data.get('status', 'unknown')}",
+                    'data': data
+                }
+            else:
+                return result
+
+        except Exception as e:
+            error_msg = f"Error checking merge status: {str(e)}"
+            self.logger.error(f"💥 {error_msg}")
+            return {
+                'status': 'error',
+                'error': error_msg,
+                'data': None
+            }
+
+    def get_video_download_info(self) -> Dict[str, Any]:
+        """
+        Get download information for the merged video
+
+        Returns:
+            Dictionary with download URL and file info
+        """
+        try:
+            self.logger.info("📥 Getting video download info")
+
+            result = self.video_client.download_merged_video()
+
+            if result['status'] == 'success':
+                data = result['data']
+                return {
+                    'status': 'success',
+                    'message': "Video download info retrieved successfully",
+                    'data': data
+                }
+            else:
+                return result
+
+        except Exception as e:
+            error_msg = f"Error getting download info: {str(e)}"
+            self.logger.error(f"💥 {error_msg}")
+            return {
+                'status': 'error',
+                'error': error_msg,
+                'data': None
             }

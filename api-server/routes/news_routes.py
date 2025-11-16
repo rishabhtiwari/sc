@@ -170,6 +170,165 @@ def get_news_health():
         }), 500
 
 
+@news_bp.route('/news/videos/merge-latest', methods=['POST'])
+def merge_latest_videos():
+    """
+    Merge latest 20 news videos into a single compilation video
+
+    Returns:
+        JSON response with merge operation status and details
+    """
+    try:
+        logger.info("🎬 POST /news/videos/merge-latest")
+
+        result = news_handler.merge_latest_videos()
+
+        if result['status'] == 'success':
+            return jsonify(result['data']), 200
+        else:
+            return jsonify({
+                'error': result['error'],
+                'status': 'error'
+            }), 400
+
+    except Exception as e:
+        error_msg = f"Error in POST /news/videos/merge-latest: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/videos/merge-status', methods=['GET'])
+def get_video_merge_status():
+    """
+    Check the status of video merging process
+
+    Returns:
+        JSON response with merge status and file info
+    """
+    try:
+        logger.info("🔍 GET /news/videos/merge-status")
+
+        result = news_handler.get_video_merge_status()
+
+        if result['status'] == 'success':
+            return jsonify(result['data']), 200
+        else:
+            return jsonify({
+                'error': result['error'],
+                'status': 'error'
+            }), 400
+
+    except Exception as e:
+        error_msg = f"Error in GET /news/videos/merge-status: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/videos/download', methods=['GET'])
+def get_video_download():
+    """
+    Get download information for the merged video
+
+    Returns:
+        JSON response with download URL and file info
+    """
+    try:
+        logger.info("📥 GET /news/videos/download")
+
+        result = news_handler.get_video_download_info()
+
+        if result['status'] == 'success':
+            return jsonify(result['data']), 200
+        else:
+            return jsonify({
+                'error': result['error'],
+                'status': 'error'
+            }), 400
+
+    except Exception as e:
+        error_msg = f"Error in GET /news/videos/download: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/videos/latest-20-news.mp4', methods=['GET'])
+def download_latest_news_video():
+    """
+    Download the latest 20 news compilation video
+
+    Returns:
+        MP4 video file stream containing latest news compilation
+    """
+    import requests
+    from flask import Response
+
+    try:
+        logger.info("📥 GET /news/videos/latest-20-news.mp4 - Downloading latest news compilation video")
+
+        # Proxy the request to the video generator service
+        video_service_url = "http://ichat-video-generator:8095/download/latest-20-news.mp4"
+
+        response = requests.get(video_service_url, stream=True, timeout=60)
+
+        if response.status_code == 200:
+            # Stream the video file back to the client
+            def generate():
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+
+            return Response(
+                generate(),
+                content_type='video/mp4',
+                headers={
+                    'Content-Disposition': 'attachment; filename="latest-20-news.mp4"',
+                    'Content-Length': response.headers.get('Content-Length', ''),
+                    'Accept-Ranges': 'bytes'
+                }
+            )
+        else:
+            # Handle error response from video service
+            try:
+                error_data = response.json()
+                return jsonify(error_data), response.status_code
+            except:
+                return jsonify({
+                    'error': f'Video service returned status {response.status_code}',
+                    'status': 'error'
+                }), response.status_code
+
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to video generation service"
+        logger.error(f"🔌 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 503
+    except requests.exceptions.Timeout:
+        error_msg = "Video download request timed out"
+        logger.error(f"⏰ {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 504
+    except Exception as e:
+        error_msg = f"Error in GET /news/videos/download/latest-20-news.mp4: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
 # Error handlers for the news blueprint
 @news_bp.errorhandler(404)
 def news_not_found(error):

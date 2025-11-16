@@ -1,34 +1,30 @@
 import { MMSVoiceModel } from './MMSVoiceModel.js';
 import { SpeechT5VoiceModel } from './SpeechT5VoiceModel.js';
+import { KokoroVoiceModelPython } from './KokoroVoiceModelPython.js';
 
 /**
  * Factory for creating voice generation models
  */
 export class VoiceModelFactory {
     static modelConfigs = {
-        // Supported TTS Models (SpeechT5 - working with transformers.js)
-        'speecht5-tts': {
-            modelId: 'Xenova/speecht5_tts',
-            type: 'SpeechT5',
+        // Kokoro-82M TTS Model (High-quality English TTS with 82M parameters)
+        'kokoro-82m': {
+            modelId: 'onnx-community/Kokoro-82M-v1.0-ONNX',
+            type: 'Kokoro',
             language: 'English',
-            baseModel: 'microsoft/speecht5_tts',
-            config: { quantized: false }
+            baseModel: 'hexgrad/Kokoro-82M',
+            config: {
+                dtype: 'q8', // Options: fp32, fp16, q8, q4, q4f16
+                voice: 'am_adam' // Default male voice
+            }
         },
 
-        // MMS Models (temporarily disabled - VITS architecture not supported yet)
+        // MMS Models for Hindi
         'mms-tts-hin': {
             modelId: 'Xenova/mms-tts-hin',
             type: 'MMS',
             language: 'Hindi',
             baseModel: 'facebook/mms-tts-hin',
-            config: { quantized: false }
-        },
-        
-        'mms-tts-eng': {
-            modelId: 'Xenova/mms-tts-eng',
-            type: 'MMS',
-            language: 'English',
-            baseModel: 'facebook/mms-tts-eng',
             config: { quantized: false }
         },
         
@@ -123,6 +119,8 @@ export class VoiceModelFactory {
         };
 
         switch (modelConfig.type) {
+            case 'Kokoro':
+                return new KokoroVoiceModelPython(modelConfig.modelId, config);
             case 'MMS':
                 return new MMSVoiceModel(modelConfig.modelId, config);
             case 'SpeechT5':

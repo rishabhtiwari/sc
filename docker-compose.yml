@@ -660,7 +660,7 @@ services:
       - FLASK_PORT=8095
       - FLASK_DEBUG=false
       - FLASK_ENV=production
-      - JOB_INTERVAL_MINUTES=30
+      - JOB_INTERVAL_MINUTES=5
       - LOG_LEVEL=INFO
       - LOG_FILE=logs/video-generator.log
       # MongoDB Configuration

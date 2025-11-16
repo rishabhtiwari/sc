@@ -57,6 +57,12 @@ class AppConfig:
     NEWS_SERVICE_URL = f"http://{NEWS_SERVICE_HOST}:{NEWS_SERVICE_PORT}"
     NEWS_SERVICE_TIMEOUT = int(os.environ.get('NEWS_SERVICE_TIMEOUT', 30))
 
+    # Video Generation Service integration
+    VIDEO_SERVICE_HOST = os.environ.get('VIDEO_SERVICE_HOST', 'ichat-video-generator')
+    VIDEO_SERVICE_PORT = int(os.environ.get('VIDEO_SERVICE_PORT', 8095))
+    VIDEO_SERVICE_URL = f"http://{VIDEO_SERVICE_HOST}:{VIDEO_SERVICE_PORT}"
+    VIDEO_SERVICE_TIMEOUT = int(os.environ.get('VIDEO_SERVICE_TIMEOUT', 300))  # 5 minutes for video processing
+
 
 class DevelopmentConfig(AppConfig):
     """

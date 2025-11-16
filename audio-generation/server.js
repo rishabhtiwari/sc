@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+// app.use('/temp', express.static('data/temp')); // Serve temp files for Kokoro model
 
 // Voice service instance with cache directory
 const cacheDir = path.join(__dirname, 'data', 'models');
@@ -25,17 +26,13 @@ const voiceService = new VoiceService(path.join(__dirname, 'public'), cacheDir);
 async function initializeModels() {
     console.log('Initializing voice models...');
     try {
+        // Load Kokoro-82M as primary English model (high quality)
+        await voiceService.loadModel('kokoro-82m', false);
+        console.log('✅ Kokoro-82M English model loaded successfully!');
+
         // Load default MMS Hindi model for Hindi voice generation
         await voiceService.loadModel('mms-tts-hin', true);
         console.log('✅ Hindi MMS model loaded successfully!');
-
-        // Load English MMS model for English voice generation
-        await voiceService.loadModel('mms-tts-eng', false);
-        console.log('✅ English MMS model loaded successfully!');
-
-        // Load SpeechT5 English model as alternative English option
-        await voiceService.loadModel('speecht5-tts', false);
-        console.log('✅ SpeechT5 English model loaded successfully!');
 
         console.log('🎉 All voice models initialized successfully!');
     } catch (error) {
@@ -49,19 +46,36 @@ app.get('/health', (req, res) => {
     res.json(voiceService.getHealthStatus());
 });
 
-// TTS endpoint
+// TTS endpoint - unified endpoint for all TTS models
 app.post('/tts', async (req, res) => {
     try {
-        const { text, model, format = 'wav' } = req.body;
+        const { text, model, voice, format = 'wav', news_id, filename } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
         }
 
-        console.log(`Generating speech for: "${text}" using model: ${model || 'default'}`);
+        console.log(`🎤 Generating speech for: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+        console.log(`🤖 Model: ${model || 'default'}`);
+        if (voice) console.log(`🎭 Voice: ${voice}`);
+        if (news_id) console.log(`📰 News ID: ${news_id}`);
+        if (filename) console.log(`📁 Filename: ${filename}`);
 
-        const result = await voiceService.generateAudioFile(text, { model, format });
-        res.json(result);
+        // Build options object
+        const options = { model, format };
+        if (voice) options.voice = voice;
+        if (news_id) options.news_id = news_id;
+        if (filename) options.filename = filename;
+
+        const result = await voiceService.generateAudioFile(text, options);
+
+        // Add voice information to response if available
+        const response = { ...result };
+        if (voice) response.voice_used = voice;
+        if (news_id) response.news_id = news_id;
+        if (filename) response.filename = filename;
+
+        res.json(response);
 
     } catch (error) {
         console.error('TTS generation error:', error);
@@ -284,7 +298,7 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Supported Languages: Hindi (mms-tts-hin), English (mms-tts-eng, speecht5-tts)`);
+        console.log(`🌍 Supported Languages: Hindi (mms-tts-hin), English (kokoro-82m)`);
     });
 }
 

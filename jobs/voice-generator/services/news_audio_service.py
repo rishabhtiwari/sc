@@ -110,6 +110,9 @@ class NewsAudioService:
             # Determine language and model
             language = article.get('lang', 'en')
             model = self._get_audio_model_for_language(language)
+            self.logger.info(f"🌍 Article language: {language}, Selected model: {model}")
+            self.logger.info(f"🔧 DEFAULT_AUDIO_MODEL: {self.config.DEFAULT_AUDIO_MODEL}")
+            self.logger.info(f"🔧 HINDI_AUDIO_MODEL: {self.config.HINDI_AUDIO_MODEL}")
 
             # Create public directory structure
             import os
@@ -207,9 +210,13 @@ class NewsAudioService:
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
 
             # Handle different source path formats
-            # TTS service returns paths like "/tts_mms-tts-hin_1762711899384.wav"
-            # These are actually relative to the TTS service data directory
-            if source_path.startswith('/tts_'):
+            # TTS service returns paths like "/tts_mms-tts-hin_1762711899384.wav" or "/temp/kokoro_xxx.wav"
+            if source_path.startswith('/temp/'):
+                # Kokoro model temp files are in audio-generation service's /app/public/temp/ directory
+                # which is mounted as /app/tts_data/temp/ in voice generator container
+                filename = source_path.replace('/temp/', '')
+                actual_source = f"/app/tts_data/temp/{filename}"
+            elif source_path.startswith('/tts_'):
                 # TTS service path format - remove leading slash and add TTS data directory
                 actual_source = f"/app/tts_data{source_path}"
             elif source_path.startswith('/'):
@@ -294,11 +301,11 @@ class NewsAudioService:
     def _call_audio_generation_service(self, text: str, model: str) -> Dict[str, Any]:
         """
         Call the audio-generation service to generate TTS
-        
+
         Args:
             text: Text to convert to speech
             model: TTS model to use
-            
+
         Returns:
             Dictionary with generation results
         """
@@ -307,43 +314,54 @@ class NewsAudioService:
             payload = {
                 'text': text,
                 'model': model,
-                'format': 'wav'
+                'format': 'wav',
+                'voice': 'am_adam'  # Default male voice for Kokoro model
             }
-            
+
             self.logger.info(f"🔊 Calling audio generation service: {url}")
             self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}")
-            
+            self.logger.info(f"📦 Payload: {payload}")
+
+            # Use extended timeout for Kokoro model (10 minutes) as it takes longer to generate
+            timeout = 600 if model == 'kokoro-82m' else self.config.AUDIO_GENERATION_TIMEOUT
+            self.logger.info(f"⏱️ Using timeout: {timeout}s for model: {model}")
+
             response = requests.post(
                 url,
                 json=payload,
-                timeout=self.config.AUDIO_GENERATION_TIMEOUT
+                timeout=timeout
             )
             
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
+                    self.logger.info(f"✅ Audio generation successful in {result.get('generation_time_ms', 0)}ms")
                     return {
                         'success': True,
                         'audio_url': result.get('audio_url'),
                         'generation_time_ms': result.get('generation_time_ms', 0)
                     }
                 else:
+                    self.logger.error(f"❌ Audio generation failed: {result.get('error', 'Unknown error')}")
                     return {
                         'success': False,
                         'error': result.get('error', 'Unknown error from audio service')
                     }
             else:
+                self.logger.error(f"❌ HTTP error {response.status_code}: {response.text}")
                 return {
                     'success': False,
                     'error': f"HTTP {response.status_code}: {response.text}"
                 }
-                
+
         except requests.exceptions.Timeout:
+            self.logger.error(f"❌ Audio generation timeout after {timeout}s")
             return {
                 'success': False,
-                'error': f"Audio generation timeout after {self.config.AUDIO_GENERATION_TIMEOUT}s"
+                'error': f"Audio generation timeout after {timeout}s"
             }
         except Exception as e:
+            self.logger.error(f"❌ Audio generation exception: {str(e)}")
             return {
                 'success': False,
                 'error': f"Audio generation service error: {str(e)}"

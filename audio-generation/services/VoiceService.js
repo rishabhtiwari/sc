@@ -104,21 +104,53 @@ export class VoiceService {
      */
     async generateAudioFile(text, options = {}) {
         const result = await this.generateSpeech(text, options);
-        
-        // Create WAV file
+
+        // Check if result already contains a file path (for models like Kokoro that generate files directly)
+        if (result.audioPath) {
+            // Model already generated a file, just return the path info
+            const filename = path.basename(result.audioPath);
+            const modelKey = options.model || this.defaultModel;
+
+            // Determine the correct audio_url based on the file location
+            let audio_url;
+            if (result.audioPath.includes('/app/public/')) {
+                // For news records in public folder: /public/{news_id}/{filename}
+                const relativePath = result.audioPath.replace('/app/public/', '');
+                audio_url = `/${relativePath}`;
+            } else {
+                // For temp files in /app/public/temp/: /temp/{filename}
+                audio_url = `/temp/${filename}`;
+            }
+
+            return {
+                success: true,
+                text: text,
+                model: modelKey,
+                audio_url: audio_url,
+                filepath: result.audioPath,
+                generation_time_ms: result.generation_time_ms || 0,
+                audio_info: {
+                    duration: result.duration,
+                    sample_rate: result.sampleRate,
+                    voice: result.voice
+                }
+            };
+        }
+
+        // For models that return raw audio data, create WAV file
         const wav = new WaveFile();
         wav.fromScratch(1, result.sampling_rate, '32f', result.audio);
         const audioBuffer = wav.toBuffer();
-        
+
         // Generate filename
         const timestamp = Date.now();
         const modelKey = options.model || this.defaultModel;
         const filename = options.filename || `tts_${modelKey}_${timestamp}.wav`;
         const filepath = path.join(this.outputDir, filename);
-        
+
         // Save audio file
         fs.writeFileSync(filepath, audioBuffer);
-        
+
         return {
             success: true,
             text: text,

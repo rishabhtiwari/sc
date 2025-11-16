@@ -39,7 +39,7 @@ class Config:
     NEWS_MONGODB_URL = os.getenv('NEWS_MONGODB_URL', f'mongodb://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{MONGODB_HOST}:{MONGODB_PORT}/{NEWS_MONGODB_DATABASE}?authSource=admin')
     
     # Audio Generation Configuration
-    DEFAULT_AUDIO_MODEL = os.getenv('DEFAULT_AUDIO_MODEL', 'mms-tts-eng')  # Default to English
+    DEFAULT_AUDIO_MODEL = os.getenv('DEFAULT_AUDIO_MODEL', 'kokoro-82m')  # Default to Kokoro-82M for English
     HINDI_AUDIO_MODEL = os.getenv('HINDI_AUDIO_MODEL', 'mms-tts-hin')     # Hindi model
     MAX_TEXT_LENGTH = int(os.getenv('MAX_TEXT_LENGTH', 1000))             # Max characters for TTS
     AUDIO_BATCH_SIZE = int(os.getenv('AUDIO_BATCH_SIZE', 5))              # Process 5 articles at a time

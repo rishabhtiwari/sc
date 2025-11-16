@@ -40,7 +40,7 @@ class Config:
     NEWS_MONGODB_URL = os.getenv('NEWS_MONGODB_URL', f'mongodb://{MONGODB_USERNAME}:{MONGODB_PASSWORD}@{MONGODB_HOST}:{MONGODB_PORT}/{NEWS_MONGODB_DATABASE}?authSource=admin')
 
     # Job Configuration
-    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 30))  # Run every 30 minutes
+    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 5))  # Run every 5 minutes
     MAX_THREADS = int(os.getenv('MAX_THREADS', 2))
     MAX_PARALLEL_TASKS = int(os.getenv('MAX_PARALLEL_TASKS', 3))
 
