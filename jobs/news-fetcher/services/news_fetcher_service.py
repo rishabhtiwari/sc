@@ -179,26 +179,26 @@ class NewsFetcherService:
             actual_url = self._build_url_with_params(seed_url)
 
             # Make HTTP request
-            # response = requests.get(
-            #     actual_url,
-            #     timeout=self.config.HTTP_TIMEOUT,
-            #     headers={'User-Agent': 'News-Fetcher-Service/1.0'}
-            # )
-            # response.raise_for_status()
-            #
-            # # Parse JSON response
-            # response_data = response.json()
+            response = requests.get(
+                actual_url,
+                timeout=self.config.HTTP_TIMEOUT,
+                headers={'User-Agent': 'News-Fetcher-Service/1.0'}
+            )
+            response.raise_for_status()
+
+            # Parse JSON response
+            response_data = response.json()
 
             # For testing: use mock data if available
-            mock_data = self._get_mock_data()
-            if mock_data:
-                response_data = mock_data
-            else:
-                # Provide valid fallback mock data when mock file is missing
-                response_data = {
-                    "totalArticles": 0,
-                    "articles": []
-                }
+            # mock_data = self._get_mock_data()
+            # if mock_data:
+            #     response_data = mock_data
+            # else:
+            # Provide valid fallback mock data when mock file is missing
+            # response_data = {
+            #     "totalArticles": 0,
+            #     "articles": []
+            # }
             # Get appropriate parser for this provider - handle both partner_name and provider fields
             partner_name = seed_url.get('partner_name', seed_url.get('provider', 'gnews'))
             parser = ParserFactory.create_parser(partner_name)
@@ -260,6 +260,10 @@ class NewsFetcherService:
             elif param_name == 'country':
                 # Use default country
                 actual_params['country'] = param_def.get('default', 'in')
+            elif param_name == 'max':
+                # Use max articles from config or parameter default
+                max_articles = getattr(self.config, 'MAX_ARTICLES_PER_FETCH', param_def.get('default', 100))
+                actual_params['max'] = max_articles
 
         # Debug: Show parameters being applied
         self.logger.info(f"🔧 URL Building Details:")
@@ -318,7 +322,8 @@ class NewsFetcherService:
                     article['category'] = category
                     self.news_collection.insert_one(article)
                     saved_count += 1
-                    self.logger.info(f"✅ Saved new article with category '{category}': {article.get('title', 'N/A')[:50]}...")
+                    self.logger.info(
+                        f"✅ Saved new article with category '{category}': {article.get('title', 'N/A')[:50]}...")
                 else:
                     # Optionally update existing article with newer data and category
                     self.news_collection.update_one(
@@ -330,7 +335,8 @@ class NewsFetcherService:
                             'category': category
                         }}
                     )
-                    self.logger.info(f"🔄 Updated existing article with category '{category}': {article.get('title', 'N/A')[:50]}...")
+                    self.logger.info(
+                        f"🔄 Updated existing article with category '{category}': {article.get('title', 'N/A')[:50]}...")
 
             except Exception as e:
                 self.logger.error(f"Error saving article {article.get('id', 'unknown')}: {str(e)}")
@@ -383,7 +389,8 @@ class NewsFetcherService:
                     # Try to parse as JSON first
                     try:
                         mock_data = json.loads(content)
-                        self.logger.info(f"✅ Successfully loaded JSON mock data with {len(mock_data.get('articles', []))} articles")
+                        self.logger.info(
+                            f"✅ Successfully loaded JSON mock data with {len(mock_data.get('articles', []))} articles")
                         return mock_data
                     except json.JSONDecodeError:
                         # If not JSON, treat as plain text and create a mock structure

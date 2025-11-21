@@ -7,18 +7,22 @@ RUN apt-get update && apt-get install -y \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directories for migrations and scripts
+# Create directories for migrations, scripts and seed-data
 RUN mkdir -p /docker-entrypoint-initdb.d \
     /app/migrations \
     /app/scripts \
+    /app/seed-data \
     /var/log/mongodb
 
 # Copy migration system scripts
 COPY scripts/ /app/scripts/
-COPY migrations/ /app/migrations/
 
 # Make scripts executable
 RUN chmod +x /app/scripts/*.sh
+
+# Copy migrations and seed data
+COPY migrations/ /app/migrations/
+COPY seed-data/ /app/seed-data/
 
 # Copy the initialization script that sets up the migration system (for fresh databases)
 COPY init-migration-system.sh /docker-entrypoint-initdb.d/00-init-migration-system.sh

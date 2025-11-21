@@ -31,7 +31,7 @@ class Config:
     FLASK_ENV = os.getenv('FLASK_ENV', 'production')
 
     # Job Configuration
-    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 60))  # Run every hour (fallback)
+    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 5))  # Run every 5 minutes (fallback)
     JOB_INTERVAL_SECONDS = int(os.getenv('JOB_INTERVAL_SECONDS', 0))  # Run every N seconds (takes priority)
     MAX_THREADS = int(os.getenv('MAX_THREADS', '1'))  # Threading support
     MAX_PARALLEL_TASKS = int(os.getenv('MAX_PARALLEL_TASKS', '3'))  # Parallel task support

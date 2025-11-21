@@ -30,11 +30,11 @@ async function initializeModels() {
         await voiceService.loadModel('kokoro-82m', false);
         console.log('✅ Kokoro-82M English model loaded successfully!');
 
-        // Load default MMS Hindi model for Hindi voice generation
-        await voiceService.loadModel('mms-tts-hin', true);
-        console.log('✅ Hindi MMS model loaded successfully!');
+        // Hindi model disabled for now
+        // await voiceService.loadModel('mms-tts-hin', true);
+        // console.log('✅ Hindi MMS model loaded successfully!');
 
-        console.log('🎉 All voice models initialized successfully!');
+        console.log('🎉 Voice model(s) initialized successfully!');
     } catch (error) {
         console.error('Failed to initialize voice models:', error);
         process.exit(1);
@@ -298,7 +298,7 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Supported Languages: Hindi (mms-tts-hin), English (kokoro-82m)`);
+        console.log(`🌍 Supported Languages: English (kokoro-82m)`);
     });
 }
 

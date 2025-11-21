@@ -1,0 +1,64 @@
+[
+  {
+    "partner_id": "20906bdf-5375-498d-957f-a1c50bbbb4bf",
+    "url": "https://gnews.io/api/v4/top-headlines?category={category}&apikey={api_key}&lang={lang}&country={country}&max={max}",
+    "partner_name": "gnews",
+    "name": "GNews General Headlines - India",
+    "provider": "gnews",
+    "category": "general",
+    "country": "in",
+    "language": "en",
+    "frequency_minutes": 60,
+    "frequency_hours": 1,
+    "is_active": true,
+    "last_run": null,
+    "last_fetched_at": null,
+    "fetch_count": 0,
+    "success_count": 0,
+    "error_count": 0,
+    "last_error": null,
+    "parameters": {
+      "category": {
+        "type": "string",
+        "required": false,
+        "description": "News category",
+        "default": "general"
+      },
+      "api_key": {
+        "type": "string",
+        "required": true,
+        "description": "GNews API key",
+        "default": "c01da20de0ad07ce5ab3b91a7603f7bb"
+      },
+      "lang": {
+        "type": "string",
+        "required": false,
+        "description": "Language code",
+        "default": "en"
+      },
+      "country": {
+        "type": "string",
+        "required": false,
+        "description": "Country code",
+        "default": "in"
+      },
+      "max": {
+        "type": "integer",
+        "required": false,
+        "description": "Maximum number of articles to fetch",
+        "default": 20
+      }
+    },
+    "metadata": {
+      "description": "General headlines from GNews API for India",
+      "actual_url_called": "https://gnews.io/api/v4/top-headlines?category=general&country=in&lang=en&apikey=c01da20de0ad07ce5ab3b91a7603f7bb",
+      "max_articles": 20,
+      "api_params": {
+        "category": "general",
+        "country": "in",
+        "lang": "en"
+      }
+    }
+  }
+]
+
