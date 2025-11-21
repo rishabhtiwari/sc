@@ -746,6 +746,122 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/test-background-music', methods=['POST'])
+        def test_background_music():
+            """Test Background Music effect on a single video"""
+            try:
+                from flask import request
+
+                self.logger.info("🎵 Testing Background Music effect on a video")
+
+                # Get parameters from request
+                data = request.get_json() or {}
+                article_id = data.get('article_id')
+
+                # Optional: Override background music settings for this test
+                music_volume = data.get('music_volume', self.config.BACKGROUND_MUSIC_VOLUME)
+                voice_volume = data.get('voice_volume', self.config.VOICE_VOLUME)
+                fade_in_duration = data.get('fade_in_duration', self.config.MUSIC_FADE_IN_DURATION)
+                fade_out_duration = data.get('fade_out_duration', self.config.MUSIC_FADE_OUT_DURATION)
+
+                # If no article_id provided, get the latest article with audio
+                if not article_id:
+                    latest_article = self.news_collection.find_one(
+                        {
+                            'audio_paths': {'$ne': None, '$exists': True},
+                            'image': {'$ne': None, '$exists': True},
+                            'status': {'$in': ['completed', 'published']}
+                        },
+                        sort=[('created_at', -1)]
+                    )
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": "No articles with audio found",
+                            "status": "error"
+                        }), 404
+
+                    article_id = latest_article['id']
+                else:
+                    latest_article = self.news_collection.find_one({'id': article_id})
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": f"Article {article_id} not found",
+                            "status": "error"
+                        }), 404
+
+                self.logger.info(f"📊 Testing Background Music effect on article: {article_id}")
+
+                # Temporarily override background music settings if provided
+                original_music_volume = self.config.BACKGROUND_MUSIC_VOLUME
+                original_voice_volume = self.config.VOICE_VOLUME
+                original_fade_in = self.config.MUSIC_FADE_IN_DURATION
+                original_fade_out = self.config.MUSIC_FADE_OUT_DURATION
+                original_enabled = self.config.ENABLE_BACKGROUND_MUSIC
+
+                try:
+                    # Force enable background music for this test
+                    self.config.ENABLE_BACKGROUND_MUSIC = True
+                    self.config.BACKGROUND_MUSIC_VOLUME = float(music_volume)
+                    self.config.VOICE_VOLUME = float(voice_volume)
+                    self.config.MUSIC_FADE_IN_DURATION = float(fade_in_duration)
+                    self.config.MUSIC_FADE_OUT_DURATION = float(fade_out_duration)
+
+                    # Generate video with Background Music effect
+                    result = self.video_service.generate_video_for_article(latest_article)
+                finally:
+                    # Restore original settings
+                    self.config.ENABLE_BACKGROUND_MUSIC = original_enabled
+                    self.config.BACKGROUND_MUSIC_VOLUME = original_music_volume
+                    self.config.VOICE_VOLUME = original_voice_volume
+                    self.config.MUSIC_FADE_IN_DURATION = original_fade_in
+                    self.config.MUSIC_FADE_OUT_DURATION = original_fade_out
+
+                if result['status'] == 'success':
+                    # Update database with video path
+                    self.news_collection.update_one(
+                        {'id': article_id},
+                        {'$set': {
+                            'video_path': result['video_path'],
+                            'updated_at': datetime.utcnow()
+                        }}
+                    )
+
+                    return jsonify({
+                        "message": "Background Music effect test completed successfully",
+                        "status": "success",
+                        "article_id": article_id,
+                        "video_path": result['video_path'],
+                        "download_url": f"/download/{os.path.basename(result['video_path'])}",
+                        "background_music_config": {
+                            "enabled": True,
+                            "music_volume": float(music_volume),
+                            "voice_volume": float(voice_volume),
+                            "fade_in_duration": float(fade_in_duration),
+                            "fade_out_duration": float(fade_out_duration),
+                            "music_path": self.config.BACKGROUND_MUSIC_PATH
+                        },
+                        "other_effects": {
+                            "ken_burns": self.config.ENABLE_KEN_BURNS,
+                            "fade_text": self.config.ENABLE_FADE_TEXT,
+                            "logo_watermark": self.config.ENABLE_LOGO_WATERMARK
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "error": result.get('error', 'Unknown error'),
+                        "status": "error",
+                        "article_id": article_id
+                    }), 500
+
+            except Exception as e:
+                self.logger.error(f"❌ Error testing Background Music effect: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to test Background Music effect: {str(e)}",
+                    "status": "error"
+                }), 500
+
 
 if __name__ == '__main__':
     # Create and run the job service

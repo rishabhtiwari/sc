@@ -92,6 +92,14 @@ class Config:
     LOGO_SCALE = float(os.getenv('LOGO_SCALE', 0.12))  # Relative to video width (0.12 = 12% of video width)
     LOGO_MARGIN = int(os.getenv('LOGO_MARGIN', 30))  # Margin from edges in pixels
 
+    # Background Music Effect Configuration
+    ENABLE_BACKGROUND_MUSIC = os.getenv('ENABLE_BACKGROUND_MUSIC', 'true').lower() == 'true'
+    BACKGROUND_MUSIC_PATH = os.getenv('BACKGROUND_MUSIC_PATH', '/app/assets/background_music.wav')
+    BACKGROUND_MUSIC_VOLUME = float(os.getenv('BACKGROUND_MUSIC_VOLUME', 0.15))  # 15% volume - noticeable but gentle, won't overpower voice
+    VOICE_VOLUME = float(os.getenv('VOICE_VOLUME', 1.0))  # 100% volume for voice
+    MUSIC_FADE_IN_DURATION = float(os.getenv('MUSIC_FADE_IN_DURATION', 3.0))  # 3 seconds fade in for smoother start
+    MUSIC_FADE_OUT_DURATION = float(os.getenv('MUSIC_FADE_OUT_DURATION', 3.0))  # 3 seconds fade out for smoother end
+
     # Processing Configuration
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 5))  # Process 5 videos at a time
     PROCESSING_TIMEOUT = int(os.getenv('PROCESSING_TIMEOUT', 600))  # 10 minutes per video

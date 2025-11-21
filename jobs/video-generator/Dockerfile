@@ -43,6 +43,9 @@ RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/assets
 # Create sample logo for watermark effect
 RUN python create_sample_logo.py
 
+# Generate royalty-free background music
+RUN python create_background_music.py
+
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV FLASK_APP=app.py

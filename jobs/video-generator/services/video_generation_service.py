@@ -449,8 +449,24 @@ class VideoGenerationService:
                     }
                 )
 
-            # Set audio
-            final_video = final_video.set_audio(audio_clip)
+            # Apply background music effect if enabled
+            if self.config.ENABLE_BACKGROUND_MUSIC:
+                self.logger.info("🎵 Adding background music to video...")
+                final_video = self.effects_factory.apply_effect(
+                    'background_music',
+                    None,  # Not used by this effect
+                    video_clip=final_video,
+                    voice_audio=audio_clip,
+                    duration=duration,
+                    music_path=self.config.BACKGROUND_MUSIC_PATH if os.path.exists(self.config.BACKGROUND_MUSIC_PATH) else None,
+                    music_volume=self.config.BACKGROUND_MUSIC_VOLUME,
+                    voice_volume=self.config.VOICE_VOLUME,
+                    fade_in_duration=self.config.MUSIC_FADE_IN_DURATION,
+                    fade_out_duration=self.config.MUSIC_FADE_OUT_DURATION
+                )
+            else:
+                # Set audio without background music
+                final_video = final_video.set_audio(audio_clip)
 
             # Output path
             output_path = os.path.join(output_dir, 'video.mp4')
