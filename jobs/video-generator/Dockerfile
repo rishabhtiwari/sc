@@ -38,7 +38,10 @@ COPY common/ /app/common/
 COPY video-generator/ .
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/data /app/public /app/temp
+RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/assets
+
+# Create sample logo for watermark effect
+RUN python create_sample_logo.py
 
 # Set environment variables
 ENV PYTHONPATH=/app

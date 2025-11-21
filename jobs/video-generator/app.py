@@ -627,6 +627,125 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/test-logo-watermark', methods=['POST'])
+        def test_logo_watermark():
+            """Test Logo Watermark effect on a single video"""
+            try:
+                from flask import request
+
+                self.logger.info("🎬 Testing Logo Watermark effect on a video")
+
+                # Get parameters from request
+                data = request.get_json() or {}
+                article_id = data.get('article_id')
+
+                # Optional: Override logo watermark settings for this test
+                logo_position = data.get('position', self.config.LOGO_POSITION)
+                logo_opacity = data.get('opacity', self.config.LOGO_OPACITY)
+                logo_scale = data.get('scale', self.config.LOGO_SCALE)
+                logo_margin = data.get('margin', self.config.LOGO_MARGIN)
+
+                # If no article_id provided, get the latest article with audio
+                if not article_id:
+                    latest_article = self.news_collection.find_one(
+                        {
+                            'audio_paths': {'$ne': None, '$exists': True},
+                            'image': {'$ne': None, '$exists': True},
+                            'status': {'$in': ['completed', 'published']}
+                        },
+                        sort=[('created_at', -1)]
+                    )
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": "No articles with audio found",
+                            "status": "error"
+                        }), 404
+
+                    article_id = latest_article['id']
+                else:
+                    latest_article = self.news_collection.find_one({'id': article_id})
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": f"Article {article_id} not found",
+                            "status": "error"
+                        }), 404
+
+                self.logger.info(f"📊 Testing Logo Watermark effect on article: {article_id}")
+
+                # Temporarily override logo watermark settings if provided
+                original_position = self.config.LOGO_POSITION
+                original_opacity = self.config.LOGO_OPACITY
+                original_scale = self.config.LOGO_SCALE
+                original_margin = self.config.LOGO_MARGIN
+
+                try:
+                    self.config.LOGO_POSITION = logo_position
+                    self.config.LOGO_OPACITY = float(logo_opacity)
+                    self.config.LOGO_SCALE = float(logo_scale)
+                    self.config.LOGO_MARGIN = int(logo_margin)
+
+                    # Generate video with Logo Watermark effect
+                    result = self.video_service.generate_video_for_article(latest_article)
+                finally:
+                    # Restore original settings
+                    self.config.LOGO_POSITION = original_position
+                    self.config.LOGO_OPACITY = original_opacity
+                    self.config.LOGO_SCALE = original_scale
+                    self.config.LOGO_MARGIN = original_margin
+
+                if result['status'] == 'success':
+                    # Update database with video path
+                    self.news_collection.update_one(
+                        {'id': article_id},
+                        {'$set': {
+                            'video_path': result['video_path'],
+                            'updated_at': datetime.utcnow()
+                        }}
+                    )
+
+                    return jsonify({
+                        "message": "Logo Watermark effect test completed successfully",
+                        "status": "success",
+                        "article_id": article_id,
+                        "video_path": result['video_path'],
+                        "download_url": f"/download/{os.path.basename(result['video_path'])}",
+                        "logo_watermark_config": {
+                            "enabled": self.config.ENABLE_LOGO_WATERMARK,
+                            "position": logo_position,
+                            "opacity": float(logo_opacity),
+                            "scale": float(logo_scale),
+                            "margin": int(logo_margin),
+                            "logo_path": self.config.LOGO_PATH
+                        },
+                        "ken_burns_config": {
+                            "enabled": self.config.ENABLE_KEN_BURNS,
+                            "zoom_start": self.config.KEN_BURNS_ZOOM_START,
+                            "zoom_end": self.config.KEN_BURNS_ZOOM_END,
+                            "easing": self.config.KEN_BURNS_EASING
+                        },
+                        "fade_text_config": {
+                            "enabled": self.config.ENABLE_FADE_TEXT,
+                            "fade_in_duration": self.config.FADE_TEXT_IN_DURATION,
+                            "fade_out_duration": self.config.FADE_TEXT_OUT_DURATION,
+                            "fade_type": self.config.FADE_TEXT_TYPE
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "error": result.get('error', 'Unknown error'),
+                        "status": "error",
+                        "article_id": article_id
+                    }), 500
+
+            except Exception as e:
+                self.logger.error(f"❌ Error testing Logo Watermark effect: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to test Logo Watermark effect: {str(e)}",
+                    "status": "error"
+                }), 500
+
 
 if __name__ == '__main__':
     # Create and run the job service

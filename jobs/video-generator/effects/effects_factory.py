@@ -8,6 +8,7 @@ from moviepy.editor import VideoClip
 from .base_effect import BaseEffect
 from .ken_burns_effect import KenBurnsEffect
 from .fade_text_effect import FadeTextEffect
+from .logo_watermark_effect import LogoWatermarkEffect
 
 
 class EffectsFactory:
@@ -22,6 +23,7 @@ class EffectsFactory:
     _effects_registry: Dict[str, type] = {
         'ken_burns': KenBurnsEffect,
         'fade_text': FadeTextEffect,
+        'logo_watermark': LogoWatermarkEffect,
         # Add more effects here as they are implemented
         # 'color_grading': ColorGradingEffect,
         # etc.

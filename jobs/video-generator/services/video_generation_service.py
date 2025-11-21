@@ -435,6 +435,20 @@ class VideoGenerationService:
             final_clips = [background_clip] + text_clips
             final_video = CompositeVideoClip(final_clips)
 
+            # Apply logo watermark effect if enabled
+            if self.config.ENABLE_LOGO_WATERMARK:
+                final_video = self.effects_factory.apply_effect(
+                    'logo_watermark',
+                    final_video,
+                    config={
+                        'logo_path': self.config.LOGO_PATH,
+                        'position': self.config.LOGO_POSITION,
+                        'opacity': self.config.LOGO_OPACITY,
+                        'scale': self.config.LOGO_SCALE,
+                        'margin': self.config.LOGO_MARGIN
+                    }
+                )
+
             # Set audio
             final_video = final_video.set_audio(audio_clip)
 

@@ -83,7 +83,15 @@ class Config:
     FADE_TEXT_IN_DURATION = float(os.getenv('FADE_TEXT_IN_DURATION', 0.5))
     FADE_TEXT_OUT_DURATION = float(os.getenv('FADE_TEXT_OUT_DURATION', 0.5))
     FADE_TEXT_TYPE = os.getenv('FADE_TEXT_TYPE', 'both')  # both, in, out
-    
+
+    # Logo Watermark Effect Configuration
+    ENABLE_LOGO_WATERMARK = os.getenv('ENABLE_LOGO_WATERMARK', 'true').lower() == 'true'
+    LOGO_PATH = os.getenv('LOGO_PATH', '/app/assets/logo.png')
+    LOGO_POSITION = os.getenv('LOGO_POSITION', 'top-right')  # top-left, top-right, bottom-left, bottom-right, center
+    LOGO_OPACITY = float(os.getenv('LOGO_OPACITY', 0.9))  # 0.0 to 1.0
+    LOGO_SCALE = float(os.getenv('LOGO_SCALE', 0.12))  # Relative to video width (0.12 = 12% of video width)
+    LOGO_MARGIN = int(os.getenv('LOGO_MARGIN', 30))  # Margin from edges in pixels
+
     # Processing Configuration
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 5))  # Process 5 videos at a time
     PROCESSING_TIMEOUT = int(os.getenv('PROCESSING_TIMEOUT', 600))  # 10 minutes per video
