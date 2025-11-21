@@ -688,6 +688,11 @@ services:
       - TITLE_FONT_SIZE=48
       - DESCRIPTION_FONT_SIZE=24
       - TEXT_COLOR=white
+      # Ken Burns Effect Configuration
+      - ENABLE_KEN_BURNS=true
+      - KEN_BURNS_ZOOM_START=1.0
+      - KEN_BURNS_ZOOM_END=1.3
+      - KEN_BURNS_EASING=ease_in_out
     volumes:
       - ./jobs/video-generator/logs:/app/logs
       - ./jobs/video-generator/public:/app/public

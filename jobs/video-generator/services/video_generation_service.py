@@ -24,6 +24,10 @@ import numpy as np
 
 from common.utils.logger import setup_logger
 
+# Add effects directory to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from effects import EffectsFactory
+
 
 class VideoGenerationService:
     """Service for generating videos from news articles with audio and background images"""
@@ -31,12 +35,16 @@ class VideoGenerationService:
     def __init__(self, config, logger=None):
         self.config = config
         self.logger = logger or setup_logger('video-generation-service', config.LOG_FILE)
-        
+
         # Ensure output directories exist
         os.makedirs(self.config.VIDEO_OUTPUT_DIR, exist_ok=True)
         os.makedirs(self.config.TEMP_DIR, exist_ok=True)
-        
+
+        # Initialize effects factory
+        self.effects_factory = EffectsFactory(logger=self.logger)
+
         self.logger.info("Video Generation Service initialized")
+        self.logger.info(f"Available effects: {self.effects_factory.get_available_effects()}")
     
     def generate_video_for_article(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -403,6 +411,19 @@ class VideoGenerationService:
 
             # Load background image as video clip
             background_clip = ImageClip(background_image_path, duration=duration)
+
+            # Apply Ken Burns effect if enabled
+            if self.config.ENABLE_KEN_BURNS:
+                background_clip = self.effects_factory.apply_effect(
+                    'ken_burns',
+                    background_clip,
+                    config={
+                        'zoom_start': self.config.KEN_BURNS_ZOOM_START,
+                        'zoom_end': self.config.KEN_BURNS_ZOOM_END,
+                        'easing': self.config.KEN_BURNS_EASING
+                    },
+                    duration=duration
+                )
 
             # Load audio
             audio_clip = AudioFileClip(audio_path)

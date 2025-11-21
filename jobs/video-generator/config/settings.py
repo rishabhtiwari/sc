@@ -71,6 +71,12 @@ class Config:
     DESCRIPTION_FONT_SIZE = int(os.getenv('DESCRIPTION_FONT_SIZE', 24))
     TEXT_COLOR = os.getenv('TEXT_COLOR', 'white')
     TEXT_BACKGROUND_COLOR = os.getenv('TEXT_BACKGROUND_COLOR', 'rgba(0,0,0,0.7)')
+
+    # Effects Configuration
+    ENABLE_KEN_BURNS = os.getenv('ENABLE_KEN_BURNS', 'true').lower() == 'true'
+    KEN_BURNS_ZOOM_START = float(os.getenv('KEN_BURNS_ZOOM_START', 1.0))
+    KEN_BURNS_ZOOM_END = float(os.getenv('KEN_BURNS_ZOOM_END', 1.2))
+    KEN_BURNS_EASING = os.getenv('KEN_BURNS_EASING', 'ease_in_out')  # linear, ease_in, ease_out, ease_in_out
     
     # Processing Configuration
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 5))  # Process 5 videos at a time

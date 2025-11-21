@@ -11,7 +11,7 @@ class Config:
     
     # Job Configuration
     JOB_NAME = 'voice-generator'
-    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_INTERVAL_MINUTES', 30))  # Run every 30 minutes
+    JOB_INTERVAL_MINUTES = int(os.getenv('JOB_FREQUENCY_MINUTES', 30))  # Run every 30 minutes
     JOB_INTERVAL_SECONDS = int(os.getenv('JOB_INTERVAL_SECONDS', 0))   # Override with seconds if needed
     
     # Threading Configuration

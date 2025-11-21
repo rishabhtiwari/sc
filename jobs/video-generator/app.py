@@ -20,7 +20,7 @@ from services.video_merge_service import VideoMergeService
 
 class VideoGeneratorJob(BaseJob):
     """Video Generation Job that extends BaseJob framework"""
-    
+
     def __init__(self):
         super().__init__("video-generator", Config)
         self.video_service = VideoGenerationService(self.config, self.logger)
@@ -34,7 +34,7 @@ class VideoGeneratorJob(BaseJob):
         self.news_client = MongoClient(self.config.NEWS_MONGODB_URL)
         self.news_db = self.news_client[self.config.NEWS_MONGODB_DATABASE]
         self.news_collection = self.news_db['news_document']
-        
+
         # Validate configuration
         try:
             self.config.validate_config()
@@ -42,11 +42,11 @@ class VideoGeneratorJob(BaseJob):
         except ValueError as e:
             self.logger.error(f"❌ Configuration validation failed: {str(e)}")
             raise
-    
+
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         return "video-generator"
-    
+
     def get_service_info(self) -> dict:
         """Return service information"""
         return {
@@ -64,7 +64,7 @@ class VideoGeneratorJob(BaseJob):
                 'video_fps': self.config.VIDEO_FPS
             }
         }
-    
+
     def run_job(self, job_id: str, is_on_demand: bool = False, **kwargs) -> dict:
         """
         Main job execution method - finds articles with audio but no video and generates videos
@@ -149,7 +149,7 @@ class VideoGeneratorJob(BaseJob):
             }
             self.logger.info(f"🔍 DEBUG: Error result being returned from run_job: {error_result}")
             return error_result
-    
+
     def get_parallel_tasks(self) -> list:
         """
         Convert articles into parallel tasks for processing
@@ -168,9 +168,9 @@ class VideoGeneratorJob(BaseJob):
                 'kwargs': {}
             }
             tasks.append(task)
-        
+
         return tasks
-    
+
     def process_single_task(self, article: dict, job_id: str = None, **kwargs) -> dict:
         """
         Process a single video generation task
@@ -194,7 +194,8 @@ class VideoGeneratorJob(BaseJob):
             if result['status'] == 'success':
                 self.logger.info(f"✅ Video generated successfully for article: {article_id}")
             else:
-                self.logger.error(f"❌ Video generation failed for article: {article_id} - {result.get('error', 'Unknown error')}")
+                self.logger.error(
+                    f"❌ Video generation failed for article: {article_id} - {result.get('error', 'Unknown error')}")
 
             return result
 
@@ -206,7 +207,7 @@ class VideoGeneratorJob(BaseJob):
                 'error': error_msg,
                 'article_id': article.get('id', 'unknown')
             }
-    
+
     def _get_articles_for_video_generation(self) -> list:
         """
         Get articles that have audio but no video generated yet
@@ -222,21 +223,21 @@ class VideoGeneratorJob(BaseJob):
                 'image': {'$ne': None, '$exists': True},  # Has image URL
                 'status': {'$in': ['completed', 'published']}  # Only process completed articles
             }
-            
+
             # Get all articles that need video generation
             articles = list(
                 self.news_collection.find(query)
                 .sort('updated_at', -1)  # Process newest first
             )
-            
+
             self.logger.info(f"🔍 Found {len(articles)} articles ready for video generation")
-            
+
             return articles
-            
+
         except Exception as e:
             self.logger.error(f"Error querying articles for video generation: {str(e)}")
             return []
-    
+
     def _update_database_with_results(self, results: list) -> int:
         """
         Update database with video generation results
@@ -252,11 +253,11 @@ class VideoGeneratorJob(BaseJob):
 
         for i, result in enumerate(results):
             try:
-                self.logger.info(f"🔍 DEBUG: Processing result {i+1}/{len(results)}: {result}")
+                self.logger.info(f"🔍 DEBUG: Processing result {i + 1}/{len(results)}: {result}")
 
                 article_id = result.get('article_id')
                 if not article_id:
-                    self.logger.warning(f"⚠️ DEBUG: Result {i+1} missing article_id: {result}")
+                    self.logger.warning(f"⚠️ DEBUG: Result {i + 1} missing article_id: {result}")
                     continue
 
                 self.logger.info(f"🔍 DEBUG: Processing article_id: {article_id}, status: {result.get('status')}")
@@ -287,7 +288,8 @@ class VideoGeneratorJob(BaseJob):
                         {'$set': update_data}
                     )
 
-                    self.logger.info(f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}")
+                    self.logger.info(
+                        f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}")
 
                     if update_result.modified_count > 0:
                         success_count += 1
@@ -296,10 +298,12 @@ class VideoGeneratorJob(BaseJob):
                         self.logger.warning(f"⚠️ No document updated for article: {article_id}")
                 else:
                     # Log error but don't update database for failed generations
-                    self.logger.error(f"❌ Video generation failed for article {article_id}: {result.get('error', 'Unknown error')}")
+                    self.logger.error(
+                        f"❌ Video generation failed for article {article_id}: {result.get('error', 'Unknown error')}")
 
             except Exception as e:
-                self.logger.error(f"💥 Error updating database for article {result.get('article_id', 'unknown')}: {str(e)}")
+                self.logger.error(
+                    f"💥 Error updating database for article {result.get('article_id', 'unknown')}: {str(e)}")
 
         self.logger.info(f"🔍 DEBUG: Database update completed. Success count: {success_count}")
         return success_count
@@ -348,7 +352,8 @@ class VideoGeneratorJob(BaseJob):
                         processing_time = round(end_time - start_time, 2)
 
                         if result['status'] == 'success':
-                            self.logger.info(f"✅ Video merge completed successfully in {processing_time} seconds - merged {result['video_count']} videos")
+                            self.logger.info(
+                                f"✅ Video merge completed successfully in {processing_time} seconds - merged {result['video_count']} videos")
                         else:
                             self.logger.error(f"❌ Video merge failed: {result['error']}")
 
@@ -434,10 +439,91 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/test-ken-burns', methods=['POST'])
+        def test_ken_burns():
+            """Test Ken Burns effect on a single video"""
+            try:
+                from flask import request
+
+                self.logger.info("🎬 Testing Ken Burns effect on a video")
+
+                # Get parameters from request
+                data = request.get_json() or {}
+                article_id = data.get('article_id')
+
+                # If no article_id provided, get the latest article with audio
+                if not article_id:
+                    latest_article = self.news_collection.find_one(
+                        {
+                            'audio_paths': {'$ne': None, '$exists': True},
+                            'image': {'$ne': None, '$exists': True},
+                            'status': {'$in': ['completed', 'published']}
+                        },
+                        sort=[('created_at', -1)]
+                    )
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": "No articles with audio found",
+                            "status": "error"
+                        }), 404
+
+                    article_id = latest_article['id']
+                else:
+                    latest_article = self.news_collection.find_one({'id': article_id})
+
+                    if not latest_article:
+                        return jsonify({
+                            "error": f"Article {article_id} not found",
+                            "status": "error"
+                        }), 404
+
+                self.logger.info(f"📊 Testing Ken Burns effect on article: {article_id}")
+
+                # Generate video with Ken Burns effect
+                result = self.video_service.generate_video_for_article(latest_article)
+
+                if result['status'] == 'success':
+                    # Update database with video path
+                    self.news_collection.update_one(
+                        {'id': article_id},
+                        {'$set': {
+                            'video_path': result['video_path'],
+                            'updated_at': datetime.utcnow()
+                        }}
+                    )
+
+                    return jsonify({
+                        "message": "Ken Burns effect test completed successfully",
+                        "status": "success",
+                        "article_id": article_id,
+                        "video_path": result['video_path'],
+                        "download_url": f"/download/{os.path.basename(result['video_path'])}",
+                        "ken_burns_config": {
+                            "enabled": self.config.ENABLE_KEN_BURNS,
+                            "zoom_start": self.config.KEN_BURNS_ZOOM_START,
+                            "zoom_end": self.config.KEN_BURNS_ZOOM_END,
+                            "easing": self.config.KEN_BURNS_EASING
+                        }
+                    })
+                else:
+                    return jsonify({
+                        "error": result.get('error', 'Unknown error'),
+                        "status": "error",
+                        "article_id": article_id
+                    }), 500
+
+            except Exception as e:
+                self.logger.error(f"❌ Error testing Ken Burns effect: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to test Ken Burns effect: {str(e)}",
+                    "status": "error"
+                }), 500
+
 
 if __name__ == '__main__':
     # Create and run the job service
     job = VideoGeneratorJob()
-    
+
     # Start the Flask application with job scheduling
     job.run_flask_app()
