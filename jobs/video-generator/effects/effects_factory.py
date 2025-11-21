@@ -7,6 +7,7 @@ from moviepy.editor import VideoClip
 
 from .base_effect import BaseEffect
 from .ken_burns_effect import KenBurnsEffect
+from .fade_text_effect import FadeTextEffect
 
 
 class EffectsFactory:
@@ -20,8 +21,8 @@ class EffectsFactory:
     # Registry of available effects
     _effects_registry: Dict[str, type] = {
         'ken_burns': KenBurnsEffect,
+        'fade_text': FadeTextEffect,
         # Add more effects here as they are implemented
-        # 'fade_transition': FadeTransitionEffect,
         # 'color_grading': ColorGradingEffect,
         # etc.
     }
@@ -134,7 +135,9 @@ class EffectsFactory:
             return effect.apply(clip, **kwargs)
         except Exception as e:
             if self.logger:
+                import traceback
                 self.logger.error(f"Error applying effect '{effect_name}': {str(e)}")
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
             return clip
     
     def apply_effects_chain(self, clip: VideoClip, effects_config: List[Dict[str, Any]]) -> VideoClip:

@@ -495,6 +495,16 @@ class VideoGenerationService:
                     color=self.config.TEXT_COLOR
                 ).set_position(('center', 0.1), relative=True).set_duration(title_duration)
 
+                # Apply fade text effect if enabled
+                if self.config.ENABLE_FADE_TEXT:
+                    title_clip = self.effects_factory.apply_effect(
+                        'fade_text',
+                        title_clip,
+                        fade_in_duration=self.config.FADE_TEXT_IN_DURATION,
+                        fade_out_duration=self.config.FADE_TEXT_OUT_DURATION,
+                        fade_type=self.config.FADE_TEXT_TYPE
+                    )
+
                 text_clips.append(title_clip)
 
             # Description overlay (appears after title, for remaining duration)
@@ -507,6 +517,16 @@ class VideoGenerationService:
                     fontsize=self.config.DESCRIPTION_FONT_SIZE,
                     color=self.config.TEXT_COLOR
                 ).set_position(('center', 0.85), relative=True).set_start(desc_start_time).set_duration(desc_duration)
+
+                # Apply fade text effect if enabled
+                if self.config.ENABLE_FADE_TEXT:
+                    description_clip = self.effects_factory.apply_effect(
+                        'fade_text',
+                        description_clip,
+                        fade_in_duration=self.config.FADE_TEXT_IN_DURATION,
+                        fade_out_duration=self.config.FADE_TEXT_OUT_DURATION,
+                        fade_type=self.config.FADE_TEXT_TYPE
+                    )
 
                 text_clips.append(description_clip)
 

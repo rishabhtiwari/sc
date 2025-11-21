@@ -77,6 +77,12 @@ class Config:
     KEN_BURNS_ZOOM_START = float(os.getenv('KEN_BURNS_ZOOM_START', 1.0))
     KEN_BURNS_ZOOM_END = float(os.getenv('KEN_BURNS_ZOOM_END', 1.2))
     KEN_BURNS_EASING = os.getenv('KEN_BURNS_EASING', 'ease_in_out')  # linear, ease_in, ease_out, ease_in_out
+
+    # Fade Text Effect Configuration
+    ENABLE_FADE_TEXT = os.getenv('ENABLE_FADE_TEXT', 'true').lower() == 'true'
+    FADE_TEXT_IN_DURATION = float(os.getenv('FADE_TEXT_IN_DURATION', 0.5))
+    FADE_TEXT_OUT_DURATION = float(os.getenv('FADE_TEXT_OUT_DURATION', 0.5))
+    FADE_TEXT_TYPE = os.getenv('FADE_TEXT_TYPE', 'both')  # both, in, out
     
     # Processing Configuration
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 5))  # Process 5 videos at a time
