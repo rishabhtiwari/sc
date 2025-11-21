@@ -10,6 +10,7 @@ from .ken_burns_effect import KenBurnsEffect
 from .fade_text_effect import FadeTextEffect
 from .logo_watermark_effect import LogoWatermarkEffect
 from .background_music_effect import BackgroundMusicEffect
+from .transition_effect import TransitionEffect
 
 
 class EffectsFactory:
@@ -26,6 +27,7 @@ class EffectsFactory:
         'fade_text': FadeTextEffect,
         'logo_watermark': LogoWatermarkEffect,
         'background_music': BackgroundMusicEffect,
+        'transition': TransitionEffect,
         # Add more effects here as they are implemented
         # 'color_grading': ColorGradingEffect,
         # etc.

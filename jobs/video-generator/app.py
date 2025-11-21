@@ -862,6 +862,85 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/test-transitions', methods=['POST'])
+        def test_transitions():
+            """Test smooth transitions by merging 2-3 videos with transitions"""
+            try:
+                from flask import request
+
+                self.logger.info("🎬 Testing Smooth Transitions effect")
+
+                # Get parameters from request
+                data = request.get_json() or {}
+                transition_type = data.get('transition_type', self.config.TRANSITION_TYPE)
+                transition_duration = data.get('transition_duration', self.config.TRANSITION_DURATION)
+                video_count = data.get('video_count', 3)  # Default: merge 3 videos
+
+                self.logger.info(f"📊 Testing {transition_type} transition with {video_count} videos")
+
+                # Get latest videos
+                latest_news = list(self.news_collection.find(
+                    {"video_path": {"$exists": True, "$ne": None}},
+                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1}
+                ).sort("created_at", -1).limit(video_count))
+
+                if len(latest_news) < 2:
+                    return jsonify({
+                        "error": f"Need at least 2 videos to test transitions, found {len(latest_news)}",
+                        "status": "error"
+                    }), 400
+
+                self.logger.info(f"📊 Found {len(latest_news)} videos for transition test")
+
+                # Temporarily override transition settings
+                original_transition_type = self.config.TRANSITION_TYPE
+                original_transition_duration = self.config.TRANSITION_DURATION
+                original_enable_transitions = self.config.ENABLE_TRANSITIONS
+
+                self.config.TRANSITION_TYPE = transition_type
+                self.config.TRANSITION_DURATION = transition_duration
+                self.config.ENABLE_TRANSITIONS = True
+
+                try:
+                    # Merge videos with transitions
+                    result = self.merge_service.merge_latest_videos(latest_news)
+
+                    if result['status'] == 'success':
+                        return jsonify({
+                            "message": f"Transition test completed successfully with {transition_type}",
+                            "status": "success",
+                            "video_count": len(latest_news),
+                            "merged_video_path": result['merged_video_path'],
+                            "download_url": "/download/latest-20-news.mp4",
+                            "transition_config": {
+                                "enabled": True,
+                                "type": transition_type,
+                                "duration": transition_duration
+                            },
+                            "file_size_mb": result.get('file_size_mb', 0),
+                            "total_duration": result.get('total_duration', 0)
+                        })
+                    else:
+                        return jsonify({
+                            "error": result.get('error', 'Unknown error'),
+                            "status": "error"
+                        }), 500
+
+                finally:
+                    # Restore original settings
+                    self.config.TRANSITION_TYPE = original_transition_type
+                    self.config.TRANSITION_DURATION = original_transition_duration
+                    self.config.ENABLE_TRANSITIONS = original_enable_transitions
+
+            except Exception as e:
+                self.logger.error(f"❌ Error testing Transitions: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return jsonify({
+                    "error": f"Failed to test Transitions: {str(e)}",
+                    "status": "error"
+                }), 500
+
 
 if __name__ == '__main__':
     # Create and run the job service

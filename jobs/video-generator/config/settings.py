@@ -98,6 +98,11 @@ class Config:
     BACKGROUND_MUSIC_VOLUME = float(os.getenv('BACKGROUND_MUSIC_VOLUME', 0.15))  # 15% volume - noticeable but gentle, won't overpower voice
     VOICE_VOLUME = float(os.getenv('VOICE_VOLUME', 1.0))  # 100% volume for voice
     MUSIC_FADE_IN_DURATION = float(os.getenv('MUSIC_FADE_IN_DURATION', 3.0))  # 3 seconds fade in for smoother start
+
+    # Transition Effect Configuration (for video merging)
+    ENABLE_TRANSITIONS = os.getenv('ENABLE_TRANSITIONS', 'true').lower() == 'true'
+    TRANSITION_TYPE = os.getenv('TRANSITION_TYPE', 'crossfade')  # crossfade, fade_black, slide_left, slide_right, slide_up, slide_down, wipe_horizontal, wipe_vertical
+    TRANSITION_DURATION = float(os.getenv('TRANSITION_DURATION', 1.0))  # 1 second transition duration
     MUSIC_FADE_OUT_DURATION = float(os.getenv('MUSIC_FADE_OUT_DURATION', 3.0))  # 3 seconds fade out for smoother end
 
     # Processing Configuration
