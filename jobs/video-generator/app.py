@@ -16,6 +16,7 @@ from common.utils.logger import setup_logger
 from config.settings import Config
 from services.video_generation_service import VideoGenerationService
 from services.video_merge_service import VideoMergeService
+from services.logo_service import LogoService
 
 
 class VideoGeneratorJob(BaseJob):
@@ -25,6 +26,7 @@ class VideoGeneratorJob(BaseJob):
         super().__init__("video-generator", Config)
         self.video_service = VideoGenerationService(self.config, self.logger)
         self.merge_service = VideoMergeService(self.config, self.logger)
+        self.logo_service = LogoService()
 
         # Initialize MongoDB connection
         from pymongo import MongoClient
@@ -386,6 +388,7 @@ class VideoGeneratorJob(BaseJob):
             """Check the status of video merging process"""
             try:
                 merged_video_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+                thumbnail_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news-thumbnail.jpg')
 
                 if os.path.exists(merged_video_path):
                     # Get file info
@@ -393,13 +396,22 @@ class VideoGeneratorJob(BaseJob):
                     file_size_mb = round(file_stats.st_size / (1024 * 1024), 2)
                     modified_time = time.ctime(file_stats.st_mtime)
 
-                    return jsonify({
+                    response = {
                         "status": "completed",
                         "message": "Merged video is ready for download",
                         "file_size_mb": file_size_mb,
                         "last_updated": modified_time,
                         "download_url": "/download/latest-20-news.mp4"
-                    })
+                    }
+
+                    # Add thumbnail info if available
+                    if os.path.exists(thumbnail_path):
+                        response["thumbnail_url"] = "/download/latest-20-news-thumbnail.jpg"
+                        response["thumbnail_available"] = True
+                    else:
+                        response["thumbnail_available"] = False
+
+                    return jsonify(response)
                 else:
                     return jsonify({
                         "status": "not_found",
@@ -436,6 +448,102 @@ class VideoGeneratorJob(BaseJob):
                 self.logger.error(f"❌ Error downloading merged video: {str(e)}")
                 return jsonify({
                     "error": f"Failed to download video: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/download/latest-20-news-thumbnail.jpg', methods=['GET'])
+        def download_thumbnail():
+            """Download the thumbnail for the merged video"""
+            try:
+                thumbnail_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news-thumbnail.jpg')
+
+                if not os.path.exists(thumbnail_path):
+                    return jsonify({
+                        "error": "Thumbnail not found. Please run /merge-latest first.",
+                        "status": "error"
+                    }), 404
+
+                return send_file(
+                    thumbnail_path,
+                    as_attachment=True,
+                    download_name='latest-20-news-thumbnail.jpg',
+                    mimetype='image/jpeg'
+                )
+
+            except Exception as e:
+                self.logger.error(f"❌ Error downloading thumbnail: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to download thumbnail: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/generate-logo', methods=['POST'])
+        def generate_logo():
+            """Generate CNI logo (CNN style)"""
+            try:
+                from flask import request
+
+                # Get parameters from request
+                data = request.get_json() or {}
+                size = data.get('size', 500)
+                with_border = data.get('with_border', False)
+
+                # Generate logo
+                logo_filename = 'cni-logo-border.png' if with_border else 'cni-logo.png'
+                logo_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, logo_filename)
+
+                if with_border:
+                    border_width = data.get('border_width', 10)
+                    self.logo_service.generate_cni_logo_with_border(logo_path, size, border_width)
+                else:
+                    self.logo_service.generate_cni_logo(logo_path, size)
+
+                return jsonify({
+                    "status": "success",
+                    "message": "Logo generated successfully",
+                    "logo_path": f"/public/{logo_filename}",
+                    "download_url": f"/download/{logo_filename}",
+                    "size": size,
+                    "with_border": with_border
+                })
+
+            except Exception as e:
+                self.logger.error(f"❌ Error generating logo: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to generate logo: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/download/<logo_filename>', methods=['GET'])
+        def download_logo(logo_filename):
+            """Download generated logo"""
+            try:
+                # Only allow PNG logo files
+                if not logo_filename.endswith('.png') or 'logo' not in logo_filename:
+                    return jsonify({
+                        "error": "Invalid logo filename",
+                        "status": "error"
+                    }), 400
+
+                logo_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, logo_filename)
+
+                if not os.path.exists(logo_path):
+                    return jsonify({
+                        "error": "Logo not found. Please generate it first using /generate-logo",
+                        "status": "error"
+                    }), 404
+
+                return send_file(
+                    logo_path,
+                    as_attachment=True,
+                    download_name=logo_filename,
+                    mimetype='image/png'
+                )
+
+            except Exception as e:
+                self.logger.error(f"❌ Error downloading logo: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to download logo: {str(e)}",
                     "status": "error"
                 }), 500
 

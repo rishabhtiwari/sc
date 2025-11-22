@@ -10,6 +10,7 @@ from typing import List, Dict, Optional
 from moviepy.editor import VideoFileClip, concatenate_videoclips, TextClip, CompositeVideoClip
 from PIL import Image, ImageDraw, ImageFont
 from effects.effects_factory import EffectsFactory
+from services.thumbnail_service import ThumbnailService
 
 
 class VideoMergeService:
@@ -19,6 +20,7 @@ class VideoMergeService:
         self.config = config
         self.logger = logger
         self.effects_factory = EffectsFactory(logger=logger)
+        self.thumbnail_service = ThumbnailService(config, logger)
         
     def merge_latest_videos(self, news_list: List[Dict]) -> Dict:
         """
@@ -117,13 +119,21 @@ class VideoMergeService:
             # Get file info from final location
             file_size = os.path.getsize(final_output_path)
             file_size_mb = file_size / (1024 * 1024)
-            
+
             self.logger.info(f"✅ Merged video created successfully")
             self.logger.info(f"📊 Duration: {duration:.2f}s, Size: {file_size_mb:.2f}MB")
-            
+
+            # Generate thumbnail for the merged video
+            thumbnail_path = None
+            try:
+                thumbnail_path = self._generate_thumbnail(valid_videos, final_output_path)
+            except Exception as thumb_error:
+                self.logger.warning(f"⚠️ Thumbnail generation failed: {thumb_error}")
+
             return {
                 'status': 'success',
                 'merged_video_path': '/public/latest-20-news.mp4',
+                'thumbnail_path': thumbnail_path,
                 'video_count': len(valid_videos),
                 'duration_seconds': round(duration, 2),
                 'file_size_mb': round(file_size_mb, 2),
@@ -225,7 +235,7 @@ class VideoMergeService:
         final_video_label = f"v{len(video_paths)-1}" if len(video_paths) > 2 else "v01"
         final_audio_label = "aout"
 
-        # Build full FFmpeg command
+        # Build full FFmpeg command with maximum compatibility for QuickTime, Android, and web
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output file
@@ -236,8 +246,14 @@ class VideoMergeService:
             '-c:v', 'libx264',  # Video codec
             '-preset', 'ultrafast',  # Fast encoding
             '-crf', '23',  # Quality
+            '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
+            '-profile:v', 'baseline',  # H.264 baseline profile for Android/iOS/web compatibility
+            '-level', '3.1',  # H.264 level 3.1 for broad device support
             '-c:a', 'aac',  # Audio codec
             '-b:a', '192k',  # Audio bitrate
+            '-ar', '44100',  # Audio sample rate (standard for Android/iOS)
+            '-ac', '2',  # Stereo audio
+            '-movflags', '+faststart',  # Enable fast start for web/QuickTime/Android playback
             output_path
         ]
 
@@ -350,4 +366,93 @@ class VideoMergeService:
             )
 
         return result_clip
+
+    def _generate_thumbnail(self, news_list: List[Dict], video_path: str) -> Optional[str]:
+        """
+        Generate a YouTube-style thumbnail for the merged video
+
+        Args:
+            news_list: List of news documents
+            video_path: Path to the merged video
+
+        Returns:
+            Path to generated thumbnail or None
+        """
+        try:
+            self.logger.info("🎨 Generating thumbnail for merged video...")
+
+            # Extract frames from first 2-3 news videos for the collage
+            news_thumbnails = []
+            temp_files = []
+
+            try:
+                # Take first 3 news videos
+                for i, news in enumerate(news_list[:3]):
+                    video_file_path = news.get('video_path', '')
+
+                    if not video_file_path:
+                        continue
+
+                    # Convert to absolute path
+                    if video_file_path.startswith('/public/'):
+                        video_file_path = os.path.join(
+                            self.config.VIDEO_OUTPUT_DIR,
+                            video_file_path.replace('/public/', '')
+                        )
+
+                    if not os.path.exists(video_file_path):
+                        self.logger.warning(f"⚠️ Video file not found: {video_file_path}")
+                        continue
+
+                    # Extract frame from this video
+                    temp_frame_path = os.path.join(
+                        self.config.VIDEO_OUTPUT_DIR,
+                        f'thumb_news_{i}.jpg'
+                    )
+
+                    subprocess.run([
+                        'ffmpeg', '-y',
+                        '-i', video_file_path,
+                        '-ss', '00:00:02',  # Extract at 2 seconds
+                        '-vframes', '1',
+                        '-q:v', '2',  # High quality
+                        temp_frame_path
+                    ], check=True, capture_output=True, timeout=10)
+
+                    if os.path.exists(temp_frame_path):
+                        news_thumbnails.append(temp_frame_path)
+                        temp_files.append(temp_frame_path)
+                        self.logger.info(f"✅ Extracted frame from news video {i+1}")
+
+            except Exception as frame_error:
+                self.logger.warning(f"⚠️ Could not extract news frames: {frame_error}")
+
+            # Generate thumbnail with split design
+            thumbnail_output_path = os.path.join(
+                self.config.VIDEO_OUTPUT_DIR,
+                'latest-20-news-thumbnail.jpg'
+            )
+
+            thumbnail_path = self.thumbnail_service.generate_thumbnail(
+                background_image_path=None,  # Not used in split design
+                title="TOP 20 NEWS",  # Will be used by split design
+                subtitle=None,
+                output_path=thumbnail_output_path,
+                news_thumbnails=news_thumbnails
+            )
+
+            # Clean up temp frames
+            for temp_file in temp_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                except Exception:
+                    pass
+
+            self.logger.info(f"✅ Thumbnail generated: {thumbnail_path}")
+            return '/public/latest-20-news-thumbnail.jpg'
+
+        except Exception as e:
+            self.logger.error(f"❌ Thumbnail generation failed: {str(e)}")
+            return None
 

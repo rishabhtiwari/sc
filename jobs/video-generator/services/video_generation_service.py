@@ -495,7 +495,15 @@ class VideoGenerationService:
                 temp_audiofile=temp_audio_path,
                 remove_temp=True,
                 verbose=False,
-                logger=None  # Disable moviepy logging
+                logger=None,  # Disable moviepy logging
+                ffmpeg_params=[
+                    '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
+                    '-profile:v', 'baseline',  # H.264 baseline for Android/iOS/web
+                    '-level', '3.1',  # H.264 level 3.1 for broad device support
+                    '-ar', '44100',  # Audio sample rate (standard)
+                    '-ac', '2',  # Stereo audio
+                    '-movflags', '+faststart'  # Fast start for streaming
+                ]
             )
 
             # Clean up clips
