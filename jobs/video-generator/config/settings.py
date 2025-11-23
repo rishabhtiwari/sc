@@ -116,6 +116,16 @@ class Config:
 
     # Request Timeouts
     HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 30))
+
+    # Audio Generation Service Configuration
+    AUDIO_GENERATION_SERVICE_URL = os.getenv('AUDIO_GENERATION_SERVICE_URL', 'http://audio-generation-factory:3000')
+    AUDIO_GENERATION_TIMEOUT = int(os.getenv('AUDIO_GENERATION_TIMEOUT', 120))  # 2 minutes timeout
+
+    # Channel Subscription Tagline Configuration
+    CHANNEL_TAGLINE_TEXT = "Smash the like button, hit subscribe, and turn on notifications — CNI News keeps you updated 24/7!"
+    CHANNEL_TAGLINE_FILENAME = "cni_news_subscribe.wav"
+    CHANNEL_TAGLINE_MODEL = os.getenv('CHANNEL_TAGLINE_MODEL', 'kokoro-82m')  # Default to Kokoro-82M for English
+    CHANNEL_TAGLINE_VOICE = os.getenv('CHANNEL_TAGLINE_VOICE', 'am_adam')  # Default voice
     
     @classmethod
     def validate_config(cls):

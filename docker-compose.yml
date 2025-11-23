@@ -708,6 +708,7 @@ services:
       - ./jobs/video-generator/public:/app/public
       - ./audio-generation/public:/app/audio_input:ro  # Read-only access to audio files
       - ./jobs/video-generator/temp:/app/temp
+      - ./jobs/video-generator/subscribe:/app/subscribe:ro  # Read-only access to subscribe video template
     networks:
       - ichat-network
     healthcheck:

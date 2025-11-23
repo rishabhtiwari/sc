@@ -99,11 +99,12 @@ class VideoMergeService:
             # Get video paths
             video_paths = [self._get_full_video_path(news.get('video_path')) for news in valid_videos]
 
-            # Merge videos using FFmpeg with xfade filter
+            # Merge videos using FFmpeg with xfade filter (append subscribe video at the end)
             duration = self._merge_videos_with_ffmpeg(
                 video_paths,
                 temp_output_path,
-                transition_duration=self.config.TRANSITION_DURATION if self.config.ENABLE_TRANSITIONS else 0
+                transition_duration=self.config.TRANSITION_DURATION if self.config.ENABLE_TRANSITIONS else 0,
+                append_subscribe_video=True  # Always append subscribe video
             )
 
             # Atomic operation: Move temp file to final location
@@ -157,7 +158,7 @@ class VideoMergeService:
                 'error': str(e)
             }
 
-    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0) -> float:
+    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0, append_subscribe_video: bool = False) -> float:
         """
         Merge videos using FFmpeg with xfade sliding transitions for maximum speed
 
@@ -165,10 +166,65 @@ class VideoMergeService:
             video_paths: List of video file paths to merge
             output_path: Output file path
             transition_duration: Duration of transition in seconds
+            append_subscribe_video: Whether to append CNI News subscribe video at the end
 
         Returns:
             Total duration of merged video in seconds
         """
+        # Add subscribe video at the end if requested
+        if append_subscribe_video:
+            subscribe_video_path = '/app/public/CNINews_Subscribe.mp4'
+            if os.path.exists(subscribe_video_path):
+                # Scale subscribe video to match the resolution of other videos
+                # Get resolution of first video
+                result = subprocess.run(
+                    ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                     '-show_entries', 'stream=width,height',
+                     '-of', 'csv=s=x:p=0', video_paths[0]],
+                    capture_output=True, text=True, check=True
+                )
+                target_resolution = result.stdout.strip()  # e.g., "1920x1080"
+
+                # Get resolution of subscribe video
+                result = subprocess.run(
+                    ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                     '-show_entries', 'stream=width,height',
+                     '-of', 'csv=s=x:p=0', subscribe_video_path],
+                    capture_output=True, text=True, check=True
+                )
+                subscribe_resolution = result.stdout.strip()
+
+                # If resolutions don't match, scale the subscribe video
+                if target_resolution != subscribe_resolution:
+                    self.logger.info(f"📐 Scaling subscribe video from {subscribe_resolution} to {target_resolution}")
+                    scaled_subscribe_path = '/app/temp/CNINews_Subscribe_scaled.mp4'
+
+                    # Parse target resolution (e.g., "1920x1080" -> width=1920, height=1080)
+                    width, height = target_resolution.split('x')
+
+                    # Scale video using FFmpeg and match frame rate to 30fps
+                    try:
+                        result = subprocess.run([
+                            'ffmpeg', '-y', '-i', subscribe_video_path,
+                            '-vf', f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,fps=30',
+                            '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
+                            '-c:a', 'copy',
+                            scaled_subscribe_path
+                        ], check=True, capture_output=True, text=True)
+
+                        video_paths = video_paths + [scaled_subscribe_path]
+                        self.logger.info(f"📺 Appending scaled CNI News subscribe video at the end")
+                    except subprocess.CalledProcessError as e:
+                        self.logger.error(f"❌ FFmpeg scaling error: {e.stderr}")
+                        # If scaling fails, try to use the original video anyway
+                        self.logger.warning(f"⚠️ Using original subscribe video without scaling")
+                        video_paths = video_paths + [subscribe_video_path]
+                else:
+                    video_paths = video_paths + [subscribe_video_path]
+                    self.logger.info(f"📺 Appending CNI News subscribe video at the end")
+            else:
+                self.logger.warning(f"⚠️ Subscribe video not found at {subscribe_video_path}")
+
         if len(video_paths) == 1:
             # Single video - just copy it
             self.logger.info("📋 Single video - copying directly")

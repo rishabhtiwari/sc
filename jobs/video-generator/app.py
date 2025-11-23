@@ -1049,6 +1049,255 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/generate-channel-tagline', methods=['POST'])
+        def generate_channel_tagline():
+            """Generate CNI News channel subscription tagline audio"""
+            try:
+                from flask import request
+                import requests
+
+                self.logger.info("🎤 Generating CNI News channel subscription tagline audio")
+
+                # Get optional parameters from request
+                data = request.get_json() or {}
+                text = data.get('text', self.config.CHANNEL_TAGLINE_TEXT)
+                model = data.get('model', self.config.CHANNEL_TAGLINE_MODEL)
+                voice = data.get('voice', self.config.CHANNEL_TAGLINE_VOICE)
+                filename = data.get('filename', self.config.CHANNEL_TAGLINE_FILENAME)
+
+                # Ensure filename has .wav extension
+                if not filename.endswith('.wav'):
+                    filename += '.wav'
+
+                self.logger.info(f"📝 Text: {text}")
+                self.logger.info(f"🤖 Model: {model}")
+                self.logger.info(f"🎭 Voice: {voice}")
+                self.logger.info(f"📁 Filename: {filename}")
+
+                # Prepare request to audio generation service
+                audio_request = {
+                    'text': text,
+                    'model': model,
+                    'voice': voice,
+                    'filename': filename,
+                    'format': 'wav'
+                }
+
+                # Call audio generation service
+                audio_service_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/tts"
+                self.logger.info(f"🔗 Calling audio service: {audio_service_url}")
+
+                response = requests.post(
+                    audio_service_url,
+                    json=audio_request,
+                    timeout=self.config.AUDIO_GENERATION_TIMEOUT
+                )
+
+                if response.status_code != 200:
+                    error_msg = f"Audio generation service returned status {response.status_code}"
+                    self.logger.error(f"❌ {error_msg}")
+                    return jsonify({
+                        "error": error_msg,
+                        "details": response.text,
+                        "status": "error"
+                    }), response.status_code
+
+                audio_result = response.json()
+                self.logger.info(f"✅ Audio generation successful: {audio_result}")
+
+                # The audio file should be saved in the audio-generation service's output directory
+                # We'll provide the download URL from the audio service
+                return jsonify({
+                    "message": "Channel subscription tagline audio generated successfully",
+                    "status": "success",
+                    "text": text,
+                    "model": model,
+                    "voice": voice,
+                    "filename": filename,
+                    "audio_url": audio_result.get('audio_url'),
+                    "filepath": audio_result.get('filepath'),
+                    "audio_info": audio_result.get('audio_info'),
+                    "generation_time_ms": audio_result.get('generation_time_ms'),
+                    "download_url": f"{self.config.AUDIO_GENERATION_SERVICE_URL}{audio_result.get('audio_url')}"
+                })
+
+            except requests.exceptions.Timeout:
+                error_msg = "Audio generation service timeout"
+                self.logger.error(f"❌ {error_msg}")
+                return jsonify({
+                    "error": error_msg,
+                    "status": "error"
+                }), 504
+
+            except requests.exceptions.ConnectionError:
+                error_msg = "Cannot connect to audio generation service"
+                self.logger.error(f"❌ {error_msg}")
+                return jsonify({
+                    "error": error_msg,
+                    "status": "error"
+                }), 503
+
+            except Exception as e:
+                self.logger.error(f"❌ Error generating channel tagline: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return jsonify({
+                    "error": f"Failed to generate channel tagline: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/create-subscribe-video', methods=['POST'])
+        def create_subscribe_video():
+            """Create CNI News subscribe video with channel tagline audio"""
+            try:
+                from flask import request
+                import requests
+                from moviepy.editor import ImageClip, AudioFileClip, CompositeVideoClip, TextClip
+
+                self.logger.info("🎬 Creating CNI News subscribe video")
+
+                # Get optional parameters from request
+                data = request.get_json() or {}
+
+                # Step 1: Generate the audio first
+                self.logger.info("🎤 Step 1: Generating channel tagline audio...")
+                audio_request = {
+                    'text': data.get('text', self.config.CHANNEL_TAGLINE_TEXT),
+                    'model': data.get('model', self.config.CHANNEL_TAGLINE_MODEL),
+                    'voice': data.get('voice', self.config.CHANNEL_TAGLINE_VOICE),
+                    'filename': self.config.CHANNEL_TAGLINE_FILENAME,
+                    'format': 'wav'
+                }
+
+                audio_service_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/tts"
+                audio_response = requests.post(
+                    audio_service_url,
+                    json=audio_request,
+                    timeout=self.config.AUDIO_GENERATION_TIMEOUT
+                )
+
+                if audio_response.status_code != 200:
+                    error_msg = f"Audio generation failed with status {audio_response.status_code}"
+                    self.logger.error(f"❌ {error_msg}")
+                    return jsonify({
+                        "error": error_msg,
+                        "details": audio_response.text,
+                        "status": "error"
+                    }), audio_response.status_code
+
+                audio_result = audio_response.json()
+                audio_url = audio_result.get('audio_url')
+                self.logger.info(f"✅ Audio generated: {audio_url}")
+
+                # Step 2: Download the audio file from audio-generation service
+                self.logger.info("📥 Step 2: Downloading audio file...")
+                audio_download_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}{audio_url}"
+                audio_download_response = requests.get(audio_download_url, timeout=30)
+
+                if audio_download_response.status_code != 200:
+                    error_msg = f"Failed to download audio file: {audio_download_response.status_code}"
+                    self.logger.error(f"❌ {error_msg}")
+                    return jsonify({
+                        "error": error_msg,
+                        "status": "error"
+                    }), 500
+
+                # Save audio file locally
+                local_audio_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, self.config.CHANNEL_TAGLINE_FILENAME)
+                with open(local_audio_path, 'wb') as f:
+                    f.write(audio_download_response.content)
+                self.logger.info(f"✅ Audio downloaded to: {local_audio_path}")
+
+                # Step 3: Use existing subscribe video and replace audio
+                self.logger.info("🎬 Step 3: Creating subscribe video with new audio...")
+
+                # Path to the existing subscribe video template
+                source_video_path = '/app/subscribe/CNINews_Subscribe.mp4'
+
+                if not os.path.exists(source_video_path):
+                    error_msg = f"Source subscribe video not found at {source_video_path}"
+                    self.logger.error(f"❌ {error_msg}")
+                    return jsonify({
+                        "error": error_msg,
+                        "status": "error"
+                    }), 500
+
+                # Load the existing video and new audio
+                from moviepy.editor import VideoFileClip
+
+                video_clip = VideoFileClip(source_video_path)
+                audio_clip = AudioFileClip(local_audio_path)
+
+                # Get audio duration
+                video_duration = audio_clip.duration
+
+                # Adjust video duration to match audio duration
+                # If audio is longer, loop the video; if shorter, trim the video
+                if video_clip.duration < video_duration:
+                    # Loop the video to match audio duration
+                    video_clip = video_clip.loop(duration=video_duration)
+                else:
+                    # Trim the video to match audio duration
+                    video_clip = video_clip.subclip(0, video_duration)
+
+                # Replace the audio
+                final_video = video_clip.set_audio(audio_clip)
+
+                # Output path
+                output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'CNINews_Subscribe.mp4')
+
+                # Write video file
+                self.logger.info(f"💾 Writing video to: {output_path}")
+                final_video.write_videofile(
+                    output_path,
+                    fps=24,
+                    codec='libx264',
+                    audio_codec='aac',
+                    preset='medium',
+                    ffmpeg_params=['-pix_fmt', 'yuv420p']
+                )
+
+                # Clean up
+                audio_clip.close()
+                video_clip.close()
+                final_video.close()
+
+                self.logger.info(f"✅ Subscribe video created successfully: {output_path}")
+
+                return jsonify({
+                    "message": "Subscribe video created successfully",
+                    "status": "success",
+                    "video_path": "/public/CNINews_Subscribe.mp4",
+                    "audio_path": local_audio_path,
+                    "duration_seconds": round(video_duration, 2),
+                    "download_url": "/download/CNINews_Subscribe.mp4"
+                })
+
+            except requests.exceptions.Timeout:
+                error_msg = "Audio generation service timeout"
+                self.logger.error(f"❌ {error_msg}")
+                return jsonify({
+                    "error": error_msg,
+                    "status": "error"
+                }), 504
+
+            except requests.exceptions.ConnectionError:
+                error_msg = "Cannot connect to audio generation service"
+                self.logger.error(f"❌ {error_msg}")
+                return jsonify({
+                    "error": error_msg,
+                    "status": "error"
+                }), 503
+
+            except Exception as e:
+                self.logger.error(f"❌ Error creating subscribe video: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
+                return jsonify({
+                    "error": f"Failed to create subscribe video: {str(e)}",
+                    "status": "error"
+                }), 500
+
 
 if __name__ == '__main__':
     # Create and run the job service
