@@ -2,15 +2,17 @@
 
 ################################################################################
 # News Services Deployment Script
-# 
+#
 # This script deploys all news-related services in the correct order:
 # 1. MongoDB (database)
 # 2. News Fetcher Job (fetches news articles)
 # 3. LLM Service (generates summaries)
 # 4. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
 # 5. Voice Generator Job (generates audio from news)
-# 6. Video Generator Job (creates videos from news + audio)
-# 7. API Server (serves news data to frontend)
+# 6. IOPaint Watermark Remover (removes watermarks from images)
+# 7. Video Generator Job (creates videos from news + audio)
+# 8. YouTube Uploader (uploads videos to YouTube)
+# 9. API Server (serves news data to frontend)
 #
 # Usage:
 #   ./deploy-news-services.sh [options]
@@ -40,7 +42,9 @@ SERVICES=(
     "llm-service"
     "audio-generation-factory"
     "job-voice-generator"
+    "iopaint"
     "job-video-generator"
+    "youtube-uploader"
     "ichat-api"
 )
 
@@ -234,39 +238,49 @@ deploy_all_services() {
     echo ""
     
     # 1. MongoDB
-    print_header "Step 1/7: MongoDB Database"
+    print_header "Step 1/9: MongoDB Database"
     deploy_service "ichat-mongodb" "$build_flag"
-    wait_for_health "ichat-mongodb" 60
-    
+    # wait_for_health "ichat-mongodb" 60
+
     # 2. News Fetcher
-    print_header "Step 2/7: News Fetcher Job"
+    print_header "Step 2/9: News Fetcher Job"
     deploy_service "job-news-fetcher" "$build_flag"
-    wait_for_health "ichat-news-fetcher" 60
-    
+    # wait_for_health "ichat-news-fetcher" 60
+
     # 3. LLM Service
-    print_header "Step 3/7: LLM Service"
+    print_header "Step 3/9: LLM Service"
     deploy_service "llm-service" "$build_flag"
-    wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
-    
+    # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
+
     # 4. Audio Generation Factory
-    print_header "Step 4/7: Audio Generation Factory (Kokoro + Veena TTS)"
+    print_header "Step 4/9: Audio Generation Factory (Kokoro + Veena TTS)"
     deploy_service "audio-generation-factory" "$build_flag"
-    wait_for_health "audio-generation-factory" 180  # TTS models take time to load
-    
+    # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
+
     # 5. Voice Generator Job
-    print_header "Step 5/7: Voice Generator Job"
+    print_header "Step 5/9: Voice Generator Job"
     deploy_service "job-voice-generator" "$build_flag"
-    wait_for_health "ichat-voice-generator" 60
-    
-    # 6. Video Generator Job
-    print_header "Step 6/7: Video Generator Job"
+    # wait_for_health "ichat-voice-generator" 60
+
+    # 6. IOPaint Watermark Remover
+    print_header "Step 6/9: IOPaint Watermark Remover"
+    deploy_service "iopaint" "$build_flag"
+    # wait_for_health "ichat-iopaint" 60
+
+    # 7. Video Generator Job
+    print_header "Step 7/9: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
-    wait_for_health "ichat-video-generator" 60
-    
-    # 7. API Server
-    print_header "Step 7/7: API Server"
+    # wait_for_health "ichat-video-generator" 60
+
+    # 8. YouTube Uploader
+    print_header "Step 8/9: YouTube Uploader"
+    deploy_service "youtube-uploader" "$build_flag"
+    # wait_for_health "ichat-youtube-uploader" 60
+
+    # 9. API Server
+    print_header "Step 9/9: API Server"
     deploy_service "ichat-api" "$build_flag"
-    wait_for_health "ichat-api-server" 60
+    # wait_for_health "ichat-api-server" 60
     
     # Show final status
     echo ""
@@ -282,7 +296,9 @@ deploy_all_services() {
     echo "  • LLM Service:          http://localhost:8083"
     echo "  • Audio Generation:     http://localhost:3000"
     echo "  • Voice Generator:      http://localhost:8094"
+    echo "  • Watermark Remover:    http://localhost:8096"
     echo "  • Video Generator:      http://localhost:8095"
+    echo "  • YouTube Uploader:     http://localhost:8097"
     echo "  • MongoDB:              mongodb://localhost:27017"
     echo ""
     print_info "To view logs: ./deploy-news-services.sh --logs"
@@ -301,8 +317,10 @@ This script manages deployment of all news-related services:
   3. LLM Service (generates summaries)
   4. Audio Generation Factory (TTS: Kokoro English + Veena Hindi)
   5. Voice Generator Job (generates audio from news)
-  6. Video Generator Job (creates videos from news + audio)
-  7. API Server (serves news data to frontend)
+  6. IOPaint Watermark Remover (removes watermarks from images)
+  7. Video Generator Job (creates videos from news + audio)
+  8. YouTube Uploader (uploads videos to YouTube)
+  9. API Server (serves news data to frontend)
 
 Usage:
   ./deploy-news-services.sh [options]

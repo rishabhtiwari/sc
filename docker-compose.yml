@@ -724,6 +724,72 @@ services:
 
 
 
+  # IOPaint Logo/Watermark Removal Service with MongoDB Integration
+  iopaint:
+    build:
+      context: ./jobs/watermark-remover
+      dockerfile: Dockerfile
+    container_name: ichat-iopaint
+    ports:
+      - "8096:8096"
+    environment:
+      - FLASK_PORT=8096
+      - OUTPUT_DIR=/app/output
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+    volumes:
+      - ./jobs/watermark-remover/public:/app/output
+      - ./jobs/watermark-remover/models:/root/.cache
+    networks:
+      - ichat-network
+    depends_on:
+      - ichat-mongodb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s  # Model loading takes time
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+
+  # YouTube Uploader Service
+  youtube-uploader:
+    build:
+      context: ./youtube-uploader
+      dockerfile: Dockerfile
+    container_name: ichat-youtube-uploader
+    ports:
+      - "8097:8097"
+    environment:
+      - FLASK_PORT=8097
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      - VIDEO_BASE_PATH=/app/public
+      - VIDEO_GENERATOR_URL=http://ichat-video-generator:8095
+      - LLM_SERVICE_URL=http://ichat-llm-service:8083
+      - DEFAULT_CATEGORY_ID=25
+      - DEFAULT_PRIVACY_STATUS=private
+      - DEFAULT_TAGS=news,hindi news,breaking news,latest news
+    volumes:
+      - ./youtube-uploader/logs:/app/logs
+      - ./youtube-uploader/credentials:/app/credentials
+      - ./jobs/video-generator/public:/app/public:ro  # Read-only access to videos
+    networks:
+      - ichat-network
+    depends_on:
+      - ichat-mongodb
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8097/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
   # MongoDB Database Service
   ichat-mongodb:
     build:

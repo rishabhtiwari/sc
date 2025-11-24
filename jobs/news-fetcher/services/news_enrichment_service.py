@@ -140,16 +140,17 @@ class NewsEnrichmentService:
         """
         try:
             # Enhanced prompt to prevent code generation and ensure text-only summaries
-            prompt = f"""You are a news summarizer. Write a clear, factual summary of this news article in plain English text only.
+            prompt = f"""You are a professional news editor. Summarize the following article in plain, everyday English.
+Write ONLY the summary itself. Do not add any titles, bullet points, markdown, code, quotes, or explanations.
 
-REQUIREMENTS:
-- Write exactly 45-70 words
-- Use only plain text, no code, no programming syntax, no markdown
-- Focus on key facts: who, what, when, where, why
-- Write in complete sentences
-- Do not include any Python code, functions, or programming examples
+Rules:
+- Use exactly 45–70 words (count them carefully)
+- Write in full, correct sentences
+- Never use slashes, brackets, code formatting, or programming symbols
+- Include only the key facts: who, what, when, where, and why
+- Do not mention word count or any instructions in the output
 
-Article to summarize:
+Article:
 {content[:2000]}
 
 Summary:"""
