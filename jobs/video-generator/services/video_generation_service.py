@@ -49,29 +49,30 @@ class VideoGenerationService:
     def generate_video_for_article(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generate video for a single news article
-        
+
         Args:
             article_data: Dictionary containing article information with:
-                - id: Article ID
+                - id: Article ID (MongoDB _id as string)
                 - title: Article title
                 - description: Article description
                 - audio_paths: Dictionary with audio file paths (title, description, content, short_summary)
-                - image: Image URL
-                
+                - clean_image: Path to cleaned image (from watermark remover)
+
         Returns:
             Dictionary with generation result
         """
         try:
             article_id = article_data.get('id')
+            # MongoDB _id is ObjectId, convert to string for API calls
+            mongo_id = str(article_data.get('_id'))
             title = article_data.get('title', '')
             description = article_data.get('description', '')
             audio_paths = article_data.get('audio_paths', {})
             # Use short_summary audio as primary, fallback to content, description, then title
             audio_path = audio_paths.get('short_summary') or audio_paths.get('content') or audio_paths.get('description') or audio_paths.get('title')
-            image_url = article_data.get('image')
-            
-            self.logger.info(f"🎬 Starting video generation for article: {article_id}")
-            
+
+            self.logger.info(f"🎬 Starting video generation for article: {article_id} (MongoDB ID: {mongo_id})")
+
             # Validate inputs
             validation_result = self._validate_inputs(article_data)
             if not validation_result['valid']:
@@ -80,19 +81,19 @@ class VideoGenerationService:
                     'error': validation_result['error'],
                     'article_id': article_id
                 }
-            
+
             # Create output directory for this article
             output_dir = os.path.join(self.config.VIDEO_OUTPUT_DIR, article_id)
             os.makedirs(output_dir, exist_ok=True)
-            
-            # Step 1: Download and process background image
-            self.logger.info(f"📸 Downloading background image from: {image_url}")
-            background_image_path = self._download_and_process_image(image_url, output_dir)
-            
+
+            # Step 1: Download cleaned image from IOPaint service
+            self.logger.info(f"📸 Downloading cleaned image from IOPaint service for MongoDB ID: {mongo_id}")
+            background_image_path = self._download_cleaned_image(mongo_id, output_dir)
+
             if not background_image_path:
                 return {
                     'status': 'error',
-                    'error': 'Failed to download or process background image',
+                    'error': 'Failed to download or process cleaned image',
                     'article_id': article_id
                 }
             
@@ -198,9 +199,9 @@ class VideoGenerationService:
     def _validate_inputs(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
         """Validate input data for video generation"""
         errors = []
-        
+
         # Check required fields
-        required_fields = ['id', 'title', 'audio_paths', 'image']
+        required_fields = ['id', '_id', 'title', 'audio_paths', 'clean_image']
         for field in required_fields:
             if not article_data.get(field):
                 errors.append(f"Missing required field: {field}")
@@ -209,66 +210,67 @@ class VideoGenerationService:
         audio_paths = article_data.get('audio_paths', {})
         if not audio_paths or not any(audio_paths.values()):
             errors.append("No valid audio paths found in audio_paths")
-        
-        # Check image URL format
-        image_url = article_data.get('image')
-        if image_url:
-            try:
-                parsed = urlparse(image_url)
-                if not parsed.scheme or not parsed.netloc:
-                    errors.append("Invalid image URL format")
-            except Exception:
-                errors.append("Invalid image URL")
-        
+
         return {
             'valid': len(errors) == 0,
             'error': '; '.join(errors) if errors else None
         }
     
-    def _download_and_process_image(self, image_url: str, output_dir: str) -> Optional[str]:
-        """Download and process background image"""
+    def _download_cleaned_image(self, mongo_id: str, output_dir: str) -> Optional[str]:
+        """
+        Download cleaned image from IOPaint service
+
+        Args:
+            mongo_id: MongoDB document ID (as string)
+            output_dir: Directory to save the image
+
+        Returns:
+            Path to processed image or None if failed
+        """
         try:
-            # Download image
+            # Construct IOPaint service URL
+            iopaint_url = f"{self.config.IOPAINT_SERVICE_URL}/api/cleaned-image/{mongo_id}"
+
+            self.logger.info(f"📸 Downloading cleaned image from: {iopaint_url}")
+
+            # Download cleaned image
             response = requests.get(
-                image_url, 
-                timeout=self.config.IMAGE_DOWNLOAD_TIMEOUT,
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; VideoGenerator/1.0)'}
+                iopaint_url,
+                timeout=self.config.IOPAINT_TIMEOUT
             )
+
+            if response.status_code == 404:
+                self.logger.error(f"Cleaned image not found for MongoDB ID: {mongo_id}")
+                return None
+
             response.raise_for_status()
-            
+
             # Check file size
             content_length = len(response.content)
             if content_length > self.config.MAX_IMAGE_SIZE_MB * 1024 * 1024:
                 self.logger.warning(f"Image too large: {content_length / (1024*1024):.2f} MB")
                 return None
-            
-            # Save original image
-            image_filename = f"background_original{self._get_image_extension(image_url)}"
-            original_path = os.path.join(output_dir, image_filename)
-            
+
+            self.logger.info(f"✅ Downloaded cleaned image: {content_length / 1024:.2f} KB")
+
+            # Save original cleaned image
+            original_path = os.path.join(output_dir, 'background_cleaned.png')
+
             with open(original_path, 'wb') as f:
                 f.write(response.content)
-            
-            # Process and resize image
+
+            # Process and resize image for video
             processed_path = self._resize_and_process_image(original_path, output_dir)
-            
+
             return processed_path
-            
-        except Exception as e:
-            self.logger.error(f"Error downloading image from {image_url}: {str(e)}")
+
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Network error downloading cleaned image: {str(e)}")
             return None
-    
-    def _get_image_extension(self, url: str) -> str:
-        """Get appropriate image extension from URL"""
-        parsed = urlparse(url)
-        path = parsed.path.lower()
-        
-        for ext in ['.jpg', '.jpeg', '.png', '.webp', '.bmp']:
-            if path.endswith(ext):
-                return ext
-        
-        return '.jpg'  # Default to jpg
-    
+        except Exception as e:
+            self.logger.error(f"Error downloading cleaned image for MongoDB ID {mongo_id}: {str(e)}")
+            return None
+
     def _resize_and_process_image(self, image_path: str, output_dir: str) -> str:
         """Resize and process image for video background"""
         try:

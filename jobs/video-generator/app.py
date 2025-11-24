@@ -10,13 +10,14 @@ from datetime import datetime
 # Add common directory to path for job framework
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 
-from flask import send_file, jsonify
+from flask import send_file, jsonify, request
 from common.models.base_job import BaseJob
 from common.utils.logger import setup_logger
 from config.settings import Config
 from services.video_generation_service import VideoGenerationService
 from services.video_merge_service import VideoMergeService
 from services.logo_service import LogoService
+from services.shorts_generation_service import ShortsGenerationService
 
 
 class VideoGeneratorJob(BaseJob):
@@ -27,6 +28,7 @@ class VideoGeneratorJob(BaseJob):
         self.video_service = VideoGenerationService(self.config, self.logger)
         self.merge_service = VideoMergeService(self.config, self.logger)
         self.logo_service = LogoService()
+        self.shorts_service = ShortsGenerationService(self.config, self.logger)
 
         # Initialize MongoDB connection
         from pymongo import MongoClient
@@ -195,6 +197,83 @@ class VideoGeneratorJob(BaseJob):
 
             if result['status'] == 'success':
                 self.logger.info(f"✅ Video generated successfully for article: {article_id}")
+
+                # Update database with video_path FIRST before generating shorts
+                update_data = {
+                    'video_path': result['video_path'],
+                    'updated_at': datetime.utcnow()
+                }
+                if result.get('thumbnail_path'):
+                    update_data['thumbnail_path'] = result['thumbnail_path']
+                if result.get('duration_seconds'):
+                    update_data['video_duration_seconds'] = result['duration_seconds']
+                if result.get('file_size_mb'):
+                    update_data['video_file_size_mb'] = result['file_size_mb']
+
+                self.news_collection.update_one(
+                    {'id': article_id},
+                    {'$set': update_data}
+                )
+                self.logger.info(f"✅ Database updated with video_path for article: {article_id}")
+
+                # Also generate YouTube Short
+                try:
+                    self.logger.info(f"🎬 Generating YouTube Short for article: {article_id}")
+
+                    # Get paths from result (these are relative paths like /public/...)
+                    relative_video_path = result.get('video_path')
+                    relative_thumbnail_path = result.get('thumbnail_path')
+
+                    # Convert to absolute filesystem paths
+                    video_path = os.path.join('/app', relative_video_path.lstrip('/')) if relative_video_path else None
+                    thumbnail_path = os.path.join('/app', relative_thumbnail_path.lstrip('/')) if relative_thumbnail_path else None
+
+                    self.logger.info(f"🔍 Video path: {video_path}")
+                    self.logger.info(f"🔍 Thumbnail path: {thumbnail_path}")
+
+                    if video_path and thumbnail_path and os.path.exists(video_path) and os.path.exists(thumbnail_path):
+                        # Get subscribe video path (use the one from public directory which has audio)
+                        subscribe_video_path = '/app/public/CNINews_Subscribe.mp4'
+
+                        # Get output directory
+                        output_dir = os.path.dirname(video_path)
+
+                        # Generate short
+                        shorts_result = self.shorts_service.generate_short(
+                            news_video_path=video_path,
+                            thumbnail_path=thumbnail_path,
+                            title=article.get('title', 'News Update'),
+                            output_dir=output_dir,
+                            subscribe_video_path=subscribe_video_path if os.path.exists(subscribe_video_path) else None
+                        )
+
+                        if shorts_result['status'] == 'success':
+                            # Update database with shorts path
+                            shorts_path = shorts_result['short_path']
+                            # Convert to relative path like /public/article_id/short.mp4
+                            relative_shorts_path = shorts_path.replace('/app', '')
+
+                            self.news_collection.update_one(
+                                {'id': article_id},
+                                {'$set': {
+                                    'shorts_video_path': relative_shorts_path,
+                                    'updated_at': datetime.utcnow()
+                                }}
+                            )
+
+                            self.logger.info(f"✅ YouTube Short generated successfully: {relative_shorts_path}")
+                            result['shorts_video_path'] = relative_shorts_path
+                        else:
+                            self.logger.warning(f"⚠️ Shorts generation failed: {shorts_result.get('error', 'Unknown error')}")
+                            result['shorts_error'] = shorts_result.get('error')
+                    else:
+                        self.logger.warning(f"⚠️ Skipping shorts generation - missing video or thumbnail")
+
+                except Exception as shorts_error:
+                    # Don't fail the whole task if shorts generation fails
+                    self.logger.error(f"⚠️ Error generating shorts (non-critical): {str(shorts_error)}")
+                    result['shorts_error'] = str(shorts_error)
+
             else:
                 self.logger.error(
                     f"❌ Video generation failed for article: {article_id} - {result.get('error', 'Unknown error')}")
@@ -212,17 +291,17 @@ class VideoGeneratorJob(BaseJob):
 
     def _get_articles_for_video_generation(self) -> list:
         """
-        Get articles that have audio but no video generated yet
-        
+        Get articles that have audio and cleaned image but no video generated yet
+
         Returns:
             List of article documents that need video generation
         """
         try:
-            # Query for articles that have audio_paths but no video_path
+            # Query for articles that have audio_paths, clean_image, but no video_path
             query = {
                 'audio_paths': {'$ne': None, '$exists': True},  # Has audio paths
+                'clean_image': {'$ne': None, '$exists': True},  # Has cleaned image
                 'video_path': {'$in': [None, '']},  # No video yet
-                'image': {'$ne': None, '$exists': True},  # Has image URL
                 'status': {'$in': ['completed', 'published']}  # Only process completed articles
             }
 
@@ -232,7 +311,7 @@ class VideoGeneratorJob(BaseJob):
                 .sort('updated_at', -1)  # Process newest first
             )
 
-            self.logger.info(f"🔍 Found {len(articles)} articles ready for video generation")
+            self.logger.info(f"🔍 Found {len(articles)} articles ready for video generation (with audio and cleaned image)")
 
             return articles
 
@@ -265,39 +344,40 @@ class VideoGeneratorJob(BaseJob):
                 self.logger.info(f"🔍 DEBUG: Processing article_id: {article_id}, status: {result.get('status')}")
 
                 if result['status'] == 'success':
-                    # Update article with video path
+                    # Note: video_path and thumbnail_path are already updated in process_single_task
+                    # before shorts generation. Here we only update shorts_video_path if available.
                     update_data = {
-                        'video_path': result['video_path'],
                         'updated_at': datetime.utcnow()
                     }
 
-                    self.logger.info(f"🔍 DEBUG: Base update_data for {article_id}: {update_data}")
-
-                    # Add optional fields if available
-                    if result.get('thumbnail_path'):
-                        update_data['thumbnail_path'] = result['thumbnail_path']
-                    if result.get('duration_seconds'):
-                        update_data['video_duration_seconds'] = result['duration_seconds']
-                    if result.get('file_size_mb'):
-                        update_data['video_file_size_mb'] = result['file_size_mb']
+                    # Add shorts_video_path if available
+                    if result.get('shorts_video_path'):
+                        update_data['shorts_video_path'] = result['shorts_video_path']
+                        self.logger.info(f"🔍 DEBUG: Adding shorts_video_path to update: {result['shorts_video_path']}")
 
                     self.logger.info(f"🔍 DEBUG: Final update_data for {article_id}: {update_data}")
 
-                    # Update the document
-                    self.logger.info(f"🔍 DEBUG: Executing MongoDB update for article: {article_id}")
-                    update_result = self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': update_data}
-                    )
+                    # Only update if there's something to update beyond updated_at
+                    if len(update_data) > 1:
+                        # Update the document
+                        self.logger.info(f"🔍 DEBUG: Executing MongoDB update for article: {article_id}")
+                        update_result = self.news_collection.update_one(
+                            {'id': article_id},
+                            {'$set': update_data}
+                        )
 
-                    self.logger.info(
-                        f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}")
+                        self.logger.info(
+                            f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}")
 
-                    if update_result.modified_count > 0:
-                        success_count += 1
-                        self.logger.info(f"✅ Updated database for article: {article_id}")
+                        if update_result.modified_count > 0:
+                            success_count += 1
+                            self.logger.info(f"✅ Updated database for article: {article_id}")
+                        else:
+                            self.logger.warning(f"⚠️ No document updated for article: {article_id}")
                     else:
-                        self.logger.warning(f"⚠️ No document updated for article: {article_id}")
+                        # No additional updates needed (video_path already updated in process_single_task)
+                        success_count += 1
+                        self.logger.info(f"✅ Article {article_id} already updated in process_single_task")
                 else:
                     # Log error but don't update database for failed generations
                     self.logger.error(
@@ -474,6 +554,112 @@ class VideoGeneratorJob(BaseJob):
                 self.logger.error(f"❌ Error downloading thumbnail: {str(e)}")
                 return jsonify({
                     "error": f"Failed to download thumbnail: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/generate-short', methods=['POST'])
+        def generate_short():
+            """Generate YouTube Short for a news article"""
+            try:
+                data = request.get_json() or {}
+                article_id = data.get('article_id')
+
+                if not article_id:
+                    return jsonify({
+                        "error": "article_id is required",
+                        "status": "error"
+                    }), 400
+
+                self.logger.info(f"🎬 Generating YouTube Short for article: {article_id}")
+
+                # Get article from database
+                article = self.news_collection.find_one({'id': article_id})
+
+                if not article:
+                    return jsonify({
+                        "error": f"Article not found: {article_id}",
+                        "status": "error"
+                    }), 404
+
+                # Check if video exists
+                video_path = article.get('video_path')
+                if not video_path:
+                    return jsonify({
+                        "error": "Article does not have a video. Generate video first.",
+                        "status": "error"
+                    }), 400
+
+                # Get full video path
+                if not video_path.startswith('/'):
+                    video_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, article_id, os.path.basename(video_path))
+
+                if not os.path.exists(video_path):
+                    return jsonify({
+                        "error": f"Video file not found: {video_path}",
+                        "status": "error"
+                    }), 404
+
+                # Get thumbnail path
+                output_dir = os.path.join(self.config.VIDEO_OUTPUT_DIR, article_id)
+                thumbnail_path = os.path.join(output_dir, 'thumbnail.jpg')
+
+                if not os.path.exists(thumbnail_path):
+                    return jsonify({
+                        "error": f"Thumbnail not found: {thumbnail_path}",
+                        "status": "error"
+                    }), 404
+
+                # Get subscribe video path (use the one from public directory which has audio)
+                subscribe_video_path = '/app/public/CNINews_Subscribe.mp4'
+
+                # Generate short
+                result = self.shorts_service.generate_short(
+                    news_video_path=video_path,
+                    thumbnail_path=thumbnail_path,
+                    title=article.get('title', 'News Update'),
+                    output_dir=output_dir,
+                    subscribe_video_path=subscribe_video_path if os.path.exists(subscribe_video_path) else None
+                )
+
+                if result['status'] == 'success':
+                    # Update database with shorts path
+                    shorts_path = result['short_path']
+                    # Store relative path
+                    relative_shorts_path = os.path.join(article_id, os.path.basename(shorts_path))
+
+                    self.news_collection.update_one(
+                        {'id': article_id},
+                        {'$set': {
+                            'shorts_video_path': relative_shorts_path,
+                            'updated_at': datetime.utcnow()
+                        }}
+                    )
+
+                    self.logger.info(f"✅ Short generated and saved: {shorts_path}")
+
+                    return jsonify({
+                        "message": "YouTube Short generated successfully",
+                        "status": "success",
+                        "article_id": article_id,
+                        "short_path": relative_shorts_path,
+                        "file_size_mb": result.get('file_size_mb'),
+                        "duration": result.get('duration'),
+                        "dimensions": result.get('dimensions'),
+                        "download_url": f"/download/{article_id}/{os.path.basename(shorts_path)}"
+                    })
+                else:
+                    return jsonify({
+                        "error": result.get('error', 'Unknown error'),
+                        "status": "error",
+                        "article_id": article_id
+                    }), 500
+
+            except Exception as e:
+                self.logger.error(f"❌ Error generating short: {str(e)}")
+                import traceback
+                self.logger.error(traceback.format_exc())
+                return jsonify({
+                    "error": f"Failed to generate short: {str(e)}",
                     "status": "error"
                 }), 500
 
