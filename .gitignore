@@ -44,6 +44,7 @@ jobs/video-generator/temp/
 
 ### Watermark remover directories ###
 jobs/watermark-remover/public/
+jobs/watermark-remover/models/
 
 ### macOS system files ###
 .DS_Store
