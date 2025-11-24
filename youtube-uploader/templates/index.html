@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Uploader - News Videos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .value {
+            color: #333;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        .action-panel {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .action-panel h2 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        
+        .upload-btn {
+            background: linear-gradient(135deg, #FF0000 0%, #CC0000 100%);
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(255, 0, 0, 0.3);
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(255, 0, 0, 0.4);
+        }
+        
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .upload-btn .icon {
+            font-size: 24px;
+        }
+        
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status-message.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left: 4px solid #1976d2;
+        }
+        
+        .status-message.success {
+            background: #e8f5e9;
+            color: #388e3c;
+            border-left: 4px solid #388e3c;
+        }
+        
+        .status-message.error {
+            background: #ffebee;
+            color: #d32f2f;
+            border-left: 4px solid #d32f2f;
+        }
+        
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50 0%, #8bc34a 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .upload-log {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .upload-log .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+        }
+        
+        .upload-log .log-entry.success {
+            color: #388e3c;
+        }
+        
+        .upload-log .log-entry.error {
+            color: #d32f2f;
+        }
+        
+        .upload-log .log-entry.info {
+            color: #1976d2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span class="icon">📺</span>
+                YouTube Uploader
+            </h1>
+            <p>Upload news videos to YouTube channel</p>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Ready to Upload</h3>
+                <div class="value" id="ready-count">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Already Uploaded</h3>
+                <div class="value" id="uploaded-count">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Videos</h3>
+                <div class="value" id="total-count">-</div>
+            </div>
+        </div>
+        
+        <div class="action-panel">
+            <h2>Upload Actions</h2>
+            <button class="upload-btn" id="upload-btn" onclick="uploadLatest20()">
+                <span class="icon">⬆️</span>
+                Upload Latest 20 News to YouTube
+            </button>
+            
+            <div class="status-message" id="status-message"></div>
+            
+            <div class="progress-container" id="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill">0%</div>
+                </div>
+                <div class="upload-log" id="upload-log"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Load stats on page load
+        window.addEventListener('load', loadStats);
+        
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                document.getElementById('ready-count').textContent = data.ready_to_upload || 0;
+                document.getElementById('uploaded-count').textContent = data.already_uploaded || 0;
+                document.getElementById('total-count').textContent = data.total_videos || 0;
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+        
+        async function uploadLatest20() {
+            const btn = document.getElementById('upload-btn');
+            const statusMsg = document.getElementById('status-message');
+            const progressContainer = document.getElementById('progress-container');
+            const progressFill = document.getElementById('progress-fill');
+            const uploadLog = document.getElementById('upload-log');
+            
+            // Disable button
+            btn.disabled = true;
+            
+            // Show progress
+            progressContainer.style.display = 'block';
+            uploadLog.innerHTML = '';
+            
+            // Show status
+            statusMsg.className = 'status-message info';
+            statusMsg.textContent = '🚀 Starting upload process...';
+            statusMsg.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/upload-latest-20', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    statusMsg.className = 'status-message success';
+                    statusMsg.textContent = `✅ ${data.message}`;
+                    
+                    // Show results
+                    if (data.results) {
+                        data.results.forEach((result, index) => {
+                            const logEntry = document.createElement('div');
+                            logEntry.className = `log-entry ${result.status}`;
+                            logEntry.textContent = `${index + 1}. ${result.title}: ${result.status === 'success' ? '✅ ' + result.video_url : '❌ ' + result.error}`;
+                            uploadLog.appendChild(logEntry);
+                        });
+                        
+                        const successCount = data.results.filter(r => r.status === 'success').length;
+                        progressFill.style.width = '100%';
+                        progressFill.textContent = `${successCount}/${data.results.length} uploaded`;
+                    }
+                    
+                    // Reload stats
+                    loadStats();
+                } else {
+                    statusMsg.className = 'status-message error';
+                    statusMsg.textContent = `❌ ${data.error || 'Upload failed'}`;
+                }
+            } catch (error) {
+                statusMsg.className = 'status-message error';
+                statusMsg.textContent = `❌ Error: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
+
