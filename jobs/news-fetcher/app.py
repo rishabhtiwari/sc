@@ -8,7 +8,7 @@ import os
 import sys
 from datetime import datetime
 from typing import Dict, Any, List
-from flask import jsonify, request
+from flask import jsonify, request, render_template, send_from_directory
 from typing import List
 
 # Add parent directories to path for imports
@@ -28,6 +28,14 @@ class NewsFetcherJob(BaseJob):
 
     def __init__(self):
         super().__init__('news-fetcher', Config)
+
+        # Fix Flask template and static folder paths
+        # The BaseJob creates Flask app with __name__ from base_job module
+        # We need to set the correct paths for this specific job
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        self.app.template_folder = os.path.join(app_dir, 'templates')
+        self.app.static_folder = os.path.join(app_dir, 'static')
+
         self.news_fetcher_service = NewsFetcherService(logger=self.logger)
         self.news_enrichment_service = NewsEnrichmentService(Config, logger=self.logger)
         self.news_query_service = NewsQueryService(logger=self.logger)
@@ -230,10 +238,21 @@ class NewsFetcherJob(BaseJob):
         """
         try:
             from datetime import datetime
+            import uuid
+
+            # Auto-generate partner_id if not provided
+            if 'partner_id' not in seed_url_data or not seed_url_data['partner_id']:
+                partner_id = str(uuid.uuid4())
+            else:
+                partner_id = seed_url_data['partner_id']
+
+            # Get frequency_minutes (now directly from input)
+            frequency_minutes = seed_url_data.get('frequency_minutes', 60)
+            frequency_hours = frequency_minutes / 60
 
             # Set default values
             seed_url = {
-                'partner_id': seed_url_data['partner_id'],
+                'partner_id': partner_id,
                 'url': seed_url_data['url'],
                 'partner_name': seed_url_data['partner_name'],
                 'name': seed_url_data.get('name', seed_url_data['partner_name']),
@@ -241,8 +260,8 @@ class NewsFetcherJob(BaseJob):
                 'category': seed_url_data.get('category', 'general'),
                 'country': seed_url_data.get('country', 'in'),
                 'language': seed_url_data.get('language', 'en'),
-                'frequency_minutes': seed_url_data.get('frequency_minutes', 60),
-                'frequency_hours': seed_url_data.get('frequency_hours', 1),
+                'frequency_minutes': frequency_minutes,
+                'frequency_hours': frequency_hours,
                 'is_active': seed_url_data.get('is_active', True),
                 'last_run': None,
                 'last_fetched_at': None,
@@ -251,7 +270,13 @@ class NewsFetcherJob(BaseJob):
                 'error_count': 0,
                 'last_error': None,
                 'parameters': seed_url_data.get('parameters', {}),
-                'metadata': seed_url_data.get('metadata', {}),
+                'metadata': seed_url_data.get('metadata', {
+                    'api_params': {
+                        'category': seed_url_data.get('category', 'general'),
+                        'country': seed_url_data.get('country', 'in'),
+                        'lang': seed_url_data.get('language', 'en')
+                    }
+                }),
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow()
             }
@@ -308,11 +333,185 @@ class NewsFetcherJob(BaseJob):
                 'error': str(e)
             }
 
+    def get_all_seed_urls(self) -> Dict[str, Any]:
+        """
+        Get all seed URLs from database
+
+        Returns:
+            Dictionary with all seed URLs
+        """
+        try:
+            seed_urls = list(self.news_fetcher_service.seed_urls_collection.find())
+
+            # Convert ObjectId to string for JSON serialization
+            for seed_url in seed_urls:
+                if '_id' in seed_url:
+                    seed_url['_id'] = str(seed_url['_id'])
+                # Convert datetime to ISO format
+                for field in ['created_at', 'updated_at', 'last_run', 'last_fetched_at']:
+                    if field in seed_url and seed_url[field]:
+                        seed_url[field] = seed_url[field].isoformat()
+
+            return {
+                'status': 'success',
+                'seed_urls': seed_urls,
+                'total': len(seed_urls)
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting seed URLs: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'seed_urls': [],
+                'total': 0
+            }
+
+    def get_seed_url(self, partner_id: str) -> Dict[str, Any]:
+        """
+        Get a single seed URL by partner_id
+
+        Args:
+            partner_id: Partner ID of the seed URL to retrieve
+
+        Returns:
+            Dictionary with seed URL data
+        """
+        try:
+            seed_url = self.news_fetcher_service.seed_urls_collection.find_one({
+                'partner_id': partner_id
+            })
+
+            if not seed_url:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL {partner_id} not found'
+                }
+
+            # Convert ObjectId to string for JSON serialization
+            if '_id' in seed_url:
+                seed_url['_id'] = str(seed_url['_id'])
+
+            # Convert datetime to ISO format
+            for field in ['created_at', 'updated_at', 'last_run', 'last_fetched_at']:
+                if field in seed_url and seed_url[field]:
+                    seed_url[field] = seed_url[field].isoformat()
+
+            return {
+                'status': 'success',
+                'seed_url': seed_url
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting seed URL: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
+    def update_seed_url(self, partner_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update an existing seed URL by partner_id
+
+        Args:
+            partner_id: Partner ID of the seed URL to update
+            update_data: Dictionary containing fields to update
+
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            # Prepare update data
+            update_fields = {}
+
+            # Only update fields that are provided
+            allowed_fields = [
+                'partner_name', 'name', 'url', 'provider', 'category',
+                'country', 'language', 'frequency_minutes', 'is_active'
+            ]
+
+            for field in allowed_fields:
+                if field in update_data:
+                    update_fields[field] = update_data[field]
+
+            # Calculate frequency_hours from frequency_minutes if provided
+            if 'frequency_minutes' in update_fields:
+                update_fields['frequency_hours'] = update_fields['frequency_minutes'] / 60
+
+            # Add updated timestamp
+            update_fields['updated_at'] = datetime.utcnow()
+
+            # Update the document
+            result = self.news_fetcher_service.seed_urls_collection.update_one(
+                {'partner_id': partner_id},
+                {'$set': update_fields}
+            )
+
+            if result.matched_count > 0:
+                return {
+                    'status': 'success',
+                    'message': f'Seed URL {partner_id} updated successfully',
+                    'modified_count': result.modified_count
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL {partner_id} not found'
+                }
+        except Exception as e:
+            self.logger.error(f"Error updating seed URL: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
+    def delete_seed_url(self, partner_id: str) -> Dict[str, Any]:
+        """
+        Delete a seed URL by partner_id
+
+        Args:
+            partner_id: Partner ID of the seed URL to delete
+
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            result = self.news_fetcher_service.seed_urls_collection.delete_one({
+                'partner_id': partner_id
+            })
+
+            if result.deleted_count > 0:
+                return {
+                    'status': 'success',
+                    'message': f'Seed URL {partner_id} deleted successfully'
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'error': f'Seed URL {partner_id} not found'
+                }
+        except Exception as e:
+            self.logger.error(f"Error deleting seed URL: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
 # Create job instance
 news_fetcher_job = NewsFetcherJob()
 
 # Get Flask app from base job
 app = news_fetcher_job.app
+
+# UI Routes
+@app.route('/', methods=['GET'])
+def index():
+    """Render the management UI"""
+    return render_template('index.html')
+
+@app.route('/static/<path:filename>')
+def serve_static(filename):
+    """Serve static files"""
+    static_dir = os.path.join(os.path.dirname(__file__), 'static')
+    return send_from_directory(static_dir, filename)
 
 # Add custom endpoints
 @app.route('/seed-urls/status', methods=['GET'])
@@ -350,8 +549,8 @@ def add_seed_url():
                 'error': 'No JSON data provided'
             }), 400
 
-        # Validate required fields
-        required_fields = ['partner_id', 'url', 'partner_name']
+        # Validate required fields (partner_id is auto-generated if not provided)
+        required_fields = ['url', 'partner_name']
         for field in required_fields:
             if field not in data:
                 return jsonify({
@@ -360,6 +559,37 @@ def add_seed_url():
                 }), 400
 
         result = news_fetcher_job.add_seed_url(data)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/seed-urls/<partner_id>', methods=['GET'])
+def get_seed_url(partner_id):
+    """Get a single seed URL by partner_id"""
+    try:
+        result = news_fetcher_job.get_seed_url(partner_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/seed-urls/<partner_id>', methods=['PUT'])
+def update_seed_url(partner_id):
+    """Update an existing seed URL by partner_id"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'No data provided'
+            }), 400
+
+        result = news_fetcher_job.update_seed_url(partner_id, data)
         return jsonify(result)
     except Exception as e:
         return jsonify({

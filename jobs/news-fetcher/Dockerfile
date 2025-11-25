@@ -18,7 +18,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY common ./common
 
 # Copy application code
-COPY news-fetcher .
+COPY news-fetcher/*.py .
+COPY news-fetcher/config ./config
+COPY news-fetcher/parsers ./parsers
+COPY news-fetcher/services ./services
+COPY news-fetcher/utils ./utils
+COPY news-fetcher/templates ./templates
+COPY news-fetcher/static ./static
 
 # Create necessary directories
 RUN mkdir -p logs data

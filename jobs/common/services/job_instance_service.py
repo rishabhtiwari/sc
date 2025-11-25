@@ -188,6 +188,43 @@ class JobInstanceService:
         except Exception as e:
             raise Exception(f"Error checking job cancellation status: {str(e)}")
 
+    def cancel_running_jobs_by_type(self, job_type: str, trigger: str = None) -> int:
+        """
+        Cancel all running or pending jobs of a specific type
+
+        Args:
+            job_type: Type of job to cancel
+            trigger: Optional filter by trigger type ('manual' or 'scheduled')
+
+        Returns:
+            Number of jobs cancelled
+        """
+        try:
+            query = {
+                'job_type': job_type,
+                'status': {'$in': ['pending', 'running']},
+                'cancelled': {'$ne': True}
+            }
+
+            # If trigger is specified, only cancel jobs with that trigger type
+            if trigger:
+                query['metadata.trigger'] = trigger
+
+            result = self.collection.update_many(
+                query,
+                {
+                    '$set': {
+                        'status': 'cancelled',
+                        'cancelled': True,
+                        'updated_at': datetime.utcnow(),
+                        'completed_at': datetime.utcnow()
+                    }
+                }
+            )
+            return result.modified_count
+        except Exception as e:
+            raise Exception(f"Error cancelling running jobs: {str(e)}")
+
     def cleanup_old_jobs(self, days: int = 30) -> int:
         """Clean up job instances older than specified days"""
         try:

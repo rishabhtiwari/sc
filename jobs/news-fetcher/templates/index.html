@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Fetcher Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .nav-tabs {
+            background: white;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 10px;
+        }
+
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            background: #f5f5f5;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #666;
+        }
+
+        .nav-tab:hover {
+            background: #e0e0e0;
+        }
+
+        .nav-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .stat-card .value {
+            color: #333;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        
+        .panel {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .panel h2 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .filter-group label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table th {
+            background: #f5f5f5;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+        }
+
+        table td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .badge-warning {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        .badge-danger {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .badge-info {
+            background: #e3f2fd;
+            color: #2196f3;
+        }
+
+        .pagination {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #f5f5f5;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            font-size: 24px;
+            color: #333;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📰 News Fetcher Management</h1>
+            <p>Manage news sources, view articles, and monitor fetching status</p>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('overview')">📊 Overview</button>
+            <button class="nav-tab" onclick="switchTab('news')">📰 News Records</button>
+            <button class="nav-tab" onclick="switchTab('seeds')">🌱 Seed URLs</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="overview-tab" class="tab-content active">
+            <div class="stats-grid" id="stats-container">
+                <div class="loading">Loading statistics...</div>
+            </div>
+
+            <div class="panel">
+                <h2>
+                    Quick Actions
+                </h2>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="runFetchJob()">🚀 Run Fetch Job Now</button>
+                    <button class="btn btn-success" onclick="switchTab('seeds')">➕ Add Seed URL</button>
+                    <button class="btn btn-warning" onclick="refreshStats()">🔄 Refresh Stats</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- News Records Tab -->
+        <div id="news-tab" class="tab-content">
+            <div class="panel">
+                <h2>News Records</h2>
+                
+                <!-- Filters -->
+                <div class="filters">
+                    <div class="filter-group">
+                        <label>Category</label>
+                        <select id="filter-category" onchange="loadNews()">
+                            <option value="">All Categories</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Language</label>
+                        <select id="filter-language" onchange="loadNews()">
+                            <option value="">All Languages</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Country</label>
+                        <select id="filter-country" onchange="loadNews()">
+                            <option value="">All Countries</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status</label>
+                        <select id="filter-status" onchange="loadNews()">
+                            <option value="">All Status</option>
+                            <option value="completed">Completed</option>
+                            <option value="progress">In Progress</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Page Size</label>
+                        <select id="page-size" onchange="loadNews()">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- News Table -->
+                <div id="news-container">
+                    <div class="loading">Loading news records...</div>
+                </div>
+
+                <!-- Pagination -->
+                <div id="news-pagination" class="pagination"></div>
+            </div>
+        </div>
+
+        <!-- Seed URLs Tab -->
+        <div id="seeds-tab" class="tab-content">
+            <div class="panel">
+                <h2>
+                    Seed URLs Management
+                    <button class="btn btn-primary btn-sm" onclick="openAddSeedModal()">➕ Add Seed URL</button>
+                </h2>
+                
+                <div id="seeds-container">
+                    <div class="loading">Loading seed URLs...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Seed URL Modal -->
+    <div id="seed-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-title">Add Seed URL</h3>
+                <button class="close-btn" onclick="closeSeedModal()">&times;</button>
+            </div>
+            <form id="seed-form" onsubmit="saveSeedUrl(event)">
+                <div class="form-group" id="partner-id-group" style="display: none;">
+                    <label>Partner ID</label>
+                    <input type="text" id="seed-partner-id" readonly placeholder="Auto-generated">
+                </div>
+                <div class="form-group">
+                    <label>Partner Name *</label>
+                    <input type="text" id="seed-partner-name" required placeholder="e.g., gnews_sports">
+                </div>
+                <div class="form-group">
+                    <label>Display Name *</label>
+                    <input type="text" id="seed-name" required placeholder="e.g., GNews Sports - India">
+                </div>
+                <div class="form-group">
+                    <label>URL *</label>
+                    <input type="url" id="seed-url" required placeholder="https://gnews.io/api/v4/top-headlines?category={category}&apikey={api_key}...">
+                </div>
+                <div class="form-group">
+                    <label>Provider</label>
+                    <input type="text" id="seed-provider" value="gnews" placeholder="gnews">
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select id="seed-category">
+                        <option value="general">General</option>
+                        <option value="world">World</option>
+                        <option value="nation">Nation</option>
+                        <option value="business">Business</option>
+                        <option value="technology">Technology</option>
+                        <option value="entertainment">Entertainment</option>
+                        <option value="sports">Sports</option>
+                        <option value="science">Science</option>
+                        <option value="health">Health</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Country</label>
+                    <select id="seed-country">
+                        <option value="in">India (in)</option>
+                        <option value="us">United States (us)</option>
+                        <option value="gb">United Kingdom (gb)</option>
+                        <option value="au">Australia (au)</option>
+                        <option value="ca">Canada (ca)</option>
+                        <option value="nz">New Zealand (nz)</option>
+                        <option value="sg">Singapore (sg)</option>
+                        <option value="ae">UAE (ae)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Language</label>
+                    <select id="seed-language">
+                        <option value="en">English (en)</option>
+                        <option value="hi">Hindi (hi)</option>
+                        <option value="es">Spanish (es)</option>
+                        <option value="fr">French (fr)</option>
+                        <option value="de">German (de)</option>
+                        <option value="zh">Chinese (zh)</option>
+                        <option value="ar">Arabic (ar)</option>
+                        <option value="pt">Portuguese (pt)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Frequency (minutes)</label>
+                    <input type="number" id="seed-frequency" value="60" min="1" max="1440">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="seed-active" checked>
+                        Active
+                    </label>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="btn" onclick="closeSeedModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+

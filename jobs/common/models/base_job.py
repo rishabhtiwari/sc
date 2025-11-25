@@ -243,7 +243,7 @@ class BaseJob(ABC):
             try:
                 # Get job parameters from request
                 params = request.get_json() or {}
-                
+
                 # Validate parameters
                 validation_errors = self.validate_job_params(params)
                 if validation_errors:
@@ -251,10 +251,18 @@ class BaseJob(ABC):
                         'error': 'Invalid parameters',
                         'validation_errors': validation_errors
                     }), 400
-                
+
                 self.logger.info(f"Manual {self.get_job_type()} job triggered")
-                
-                # Create job instance
+
+                # Cancel any existing running jobs of this type (manual or scheduled) before starting new on-demand job
+                # This ensures on-demand jobs always start fresh and take priority
+                cancelled_count = self.job_instance_service.cancel_running_jobs_by_type(
+                    self.get_job_type()
+                )
+                if cancelled_count > 0:
+                    self.logger.info(f"Cancelled {cancelled_count} existing running job(s) of type {self.get_job_type()}")
+
+                # Create job instance (skip running check since we just cancelled existing jobs)
                 job_id = self.job_instance_service.create_job_instance(
                     job_type=self.get_job_type(),
                     status='running',
@@ -262,7 +270,8 @@ class BaseJob(ABC):
                         'trigger': 'manual',
                         'started_at': datetime.utcnow().isoformat(),
                         'params': params
-                    }
+                    },
+                    check_running=False  # Skip check since we just cancelled existing jobs
                 )
                 
                 # Run job in background thread with thread management

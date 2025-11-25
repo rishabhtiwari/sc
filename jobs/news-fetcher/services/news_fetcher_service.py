@@ -346,18 +346,20 @@ class NewsFetcherService:
 
     def _update_seed_url_last_fetched(self, seed_url_id):
         """
-        Update the last_fetched_at timestamp for a seed URL
+        Update the last_fetched_at and last_run timestamps for a seed URL
 
         Args:
             seed_url_id: MongoDB ObjectId of the seed URL to update
         """
         try:
+            now = datetime.utcnow()
             self.seed_urls_collection.update_one(
                 {'_id': seed_url_id},
                 {
                     '$set': {
-                        'last_fetched_at': datetime.utcnow(),
-                        'updated_at': datetime.utcnow()
+                        'last_fetched_at': now,
+                        'last_run': now,
+                        'updated_at': now
                     },
                     '$inc': {'fetch_count': 1}
                 }
