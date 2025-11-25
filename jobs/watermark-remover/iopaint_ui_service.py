@@ -858,14 +858,78 @@ def index():
 
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    """Get statistics about images"""
+    """Get statistics about images (only counts images with valid short_summary)"""
     try:
         collection = get_mongo_client()
-        
-        total = collection.count_documents({'image': {'$ne': None}})
-        cleaned = collection.count_documents({'clean_image': {'$ne': None}})
+
+        # Count only images that have valid short_summary (min 30 words)
+        # Use aggregation to filter by word count
+        pipeline_total = [
+            {
+                '$match': {
+                    'image': {'$ne': None},
+                    'short_summary': {'$ne': None, '$ne': ''}
+                }
+            },
+            {
+                '$addFields': {
+                    'word_count': {
+                        '$size': {
+                            '$split': [
+                                {'$trim': {'input': '$short_summary'}},
+                                ' '
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                '$match': {
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ]
+
+        pipeline_cleaned = [
+            {
+                '$match': {
+                    'image': {'$ne': None},
+                    'clean_image': {'$ne': None},
+                    'short_summary': {'$ne': None, '$ne': ''}
+                }
+            },
+            {
+                '$addFields': {
+                    'word_count': {
+                        '$size': {
+                            '$split': [
+                                {'$trim': {'input': '$short_summary'}},
+                                ' '
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                '$match': {
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ]
+
+        total_result = list(collection.aggregate(pipeline_total))
+        cleaned_result = list(collection.aggregate(pipeline_cleaned))
+
+        total = total_result[0]['total'] if total_result else 0
+        cleaned = cleaned_result[0]['total'] if cleaned_result else 0
         pending = total - cleaned
-        
+
         return jsonify({
             'total': total,
             'cleaned': cleaned,
@@ -882,19 +946,54 @@ def get_next_image():
     try:
         collection = get_mongo_client()
 
-        # Find first document with image but no clean_image, sorted by created_at descending (most recent first)
-        doc = collection.find_one(
+        # Find first document with:
+        # 1. Has image but no clean_image
+        # 2. Has short_summary field that is not empty/null
+        # 3. short_summary has at least 30 words (minimum requirement)
+        # Sorted by created_at descending (most recent first)
+
+        # Use aggregation pipeline to filter by word count
+        pipeline = [
             {
-                'image': {'$ne': None},
-                'clean_image': None
+                '$match': {
+                    'image': {'$ne': None},
+                    'clean_image': None,
+                    'short_summary': {'$ne': None, '$ne': ''}
+                }
             },
-            sort=[('created_at', -1)]  # -1 for descending order (most recent first)
-        )
+            {
+                '$addFields': {
+                    'word_count': {
+                        '$size': {
+                            '$split': [
+                                {'$trim': {'input': '$short_summary'}},
+                                ' '
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                '$match': {
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                }
+            },
+            {
+                '$sort': {'created_at': -1}  # Most recent first
+            },
+            {
+                '$limit': 1
+            }
+        ]
 
-        if not doc:
-            return jsonify({'error': 'No more images to clean!'}), 404
+        results = list(collection.aggregate(pipeline))
 
-        logger.info(f"📸 Loading image: {doc.get('title', 'Untitled')} (created: {doc.get('created_at')})")
+        if not results:
+            return jsonify({'error': 'No more images to clean! All images either lack proper short_summary (min 30 words) or are already cleaned.'}), 404
+
+        doc = results[0]
+        word_count = doc.get('word_count', 0)
+        logger.info(f"📸 Loading image: {doc.get('title', 'Untitled')} (created: {doc.get('created_at')}, short_summary: {word_count} words)")
 
         return jsonify({
             'doc_id': str(doc['_id']),
