@@ -418,6 +418,17 @@ class VideoGeneratorJob(BaseJob):
 
                 self.logger.info(f"📊 Found {len(latest_news)} news videos to merge")
 
+                # Delete old merged video file immediately (before async processing starts)
+                # This prevents users from downloading the old video while new one is being created
+                import os
+                old_video_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+                if os.path.exists(old_video_path):
+                    try:
+                        os.remove(old_video_path)
+                        self.logger.info("🗑️ Deleted old merged video file before starting new merge")
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Could not delete old merged video: {e}")
+
                 # Return immediate response to user with processing status
                 from threading import Thread
                 import time
