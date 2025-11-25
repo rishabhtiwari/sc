@@ -129,7 +129,7 @@ class NewsEnrichmentService:
 
     def _generate_summary(self, content: str, article_id: str) -> str:
         """
-        Generate a 45-70 word summary using LLM service
+        Generate a 45-70 word summary using LLM service with retry logic
 
         Args:
             content: Article content to summarize
@@ -138,74 +138,109 @@ class NewsEnrichmentService:
         Returns:
             Generated summary (45-70 words) or empty string if failed
         """
-        try:
-            # Enhanced prompt to prevent code generation and ensure text-only summaries
-            prompt = f"""You are a professional news editor. Summarize the following article in plain, everyday English.
-Write ONLY the summary itself. Do not add any titles, bullet points, markdown, code, quotes, or explanations.
+        max_retries = 2  # Try up to 2 times
 
-Rules:
-- Use exactly 45–70 words (count them carefully)
-- Write in full, correct sentences
-- Never use slashes, brackets, code formatting, or programming symbols
-- Include only the key facts: who, what, when, where, and why
-- Do not mention word count or any instructions in the output
+        for attempt in range(max_retries):
+            try:
+                # Enhanced prompt with stronger emphasis on word count
+                # On retry, make the prompt even more explicit
+                if attempt == 0:
+                    prompt = f"""You are a professional news editor. Create a news summary following these STRICT requirements:
+
+CRITICAL REQUIREMENTS:
+1. Write EXACTLY 45-70 words - this is MANDATORY
+2. Count every single word to ensure you meet this requirement
+3. If your summary is less than 45 words, ADD MORE DETAILS
+4. If your summary is more than 70 words, REMOVE LESS IMPORTANT DETAILS
+
+CONTENT RULES:
+- Write in plain, everyday English
+- Use complete, grammatically correct sentences
+- Include key facts: who, what, when, where, why
+- Write ONLY the summary - no titles, labels, or explanations
+- Never use code, markdown, bullets, or special formatting
+
+Article to summarize:
+{content[:2000]}
+
+Write your 45-70 word summary now:"""
+                else:
+                    # More aggressive prompt for retry
+                    prompt = f"""IMPORTANT: Your previous summary was TOO SHORT. You MUST write MORE words.
+
+Create a detailed news summary with EXACTLY 50-65 words (count carefully!).
+
+MANDATORY RULES:
+- Write AT LEAST 50 words - this is CRITICAL
+- Include MORE details: background, context, implications
+- Use complete sentences with proper grammar
+- Write ONLY the summary text - no labels or formatting
 
 Article:
 {content[:2000]}
 
-Summary:"""
-            # Limit content to avoid token limits
+Write your 50-65 word detailed summary:"""
 
-            # Make request to LLM service directly (no RAG)
-            payload = {
-                "query": prompt,  # LLM service uses 'query' parameter
-                "use_rag": False,  # Explicitly disable RAG
-                "detect_code": False,  # Disable code generation detection for news summaries
-                "temperature": 0.3  # Lower temperature for more focused summaries
-            }
+                # Make request to LLM service directly (no RAG)
+                payload = {
+                    "query": prompt,
+                    "use_rag": False,
+                    "detect_code": False,
+                    "temperature": 0.6 if attempt == 0 else 0.7,  # Higher temp on retry for more output
+                    "max_tokens": 200  # More tokens on retry
+                }
 
-            self.logger.info(f"🤖 Requesting direct LLM summary (no RAG) for article {article_id}")
+                attempt_label = f"(attempt {attempt + 1}/{max_retries})" if max_retries > 1 else ""
+                self.logger.info(f"🤖 Requesting direct LLM summary {attempt_label} for article {article_id}")
 
-            response = requests.post(
-                f"{self.llm_service_url}/llm/generate",  # Direct LLM service endpoint
-                json=payload,
-                timeout=self.llm_timeout,
-                headers={'Content-Type': 'application/json'}
-            )
+                response = requests.post(
+                    f"{self.llm_service_url}/llm/generate",
+                    json=payload,
+                    timeout=self.llm_timeout,
+                    headers={'Content-Type': 'application/json'}
+                )
 
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('status') == 'success':
-                    # LLM service returns response in 'response' field
-                    summary = result.get('response', '').strip()
-                    if not summary and 'data' in result:
-                        # Fallback to 'data' field structure
-                        summary = result['data'].get('generated_text', '').strip()
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('status') == 'success':
+                        # LLM service returns response in 'response' field
+                        summary = result.get('response', '').strip()
+                        if not summary and 'data' in result:
+                            # Fallback to 'data' field structure
+                            summary = result['data'].get('generated_text', '').strip()
 
-                    if summary:
-                        # Post-process to ensure it's not code
-                        cleaned_summary = self._clean_summary(summary)
-                        if cleaned_summary:
-                            word_count = len(cleaned_summary.split())
-                            self.logger.info(f"✅ Generated summary for article {article_id} ({word_count} words)")
-                            return cleaned_summary
+                        if summary:
+                            # Post-process to ensure it's not code
+                            cleaned_summary = self._clean_summary(summary)
+                            if cleaned_summary:
+                                word_count = len(cleaned_summary.split())
+                                self.logger.info(f"✅ Generated summary for article {article_id} ({word_count} words)")
+                                return cleaned_summary
+                            else:
+                                self.logger.warning(
+                                    f"⚠️ Summary validation failed for article {article_id} on attempt {attempt + 1}")
+                                if attempt < max_retries - 1:
+                                    self.logger.info(f"🔄 Retrying summary generation...")
+                                    continue
+                                else:
+                                    self.logger.error(
+                                        f"❌ Summary contained code/invalid content for article {article_id}")
                         else:
-                            self.logger.error(f"❌ Summary contained code/invalid content for article {article_id}")
+                            self.logger.error(f"❌ Empty summary received for article {article_id}")
                     else:
-                        self.logger.error(f"❌ Empty summary received for article {article_id}")
+                        self.logger.error(f"❌ LLM service returned error for article {article_id}: {result}")
                 else:
-                    self.logger.error(f"❌ LLM service returned error for article {article_id}: {result}")
-            else:
-                self.logger.error(
-                    f"❌ LLM service request failed for article {article_id}: {response.status_code} - {response.text}")
+                    self.logger.error(
+                        f"❌ LLM service request failed for article {article_id}: {response.status_code} - {response.text}")
 
-        except requests.exceptions.Timeout:
-            self.logger.error(f"⏰ LLM service timeout for article {article_id}")
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"🌐 LLM service request error for article {article_id}: {str(e)}")
-        except Exception as e:
-            self.logger.error(f"💥 Unexpected error generating summary for article {article_id}: {str(e)}")
+            except requests.exceptions.Timeout:
+                self.logger.error(f"⏰ LLM service timeout for article {article_id}")
+            except requests.exceptions.RequestException as e:
+                self.logger.error(f"🌐 LLM service request error for article {article_id}: {str(e)}")
+            except Exception as e:
+                self.logger.error(f"💥 Unexpected error generating summary for article {article_id}: {str(e)}")
 
+        self.logger.error(f"❌ Failed to generate summary for article {article_id} after {max_retries} attempts")
         return ""
 
     def _clean_summary(self, summary: str) -> str:
@@ -246,7 +281,7 @@ Summary:"""
 
             # Remove common code artifacts
             summary = re.sub(r'\n\s*\n', ' ', summary)  # Multiple newlines
-            summary = re.sub(r'\s+', ' ', summary)      # Multiple spaces
+            summary = re.sub(r'\s+', ' ', summary)  # Multiple spaces
 
             # Ensure it starts with a capital letter and ends with punctuation
             if summary and not summary[0].isupper():
@@ -255,10 +290,14 @@ Summary:"""
             if summary and summary[-1] not in '.!?':
                 summary += '.'
 
-            # Check word count (should be reasonable for news summary)
+            # Check word count (should be 45-70 words, but accept 40-90 to be flexible)
             word_count = len(summary.split())
-            if word_count < 30:  # Too short, likely not a proper summary
-                self.logger.warning(f"⚠️ Summary too short: {word_count} words")
+            if word_count < 40:  # Too short, likely not a proper summary
+                self.logger.warning(f"⚠️ Summary too short: {word_count} words (minimum 40 required)")
+                return ""
+
+            if word_count > 90:  # Too long (increased from 80 to reduce false rejections)
+                self.logger.warning(f"⚠️ Summary too long: {word_count} words (maximum 90 allowed)")
                 return ""
 
             return summary

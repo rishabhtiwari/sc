@@ -44,7 +44,7 @@ _news_collection = None
 def get_mongo_client():
     """Get MongoDB client (lazy loaded)"""
     global _mongo_client, _news_collection
-    
+
     if _mongo_client is None:
         try:
             logger.info(f"🔌 Connecting to MongoDB: {MONGODB_URL}")
@@ -56,36 +56,36 @@ def get_mongo_client():
         except Exception as e:
             logger.error(f"❌ Failed to connect to MongoDB: {e}")
             raise
-    
+
     return _news_collection
 
 
 def get_model():
     """Lazy load IOPaint model"""
     global _model, _device
-    
+
     if _model is None:
         try:
             logger.info("🔄 Loading IOPaint LaMa model...")
             from iopaint.model import models
             import torch
-            
+
             # Determine device
             _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             logger.info(f"📱 Using device: {_device}")
-            
+
             # Initialize LaMa model directly from the models registry
             if "lama" not in models:
                 raise ValueError("LaMa model not found in IOPaint models registry")
-            
+
             lama_class = models["lama"]
             _model = lama_class(device=_device)
             logger.info("✅ IOPaint LaMa model loaded successfully!")
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to load IOPaint model: {e}")
             raise
-    
+
     return _model
 
 
@@ -122,7 +122,8 @@ def remove_watermark(image_np, mask_np):
         mask_np = cv2.dilate(mask_np, kernel, iterations=1)
 
         logger.info(f"🔧 Input - Image shape: {image_np.shape}, dtype: {image_np.dtype}")
-        logger.info(f"🔧 Input - Mask shape: {mask_np.shape}, dtype: {mask_np.dtype}, unique values: {np.unique(mask_np)}")
+        logger.info(
+            f"🔧 Input - Mask shape: {mask_np.shape}, dtype: {mask_np.dtype}, unique values: {np.unique(mask_np)}")
 
         # Save debug mask to verify the area being processed
         try:
@@ -564,16 +565,20 @@ HTML_TEMPLATE = """
                 const response = await fetch('/api/next-image');
                 console.log('📡 Response status:', response.status);
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
+                // Parse JSON response first (even for errors)
                 const data = await response.json();
                 console.log('📦 Response data:', data);
 
-                if (data.error) {
-                    alert(data.error);
+                // Check for errors (including 404)
+                if (!response.ok || data.error) {
+                    showToast(data.error || 'Failed to load image', 'info');
                     showLoading(false);
+                    // Disable buttons when no images available
+                    document.getElementById('auto-detect-btn').disabled = true;
+                    document.getElementById('clear-mask-btn').disabled = true;
+                    document.getElementById('skip-btn').disabled = true;
+                    document.getElementById('process-btn').disabled = true;
+                    document.getElementById('save-btn').disabled = true;
                     return;
                 }
 
@@ -885,7 +890,7 @@ def get_stats():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
                 }
             },
             {
@@ -915,7 +920,7 @@ def get_stats():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
                 }
             },
             {
@@ -949,7 +954,7 @@ def get_next_image():
         # Find first document with:
         # 1. Has image but no clean_image
         # 2. Has short_summary field that is not empty/null
-        # 3. short_summary has at least 30 words (minimum requirement)
+        # 3. short_summary has at least 40 words (minimum requirement)
         # Sorted by created_at descending (most recent first)
 
         # Use aggregation pipeline to filter by word count
@@ -975,7 +980,7 @@ def get_next_image():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
                 }
             },
             {
@@ -989,11 +994,13 @@ def get_next_image():
         results = list(collection.aggregate(pipeline))
 
         if not results:
-            return jsonify({'error': 'No more images to clean! All images either lack proper short_summary (min 30 words) or are already cleaned.'}), 404
+            return jsonify({
+                'error': 'No more images to clean! All images either lack proper short_summary (min 40 words) or are already cleaned.'}), 404
 
         doc = results[0]
         word_count = doc.get('word_count', 0)
-        logger.info(f"📸 Loading image: {doc.get('title', 'Untitled')} (created: {doc.get('created_at')}, short_summary: {word_count} words)")
+        logger.info(
+            f"📸 Loading image: {doc.get('title', 'Untitled')} (created: {doc.get('created_at')}, short_summary: {word_count} words)")
 
         return jsonify({
             'doc_id': str(doc['_id']),
@@ -1072,7 +1079,8 @@ def process_image():
         binary_mask = np.where((red_channel > 100) & (alpha_channel > 0), 255, 0).astype(np.uint8)
 
         non_zero_pixels = np.count_nonzero(binary_mask)
-        logger.info(f"🎭 Mask stats - min: {binary_mask.min()}, max: {binary_mask.max()}, non-zero pixels: {non_zero_pixels}")
+        logger.info(
+            f"🎭 Mask stats - min: {binary_mask.min()}, max: {binary_mask.max()}, non-zero pixels: {non_zero_pixels}")
 
         # Validate that mask has content
         if non_zero_pixels == 0:
@@ -1137,17 +1145,17 @@ def save_image():
         data = request.json
         doc_id = data['doc_id']
         image_data = data['image_data']
-        
+
         # Decode base64 image
         image_bytes = base64.b64decode(image_data.split(',')[1])
         image = Image.open(io.BytesIO(image_bytes))
-        
+
         # Save to file
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         filename = f"{doc_id}_cleaned.png"
         filepath = os.path.join(OUTPUT_DIR, filename)
         image.save(filepath, 'PNG')
-        
+
         # Update MongoDB
         collection = get_mongo_client()
         collection.update_one(
@@ -1159,9 +1167,9 @@ def save_image():
                 }
             }
         )
-        
+
         logger.info(f"✅ Saved cleaned image: {filepath}")
-        
+
         return jsonify({
             'success': True,
             'filepath': filepath
@@ -1236,10 +1244,9 @@ if __name__ == '__main__':
     logger.info(f"🚀 Starting IOPaint UI Service on port {FLASK_PORT}...")
     logger.info(f"📁 Output directory: {OUTPUT_DIR}")
     logger.info(f"🔌 MongoDB URL: {MONGODB_URL}")
-    
+
     app.run(
         host='0.0.0.0',
         port=FLASK_PORT,
         debug=False
     )
-
