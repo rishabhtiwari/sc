@@ -700,6 +700,48 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        @self.app.route('/download/<article_id>/<filename>', methods=['GET'])
+        def download_article_file(article_id, filename):
+            """Download article video or image file"""
+            try:
+                # Security: Only allow specific file types
+                allowed_extensions = ['.mp4', '.jpg', '.png', '.jpeg']
+                file_ext = os.path.splitext(filename)[1].lower()
+
+                if file_ext not in allowed_extensions:
+                    return jsonify({
+                        "error": "Invalid file type",
+                        "status": "error"
+                    }), 400
+
+                # Construct file path
+                file_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, article_id, filename)
+
+                if not os.path.exists(file_path):
+                    self.logger.error(f"❌ File not found: {file_path}")
+                    return jsonify({
+                        "error": "File not found",
+                        "status": "error"
+                    }), 404
+
+                # Determine mimetype
+                mimetype = 'video/mp4' if file_ext == '.mp4' else f'image/{file_ext[1:]}'
+
+                self.logger.info(f"📥 Serving file: {file_path}")
+                return send_file(
+                    file_path,
+                    mimetype=mimetype,
+                    as_attachment=True,
+                    download_name=filename
+                )
+
+            except Exception as e:
+                self.logger.error(f"❌ Failed to download file: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to download file: {str(e)}",
+                    "status": "error"
+                }), 500
+
         @self.app.route('/download/<logo_filename>', methods=['GET'])
         def download_logo(logo_filename):
             """Download generated logo"""

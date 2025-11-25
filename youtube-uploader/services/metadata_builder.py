@@ -285,10 +285,10 @@ class YouTubeMetadataBuilder:
     def build_metadata(self, news_doc: Dict[str, Any]) -> Dict[str, Any]:
         """
         Build complete YouTube metadata package
-        
+
         Args:
             news_doc: MongoDB news document
-            
+
         Returns:
             Dictionary with title, description, and tags
         """
@@ -296,5 +296,80 @@ class YouTubeMetadataBuilder:
             'title': self.build_title(news_doc),
             'description': self.build_description(news_doc),
             'tags': self.build_tags(news_doc)
+        }
+
+    def build_shorts_metadata(self, title: str, description: str) -> Dict[str, Any]:
+        """
+        Build YouTube Shorts metadata
+
+        YouTube Shorts best practices:
+        - Title: 60 characters or less for mobile
+        - Description: Keep it concise, first 2 lines visible
+        - Tags: Focus on #Shorts and trending tags
+        - Vertical format (9:16 aspect ratio)
+
+        Args:
+            title: Original news title
+            description: Short summary or description
+
+        Returns:
+            Dictionary with title, description, and tags
+        """
+        # Optimize title for Shorts (max 60 chars for mobile)
+        shorts_title = title
+        if len(shorts_title) > 60:
+            shorts_title = shorts_title[:57] + '...'
+
+        # Add Shorts indicator emoji
+        shorts_title = f"📱 {shorts_title}"
+
+        # Build concise description for Shorts
+        parts = []
+
+        # Main content (keep it short)
+        if description:
+            # Limit description to 150 chars for better mobile visibility
+            short_desc = description[:150] + '...' if len(description) > 150 else description
+            parts.append(short_desc)
+        else:
+            parts.append("Watch this quick news update!")
+
+        parts.append("")
+        parts.append("🔔 Subscribe for more news shorts!")
+        parts.append("")
+
+        # Shorts-specific hashtags (first 3 appear above title)
+        shorts_hashtags = [
+            '#Shorts',
+            '#YouTubeShorts',
+            '#News',
+            '#BreakingNews',
+            '#IndiaNews',
+            '#NewsUpdate',
+            '#ShortNews',
+            '#QuickNews'
+        ]
+        parts.append(" ".join(shorts_hashtags))
+
+        final_description = "\n".join(parts)
+
+        # Build tags for Shorts
+        shorts_tags = [
+            'shorts',
+            'youtube shorts',
+            'news shorts',
+            'breaking news',
+            'india news',
+            'news update',
+            'quick news',
+            'short news',
+            'news today',
+            'latest news'
+        ]
+
+        return {
+            'title': shorts_title,
+            'description': final_description,
+            'tags': shorts_tags
         }
 

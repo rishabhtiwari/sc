@@ -73,10 +73,32 @@ def get_stats():
             'video_path': {'$ne': None}
         })
 
+        # Count shorts ready to upload (have shorts_video_path but no youtube_shorts_id)
+        shorts_ready_to_upload = news_collection.count_documents({
+            'shorts_video_path': {'$ne': None},
+            '$or': [
+                {'youtube_shorts_id': {'$exists': False}},
+                {'youtube_shorts_id': None}
+            ]
+        })
+
+        # Count already uploaded shorts
+        shorts_already_uploaded = news_collection.count_documents({
+            'youtube_shorts_id': {'$exists': True, '$ne': None}
+        })
+
+        # Count total shorts
+        total_shorts = news_collection.count_documents({
+            'shorts_video_path': {'$ne': None}
+        })
+
         return jsonify({
             'ready_to_upload': ready_to_upload,
             'already_uploaded': already_uploaded,
-            'total_videos': total_videos
+            'total_videos': total_videos,
+            'shorts_ready_to_upload': shorts_ready_to_upload,
+            'shorts_already_uploaded': shorts_already_uploaded,
+            'total_shorts': total_shorts
         })
     except Exception as e:
         logger.error(f"Failed to get stats: {str(e)}")
@@ -301,6 +323,178 @@ def upload_latest_20():
 
     except Exception as e:
         logger.error(f"❌ Upload process failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/shorts/pending', methods=['GET'])
+def get_pending_shorts():
+    """Get list of shorts ready to upload (not yet uploaded)"""
+    try:
+        # Query for news with shorts_video_path but no youtube_shorts_id
+        # Sort by publishedAt in descending order (most recent first)
+        shorts = list(news_collection.find(
+            {
+                'shorts_video_path': {'$ne': None},
+                '$or': [
+                    {'youtube_shorts_id': {'$exists': False}},
+                    {'youtube_shorts_id': None}
+                ]
+            },
+            {
+                'id': 1,
+                'title': 1,
+                'short_summary': 1,
+                'shorts_video_path': 1,
+                'publishedAt': 1,
+                'image': 1,
+                '_id': 0
+            }
+        ).sort('publishedAt', -1))  # -1 for descending order (most recent first)
+
+        logger.info(f"📋 Found {len(shorts)} shorts ready to upload")
+
+        return jsonify({
+            'status': 'success',
+            'count': len(shorts),
+            'shorts': shorts
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Failed to fetch pending shorts: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/shorts/upload/<article_id>', methods=['POST'])
+def upload_short(article_id):
+    """Upload a single YouTube Short"""
+    try:
+        logger.info(f"📤 Starting upload of YouTube Short for article: {article_id}")
+
+        # Fetch article from database
+        article = news_collection.find_one({'id': article_id})
+
+        if not article:
+            return jsonify({
+                'status': 'error',
+                'error': f'Article not found: {article_id}'
+            }), 404
+
+        # Check if shorts video exists
+        shorts_video_path = article.get('shorts_video_path')
+        if not shorts_video_path:
+            return jsonify({
+                'status': 'error',
+                'error': 'Shorts video not generated for this article'
+            }), 400
+
+        # Check if already uploaded
+        if article.get('youtube_shorts_id'):
+            return jsonify({
+                'status': 'error',
+                'error': 'This short has already been uploaded to YouTube',
+                'video_url': article.get('youtube_shorts_url')
+            }), 400
+
+        # Get video file from video-generator service
+        video_generator_url = os.getenv('VIDEO_GENERATOR_URL', 'http://ichat-video-generator:8095')
+
+        # Convert relative path to download URL
+        # shorts_video_path can be:
+        # - /public/article_id/short.mp4
+        # - article_id/article_id_short.mp4
+        shorts_video_path_clean = shorts_video_path.lstrip('/')
+        if shorts_video_path_clean.startswith('public/'):
+            shorts_video_path_clean = shorts_video_path_clean[7:]  # Remove 'public/' prefix
+
+        video_filename = os.path.basename(shorts_video_path_clean)
+        video_dir = os.path.dirname(shorts_video_path_clean).split('/')[-1] if '/' in shorts_video_path_clean else shorts_video_path_clean.split('/')[0]
+        video_url = f"{video_generator_url}/download/{video_dir}/{video_filename}"
+
+        logger.info(f"📥 Downloading shorts video from: {video_url}")
+
+        # Download video file
+        video_response = requests.get(video_url, timeout=60)
+        if video_response.status_code != 200:
+            logger.error(f"❌ Failed to download video from {video_url}")
+            logger.error(f"❌ HTTP Status: {video_response.status_code}")
+            logger.error(f"❌ Response: {video_response.text[:500]}")
+            return jsonify({
+                'status': 'error',
+                'error': f'Failed to download shorts video: HTTP {video_response.status_code}'
+            }), 500
+
+        # Save video temporarily
+        temp_video_path = f'/tmp/short_{article_id}.mp4'
+        with open(temp_video_path, 'wb') as f:
+            f.write(video_response.content)
+
+        logger.info(f"✅ Downloaded shorts video: {len(video_response.content)} bytes")
+
+        # Generate metadata for the short
+        title = article.get('title', 'News Update')
+        description = article.get('short_summary', article.get('description', ''))
+
+        # Build metadata using metadata builder
+        metadata = metadata_builder.build_shorts_metadata(
+            title=title,
+            description=description
+        )
+
+        logger.info(f"📝 Generated metadata - Title: {metadata['title'][:50]}...")
+
+        # Upload to YouTube
+        upload_result = youtube_service.upload_video(
+            video_path=temp_video_path,
+            title=metadata['title'],
+            description=metadata['description'],
+            tags=metadata['tags'],
+            category_id='25',  # News & Politics
+            privacy_status='public'
+        )
+
+        # Clean up temp file
+        if os.path.exists(temp_video_path):
+            os.remove(temp_video_path)
+
+        if upload_result and upload_result['status'] == 'success':
+            # Update database with YouTube Shorts info
+            news_collection.update_one(
+                {'id': article_id},
+                {
+                    '$set': {
+                        'youtube_shorts_id': upload_result['video_id'],
+                        'youtube_shorts_url': upload_result['video_url'],
+                        'youtube_shorts_uploaded_at': datetime.utcnow(),
+                        'updated_at': datetime.utcnow()
+                    }
+                }
+            )
+
+            logger.info(f"✅ Successfully uploaded short: {upload_result['video_url']}")
+
+            return jsonify({
+                'status': 'success',
+                'message': 'Short uploaded successfully',
+                'video_url': upload_result['video_url'],
+                'video_id': upload_result['video_id']
+            })
+        else:
+            error_msg = upload_result.get('error', 'Unknown error') if upload_result else 'Upload failed'
+            logger.error(f"❌ Failed to upload short: {error_msg}")
+
+            return jsonify({
+                'status': 'error',
+                'error': error_msg
+            }), 500
+
+    except Exception as e:
+        logger.error(f"❌ Short upload failed: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'error': str(e)
