@@ -33,8 +33,8 @@ class Config:
     DEFAULT_PRIVACY_STATUS = os.getenv('DEFAULT_PRIVACY_STATUS', 'private')  # public, private, unlisted
     
     # Upload Settings
-    MAX_RETRIES = int(os.getenv('MAX_RETRIES', 3))
-    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 1024 * 1024))  # 1MB chunks
+    MAX_RETRIES = int(os.getenv('MAX_RETRIES', 5))  # Increased from 3 to 5 for better reliability
+    CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 10 * 1024 * 1024))  # 10MB chunks (increased from 1MB for better performance)
     
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

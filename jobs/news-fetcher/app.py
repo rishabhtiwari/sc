@@ -250,6 +250,30 @@ class NewsFetcherJob(BaseJob):
             frequency_minutes = seed_url_data.get('frequency_minutes', 60)
             frequency_hours = frequency_minutes / 60
 
+            # Handle category - can be string or array
+            category = seed_url_data.get('category', 'general')
+            # Ensure category is properly formatted (string or list)
+            if isinstance(category, str):
+                # If comma-separated string, convert to array
+                if ',' in category:
+                    category = [c.strip() for c in category.split(',')]
+            elif not isinstance(category, list):
+                category = 'general'  # Fallback to default
+
+            # Build parameters with category support
+            parameters = seed_url_data.get('parameters', {})
+            if 'category' in parameters:
+                # Update the default value in parameters to support array
+                parameters['category']['default'] = category
+            else:
+                # Add category parameter if not present
+                parameters['category'] = {
+                    'type': 'string' if isinstance(category, str) else 'array',
+                    'required': False,
+                    'description': 'News category or categories',
+                    'default': category
+                }
+
             # Set default values
             seed_url = {
                 'partner_id': partner_id,
@@ -257,7 +281,7 @@ class NewsFetcherJob(BaseJob):
                 'partner_name': seed_url_data['partner_name'],
                 'name': seed_url_data.get('name', seed_url_data['partner_name']),
                 'provider': seed_url_data.get('provider', 'gnews'),
-                'category': seed_url_data.get('category', 'general'),
+                'category': category,
                 'country': seed_url_data.get('country', 'in'),
                 'language': seed_url_data.get('language', 'en'),
                 'frequency_minutes': frequency_minutes,
@@ -269,10 +293,10 @@ class NewsFetcherJob(BaseJob):
                 'success_count': 0,
                 'error_count': 0,
                 'last_error': None,
-                'parameters': seed_url_data.get('parameters', {}),
+                'parameters': parameters,
                 'metadata': seed_url_data.get('metadata', {
                     'api_params': {
-                        'category': seed_url_data.get('category', 'general'),
+                        'category': category,
                         'country': seed_url_data.get('country', 'in'),
                         'lang': seed_url_data.get('language', 'en')
                     }
@@ -292,16 +316,8 @@ class NewsFetcherJob(BaseJob):
                     'error': f'Seed URL with partner_id "{seed_url["partner_id"]}" already exists'
                 }
 
-            # Check if partner_name already exists
-            existing_partner_name = self.news_fetcher_service.seed_urls_collection.find_one({
-                'partner_name': seed_url['partner_name']
-            })
-
-            if existing_partner_name:
-                return {
-                    'status': 'error',
-                    'error': f'Seed URL with partner_name "{seed_url["partner_name"]}" already exists'
-                }
+            # Note: partner_name can be duplicated to support multiple categories for same partner
+            # Uniqueness is enforced by URL + metadata combination (category, country, language)
 
             # Check if URL + metadata combination already exists (as per unique index)
             existing_url_combo = self.news_fetcher_service.seed_urls_collection.find_one({
@@ -431,6 +447,41 @@ class NewsFetcherJob(BaseJob):
             for field in allowed_fields:
                 if field in update_data:
                     update_fields[field] = update_data[field]
+
+            # Handle category update - can be string or array
+            if 'category' in update_fields:
+                category = update_fields['category']
+                # If comma-separated string, convert to array
+                if isinstance(category, str) and ',' in category:
+                    category = [c.strip() for c in category.split(',')]
+                    update_fields['category'] = category
+
+                # Update parameters.category.default to match
+                # First, get the existing seed URL to preserve other parameters
+                existing_seed_url = self.news_fetcher_service.seed_urls_collection.find_one({
+                    'partner_id': partner_id
+                })
+
+                if existing_seed_url:
+                    parameters = existing_seed_url.get('parameters', {})
+                    if 'category' in parameters:
+                        parameters['category']['default'] = category
+                        parameters['category']['type'] = 'string' if isinstance(category, str) else 'array'
+                    else:
+                        parameters['category'] = {
+                            'type': 'string' if isinstance(category, str) else 'array',
+                            'required': False,
+                            'description': 'News category or categories',
+                            'default': category
+                        }
+                    update_fields['parameters'] = parameters
+
+                    # Also update metadata.api_params.category
+                    metadata = existing_seed_url.get('metadata', {})
+                    if 'api_params' not in metadata:
+                        metadata['api_params'] = {}
+                    metadata['api_params']['category'] = category
+                    update_fields['metadata'] = metadata
 
             # Calculate frequency_hours from frequency_minutes if provided
             if 'frequency_minutes' in update_fields:

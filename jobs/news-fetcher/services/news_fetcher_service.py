@@ -154,6 +154,7 @@ class NewsFetcherService:
     def _fetch_and_store_from_seed_url(self, seed_url: Dict[str, Any]) -> Dict[str, Any]:
         """
         Fetch news from a specific seed URL and store articles directly in database
+        Supports multiple categories - if category is an array, fetches news for each category
 
         Args:
             seed_url: Seed URL document from database
@@ -168,48 +169,55 @@ class NewsFetcherService:
         }
 
         try:
-            # Debug: Show seed URL details
+            # Check if category is an array (multi-category support)
+            category_param = seed_url.get('parameters', {}).get('category', {}).get('default', 'general')
+            categories = category_param if isinstance(category_param, list) else [category_param]
+
             self.logger.info(f"🔍 Processing Seed URL:")
             self.logger.info(f"   Name: {seed_url.get('name', 'N/A')}")
             self.logger.info(f"   Partner: {seed_url.get('partner_name', seed_url.get('provider', 'N/A'))}")
             self.logger.info(f"   Base URL: {seed_url.get('url', 'N/A')}")
-            self.logger.info(f"   API Params: {seed_url.get('metadata', {}).get('api_params', {})}")
+            self.logger.info(f"   Categories: {categories}")
 
-            # Build the actual URL with parameters
-            actual_url = self._build_url_with_params(seed_url)
+            # Fetch news for each category
+            for category in categories:
+                try:
+                    self.logger.info(f"📰 Fetching news for category: {category}")
 
-            # Make HTTP request
-            response = requests.get(
-                actual_url,
-                timeout=self.config.HTTP_TIMEOUT,
-                headers={'User-Agent': 'News-Fetcher-Service/1.0'}
-            )
-            response.raise_for_status()
+                    # Build the actual URL with parameters for this category
+                    actual_url = self._build_url_with_params(seed_url, category)
 
-            # Parse JSON response
-            response_data = response.json()
+                    # Make HTTP request
+                    response = requests.get(
+                        actual_url,
+                        timeout=self.config.HTTP_TIMEOUT,
+                        headers={'User-Agent': 'News-Fetcher-Service/1.0'}
+                    )
+                    response.raise_for_status()
 
-            # For testing: use mock data if available
-            # mock_data = self._get_mock_data()
-            # if mock_data:
-            #     response_data = mock_data
-            # else:
-            # Provide valid fallback mock data when mock file is missing
-            # response_data = {
-            #     "totalArticles": 0,
-            #     "articles": []
-            # }
-            # Get appropriate parser for this provider - handle both partner_name and provider fields
-            partner_name = seed_url.get('partner_name', seed_url.get('provider', 'gnews'))
-            parser = ParserFactory.create_parser(partner_name)
+                    # Parse JSON response
+                    response_data = response.json()
 
-            # Parse the response
-            articles = parser.parse_response(response_data)
-            result['articles_fetched'] = len(articles)
+                    # Get appropriate parser for this provider
+                    partner_name = seed_url.get('partner_name', seed_url.get('provider', 'gnews'))
+                    parser = ParserFactory.create_parser(partner_name)
 
-            # Save articles to database with category information
-            saved_count = self._save_articles(articles, seed_url)
-            result['articles_saved'] = saved_count
+                    # Parse the response
+                    articles = parser.parse_response(response_data)
+                    result['articles_fetched'] += len(articles)
+
+                    # Save articles to database with category information
+                    saved_count = self._save_articles(articles, seed_url)
+                    result['articles_saved'] += saved_count
+
+                    self.logger.info(f"✅ Category '{category}': Fetched {len(articles)} articles, Saved {saved_count}")
+
+                except Exception as e:
+                    error_msg = f"Error fetching category '{category}': {str(e)}"
+                    self.logger.error(f"❌ {error_msg}")
+                    result['errors'].append(error_msg)
+                    # Continue with next category even if one fails
+                    continue
 
             return result
 
@@ -228,12 +236,13 @@ class NewsFetcherService:
             result['errors'].append(error_msg)
             return result
 
-    def _build_url_with_params(self, seed_url: Dict[str, Any]) -> str:
+    def _build_url_with_params(self, seed_url: Dict[str, Any], category: str = None) -> str:
         """
         Build the actual URL with query parameters
 
         Args:
             seed_url: Seed URL document from database
+            category: Optional category to override the default (for multi-category support)
 
         Returns:
             URL with query parameters appended
@@ -252,8 +261,13 @@ class NewsFetcherService:
                 # Use API key from config
                 actual_params['apikey'] = self.config.API_KEY
             elif param_name == 'category':
-                # Use default category
-                actual_params['category'] = param_def.get('default', 'general')
+                # Use provided category or default
+                if category:
+                    actual_params['category'] = category
+                else:
+                    default_category = param_def.get('default', 'general')
+                    # Handle array default (use first element)
+                    actual_params['category'] = default_category[0] if isinstance(default_category, list) else default_category
             elif param_name == 'lang':
                 # Use default language
                 actual_params['lang'] = param_def.get('default', 'en')

@@ -48,6 +48,15 @@ class BaseJob(ABC):
         # Initialize services
         self.job_instance_service = JobInstanceService(config_class.MONGODB_URL)
 
+        # Cleanup any stuck jobs from previous sessions on startup
+        # This handles jobs that were left in 'running' state due to service crashes or restarts
+        try:
+            cancelled_count = self.job_instance_service.cleanup_stuck_jobs_on_startup(self.get_job_type())
+            if cancelled_count > 0:
+                self.logger.info(f"🧹 Startup cleanup: Cancelled {cancelled_count} stuck job(s) from previous session")
+        except Exception as e:
+            self.logger.error(f"⚠️ Error during startup cleanup: {str(e)}")
+
         # Initialize scheduler
         self.scheduler = BackgroundScheduler()
         self.scheduler.start()

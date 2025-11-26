@@ -502,8 +502,8 @@
                     <input type="text" id="seed-provider" value="gnews" placeholder="gnews">
                 </div>
                 <div class="form-group">
-                    <label>Category</label>
-                    <select id="seed-category">
+                    <label>Category (Hold Ctrl/Cmd to select multiple)</label>
+                    <select id="seed-category" multiple size="9" style="height: auto;">
                         <option value="general">General</option>
                         <option value="world">World</option>
                         <option value="nation">Nation</option>
@@ -514,6 +514,9 @@
                         <option value="science">Science</option>
                         <option value="health">Health</option>
                     </select>
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        💡 Select multiple categories to fetch news from all selected categories in one seed URL
+                    </small>
                 </div>
                 <div class="form-group">
                     <label>Country</label>

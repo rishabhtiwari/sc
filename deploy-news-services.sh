@@ -12,7 +12,8 @@
 # 6. IOPaint Watermark Remover (removes watermarks from images)
 # 7. Video Generator Job (creates videos from news + audio)
 # 8. YouTube Uploader (uploads videos to YouTube)
-# 9. API Server (serves news data to frontend)
+# 9. Cleanup Job (cleans up old files and MongoDB records)
+# 10. API Server (serves news data to frontend)
 #
 # Usage:
 #   ./deploy-news-services.sh [options]
@@ -45,6 +46,7 @@ SERVICES=(
     "iopaint"
     "job-video-generator"
     "youtube-uploader"
+    "job-cleanup"
     "ichat-api"
 )
 
@@ -238,47 +240,52 @@ deploy_all_services() {
     echo ""
     
     # 1. MongoDB
-    print_header "Step 1/9: MongoDB Database"
+    print_header "Step 1/10: MongoDB Database"
     deploy_service "ichat-mongodb" "$build_flag"
     # wait_for_health "ichat-mongodb" 60
 
     # 2. News Fetcher
-    print_header "Step 2/9: News Fetcher Job"
+    print_header "Step 2/10: News Fetcher Job"
     deploy_service "job-news-fetcher" "$build_flag"
     # wait_for_health "ichat-news-fetcher" 60
 
     # 3. LLM Service
-    print_header "Step 3/9: LLM Service"
+    print_header "Step 3/10: LLM Service"
     deploy_service "llm-service" "$build_flag"
     # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
 
     # 4. Audio Generation Factory
-    print_header "Step 4/9: Audio Generation Factory (Kokoro + Veena TTS)"
+    print_header "Step 4/10: Audio Generation Factory (Kokoro + Veena TTS)"
     deploy_service "audio-generation-factory" "$build_flag"
     # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
 
     # 5. Voice Generator Job
-    print_header "Step 5/9: Voice Generator Job"
+    print_header "Step 5/10: Voice Generator Job"
     deploy_service "job-voice-generator" "$build_flag"
     # wait_for_health "ichat-voice-generator" 60
 
     # 6. IOPaint Watermark Remover
-    print_header "Step 6/9: IOPaint Watermark Remover"
+    print_header "Step 6/10: IOPaint Watermark Remover"
     deploy_service "iopaint" "$build_flag"
     # wait_for_health "ichat-iopaint" 60
 
     # 7. Video Generator Job
-    print_header "Step 7/9: Video Generator Job"
+    print_header "Step 7/10: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
     # wait_for_health "ichat-video-generator" 60
 
     # 8. YouTube Uploader
-    print_header "Step 8/9: YouTube Uploader"
+    print_header "Step 8/10: YouTube Uploader"
     deploy_service "youtube-uploader" "$build_flag"
     # wait_for_health "ichat-youtube-uploader" 60
 
-    # 9. API Server
-    print_header "Step 9/9: API Server"
+    # 9. Cleanup Job
+    print_header "Step 9/10: Cleanup Job"
+    deploy_service "job-cleanup" "$build_flag"
+    # wait_for_health "ichat-cleanup" 60
+
+    # 10. API Server
+    print_header "Step 10/10: API Server"
     deploy_service "ichat-api" "$build_flag"
     # wait_for_health "ichat-api-server" 60
     
@@ -299,6 +306,7 @@ deploy_all_services() {
     echo "  • Watermark Remover:    http://localhost:8096"
     echo "  • Video Generator:      http://localhost:8095"
     echo "  • YouTube Uploader:     http://localhost:8097"
+    echo "  • Cleanup Job:          http://localhost:8098"
     echo "  • MongoDB:              mongodb://localhost:27017"
     echo ""
     print_info "To view logs: ./deploy-news-services.sh --logs"
@@ -320,7 +328,8 @@ This script manages deployment of all news-related services:
   6. IOPaint Watermark Remover (removes watermarks from images)
   7. Video Generator Job (creates videos from news + audio)
   8. YouTube Uploader (uploads videos to YouTube)
-  9. API Server (serves news data to frontend)
+  9. Cleanup Job (cleans up old files and MongoDB records)
+  10. API Server (serves news data to frontend)
 
 Usage:
   ./deploy-news-services.sh [options]

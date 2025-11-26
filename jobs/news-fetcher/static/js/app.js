@@ -153,6 +153,7 @@ async function loadSeeds() {
                         <tr>
                             <th>Partner Name</th>
                             <th>Partner ID</th>
+                            <th>Categories</th>
                             <th>Status</th>
                             <th>Frequency</th>
                             <th>Last Run</th>
@@ -162,22 +163,33 @@ async function loadSeeds() {
                     </thead>
                     <tbody>
             `;
-            
+
             data.seed_urls.forEach(seed => {
-                const statusBadge = seed.is_active 
-                    ? '<span class="badge badge-success">Active</span>' 
+                const statusBadge = seed.is_active
+                    ? '<span class="badge badge-success">Active</span>'
                     : '<span class="badge badge-danger">Inactive</span>';
-                const dueBadge = seed.is_due 
-                    ? '<span class="badge badge-warning">Due</span>' 
+                const dueBadge = seed.is_due
+                    ? '<span class="badge badge-warning">Due</span>'
                     : '<span class="badge badge-success">Not Due</span>';
-                const lastRun = seed.last_run 
-                    ? new Date(seed.last_run).toLocaleString() 
+                const lastRun = seed.last_run
+                    ? new Date(seed.last_run).toLocaleString()
                     : 'Never';
-                
+
+                // Display categories - handle both string and array
+                let categoriesDisplay = '';
+                if (Array.isArray(seed.category)) {
+                    categoriesDisplay = seed.category.map(cat =>
+                        `<span class="badge" style="background: #4CAF50; margin: 2px;">${cat}</span>`
+                    ).join(' ');
+                } else {
+                    categoriesDisplay = `<span class="badge" style="background: #4CAF50;">${seed.category || 'general'}</span>`;
+                }
+
                 tableHtml += `
                     <tr>
                         <td><strong>${seed.partner_name}</strong></td>
                         <td>${seed.partner_id}</td>
+                        <td>${categoriesDisplay}</td>
                         <td>${statusBadge}</td>
                         <td>${seed.frequency_minutes} min</td>
                         <td>${lastRun}</td>
@@ -374,7 +386,21 @@ async function editSeed(seed) {
         document.getElementById('seed-name').value = fullSeed.name || '';
         document.getElementById('seed-url').value = fullSeed.url || '';
         document.getElementById('seed-provider').value = fullSeed.provider || 'gnews';
-        document.getElementById('seed-category').value = fullSeed.category || 'general';
+
+        // Handle category - can be string or array
+        const categorySelect = document.getElementById('seed-category');
+        const categories = Array.isArray(fullSeed.category) ? fullSeed.category : [fullSeed.category || 'general'];
+        // Clear all selections first
+        Array.from(categorySelect.options).forEach(option => option.selected = false);
+        // Select the categories
+        categories.forEach(cat => {
+            Array.from(categorySelect.options).forEach(option => {
+                if (option.value === cat) {
+                    option.selected = true;
+                }
+            });
+        });
+
         document.getElementById('seed-country').value = fullSeed.country || 'in';
         document.getElementById('seed-language').value = fullSeed.language || 'en';
         document.getElementById('seed-frequency').value = fullSeed.frequency_minutes || 60;
@@ -401,12 +427,19 @@ async function saveSeedUrl(event) {
     const mode = form.dataset.mode || 'add';
     const partnerId = form.dataset.partnerId;
 
+    // Get selected categories (multi-select)
+    const categorySelect = document.getElementById('seed-category');
+    const selectedCategories = Array.from(categorySelect.selectedOptions).map(option => option.value);
+
+    // If only one category selected, send as string; if multiple, send as array
+    const category = selectedCategories.length === 1 ? selectedCategories[0] : selectedCategories;
+
     const seedData = {
         partner_name: document.getElementById('seed-partner-name').value,
         name: document.getElementById('seed-name').value,
         url: document.getElementById('seed-url').value,
         provider: document.getElementById('seed-provider').value,
-        category: document.getElementById('seed-category').value,
+        category: category,
         country: document.getElementById('seed-country').value,
         language: document.getElementById('seed-language').value,
         frequency_minutes: parseInt(document.getElementById('seed-frequency').value),

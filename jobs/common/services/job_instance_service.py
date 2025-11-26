@@ -240,6 +240,38 @@ class JobInstanceService:
         except Exception as e:
             raise Exception(f"Error cleaning up old jobs: {str(e)}")
 
+    def cleanup_stuck_jobs_on_startup(self, job_type: str) -> int:
+        """
+        Cancel all running/pending jobs of a specific type on service startup.
+        This handles jobs that were left in 'running' state due to service crashes or restarts.
+
+        Args:
+            job_type: Type of job to cleanup
+
+        Returns:
+            Number of jobs cancelled
+        """
+        try:
+            result = self.collection.update_many(
+                {
+                    'job_type': job_type,
+                    'status': {'$in': ['pending', 'running']},
+                    'cancelled': {'$ne': True}
+                },
+                {
+                    '$set': {
+                        'status': 'cancelled',
+                        'cancelled': True,
+                        'updated_at': datetime.utcnow(),
+                        'completed_at': datetime.utcnow(),
+                        'error_message': 'Job cancelled on service startup (cleanup of stuck jobs from previous session)'
+                    }
+                }
+            )
+            return result.modified_count
+        except Exception as e:
+            raise Exception(f"Error cleaning up stuck jobs on startup: {str(e)}")
+
     def close_connection(self):
         """Close MongoDB connection"""
         if self.client:

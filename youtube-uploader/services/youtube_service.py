@@ -5,6 +5,7 @@ Handles video uploads to YouTube using YouTube Data API v3
 import os
 import logging
 import json
+import socket
 from typing import Optional, Dict, Any
 from datetime import datetime
 import time
@@ -107,13 +108,17 @@ class YouTubeService:
                     f.write(credentials.to_json())
                 self.logger.info("Credentials saved successfully")
             
-            # Build YouTube service
+            # Build YouTube service with custom HTTP timeout
+            # Set socket timeout to prevent hanging connections
+            socket.setdefaulttimeout(600)  # 10 minutes timeout for large uploads
+
+            # Build YouTube service with credentials
             self.youtube = build(
                 self.config.YOUTUBE_API_SERVICE_NAME,
                 self.config.YOUTUBE_API_VERSION,
                 credentials=credentials
             )
-            
+
             self.logger.info("✅ YouTube authentication successful")
             return True
             
@@ -183,19 +188,38 @@ class YouTubeService:
             # Execute upload with retry logic
             for attempt in range(self.config.MAX_RETRIES):
                 try:
+                    # Recreate media upload for each retry attempt
+                    if attempt > 0:
+                        self.logger.info(f"🔄 Recreating media upload for retry attempt {attempt + 1}")
+                        media = MediaFileUpload(
+                            video_path,
+                            chunksize=self.config.CHUNK_SIZE,
+                            resumable=True
+                        )
+
                     request = self.youtube.videos().insert(
                         part='snippet,status',
                         body=body,
                         media_body=media
                     )
-                    
+
                     response = None
                     while response is None:
-                        status, response = request.next_chunk()
-                        if status:
-                            progress = int(status.progress() * 100)
-                            self.logger.info(f"⏳ Upload progress: {progress}%")
-                    
+                        try:
+                            status, response = request.next_chunk()
+                            if status:
+                                progress = int(status.progress() * 100)
+                                self.logger.info(f"⏳ Upload progress: {progress}%")
+                        except (BrokenPipeError, ConnectionResetError, OSError) as chunk_error:
+                            # Handle broken pipe and connection errors during chunk upload
+                            if attempt < self.config.MAX_RETRIES - 1:
+                                self.logger.warning(f"⚠️ Connection error during upload: {str(chunk_error)}")
+                                self.logger.warning(f"🔄 Retrying upload... (attempt {attempt + 2}/{self.config.MAX_RETRIES})")
+                                time.sleep(2 ** attempt)  # Exponential backoff
+                                raise  # Re-raise to trigger outer retry
+                            else:
+                                raise
+
                     video_id = response['id']
                     video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -218,14 +242,23 @@ class YouTubeService:
                         'title': title,
                         'uploaded_at': datetime.utcnow().isoformat()
                     }
-                    
+
                 except HttpError as e:
                     if e.resp.status in [500, 502, 503, 504]:
                         # Retry on server errors
-                        self.logger.warning(f"Server error, retrying... (attempt {attempt + 1}/{self.config.MAX_RETRIES})")
+                        self.logger.warning(f"⚠️ Server error {e.resp.status}, retrying... (attempt {attempt + 1}/{self.config.MAX_RETRIES})")
                         time.sleep(2 ** attempt)  # Exponential backoff
                         continue
                     else:
+                        raise
+                except (BrokenPipeError, ConnectionResetError, OSError) as e:
+                    # Handle connection errors
+                    if attempt < self.config.MAX_RETRIES - 1:
+                        self.logger.warning(f"⚠️ Connection error: {str(e)}, retrying... (attempt {attempt + 1}/{self.config.MAX_RETRIES})")
+                        time.sleep(2 ** attempt)  # Exponential backoff
+                        continue
+                    else:
+                        self.logger.error(f"❌ Connection error after {self.config.MAX_RETRIES} attempts: {str(e)}")
                         raise
             
             self.logger.error(f"❌ Upload failed after {self.config.MAX_RETRIES} attempts")

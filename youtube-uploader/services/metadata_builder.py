@@ -14,7 +14,7 @@ class YouTubeMetadataBuilder:
     def __init__(self, llm_service_url: str = "http://ichat-llm-service:8083"):
         self.logger = logging.getLogger(__name__)
         self.description_generator = DescriptionGenerator(llm_service_url)
-        
+
         # High-traffic search keywords for Indian news
         self.trending_keywords = [
             "breaking news",
@@ -26,12 +26,20 @@ class YouTubeMetadataBuilder:
             "news update",
             "aaj ki khabar",
             "ताज़ा खबर",
-            "समाचार"
+            "समाचार",
+            "Politics",
+            "Donald Trump",
+            "Kamala Harris",
+            "Pete Hegseth",
+            "James Comey",
+            "Narendra Modi",
+            "Fact Check",
+            "Viral Videos",
         ]
-        
+
         # Category-specific hashtags
         self.category_hashtags = {
-            'general': ['#News', '#BreakingNews', '#IndiaNews'],
+            'general': ['#News', '#BreakingNews', '#IndiaNews', '#EnglishNews', '#WorldNews'],
             'business': ['#Business', '#Economy', '#Finance', '#StockMarket', '#BusinessNews'],
             'entertainment': ['#Entertainment', '#Bollywood', '#Celebrity', '#Movies', '#Entertainment'],
             'health': ['#Health', '#Healthcare', '#Wellness', '#Medical', '#HealthNews'],
@@ -40,19 +48,30 @@ class YouTubeMetadataBuilder:
             'technology': ['#Technology', '#Tech', '#Innovation', '#Gadgets', '#TechNews'],
             'politics': ['#Politics', '#Election', '#Government', '#PoliticalNews', '#India']
         }
-        
+
         # Common high-traffic hashtags (first 3 appear above video title)
         self.common_hashtags = [
             '#News',
-            '#BreakingNews', 
+            '#BreakingNews',
             '#LatestNews',
+            '#EnglishNews',
+            '#WorldNews',
             '#HindiNews',
             '#India',
             '#NewsToday',
             '#CurrentAffairs',
-            '#IndianNews'
+            '#IndianNews',
+            '#GlobalNews',
+            '#WorldNews',
+            '#TopStories',
+            '#DailyNews',
+            '#NewsUpdate',
+            '#VideoNews',
+            '#Exclusive',
+            '#Report',
+            '#Journalism'
         ]
-    
+
     def build_title(self, news_doc: Dict[str, Any]) -> str:
         """
         Build optimized YouTube title
@@ -71,12 +90,12 @@ class YouTubeMetadataBuilder:
         """
         original_title = news_doc.get('title', 'Untitled')
         category = news_doc.get('category', 'general')
-        
+
         # Truncate if too long (leave room for prefix)
         max_title_length = 90
         if len(original_title) > max_title_length:
             original_title = original_title[:max_title_length] + '...'
-        
+
         # Add category prefix for better categorization
         category_prefixes = {
             'business': '💼 Business:',
@@ -87,18 +106,18 @@ class YouTubeMetadataBuilder:
             'technology': '💻 Tech:',
             'politics': '🏛️ Politics:'
         }
-        
+
         prefix = category_prefixes.get(category, '📰')
-        
+
         # Build final title
         final_title = f"{prefix} {original_title}"
-        
+
         # Ensure within YouTube's 100 char limit
         if len(final_title) > 100:
             final_title = final_title[:97] + '...'
-        
+
         return final_title
-    
+
     def build_description(self, news_doc: Dict[str, Any]) -> str:
         """
         Build comprehensive YouTube description with SEO optimization
@@ -123,7 +142,7 @@ class YouTubeMetadataBuilder:
         llm_description = self.description_generator.generate_description(news_doc)
         parts.append(llm_description)
         parts.append("")  # Empty line
-        
+
         # 2. Separator before call-to-action
         parts.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
         parts.append("")
@@ -159,15 +178,15 @@ class YouTubeMetadataBuilder:
         # 7. Disclaimer
         parts.append("⚠️ Disclaimer:")
         parts.append("This content is for informational purposes only.")
-        
+
         final_description = "\n".join(parts)
-        
+
         # Ensure within YouTube's 5000 char limit
         if len(final_description) > 5000:
             final_description = final_description[:4997] + '...'
-        
+
         return final_description
-    
+
     def build_tags(self, news_doc: Dict[str, Any]) -> List[str]:
         """
         Build optimized tags for YouTube video
@@ -187,18 +206,20 @@ class YouTubeMetadataBuilder:
         """
         tags = []
         category = news_doc.get('category', 'general')
-        
+
         # 1. Generic high-traffic tags
         tags.extend([
             'news',
             'breaking news',
             'latest news',
+            'english news',
+            'world news',
             'hindi news',
             'india news',
             'news today',
             'current affairs'
         ])
-        
+
         # 2. Category-specific tags
         category_tags = {
             'business': ['business news', 'economy', 'finance', 'stock market', 'business'],
@@ -209,10 +230,10 @@ class YouTubeMetadataBuilder:
             'technology': ['tech news', 'technology', 'gadgets', 'innovation', 'tech'],
             'politics': ['political news', 'politics', 'election', 'government', 'political']
         }
-        
+
         if category in category_tags:
             tags.extend(category_tags[category])
-        
+
         # 3. Hindi/Hinglish variations (important for Indian audience)
         tags.extend([
             'aaj ki khabar',
@@ -220,7 +241,7 @@ class YouTubeMetadataBuilder:
             'samachar',
             'khabar'
         ])
-        
+
         # 4. Time-based tags
         current_year = datetime.now().year
         tags.extend([
@@ -228,7 +249,7 @@ class YouTubeMetadataBuilder:
             'today news',
             'latest update'
         ])
-        
+
         # Remove duplicates while preserving order
         seen = set()
         unique_tags = []
@@ -236,7 +257,7 @@ class YouTubeMetadataBuilder:
             if tag.lower() not in seen:
                 seen.add(tag.lower())
                 unique_tags.append(tag)
-        
+
         # Limit to 15 tags and ensure total length < 500 chars
         final_tags = []
         total_length = 0
@@ -246,42 +267,42 @@ class YouTubeMetadataBuilder:
                 total_length += len(tag) + 1
             else:
                 break
-        
+
         return final_tags
-    
+
     def _build_hashtags(self, news_doc: Dict[str, Any]) -> List[str]:
         """Build hashtags for description"""
         hashtags = []
         category = news_doc.get('category', 'general')
-        
+
         # Add common hashtags (first 3 appear above title)
         hashtags.extend(self.common_hashtags[:3])
-        
+
         # Add category-specific hashtags
         if category in self.category_hashtags:
             hashtags.extend(self.category_hashtags[category][:5])
-        
+
         # Add generic hashtags
         hashtags.extend(self.common_hashtags[3:8])
-        
+
         # Remove duplicates
         return list(dict.fromkeys(hashtags))
-    
+
     def _build_keywords(self, news_doc: Dict[str, Any]) -> List[str]:
         """Build SEO keywords"""
         keywords = []
         category = news_doc.get('category', 'general')
-        
+
         # Add trending keywords
         keywords.extend(self.trending_keywords)
-        
+
         # Add category-specific keywords
         if category != 'general':
             keywords.append(f'{category} news')
             keywords.append(category)
-        
+
         return keywords
-    
+
     def build_metadata(self, news_doc: Dict[str, Any]) -> Dict[str, Any]:
         """
         Build complete YouTube metadata package
@@ -372,4 +393,3 @@ class YouTubeMetadataBuilder:
             'description': final_description,
             'tags': shorts_tags
         }
-
