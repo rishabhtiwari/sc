@@ -184,6 +184,7 @@ class YouTubeService:
             
             self.logger.info(f"📤 Uploading video: {title}")
             self.logger.info(f"📁 File: {video_path}")
+            self.logger.info(f"🏷️ Tags ({len(tags or self.config.DEFAULT_TAGS)}): {tags or self.config.DEFAULT_TAGS}")
             
             # Execute upload with retry logic
             for attempt in range(self.config.MAX_RETRIES):

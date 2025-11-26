@@ -9,11 +9,14 @@ import glob
 import logging
 import requests
 import time
+import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request
 from pymongo import MongoClient
 from config import Config
 from services import YouTubeService, YouTubeMetadataBuilder
+import spacy
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +28,14 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Load spaCy model once at startup
+try:
+    nlp = spacy.load("en_core_web_sm")
+    logger.info("✅ spaCy model loaded successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to load spaCy model: {e}")
+    nlp = None
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -43,8 +54,111 @@ except Exception as e:
 # Initialize YouTube service
 youtube_service = YouTubeService(Config)
 
-# Initialize metadata builder with LLM service
-metadata_builder = YouTubeMetadataBuilder(llm_service_url=Config.LLM_SERVICE_URL)
+# Initialize metadata builder (used for Shorts metadata only)
+metadata_builder = YouTubeMetadataBuilder()
+
+
+def _extract_keywords_from_titles(news_items, keywords_per_article=2):
+    """
+    Extract top keywords from each news article title using spaCy
+
+    Args:
+        news_items: List of news items with 'title' field
+        keywords_per_article: Number of keywords to extract per article (default: 2)
+
+    Returns:
+        List of extracted keywords (2 per article)
+    """
+    if not nlp:
+        logger.warning("⚠️ spaCy model not loaded, returning empty keywords")
+        return []
+
+    all_keywords = []
+
+    # Stop words to filter out
+    stop_words = {
+        'and', 'or', 'but', 'for', 'with', 'from', 'into', 'during', 'including',
+        'said', 'says', 'according', 'new', 'old', 'big', 'small', 'good', 'best',
+        'after', 'before', 'while', 'when', 'where', 'how', 'why', 'what', 'who',
+        'this', 'that', 'these', 'those', 'here', 'there', 'now', 'then',
+        'study', 'reveals', 'claims', 'report', 'reports', 'video', 'watch',
+        '2024', '2025', 'day', 'days', 'time', 'times', 'year', 'years',
+        'amid', 'over', 'under', 'about', 'against', 'between', 'through'
+    }
+
+    # Process each news title individually
+    for item in news_items:
+        title = item.get('title', '')
+        if not title:
+            continue
+
+        # Extract keywords for this specific article
+        article_keywords = []
+
+        # Use spaCy to analyze the title
+        doc = nlp(title)
+
+        # Priority 1: Multi-word named entities (PERSON, ORG, GPE, PRODUCT, EVENT)
+        for ent in doc.ents:
+            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'NORP', 'FAC', 'LOC']:
+                phrase = ent.text.strip()
+                # Remove possessive 's from names
+                if phrase.endswith("'s"):
+                    phrase = phrase[:-2]
+                elif phrase.endswith("'"):
+                    phrase = phrase[:-1]
+                if len(phrase) > 2 and phrase.lower() not in stop_words:
+                    article_keywords.append(('high', phrase.lower()))
+
+        # Priority 2: Consecutive proper nouns (multi-word phrases like "iPhone 16")
+        propn_sequence = []
+        for token in doc:
+            if token.pos_ == 'PROPN' and token.text.lower() not in stop_words:
+                propn_sequence.append(token.text)
+            elif token.pos_ == 'NUM' and len(propn_sequence) > 0:
+                propn_sequence.append(token.text)
+            else:
+                if len(propn_sequence) >= 2:
+                    phrase = ' '.join(propn_sequence)
+                    article_keywords.append(('high', phrase.lower()))
+                elif len(propn_sequence) == 1 and len(propn_sequence[0]) > 2:
+                    article_keywords.append(('medium', propn_sequence[0].lower()))
+                propn_sequence = []
+
+        # Don't forget the last sequence
+        if len(propn_sequence) >= 2:
+            phrase = ' '.join(propn_sequence)
+            article_keywords.append(('high', phrase.lower()))
+        elif len(propn_sequence) == 1 and len(propn_sequence[0]) > 2:
+            article_keywords.append(('medium', propn_sequence[0].lower()))
+
+        # Priority 3: Important common nouns
+        for token in doc:
+            if token.pos_ == 'NOUN':
+                word = token.text.lower()
+                if (word not in stop_words and len(word) > 3 and
+                    word not in {'home', 'sale', 'update', 'updates', 'news', 'headline', 'headlines'}):
+                    article_keywords.append(('low', word))
+
+        # Sort by priority and take top keywords_per_article
+        priority_order = {'high': 0, 'medium': 1, 'low': 2}
+        article_keywords.sort(key=lambda x: priority_order[x[0]])
+
+        # Remove duplicates while preserving priority order
+        seen = set()
+        unique_article_keywords = []
+        for priority, keyword in article_keywords:
+            if keyword not in seen:
+                seen.add(keyword)
+                unique_article_keywords.append(keyword)
+                if len(unique_article_keywords) >= keywords_per_article:
+                    break
+
+        # Add to overall list
+        all_keywords.extend(unique_article_keywords)
+
+    logger.info(f"✅ Extracted {len(all_keywords)} keywords ({keywords_per_article} per article) from {len(news_items)} news items")
+    return all_keywords
 
 
 @app.route('/')
@@ -137,6 +251,7 @@ def _build_compilation_description(news_items, time_of_day):
         '#News',
         '#BreakingNews',
         '#LatestNews',
+        '@CNI-News24',
         '#EnglishNews',
         '#WorldNews',
         '#HindiNews',
@@ -156,7 +271,9 @@ def _build_compilation_description(news_items, time_of_day):
     # Comprehensive keywords for SEO
     parts.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     parts.append("🔍 KEYWORDS:")
-    keywords = [
+
+    # Base keywords (always included)
+    base_keywords = [
         "top news",
         "latest news",
         "breaking news",
@@ -169,16 +286,28 @@ def _build_compilation_description(news_items, time_of_day):
         "news compilation",
         "current affairs",
         "news update",
-        "aaj ki khabar",
-        "ताज़ा खबर",
-        "समाचार",
         "daily news",
         "news headlines",
         "top stories",
         "indian news",
         "global news"
     ]
-    parts.append(", ".join(keywords))
+
+    # Extract content-specific keywords from news titles (top 2 from each)
+    content_keywords = _extract_keywords_from_titles(news_items, keywords_per_article=2)
+
+    # Ensure all keywords are strings (not tuples)
+    clean_content_keywords = []
+    for kw in content_keywords:
+        if isinstance(kw, tuple):
+            clean_content_keywords.append(kw[1] if len(kw) > 1 else str(kw[0]))
+        else:
+            clean_content_keywords.append(str(kw))
+
+    # Combine base keywords with content-specific keywords
+    all_keywords = base_keywords + clean_content_keywords
+
+    parts.append(", ".join(all_keywords))
     parts.append("")
 
     # About
@@ -192,7 +321,17 @@ def _build_compilation_description(news_items, time_of_day):
     parts.append("⚠️ Disclaimer:")
     parts.append("This content is for informational purposes only.")
 
-    return "\n".join(parts)
+    # Build description and ensure it's under YouTube's 5000 character limit
+    description = "\n".join(parts)
+
+    # YouTube description limit is 5000 characters
+    if len(description) > 5000:
+        logger.warning(f"⚠️ Description is {len(description)} characters, truncating to 5000")
+        # Truncate and add ellipsis
+        description = description[:4997] + "..."
+
+    logger.info(f"📝 Description length: {len(description)} characters")
+    return description
 
 
 @app.route('/api/upload-latest-20', methods=['POST'])
@@ -287,9 +426,13 @@ def upload_latest_20():
 
         # Step 4: Build compilation metadata
         logger.info("📝 Step 4: Building metadata...")
-        current_hour = datetime.now().hour
 
-        # Determine time of day
+        # Get current time in India timezone (IST - UTC+5:30)
+        india_tz = ZoneInfo("Asia/Kolkata")
+        india_time = datetime.now(india_tz)
+        current_hour = india_time.hour
+
+        # Determine time of day based on India time
         if 5 <= current_hour < 12:
             time_of_day = "Morning"
         elif 12 <= current_hour < 17:
@@ -299,14 +442,14 @@ def upload_latest_20():
         else:
             time_of_day = "Night"
 
-        # Build compilation title
-        title = f"📰 Top {len(news_items)} News: This {time_of_day}'s Top Headlines | {datetime.now().strftime('%d %B %Y')}"
+        # Build compilation title with India date
+        title = f"📰 Top {len(news_items)} News: This {time_of_day}'s Top Headlines | {india_time.strftime('%d %B %Y')}"
 
         # Build compilation description
         description = _build_compilation_description(news_items, time_of_day)
 
         # Build comprehensive tags for better discoverability
-        tags = [
+        base_tags = [
             'news compilation',
             'top news',
             'latest news',
@@ -320,19 +463,67 @@ def upload_latest_20():
             'current affairs',
             'news update',
             'daily news',
-            'aaj ki khabar',
-            'taza khabar',
-            'samachar',
             'news headlines',
             'top stories',
             'indian news',
             'global news',
-            f'news {datetime.now().year}',
+            f'news {india_time.year}',
             'today news',
             'latest update'
         ]
 
+        # Extract content-specific keywords and add to tags (top 2 from each)
+        content_keywords = _extract_keywords_from_titles(news_items, keywords_per_article=2)
+
+        # Ensure all keywords are strings (not tuples) and filter out invalid tags
+        clean_keywords = []
+        for kw in content_keywords:
+            # Convert tuple to string if needed
+            if isinstance(kw, tuple):
+                keyword_str = kw[1] if len(kw) > 1 else str(kw[0])
+            else:
+                keyword_str = str(kw)
+
+            # Filter out phrases with more than 2 words
+            word_count = len(keyword_str.split())
+            if word_count > 2:
+                continue
+
+            # Filter out non-ASCII characters (YouTube doesn't accept them in tags)
+            if not keyword_str.isascii():
+                continue
+
+            # Filter out tags that are too short (less than 2 characters)
+            if len(keyword_str) < 2:
+                continue
+
+            # Filter out tags with special characters (only allow alphanumeric, space, hyphen)
+            import re
+            if not re.match(r'^[a-zA-Z0-9\s\-]+$', keyword_str):
+                continue
+
+            clean_keywords.append(keyword_str)
+
+        # Combine base tags with content keywords
+        all_tags = base_tags + clean_keywords
+
+        # Ensure total tag size is less than 450 characters and each tag is max 30 chars
+        tags = []
+        total_size = 0
+        for tag in all_tags:
+            # Skip tags longer than 30 characters (YouTube limit per tag)
+            if len(tag) > 30:
+                continue
+
+            tag_size = len(tag)
+            if total_size + tag_size + len(tags) <= 450:  # +len(tags) accounts for commas
+                tags.append(tag)
+                total_size += tag_size
+            else:
+                break
+
         logger.info(f"✅ Metadata built - Title: {title}")
+        logger.info(f"🏷️ Total tags: {len(tags)}, total size: {total_size} chars, sample: {tags[:5]}")
 
         # Step 5: Check for thumbnail
         thumbnail_path = os.path.join(Config.VIDEO_BASE_PATH, 'latest-20-news-thumbnail.jpg')
@@ -498,6 +689,8 @@ def upload_short(article_id):
         )
 
         logger.info(f"📝 Generated metadata - Title: {metadata['title'][:50]}...")
+        logger.info(f"🏷️ Generated {len(metadata.get('tags', []))} tags: {metadata.get('tags', [])}")
+        logger.info(f"📄 Description length: {len(metadata.get('description', ''))} characters")
 
         # Upload to YouTube
         upload_result = youtube_service.upload_video(

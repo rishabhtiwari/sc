@@ -3,30 +3,37 @@ YouTube Metadata Builder
 Factory pattern for building optimized YouTube video metadata
 """
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from .description_generator import DescriptionGenerator
+
+# Try to import spaCy for keyword extraction
+try:
+    import spacy
+    nlp = spacy.load("en_core_web_sm")
+except Exception as e:
+    nlp = None
+    logging.warning(f"⚠️ spaCy not available for keyword extraction: {e}")
 
 
 class YouTubeMetadataBuilder:
     """Builder for creating optimized YouTube video metadata"""
 
-    def __init__(self, llm_service_url: str = "http://ichat-llm-service:8083"):
+    def __init__(self, llm_service_url: Optional[str] = None):
         self.logger = logging.getLogger(__name__)
-        self.description_generator = DescriptionGenerator(llm_service_url)
+        # LLM service is optional - only used for description generation if provided
+        self.description_generator = DescriptionGenerator(llm_service_url) if llm_service_url else None
 
         # High-traffic search keywords for Indian news
         self.trending_keywords = [
             "breaking news",
             "latest news",
             "news today",
-            "hindi news",
             "india news",
             "current affairs",
             "news update",
-            "aaj ki khabar",
-            "ताज़ा खबर",
-            "समाचार",
             "Politics",
             "Donald Trump",
             "Kamala Harris",
@@ -71,6 +78,135 @@ class YouTubeMetadataBuilder:
             '#Report',
             '#Journalism'
         ]
+
+    def _extract_keywords_from_title(self, title: str, max_keywords: int = 5) -> List[str]:
+        """
+        Extract relevant keywords from a news title
+
+        Args:
+            title: News title string
+            max_keywords: Maximum number of keywords to extract
+
+        Returns:
+            List of extracted keywords
+        """
+        # Common stop words to filter out
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
+            'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+            'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this',
+            'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they',
+            'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each',
+            'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no',
+            'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's',
+            't', 'just', 'don', 'now', 'says', 'over', 'after', 'amid', 'his', 'her'
+        }
+
+        # Extract words from title
+        words = re.findall(r'\b[a-zA-Z][a-zA-Z0-9]*\b', title.lower())
+
+        # Filter out stop words and short words
+        keywords = [word for word in words if len(word) >= 3 and word not in stop_words]
+
+        # Return top keywords (unique)
+        seen = set()
+        unique_keywords = []
+        for keyword in keywords:
+            if keyword not in seen and len(unique_keywords) < max_keywords:
+                seen.add(keyword)
+                unique_keywords.append(keyword)
+
+        return unique_keywords
+
+    def _extract_keywords_from_title_spacy(self, title: str, keywords_count: int = 5) -> List[str]:
+        """
+        Extract keywords from a single title using spaCy NLP
+
+        Args:
+            title: News title string
+            keywords_count: Number of keywords to extract (default: 5)
+
+        Returns:
+            List of extracted keywords
+        """
+        if not nlp:
+            self.logger.warning("⚠️ spaCy model not loaded, falling back to simple extraction")
+            return self._extract_keywords_from_title(title, max_keywords=keywords_count)
+
+        # Stop words to filter out
+        stop_words = {
+            'and', 'or', 'but', 'for', 'with', 'from', 'into', 'during', 'including',
+            'said', 'says', 'according', 'new', 'old', 'big', 'small', 'good', 'best',
+            'after', 'before', 'while', 'when', 'where', 'how', 'why', 'what', 'who',
+            'this', 'that', 'these', 'those', 'here', 'there', 'now', 'then',
+            'study', 'reveals', 'claims', 'report', 'reports', 'video', 'watch',
+            '2024', '2025', 'day', 'days', 'time', 'times', 'year', 'years',
+            'amid', 'over', 'under', 'about', 'against', 'between', 'through'
+        }
+
+        keywords = []
+
+        # Use spaCy to analyze the title
+        doc = nlp(title)
+
+        # Priority 1: Multi-word named entities (PERSON, ORG, GPE, PRODUCT, EVENT)
+        for ent in doc.ents:
+            if ent.label_ in ['PERSON', 'ORG', 'GPE', 'PRODUCT', 'EVENT', 'NORP', 'FAC', 'LOC']:
+                phrase = ent.text.strip()
+                # Remove possessive 's from names
+                if phrase.endswith("'s"):
+                    phrase = phrase[:-2]
+                elif phrase.endswith("'"):
+                    phrase = phrase[:-1]
+                if len(phrase) > 2 and phrase.lower() not in stop_words:
+                    keywords.append(('high', phrase.lower()))
+
+        # Priority 2: Consecutive proper nouns (multi-word phrases like "iPhone 16")
+        propn_sequence = []
+        for token in doc:
+            if token.pos_ == 'PROPN' and token.text.lower() not in stop_words:
+                propn_sequence.append(token.text)
+            elif token.pos_ == 'NUM' and len(propn_sequence) > 0:
+                propn_sequence.append(token.text)
+            else:
+                if len(propn_sequence) >= 2:
+                    phrase = ' '.join(propn_sequence)
+                    keywords.append(('high', phrase.lower()))
+                elif len(propn_sequence) == 1 and len(propn_sequence[0]) > 2:
+                    keywords.append(('medium', propn_sequence[0].lower()))
+                propn_sequence = []
+
+        # Don't forget the last sequence
+        if len(propn_sequence) >= 2:
+            phrase = ' '.join(propn_sequence)
+            keywords.append(('high', phrase.lower()))
+        elif len(propn_sequence) == 1 and len(propn_sequence[0]) > 2:
+            keywords.append(('medium', propn_sequence[0].lower()))
+
+        # Priority 3: Important common nouns
+        for token in doc:
+            if token.pos_ == 'NOUN':
+                word = token.text.lower()
+                if (word not in stop_words and len(word) > 3 and
+                    word not in {'home', 'sale', 'update', 'updates', 'news', 'headline', 'headlines'}):
+                    keywords.append(('low', word))
+
+        # Sort by priority and take top keywords_count
+        priority_order = {'high': 0, 'medium': 1, 'low': 2}
+        keywords.sort(key=lambda x: priority_order[x[0]])
+
+        # Remove duplicates while preserving priority order
+        seen = set()
+        unique_keywords = []
+        for priority, keyword in keywords:
+            if keyword not in seen:
+                seen.add(keyword)
+                unique_keywords.append(keyword)
+                if len(unique_keywords) >= keywords_count:
+                    break
+
+        return unique_keywords
 
     def build_title(self, news_doc: Dict[str, Any]) -> str:
         """
@@ -214,7 +350,6 @@ class YouTubeMetadataBuilder:
             'latest news',
             'english news',
             'world news',
-            'hindi news',
             'india news',
             'news today',
             'current affairs'
@@ -234,16 +369,10 @@ class YouTubeMetadataBuilder:
         if category in category_tags:
             tags.extend(category_tags[category])
 
-        # 3. Hindi/Hinglish variations (important for Indian audience)
-        tags.extend([
-            'aaj ki khabar',
-            'taza khabar',
-            'samachar',
-            'khabar'
-        ])
-
-        # 4. Time-based tags
-        current_year = datetime.now().year
+        # 4. Time-based tags (using India timezone)
+        india_tz = ZoneInfo("Asia/Kolkata")
+        india_time = datetime.now(india_tz)
+        current_year = india_time.year
         tags.extend([
             f'news {current_year}',
             'today news',
@@ -364,6 +493,7 @@ class YouTubeMetadataBuilder:
             '#Shorts',
             '#YouTubeShorts',
             '#News',
+            '@CNI-News24',
             '#BreakingNews',
             '#LatestNews',
             '#EnglishNews',
@@ -381,7 +511,9 @@ class YouTubeMetadataBuilder:
 
         # Add keywords section for better SEO
         parts.append("🔍 KEYWORDS:")
-        shorts_keywords = [
+
+        # Base keywords for Shorts
+        base_shorts_keywords = [
             "shorts",
             "news shorts",
             "breaking news",
@@ -393,12 +525,19 @@ class YouTubeMetadataBuilder:
             "quick news",
             "trending news"
         ]
-        parts.append(", ".join(shorts_keywords))
+
+        # Extract content-specific keywords from title using spaCy
+        content_keywords = self._extract_keywords_from_title_spacy(title, keywords_count=5)
+
+        # Combine base and content-specific keywords
+        all_shorts_keywords = base_shorts_keywords + content_keywords
+
+        parts.append(", ".join(all_shorts_keywords))
 
         final_description = "\n".join(parts)
 
         # Build comprehensive tags for Shorts
-        shorts_tags = [
+        base_shorts_tags = [
             'shorts',
             'youtube shorts',
             'news shorts',
@@ -414,12 +553,58 @@ class YouTubeMetadataBuilder:
             'current affairs',
             'trending news',
             'viral news',
-            'hindi news',
-            'aaj ki khabar',
-            'taza khabar',
             'news headlines',
             'top news'
         ]
+
+        # Filter content keywords: remove phrases with more than 2 words and invalid characters
+        clean_content_keywords = []
+        for kw in content_keywords:
+            # Convert tuple to string if needed
+            if isinstance(kw, tuple):
+                keyword_str = kw[1] if len(kw) > 1 else str(kw[0])
+            else:
+                keyword_str = str(kw)
+
+            # Filter out phrases with more than 2 words
+            word_count = len(keyword_str.split())
+            if word_count > 2:
+                continue
+
+            # Filter out non-ASCII characters (YouTube doesn't accept them in tags)
+            if not keyword_str.isascii():
+                continue
+
+            # Filter out tags that are too short (less than 2 characters)
+            if len(keyword_str) < 2:
+                continue
+
+            # Filter out tags with special characters (only allow alphanumeric, space, hyphen)
+            import re
+            if not re.match(r'^[a-zA-Z0-9\s\-]+$', keyword_str):
+                continue
+
+            clean_content_keywords.append(keyword_str)
+
+        # Combine base tags with content keywords
+        all_tags = base_shorts_tags + clean_content_keywords
+
+        # Ensure total tag size is less than 450 characters and each tag is max 30 chars
+        shorts_tags = []
+        total_size = 0
+        for tag in all_tags:
+            # Skip tags longer than 30 characters (YouTube limit per tag)
+            if len(tag) > 30:
+                continue
+
+            tag_size = len(tag)
+            if total_size + tag_size + len(shorts_tags) <= 450:  # +len(shorts_tags) accounts for commas
+                shorts_tags.append(tag)
+                total_size += tag_size
+            else:
+                break
+
+        self.logger.info(f"🏷️ Shorts tags: {len(shorts_tags)} tags, total size: {total_size} chars")
 
         return {
             'title': shorts_title,

@@ -117,6 +117,17 @@ class ShortsGenerationService:
             # Close the clip to free resources
             news_clip.close()
 
+            # Ensure file is fully written to disk
+            import time
+            time.sleep(0.5)  # Give filesystem time to flush buffers
+
+            # Verify the temp news video is valid before proceeding
+            if not os.path.exists(temp_news_path):
+                raise Exception(f"Temp news video not created: {temp_news_path}")
+
+            temp_size = os.path.getsize(temp_news_path) / (1024 * 1024)
+            self.logger.info(f"✅ Temp news video created: {temp_size:.2f} MB")
+
             # Step 2: Prepare video paths for concatenation
             video_paths = [temp_news_path]
 
@@ -300,6 +311,29 @@ class ShortsGenerationService:
         import subprocess
 
         try:
+            # Validate all input videos exist and are readable
+            for i, video_path in enumerate(video_paths):
+                if not os.path.exists(video_path):
+                    raise Exception(f"Input video {i+1} not found: {video_path}")
+
+                size_mb = os.path.getsize(video_path) / (1024 * 1024)
+                self.logger.info(f"📹 Input video {i+1}: {video_path} ({size_mb:.2f} MB)")
+
+                # Verify video is readable by ffprobe
+                try:
+                    probe_result = subprocess.run([
+                        'ffprobe', '-v', 'error',
+                        '-select_streams', 'v:0',
+                        '-show_entries', 'stream=codec_name,width,height,pix_fmt',
+                        '-of', 'default=noprint_wrappers=1',
+                        video_path
+                    ], capture_output=True, text=True, check=True, timeout=10)
+                    self.logger.info(f"🔍 Video {i+1} info: {probe_result.stdout.strip()}")
+                except subprocess.TimeoutExpired:
+                    raise Exception(f"Timeout while probing video {i+1}: {video_path}")
+                except subprocess.CalledProcessError as e:
+                    raise Exception(f"Cannot read video {i+1}: {video_path}. Error: {e.stderr}")
+
             # Create concat file for FFmpeg
             temp_dir = '/app/temp'
             concat_file = os.path.join(temp_dir, 'concat_list.txt')
@@ -307,6 +341,8 @@ class ShortsGenerationService:
             with open(concat_file, 'w') as f:
                 for video_path in video_paths:
                     f.write(f"file '{video_path}'\n")
+
+            self.logger.info(f"📝 Concat file created with {len(video_paths)} videos")
 
             # Concatenate using FFmpeg with re-encoding for maximum compatibility
             # This ensures YouTube can process the video properly
@@ -331,7 +367,7 @@ class ShortsGenerationService:
                 '-movflags', '+faststart',  # Enable fast start for streaming
                 '-max_muxing_queue_size', '1024',  # Prevent muxing queue overflow
                 output_path
-            ], check=True, capture_output=True, text=True)
+            ], check=True, capture_output=True, text=True, timeout=120)
 
             self.logger.info(f"✅ Videos concatenated successfully with re-encoding")
 

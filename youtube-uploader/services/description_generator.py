@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 
 
 class DescriptionGenerator:
-    """Generate YouTube descriptions using LLM"""
-    
-    def __init__(self, llm_service_url: str = "http://ichat-llm-service:8083"):
+    """Generate YouTube descriptions using LLM (optional)"""
+
+    def __init__(self, llm_service_url: Optional[str] = None):
         self.logger = logging.getLogger(__name__)
         self.llm_service_url = llm_service_url
         
