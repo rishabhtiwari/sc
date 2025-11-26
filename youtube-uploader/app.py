@@ -132,14 +132,53 @@ def _build_compilation_description(news_items, time_of_day):
     parts.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     parts.append("")
 
-    # Hashtags
-    parts.append("#News #BreakingNews #LatestNews #HindiNews #India #NewsToday #TopNews #NewsCompilation")
+    # Comprehensive hashtags (first 3 appear above title)
+    hashtags = [
+        '#News',
+        '#BreakingNews',
+        '#LatestNews',
+        '#EnglishNews',
+        '#WorldNews',
+        '#HindiNews',
+        '#India',
+        '#NewsToday',
+        '#TopNews',
+        '#NewsCompilation',
+        '#CurrentAffairs',
+        '#IndianNews',
+        '#GlobalNews',
+        '#DailyNews',
+        '#NewsUpdate'
+    ]
+    parts.append(" ".join(hashtags))
     parts.append("")
 
-    # Keywords
+    # Comprehensive keywords for SEO
     parts.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
     parts.append("🔍 KEYWORDS:")
-    parts.append(f"top news, latest news, breaking news, news today, {time_of_day.lower()} news, hindi news, india news, news compilation, current affairs, news update")
+    keywords = [
+        "top news",
+        "latest news",
+        "breaking news",
+        "news today",
+        f"{time_of_day.lower()} news",
+        "english news",
+        "world news",
+        "hindi news",
+        "india news",
+        "news compilation",
+        "current affairs",
+        "news update",
+        "aaj ki khabar",
+        "ताज़ा खबर",
+        "समाचार",
+        "daily news",
+        "news headlines",
+        "top stories",
+        "indian news",
+        "global news"
+    ]
+    parts.append(", ".join(keywords))
     parts.append("")
 
     # About
@@ -266,19 +305,31 @@ def upload_latest_20():
         # Build compilation description
         description = _build_compilation_description(news_items, time_of_day)
 
-        # Build tags
+        # Build comprehensive tags for better discoverability
         tags = [
             'news compilation',
             'top news',
             'latest news',
             'breaking news',
+            'english news',
+            'world news',
             'hindi news',
+            'india news',
             'news today',
             f'{time_of_day.lower()} news',
-            'india news',
             'current affairs',
             'news update',
-            'daily news'
+            'daily news',
+            'aaj ki khabar',
+            'taza khabar',
+            'samachar',
+            'news headlines',
+            'top stories',
+            'indian news',
+            'global news',
+            f'news {datetime.now().year}',
+            'today news',
+            'latest update'
         ]
 
         logger.info(f"✅ Metadata built - Title: {title}")

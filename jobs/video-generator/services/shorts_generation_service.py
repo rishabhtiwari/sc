@@ -103,7 +103,15 @@ class ShortsGenerationService:
                 preset='medium',
                 bitrate='5000k',
                 threads=4,
-                logger=None
+                logger=None,
+                ffmpeg_params=[
+                    '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
+                    '-profile:v', 'high',  # H.264 high profile
+                    '-level', '4.0',  # H.264 level 4.0
+                    '-b:a', '192k',  # Audio bitrate
+                    '-ar', '48000',  # Audio sample rate (48kHz)
+                    '-ac', '2'  # Stereo audio
+                ]
             )
 
             # Close the clip to free resources
@@ -129,9 +137,17 @@ class ShortsGenerationService:
                 # Concatenate news + subscribe using FFmpeg
                 self.logger.info(f"🎨 Concatenating {len(video_paths)} videos using FFmpeg...")
                 self._concatenate_videos_ffmpeg(video_paths, short_path)
-            
+
+            # Validate output file
+            if not os.path.exists(short_path):
+                raise Exception(f"Output file not created: {short_path}")
+
             # Get file size
             file_size_mb = os.path.getsize(short_path) / (1024 * 1024)
+
+            # Validate file size (should be at least 1MB for a valid video)
+            if file_size_mb < 0.001:  # Less than 1KB
+                raise Exception(f"Output file is too small ({file_size_mb:.2f} MB), likely corrupted")
 
             # Get duration using ffprobe
             import subprocess
@@ -141,7 +157,13 @@ class ShortsGenerationService:
                     '-of', 'default=noprint_wrappers=1:nokey=1', short_path
                 ], capture_output=True, text=True, check=True)
                 duration = float(duration_result.stdout.strip())
-            except:
+
+                # Validate duration
+                if duration < 1.0:
+                    raise Exception(f"Video duration too short ({duration:.2f}s), likely corrupted")
+
+            except Exception as e:
+                self.logger.error(f"⚠️ Error getting video duration: {str(e)}")
                 duration = 0.0
 
             self.logger.info(f"✅ Short generated successfully: {short_path}")
@@ -264,7 +286,12 @@ class ShortsGenerationService:
     
     def _concatenate_videos_ffmpeg(self, video_paths: list, output_path: str):
         """
-        Concatenate videos using FFmpeg concat demuxer (simple concatenation without transitions)
+        Concatenate videos using FFmpeg concat demuxer with re-encoding for compatibility
+
+        Re-encoding is necessary because:
+        1. The news video and subscribe video may have different encoding parameters
+        2. YouTube Shorts requires specific encoding for proper processing
+        3. Stream copy (-c copy) fails when videos have incompatible codecs/parameters
 
         Args:
             video_paths: List of video file paths to concatenate
@@ -281,18 +308,32 @@ class ShortsGenerationService:
                 for video_path in video_paths:
                     f.write(f"file '{video_path}'\n")
 
-            # Concatenate using FFmpeg concat demuxer
-            # This is the simplest method and preserves audio perfectly
+            # Concatenate using FFmpeg with re-encoding for maximum compatibility
+            # This ensures YouTube can process the video properly
             result = subprocess.run([
                 'ffmpeg', '-y',
                 '-f', 'concat',
                 '-safe', '0',
                 '-i', concat_file,
-                '-c', 'copy',  # Copy streams without re-encoding
+                # Video encoding settings optimized for YouTube Shorts
+                '-c:v', 'libx264',  # H.264 video codec
+                '-preset', 'medium',  # Balanced speed/quality
+                '-crf', '23',  # Constant quality (lower = better, 23 is good)
+                '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
+                '-profile:v', 'high',  # H.264 high profile for better compression
+                '-level', '4.0',  # H.264 level 4.0 for 1080p support
+                # Audio encoding settings
+                '-c:a', 'aac',  # AAC audio codec
+                '-b:a', '192k',  # Audio bitrate
+                '-ar', '48000',  # Audio sample rate (48kHz is YouTube standard)
+                '-ac', '2',  # Stereo audio
+                # Optimization flags
+                '-movflags', '+faststart',  # Enable fast start for streaming
+                '-max_muxing_queue_size', '1024',  # Prevent muxing queue overflow
                 output_path
             ], check=True, capture_output=True, text=True)
 
-            self.logger.info(f"✅ Videos concatenated successfully")
+            self.logger.info(f"✅ Videos concatenated successfully with re-encoding")
 
         except subprocess.CalledProcessError as e:
             self.logger.error(f"❌ FFmpeg concatenation error: {e.stderr}")
@@ -319,14 +360,24 @@ class ShortsGenerationService:
             scaled_subscribe_path = os.path.join(temp_dir, 'subscribe_shorts_scaled.mp4')
 
             # Scale subscribe video to shorts dimensions (1080x1920) using FFmpeg
-            # This preserves audio automatically with -c:a copy
+            # Use consistent encoding parameters to ensure compatibility with news video
             self.logger.info(f"📐 Scaling subscribe video to {self.shorts_width}x{self.shorts_height}")
 
             result = subprocess.run([
                 'ffmpeg', '-y', '-i', subscribe_video_path,
                 '-vf', f'scale={self.shorts_width}:{self.shorts_height}:force_original_aspect_ratio=decrease,pad={self.shorts_width}:{self.shorts_height}:(ow-iw)/2:(oh-ih)/2,fps=30',
-                '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
-                '-c:a', 'copy',  # Copy audio without re-encoding
+                # Video encoding - match the news video settings
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23',
+                '-pix_fmt', 'yuv420p',
+                '-profile:v', 'high',
+                '-level', '4.0',
+                # Audio encoding - match the news video settings
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ar', '48000',
+                '-ac', '2',
                 scaled_subscribe_path
             ], check=True, capture_output=True, text=True)
 

@@ -359,33 +359,66 @@ class YouTubeMetadataBuilder:
         parts.append("🔔 Subscribe for more news shorts!")
         parts.append("")
 
-        # Shorts-specific hashtags (first 3 appear above title)
+        # Comprehensive Shorts hashtags (first 3 appear above title)
         shorts_hashtags = [
             '#Shorts',
             '#YouTubeShorts',
             '#News',
             '#BreakingNews',
+            '#LatestNews',
+            '#EnglishNews',
+            '#WorldNews',
             '#IndiaNews',
             '#NewsUpdate',
             '#ShortNews',
-            '#QuickNews'
+            '#QuickNews',
+            '#NewsToday',
+            '#CurrentAffairs',
+            '#TrendingNews'
         ]
         parts.append(" ".join(shorts_hashtags))
+        parts.append("")
+
+        # Add keywords section for better SEO
+        parts.append("🔍 KEYWORDS:")
+        shorts_keywords = [
+            "shorts",
+            "news shorts",
+            "breaking news",
+            "latest news",
+            "english news",
+            "world news",
+            "india news",
+            "news today",
+            "quick news",
+            "trending news"
+        ]
+        parts.append(", ".join(shorts_keywords))
 
         final_description = "\n".join(parts)
 
-        # Build tags for Shorts
+        # Build comprehensive tags for Shorts
         shorts_tags = [
             'shorts',
             'youtube shorts',
             'news shorts',
             'breaking news',
+            'latest news',
+            'english news',
+            'world news',
             'india news',
             'news update',
             'quick news',
             'short news',
             'news today',
-            'latest news'
+            'current affairs',
+            'trending news',
+            'viral news',
+            'hindi news',
+            'aaj ki khabar',
+            'taza khabar',
+            'news headlines',
+            'top news'
         ]
 
         return {

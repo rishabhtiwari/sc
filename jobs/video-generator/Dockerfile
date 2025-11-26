@@ -34,11 +34,15 @@ RUN echo 'FFMPEG_BINARY = "/usr/bin/ffmpeg"' > /usr/local/lib/python3.9/site-pac
 # Copy common job framework
 COPY common/ /app/common/
 
-# Copy application code
-COPY video-generator/ .
+# Copy only the application code files (not data directories)
+# Data directories (logs, public, temp, subscribe) will be mounted as volumes
+COPY video-generator/*.py ./
+COPY video-generator/services/ ./services/
+COPY video-generator/config/ ./config/
+COPY video-generator/effects/ ./effects/
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/assets /app/subscribe
+RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/subscribe
 
 # Create sample logo for watermark effect
 RUN python create_sample_logo.py
