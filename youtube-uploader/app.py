@@ -476,6 +476,7 @@ def upload_latest_20():
         content_keywords = _extract_keywords_from_titles(news_items, keywords_per_article=2)
 
         # Ensure all keywords are strings (not tuples) and filter out invalid tags
+        import re
         clean_keywords = []
         for kw in content_keywords:
             # Convert tuple to string if needed
@@ -483,6 +484,9 @@ def upload_latest_20():
                 keyword_str = kw[1] if len(kw) > 1 else str(kw[0])
             else:
                 keyword_str = str(kw)
+
+            # Strip whitespace
+            keyword_str = keyword_str.strip()
 
             # Filter out phrases with more than 2 words
             word_count = len(keyword_str.split())
@@ -498,8 +502,12 @@ def upload_latest_20():
                 continue
 
             # Filter out tags with special characters (only allow alphanumeric, space, hyphen)
-            import re
+            # YouTube doesn't allow: < > " ' & etc.
             if not re.match(r'^[a-zA-Z0-9\s\-]+$', keyword_str):
+                continue
+
+            # Filter out tags that are just numbers
+            if keyword_str.isdigit():
                 continue
 
             clean_keywords.append(keyword_str)
@@ -507,12 +515,29 @@ def upload_latest_20():
         # Combine base tags with content keywords
         all_tags = base_tags + clean_keywords
 
-        # Ensure total tag size is less than 450 characters and each tag is max 30 chars
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tags = []
+        for tag in all_tags:
+            tag_lower = tag.lower().strip()
+            if tag_lower not in seen:
+                seen.add(tag_lower)
+                unique_tags.append(tag)
+
+        # Limit to 35 tags, ensure total tag size is less than 450 characters and each tag is max 30 chars
         tags = []
         total_size = 0
-        for tag in all_tags:
+        for tag in unique_tags:
+            # Stop if we've reached 35 tags
+            if len(tags) >= 35:
+                break
+
             # Skip tags longer than 30 characters (YouTube limit per tag)
             if len(tag) > 30:
+                continue
+
+            # Final validation: ensure tag contains only allowed characters
+            if not re.match(r'^[a-zA-Z0-9\s\-]+$', tag):
                 continue
 
             tag_size = len(tag)
@@ -522,8 +547,8 @@ def upload_latest_20():
             else:
                 break
 
-        logger.info(f"✅ Metadata built - Title: {title}")
-        logger.info(f"🏷️ Total tags: {len(tags)}, total size: {total_size} chars, sample: {tags[:5]}")
+        logger.info(f"✅ Metadata built - Title: {title}, Tags: {len(tags)}")
+        logger.info(f"🏷️ Total tags: {len(tags)}, total size: {total_size} chars")
 
         # Step 5: Check for thumbnail
         thumbnail_path = os.path.join(Config.VIDEO_BASE_PATH, 'latest-20-news-thumbnail.jpg')

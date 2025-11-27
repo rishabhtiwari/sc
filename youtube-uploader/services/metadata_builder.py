@@ -326,17 +326,17 @@ class YouTubeMetadataBuilder:
     def build_tags(self, news_doc: Dict[str, Any]) -> List[str]:
         """
         Build optimized tags for YouTube video
-        
+
         YouTube tags best practices:
         - Max 500 characters total
-        - Use 5-15 tags
+        - Use up to 35 tags (YouTube limit)
         - Mix broad and specific tags
         - Include common misspellings
         - Use multi-word phrases
-        
+
         Args:
             news_doc: MongoDB news document
-            
+
         Returns:
             List of tag strings
         """
@@ -387,10 +387,10 @@ class YouTubeMetadataBuilder:
                 seen.add(tag.lower())
                 unique_tags.append(tag)
 
-        # Limit to 15 tags and ensure total length < 500 chars
+        # Limit to 35 tags and ensure total length < 500 chars
         final_tags = []
         total_length = 0
-        for tag in unique_tags[:15]:
+        for tag in unique_tags[:35]:
             if total_length + len(tag) + 1 < 500:  # +1 for comma
                 final_tags.append(tag)
                 total_length += len(tag) + 1
@@ -558,6 +558,7 @@ class YouTubeMetadataBuilder:
         ]
 
         # Filter content keywords: remove phrases with more than 2 words and invalid characters
+        import re
         clean_content_keywords = []
         for kw in content_keywords:
             # Convert tuple to string if needed
@@ -565,6 +566,9 @@ class YouTubeMetadataBuilder:
                 keyword_str = kw[1] if len(kw) > 1 else str(kw[0])
             else:
                 keyword_str = str(kw)
+
+            # Strip whitespace
+            keyword_str = keyword_str.strip()
 
             # Filter out phrases with more than 2 words
             word_count = len(keyword_str.split())
@@ -580,8 +584,12 @@ class YouTubeMetadataBuilder:
                 continue
 
             # Filter out tags with special characters (only allow alphanumeric, space, hyphen)
-            import re
+            # YouTube doesn't allow: < > " ' & etc.
             if not re.match(r'^[a-zA-Z0-9\s\-]+$', keyword_str):
+                continue
+
+            # Filter out tags that are just numbers
+            if keyword_str.isdigit():
                 continue
 
             clean_content_keywords.append(keyword_str)
@@ -589,12 +597,29 @@ class YouTubeMetadataBuilder:
         # Combine base tags with content keywords
         all_tags = base_shorts_tags + clean_content_keywords
 
-        # Ensure total tag size is less than 450 characters and each tag is max 30 chars
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_tags = []
+        for tag in all_tags:
+            tag_lower = tag.lower().strip()
+            if tag_lower not in seen:
+                seen.add(tag_lower)
+                unique_tags.append(tag)
+
+        # Limit to 35 tags, ensure total tag size is less than 450 characters and each tag is max 30 chars
         shorts_tags = []
         total_size = 0
-        for tag in all_tags:
+        for tag in unique_tags:
+            # Stop if we've reached 35 tags
+            if len(shorts_tags) >= 35:
+                break
+
             # Skip tags longer than 30 characters (YouTube limit per tag)
             if len(tag) > 30:
+                continue
+
+            # Final validation: ensure tag contains only allowed characters
+            if not re.match(r'^[a-zA-Z0-9\s\-]+$', tag):
                 continue
 
             tag_size = len(tag)

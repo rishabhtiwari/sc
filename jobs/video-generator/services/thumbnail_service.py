@@ -6,6 +6,8 @@ import os
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from typing import Dict, Optional, Tuple
 import textwrap
+from datetime import datetime
+import pytz
 
 
 class ThumbnailService:
@@ -62,34 +64,23 @@ class ThumbnailService:
     
     def _create_split_design(self, news_thumbnails: list) -> Image.Image:
         """
-        Create a split design thumbnail similar to YouTube news style:
-        - Left 25%: Red background with "TOP 20 NEWS" text
-        - Right 75%: 2-3 news thumbnails merged together with CNI logo in top-right corner
+        Create a news thumbnail similar to YouTube news channels:
+        - Full collage of news images as background
+        - Navy blue banner at top-left with "TOP 20 NEWS" text in white
+        - CNI logo in top-right corner
         """
-        # Create base canvas
-        canvas = Image.new('RGB', (self.thumbnail_width, self.thumbnail_height), (255, 255, 255))
+        # Create base canvas - will be replaced by news collage
+        canvas = Image.new('RGB', (self.thumbnail_width, self.thumbnail_height), (0, 51, 153))
 
-        # Split point (25% for left, 75% for right)
-        split_x = int(self.thumbnail_width * 0.25)
+        # If we have news thumbnails, use them as background
+        if news_thumbnails and len(news_thumbnails) > 0:
+            # Create a collage of news images as background
+            canvas = self._create_full_width_collage(news_thumbnails)
 
-        # LEFT 25%: Red background with text (matching YouTube style)
-        left_width = split_x
-        left_half = Image.new('RGB', (left_width, self.thumbnail_height), (220, 20, 60))  # Crimson red
+        # Add blue banner with "TOP 20 NEWS" text at top-left
+        canvas = self._add_top_left_banner(canvas)
 
-        # Add "TOP 20 NEWS" text on left half
-        left_half = self._add_left_text(left_half)
-
-        # Paste left half onto canvas
-        canvas.paste(left_half, (0, 0))
-
-        # RIGHT 75%: News thumbnails
-        right_width = self.thumbnail_width - split_x
-        right_half = self._create_news_thumbnails_collage(news_thumbnails, right_width)
-
-        # Paste right half onto canvas
-        canvas.paste(right_half, (split_x, 0))
-
-        # Add CNI logo to top-right corner of entire thumbnail (on the right section)
+        # Add CNI logo to top-right corner
         canvas = self._add_logo_to_thumbnail(canvas)
 
         return canvas
@@ -129,124 +120,169 @@ class ThumbnailService:
             self.logger.warning(f"⚠️ Failed to add logo to thumbnail: {str(e)}")
             return canvas
 
-    def _add_left_text(self, img: Image.Image) -> Image.Image:
-        """Add 'TOP 20 NEWS' text to left half - YouTube style"""
-        draw = ImageDraw.Draw(img)
+    def _add_top_left_banner(self, img: Image.Image) -> Image.Image:
+        """Add blue banner with two-line date-based title at top-left corner - YouTube news style"""
+        # Convert to RGBA for transparency support
+        img_rgba = img.convert('RGBA')
 
-        # Load bold font
+        # Load bold font for main title and regular font for date
         try:
-            font_large = None
-            font_small = None
-            font_paths = [
+            title_font = None
+            date_font = None
+            channel_font = None
+
+            font_paths_bold = [
                 '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
                 '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
                 '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
             ]
 
-            for font_path in font_paths:
+            font_paths_regular = [
+                '/System/Library/Fonts/Supplemental/Arial.ttf',
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            ]
+
+            # Load title font (bold, size 88)
+            for font_path in font_paths_bold:
                 if os.path.exists(font_path):
-                    font_large = ImageFont.truetype(font_path, 95)
-                    font_small = ImageFont.truetype(font_path, 50)
+                    title_font = ImageFont.truetype(font_path, 88)
                     break
 
-            if not font_large:
-                font_large = ImageFont.load_default()
-                font_small = ImageFont.load_default()
+            # Load date font (regular, size 60 - smaller than title)
+            for font_path in font_paths_regular:
+                if os.path.exists(font_path):
+                    date_font = ImageFont.truetype(font_path, 60)
+                    break
+
+            # Load channel name font (bold, size 50)
+            for font_path in font_paths_bold:
+                if os.path.exists(font_path):
+                    channel_font = ImageFont.truetype(font_path, 50)
+                    break
+
+            if not title_font:
+                title_font = ImageFont.load_default()
+            if not date_font:
+                date_font = ImageFont.load_default()
+            if not channel_font:
+                channel_font = ImageFont.load_default()
 
         except Exception:
-            font_large = ImageFont.load_default()
-            font_small = ImageFont.load_default()
+            title_font = ImageFont.load_default()
+            date_font = ImageFont.load_default()
+            channel_font = ImageFont.load_default()
 
-        # Text lines - matching YouTube style
-        line1 = "TOP 20"
-        line2 = "NEWS"
+        # Generate date-based title in IST timezone
+        # Line 1: "20 Breaking News"
+        # Line 2: "27 November 2025"
+        ist = pytz.timezone('Asia/Kolkata')
+        current_date = datetime.now(ist)
+        date_str = current_date.strftime("%d %B %Y")  # e.g., "27 November 2025"
 
-        # Calculate positions (centered)
-        width = img.size[0]
-        height = img.size[1]
+        line1 = "20 Breaking News"
+        line2 = date_str
+        channel_name = "CNI NEWS"
 
-        # Get text sizes
-        bbox1 = draw.textbbox((0, 0), line1, font=font_small)
-        bbox2 = draw.textbbox((0, 0), line2, font=font_large)
+        # Create a temporary draw object to measure text
+        temp_draw = ImageDraw.Draw(img_rgba)
 
-        text_width1 = bbox1[2] - bbox1[0]
-        text_width2 = bbox2[2] - bbox2[0]
+        # Measure line 1 (title)
+        bbox1 = temp_draw.textbbox((0, 0), line1, font=title_font)
+        line1_width = bbox1[2] - bbox1[0]
+        line1_height = bbox1[3] - bbox1[1]
 
-        text_height1 = bbox1[3] - bbox1[1]
-        text_height2 = bbox2[3] - bbox2[1]
+        # Measure line 2 (date)
+        bbox2 = temp_draw.textbbox((0, 0), line2, font=date_font)
+        line2_width = bbox2[2] - bbox2[0]
+        line2_height = bbox2[3] - bbox2[1]
 
-        # Calculate vertical spacing
-        total_height = text_height1 + text_height2 + 20  # 20px spacing
-        start_y = (height - total_height) // 2
+        # Measure channel name
+        bbox_channel = temp_draw.textbbox((0, 0), channel_name, font=channel_font)
+        channel_width = bbox_channel[2] - bbox_channel[0]
+        channel_height = bbox_channel[3] - bbox_channel[1]
 
-        # Draw "TOP 20" (smaller, at top)
-        x1 = (width - text_width1) // 2
-        y1 = start_y
+        # Banner dimensions - add padding around text
+        padding_x = 40  # Horizontal padding
+        padding_y = 25  # Vertical padding
+        line_spacing = 10  # Space between lines
 
-        # Simple shadow for depth
-        draw.text((x1 + 3, y1 + 3), line1, font=font_small, fill=(0, 0, 0, 128))
-        draw.text((x1, y1), line1, font=font_small, fill=(255, 255, 255))
+        # Calculate banner width (use the wider of the two lines)
+        max_text_width = max(line1_width, line2_width)
+        banner_width = max_text_width + (padding_x * 2)
 
-        # Draw "NEWS" (larger, below)
-        x2 = (width - text_width2) // 2
-        y2 = y1 + text_height1 + 20
+        # Calculate banner height (both lines + spacing + channel name)
+        total_text_height = line1_height + line_spacing + line2_height + 20 + channel_height
+        banner_height = total_text_height + (padding_y * 2)
 
-        # Simple shadow for depth
-        draw.text((x2 + 3, y2 + 3), line2, font=font_large, fill=(0, 0, 0, 128))
-        draw.text((x2, y2), line2, font=font_large, fill=(255, 255, 255))
+        # Create banner overlay
+        overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
 
-        return img
+        # Draw navy blue banner rectangle at top-left
+        # Navy Blue: RGB(0, 51, 153) with full opacity
+        banner_color = (0, 51, 153, 255)
+        draw.rectangle(
+            [(0, 0), (banner_width, banner_height)],
+            fill=banner_color
+        )
 
-    def _create_news_thumbnails_collage(self, news_thumbnails: list, collage_width: int) -> Image.Image:
-        """Create a collage of 2-3 news thumbnails on the right side"""
+        # Draw text - centered within the banner
+        current_y = padding_y
 
-        # If we have news thumbnails, use them; otherwise create placeholder
-        if news_thumbnails and len(news_thumbnails) > 0:
-            # Take up to 3 thumbnails
-            thumbnails_to_use = news_thumbnails[:3]
+        # Line 1: "20 Breaking News" (bold, white)
+        text1_x = (banner_width - line1_width) // 2
+        draw.text((text1_x, current_y), line1, font=title_font, fill=(255, 255, 255, 255))
+        current_y += line1_height + line_spacing
 
-            # Create collage
-            collage = Image.new('RGB', (collage_width, self.thumbnail_height), (30, 30, 30))
+        # Line 2: Date (regular, white)
+        text2_x = (banner_width - line2_width) // 2
+        draw.text((text2_x, current_y), line2, font=date_font, fill=(255, 255, 255, 255))
+        current_y += line2_height + 20
 
-            if len(thumbnails_to_use) == 1:
-                # Single image - fill entire right side
-                img = self._load_and_resize_thumbnail(thumbnails_to_use[0], collage_width, self.thumbnail_height)
-                collage.paste(img, (0, 0))
-            elif len(thumbnails_to_use) == 2:
-                # Two images - stack vertically
-                img_height = self.thumbnail_height // 2
-                img1 = self._load_and_resize_thumbnail(thumbnails_to_use[0], collage_width, img_height)
-                img2 = self._load_and_resize_thumbnail(thumbnails_to_use[1], collage_width, img_height)
-                collage.paste(img1, (0, 0))
-                collage.paste(img2, (0, img_height))
-            else:
-                # Three images - one on top, two on bottom
-                top_height = self.thumbnail_height // 2
-                bottom_height = self.thumbnail_height // 2
-                bottom_width = collage_width // 2
+        # Channel name (bold, gold/yellow color for branding)
+        channel_x = (banner_width - channel_width) // 2
+        draw.text((channel_x, current_y), channel_name, font=channel_font, fill=(255, 215, 0, 255))
 
-                img1 = self._load_and_resize_thumbnail(thumbnails_to_use[0], collage_width, top_height)
-                img2 = self._load_and_resize_thumbnail(thumbnails_to_use[1], bottom_width, bottom_height)
-                img3 = self._load_and_resize_thumbnail(thumbnails_to_use[2], bottom_width, bottom_height)
+        # Composite the overlay onto the image
+        img_rgba = Image.alpha_composite(img_rgba, overlay)
 
-                collage.paste(img1, (0, 0))
-                collage.paste(img2, (0, top_height))
-                collage.paste(img3, (bottom_width, top_height))
+        return img_rgba.convert('RGB')
 
-            return collage
+    def _create_full_width_collage(self, news_thumbnails: list) -> Image.Image:
+        """Create a full-width collage of news thumbnails as background"""
+        # Take up to 3 thumbnails
+        thumbnails_to_use = news_thumbnails[:3]
+
+        # Create collage
+        collage = Image.new('RGB', (self.thumbnail_width, self.thumbnail_height), (0, 51, 153))
+
+        if len(thumbnails_to_use) == 1:
+            # Single image - fill entire canvas
+            img = self._load_and_resize_thumbnail(thumbnails_to_use[0], self.thumbnail_width, self.thumbnail_height)
+            collage.paste(img, (0, 0))
+        elif len(thumbnails_to_use) == 2:
+            # Two images - stack vertically
+            img_height = self.thumbnail_height // 2
+            img1 = self._load_and_resize_thumbnail(thumbnails_to_use[0], self.thumbnail_width, img_height)
+            img2 = self._load_and_resize_thumbnail(thumbnails_to_use[1], self.thumbnail_width, img_height)
+            collage.paste(img1, (0, 0))
+            collage.paste(img2, (0, img_height))
         else:
-            # No thumbnails - create gradient placeholder
-            placeholder = Image.new('RGB', (collage_width, self.thumbnail_height))
-            draw = ImageDraw.Draw(placeholder)
+            # Three images - one on top, two on bottom
+            top_height = self.thumbnail_height // 2
+            bottom_height = self.thumbnail_height // 2
+            bottom_width = self.thumbnail_width // 2
 
-            # Red gradient for news theme
-            for y in range(self.thumbnail_height):
-                r = int(139 + (220 - 139) * (y / self.thumbnail_height))
-                g = int(0 + (20 - 0) * (y / self.thumbnail_height))
-                b = int(0 + (60 - 0) * (y / self.thumbnail_height))
-                draw.rectangle([(0, y), (collage_width, y + 1)], fill=(r, g, b))
+            img1 = self._load_and_resize_thumbnail(thumbnails_to_use[0], self.thumbnail_width, top_height)
+            img2 = self._load_and_resize_thumbnail(thumbnails_to_use[1], bottom_width, bottom_height)
+            img3 = self._load_and_resize_thumbnail(thumbnails_to_use[2], bottom_width, bottom_height)
 
-            return placeholder
+            collage.paste(img1, (0, 0))
+            collage.paste(img2, (0, top_height))
+            collage.paste(img3, (bottom_width, top_height))
+
+        return collage
 
     def _load_and_resize_thumbnail(self, image_path: str, target_width: int, target_height: int) -> Image.Image:
         """Load and resize a thumbnail image to fit target dimensions"""
