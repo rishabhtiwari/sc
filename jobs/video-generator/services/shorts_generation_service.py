@@ -90,13 +90,18 @@ class ShortsGenerationService:
             )
 
             # Save news clip to temp file
+            # Use unique temp file names based on output_dir to avoid race conditions in parallel processing
             temp_dir = '/app/temp'
             os.makedirs(temp_dir, exist_ok=True)
-            temp_news_path = os.path.join(temp_dir, 'news_with_thumbnail.mp4')
+            import hashlib
+            # Generate unique ID from output_dir (which contains article ID)
+            unique_id = hashlib.md5(output_dir.encode()).hexdigest()[:8]
+            temp_news_path_raw = os.path.join(temp_dir, f'news_with_thumbnail_raw_{unique_id}.mp4')
+            temp_news_path = os.path.join(temp_dir, f'news_with_thumbnail_{unique_id}.mp4')
 
             self.logger.info(f"💾 Writing news video with thumbnail to temp file...")
             news_clip.write_videofile(
-                temp_news_path,
+                temp_news_path_raw,
                 codec='libx264',
                 audio_codec='aac',
                 fps=30,
@@ -122,18 +127,51 @@ class ShortsGenerationService:
             time.sleep(0.5)  # Give filesystem time to flush buffers
 
             # Verify the temp news video is valid before proceeding
-            if not os.path.exists(temp_news_path):
-                raise Exception(f"Temp news video not created: {temp_news_path}")
+            if not os.path.exists(temp_news_path_raw):
+                raise Exception(f"Temp news video not created: {temp_news_path_raw}")
 
-            temp_size = os.path.getsize(temp_news_path) / (1024 * 1024)
+            temp_size = os.path.getsize(temp_news_path_raw) / (1024 * 1024)
             self.logger.info(f"✅ Temp news video created: {temp_size:.2f} MB")
+
+            # Re-encode with FFmpeg to fix any NAL unit issues from MoviePy
+            # This ensures the video is properly encoded for concatenation
+            self.logger.info(f"🔧 Re-encoding video with FFmpeg to fix NAL units...")
+            import subprocess
+            try:
+                subprocess.run([
+                    'ffmpeg', '-y',
+                    '-i', temp_news_path_raw,
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-profile:v', 'high',
+                    '-level', '4.0',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-ar', '48000',
+                    '-ac', '2',
+                    '-movflags', '+faststart',
+                    temp_news_path
+                ], check=True, capture_output=True, text=True, timeout=60)
+
+                # Remove raw file to save space
+                os.remove(temp_news_path_raw)
+
+                re_encoded_size = os.path.getsize(temp_news_path) / (1024 * 1024)
+                self.logger.info(f"✅ Video re-encoded successfully: {re_encoded_size:.2f} MB")
+
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"❌ FFmpeg re-encoding failed!")
+                self.logger.error(f"FFmpeg stderr: {e.stderr}")
+                raise Exception(f"FFmpeg re-encoding failed: {e.stderr[:500]}")
 
             # Step 2: Prepare video paths for concatenation
             video_paths = [temp_news_path]
 
             if subscribe_video_path and os.path.exists(subscribe_video_path):
                 self.logger.info("📢 Processing subscribe video...")
-                scaled_subscribe_path = self._process_subscribe_video(subscribe_video_path)
+                scaled_subscribe_path = self._process_subscribe_video(subscribe_video_path, unique_id)
                 video_paths.append(scaled_subscribe_path)
             else:
                 self.logger.warning("⚠️ Subscribe video not found, skipping...")
@@ -148,6 +186,17 @@ class ShortsGenerationService:
                 # Concatenate news + subscribe using FFmpeg
                 self.logger.info(f"🎨 Concatenating {len(video_paths)} videos using FFmpeg...")
                 self._concatenate_videos_ffmpeg(video_paths, short_path)
+
+            # Clean up temp files after successful concatenation
+            try:
+                if os.path.exists(temp_news_path):
+                    os.remove(temp_news_path)
+                    self.logger.info(f"🗑️ Cleaned up temp file: {temp_news_path}")
+                if len(video_paths) > 1 and os.path.exists(video_paths[1]):
+                    os.remove(video_paths[1])
+                    self.logger.info(f"🗑️ Cleaned up temp file: {video_paths[1]}")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to clean up temp files: {e}")
 
             # Validate output file
             if not os.path.exists(short_path):
@@ -345,42 +394,66 @@ class ShortsGenerationService:
             self.logger.info(f"📝 Concat file created with {len(video_paths)} videos")
 
             # Concatenate using FFmpeg with re-encoding for maximum compatibility
+            # Use filter_complex instead of concat demuxer to avoid h264_mp4toannexb issues
             # This ensures YouTube can process the video properly
-            result = subprocess.run([
-                'ffmpeg', '-y',
-                '-f', 'concat',
-                '-safe', '0',
-                '-i', concat_file,
-                # Video encoding settings optimized for YouTube Shorts
-                '-c:v', 'libx264',  # H.264 video codec
-                '-preset', 'medium',  # Balanced speed/quality
-                '-crf', '23',  # Constant quality (lower = better, 23 is good)
-                '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
-                '-profile:v', 'high',  # H.264 high profile for better compression
-                '-level', '4.0',  # H.264 level 4.0 for 1080p support
-                # Audio encoding settings
-                '-c:a', 'aac',  # AAC audio codec
-                '-b:a', '192k',  # Audio bitrate
-                '-ar', '48000',  # Audio sample rate (48kHz is YouTube standard)
-                '-ac', '2',  # Stereo audio
-                # Optimization flags
-                '-movflags', '+faststart',  # Enable fast start for streaming
-                '-max_muxing_queue_size', '1024',  # Prevent muxing queue overflow
-                output_path
-            ], check=True, capture_output=True, text=True, timeout=120)
+            try:
+                # Build filter_complex command for concatenation
+                # For 2 videos: [0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[outv][outa]
+                n_videos = len(video_paths)
 
-            self.logger.info(f"✅ Videos concatenated successfully with re-encoding")
+                # Build input arguments
+                input_args = []
+                for video_path in video_paths:
+                    input_args.extend(['-i', video_path])
 
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"❌ FFmpeg concatenation error: {e.stderr}")
-            raise
+                # Build filter_complex string
+                filter_inputs = ''.join([f'[{i}:v][{i}:a]' for i in range(n_videos)])
+                filter_complex = f'{filter_inputs}concat=n={n_videos}:v=1:a=1[outv][outa]'
 
-    def _process_subscribe_video(self, subscribe_video_path: str) -> str:
+                result = subprocess.run([
+                    'ffmpeg', '-y',
+                    *input_args,
+                    '-filter_complex', filter_complex,
+                    '-map', '[outv]',
+                    '-map', '[outa]',
+                    # Video encoding settings optimized for YouTube Shorts
+                    '-c:v', 'libx264',  # H.264 video codec
+                    '-preset', 'medium',  # Balanced speed/quality
+                    '-crf', '23',  # Constant quality (lower = better, 23 is good)
+                    '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
+                    '-profile:v', 'high',  # H.264 high profile for better compression
+                    '-level', '4.0',  # H.264 level 4.0 for 1080p support
+                    # Audio encoding settings
+                    '-c:a', 'aac',  # AAC audio codec
+                    '-b:a', '192k',  # Audio bitrate
+                    '-ar', '48000',  # Audio sample rate (48kHz is YouTube standard)
+                    '-ac', '2',  # Stereo audio
+                    # Optimization flags
+                    '-movflags', '+faststart',  # Enable fast start for streaming
+                    '-max_muxing_queue_size', '1024',  # Prevent muxing queue overflow
+                    output_path
+                ], check=True, capture_output=True, text=True, timeout=120)
+
+                self.logger.info(f"✅ Videos concatenated successfully with re-encoding using filter_complex")
+
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"❌ FFmpeg concatenation failed!")
+                self.logger.error(f"FFmpeg stderr output:\n{e.stderr}")
+                self.logger.error(f"FFmpeg stdout output:\n{e.stdout}")
+                self.logger.error(f"Return code: {e.returncode}")
+                raise Exception(f"FFmpeg concatenation failed with exit code {e.returncode}. Error: {e.stderr[:500]}")
+
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"❌ FFmpeg concatenation timed out after 120 seconds")
+            raise Exception("FFmpeg concatenation timed out")
+
+    def _process_subscribe_video(self, subscribe_video_path: str, unique_id: str = None) -> str:
         """
         Process subscribe video to fit shorts dimensions using FFmpeg
 
         Args:
             subscribe_video_path: Path to subscribe video
+            unique_id: Unique identifier for temp file naming (to avoid race conditions)
 
         Returns:
             Path to processed subscribe video
@@ -393,7 +466,11 @@ class ShortsGenerationService:
             os.makedirs(temp_dir, exist_ok=True)
 
             # Output path for scaled subscribe video
-            scaled_subscribe_path = os.path.join(temp_dir, 'subscribe_shorts_scaled.mp4')
+            # Use unique ID if provided to avoid race conditions in parallel processing
+            if unique_id:
+                scaled_subscribe_path = os.path.join(temp_dir, f'subscribe_shorts_scaled_{unique_id}.mp4')
+            else:
+                scaled_subscribe_path = os.path.join(temp_dir, 'subscribe_shorts_scaled.mp4')
 
             # Scale subscribe video to shorts dimensions (1080x1920) using FFmpeg
             # Use consistent encoding parameters to ensure compatibility with news video

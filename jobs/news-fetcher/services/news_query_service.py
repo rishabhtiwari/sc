@@ -248,8 +248,14 @@ class NewsQueryService:
         """
         try:
             # Aggregate to get category counts
+            # Use $unwind to handle array categories (some documents have category as array)
             pipeline = [
                 {'$match': {'status': ArticleStatus.COMPLETED.value}},
+                # Unwind category array if it exists, otherwise keep as single value
+                {'$unwind': {
+                    'path': '$category',
+                    'preserveNullAndEmptyArrays': True
+                }},
                 {'$group': {
                     '_id': '$category',
                     'count': {'$sum': 1}
@@ -263,7 +269,13 @@ class NewsQueryService:
             total_articles = 0
 
             for item in result:
-                category = item['_id'] or 'general'
+                category = item['_id']
+                # Handle None or empty category
+                if not category:
+                    category = 'general'
+                # Convert to string if it's somehow still not a string
+                category = str(category)
+
                 count = item['count']
                 categories[category] = count
                 total_articles += count
