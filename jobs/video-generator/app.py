@@ -218,7 +218,9 @@ class VideoGeneratorJob(BaseJob):
 
                 # Also generate YouTube Short
                 try:
-                    self.logger.info(f"🎬 Generating YouTube Short for article: {article_id}")
+                    # Get voice information for logging
+                    voice_used = article.get('voice', 'unknown')
+                    self.logger.info(f"🎬 Generating YouTube Short for article: {article_id} with voice anchor: {voice_used}")
 
                     # Get paths from result (these are relative paths like /public/...)
                     relative_video_path = result.get('video_path')
@@ -400,14 +402,14 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/merge-latest', methods=['POST'])
         def merge_latest_videos():
-            """Merge latest 20 news videos into a single video"""
+            """Merge latest 20 news videos into a single video with alternating male/female anchors"""
             try:
-                self.logger.info("🎬 Starting merge of latest 20 news videos")
+                self.logger.info("🎬 Starting merge of latest 20 news videos with voice alternation")
 
-                # Get latest news with videos
+                # Get latest news with videos, including voice field
                 latest_news = list(self.news_collection.find(
                     {"video_path": {"$exists": True, "$ne": None}},
-                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1}
+                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1}
                 ).sort("created_at", -1).limit(20))
 
                 if not latest_news:
@@ -417,6 +419,12 @@ class VideoGeneratorJob(BaseJob):
                     }), 404
 
                 self.logger.info(f"📊 Found {len(latest_news)} news videos to merge")
+
+                # Log voice distribution for debugging
+                male_count = sum(1 for news in latest_news if news.get('voice') in ['am_adam', 'am_michael', 'bm_george', 'bm_lewis', 'male'])
+                female_count = sum(1 for news in latest_news if news.get('voice') in ['af_bella', 'af_nicole', 'af_sarah', 'af_sky', 'bf_emma', 'bf_isabella', 'female'])
+                no_voice_count = sum(1 for news in latest_news if not news.get('voice'))
+                self.logger.info(f"🎭 Voice distribution: {male_count} male, {female_count} female, {no_voice_count} no voice")
 
                 # Delete old merged video file immediately (before async processing starts)
                 # This prevents users from downloading the old video while new one is being created
@@ -459,12 +467,17 @@ class VideoGeneratorJob(BaseJob):
                 thread.start()
 
                 return jsonify({
-                    "message": f"Video merging started for {len(latest_news)} videos. This process may take 2-5 minutes depending on video length and quality.",
+                    "message": f"Video merging started for {len(latest_news)} videos with alternating male/female anchors. This process may take 2-5 minutes depending on video length and quality.",
                     "status": "processing",
                     "video_count": len(latest_news),
+                    "voice_distribution": {
+                        "male": male_count,
+                        "female": female_count,
+                        "no_voice": no_voice_count
+                    },
                     "estimated_time": "2-5 minutes",
                     "download_url": "/download/latest-20-news.mp4",
-                    "note": "Please wait for processing to complete before downloading. Check server logs for progress updates."
+                    "note": "Please wait for processing to complete before downloading. Check server logs for progress updates. Videos are ordered with alternating male and female anchor voices."
                 })
 
             except Exception as e:
@@ -570,7 +583,7 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/generate-short', methods=['POST'])
         def generate_short():
-            """Generate YouTube Short for a news article"""
+            """Generate YouTube Short for a news article with voice anchor information"""
             try:
                 data = request.get_json() or {}
                 article_id = data.get('article_id')
@@ -583,7 +596,7 @@ class VideoGeneratorJob(BaseJob):
 
                 self.logger.info(f"🎬 Generating YouTube Short for article: {article_id}")
 
-                # Get article from database
+                # Get article from database (including voice field)
                 article = self.news_collection.find_one({'id': article_id})
 
                 if not article:
@@ -623,6 +636,10 @@ class VideoGeneratorJob(BaseJob):
                 # Get subscribe video path (use the one from public directory which has audio)
                 subscribe_video_path = '/app/public/CNINews_Subscribe.mp4'
 
+                # Get voice information for logging
+                voice_used = article.get('voice', 'unknown')
+                self.logger.info(f"🎭 Generating short with voice anchor: {voice_used}")
+
                 # Generate short
                 result = self.shorts_service.generate_short(
                     news_video_path=video_path,
@@ -653,6 +670,7 @@ class VideoGeneratorJob(BaseJob):
                         "status": "success",
                         "article_id": article_id,
                         "short_path": relative_shorts_path,
+                        "voice_anchor": voice_used,
                         "file_size_mb": result.get('file_size_mb'),
                         "duration": result.get('duration'),
                         "dimensions": result.get('dimensions'),

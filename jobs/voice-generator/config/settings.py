@@ -44,6 +44,15 @@ class Config:
     MAX_TEXT_LENGTH = int(os.getenv('MAX_TEXT_LENGTH', 1000))             # Max characters for TTS
     AUDIO_BATCH_SIZE = int(os.getenv('AUDIO_BATCH_SIZE', 5))              # Process 5 articles at a time
     AUDIO_GENERATION_DELAY = int(os.getenv('AUDIO_GENERATION_DELAY', 2))  # Delay between generations (seconds)
+
+    # Voice/Anchor Configuration for Kokoro-82M model
+    # Male voices: am_adam, am_michael, bm_george, bm_lewis
+    # Female voices: af_bella, af_nicole, af_sarah, af_sky, bf_emma, bf_isabella
+    MALE_VOICES = os.getenv('MALE_VOICES', 'am_adam,am_michael').split(',')  # Default male voices
+    FEMALE_VOICES = os.getenv('FEMALE_VOICES', 'af_bella,af_sarah').split(',')  # Default female voices
+    DEFAULT_MALE_VOICE = os.getenv('DEFAULT_MALE_VOICE', 'am_adam')  # Default male anchor voice
+    DEFAULT_FEMALE_VOICE = os.getenv('DEFAULT_FEMALE_VOICE', 'af_bella')  # Default female anchor voice
+    ENABLE_VOICE_ALTERNATION = os.getenv('ENABLE_VOICE_ALTERNATION', 'true').lower() == 'true'  # Enable alternating voices
     
     # Logging Configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

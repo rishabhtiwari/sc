@@ -81,7 +81,11 @@ class NewsEnrichmentService:
                         results['articles_failed'] += 1
                         continue
 
-                    # Step 4: Generate 45-70 word summary using LLM
+                    # Step 3.5: Clean content to remove word/char count annotations
+                    content = self._clean_content(content)
+                    self.logger.info(f"🧹 Cleaned content for article {article_id}")
+
+                    # Step 4: Generate 40-75 word summary using LLM
                     summary = self._generate_summary(content, article_id)
 
                     if summary:
@@ -129,14 +133,14 @@ class NewsEnrichmentService:
 
     def _generate_summary(self, content: str, article_id: str) -> str:
         """
-        Generate a 45-70 word summary using LLM service with retry logic
+        Generate a 40-75 word summary using LLM service with retry logic
 
         Args:
             content: Article content to summarize
             article_id: Article identifier for logging
 
         Returns:
-            Generated summary (45-70 words) or empty string if failed
+            Generated summary (40-75 words) or empty string if failed
         """
         max_retries = 2  # Try up to 2 times
 
@@ -148,10 +152,10 @@ class NewsEnrichmentService:
                     prompt = f"""You are a professional news editor. Create a news summary following these STRICT requirements:
 
 CRITICAL REQUIREMENTS:
-1. Write EXACTLY 45-70 words - this is MANDATORY
+1. Write EXACTLY 40-75 words - this is MANDATORY
 2. Count every single word to ensure you meet this requirement
-3. If your summary is less than 45 words, ADD MORE DETAILS
-4. If your summary is more than 70 words, REMOVE LESS IMPORTANT DETAILS
+3. If your summary is less than 40 words, ADD MORE DETAILS
+4. If your summary is more than 75 words, REMOVE LESS IMPORTANT DETAILS
 
 CONTENT RULES:
 - Write in plain, everyday English
@@ -163,15 +167,15 @@ CONTENT RULES:
 Article to summarize:
 {content[:2000]}
 
-Write your 45-70 word summary now:"""
+Write your 40-75 word summary now:"""
                 else:
                     # More aggressive prompt for retry
-                    prompt = f"""IMPORTANT: Your previous summary was TOO SHORT. You MUST write MORE words.
+                    prompt = f"""IMPORTANT: Your previous summary was not in the correct range. You MUST write between 40-75 words.
 
-Create a detailed news summary with EXACTLY 50-65 words (count carefully!).
+Create a detailed news summary with EXACTLY 45-70 words (count carefully!).
 
 MANDATORY RULES:
-- Write AT LEAST 50 words - this is CRITICAL
+- Write AT LEAST 45 words - this is CRITICAL
 - Include MORE details: background, context, implications
 - Use complete sentences with proper grammar
 - Write ONLY the summary text - no labels or formatting
@@ -179,7 +183,7 @@ MANDATORY RULES:
 Article:
 {content[:2000]}
 
-Write your 50-65 word detailed summary:"""
+Write your 45-70 word detailed summary:"""
 
                 # Make request to LLM service directly (no RAG)
                 payload = {
@@ -243,6 +247,34 @@ Write your 50-65 word detailed summary:"""
         self.logger.error(f"❌ Failed to generate summary for article {article_id} after {max_retries} attempts")
         return ""
 
+    def _clean_content(self, content: str) -> str:
+        """
+        Clean content by removing word/character count annotations
+
+        Removes patterns like:
+        - "... [4771 chars]" at the end of content
+        - "[1200 words]", "[1200 characters]" anywhere in content
+
+        Args:
+            content: Raw content from news article
+
+        Returns:
+            Cleaned content without word/char count annotations
+        """
+        import re
+
+        # Remove patterns like "... [4771 chars]" at the end
+        # Pattern: optional "..." followed by space, bracket, digits, space, "chars", bracket
+        content = re.sub(r'\.\.\.\s*\[\s*\d+\s+chars?\s*\]\s*$', '', content, flags=re.IGNORECASE)
+
+        # Remove any remaining patterns like [1200 chars], [1200 words], [1200 characters]
+        content = re.sub(r'\[\s*\d+\s+(?:word|char|character)s?\s*\]', '', content, flags=re.IGNORECASE)
+
+        # Also remove patterns at the end like "1200 words" or "1200 characters" without brackets
+        content = re.sub(r'\s*\d+\s+(?:word|char|character)s?\s*$', '', content, flags=re.IGNORECASE)
+
+        return content.strip()
+
     def _clean_summary(self, summary: str) -> str:
         """
         Clean and validate summary to ensure it's proper text, not code
@@ -290,14 +322,14 @@ Write your 50-65 word detailed summary:"""
             if summary and summary[-1] not in '.!?':
                 summary += '.'
 
-            # Check word count (should be 45-70 words, but accept 40-90 to be flexible)
+            # Check word count (LLM asked for 40-75 words, but reject if < 30 or > 100)
             word_count = len(summary.split())
-            if word_count < 40:  # Too short, likely not a proper summary
-                self.logger.warning(f"⚠️ Summary too short: {word_count} words (minimum 40 required)")
+            if word_count < 30:  # Too short, likely not a proper summary
+                self.logger.warning(f"⚠️ Summary too short: {word_count} words (minimum 30 required)")
                 return ""
 
-            if word_count > 90:  # Too long (increased from 80 to reduce false rejections)
-                self.logger.warning(f"⚠️ Summary too long: {word_count} words (maximum 90 allowed)")
+            if word_count > 100:  # Too long
+                self.logger.warning(f"⚠️ Summary too long: {word_count} words (maximum 100 allowed)")
                 return ""
 
             return summary

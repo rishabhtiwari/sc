@@ -14,7 +14,7 @@ from config.settings import Config
 
 class NewsAudioService:
     """Service for generating audio from news articles"""
-    
+
     def __init__(self, logger: logging.Logger = None):
         """
         Initialize NewsAudioService
@@ -24,16 +24,16 @@ class NewsAudioService:
         """
         self.logger = logger or logging.getLogger(__name__)
         self.config = Config
-        
+
         # Initialize MongoDB connection for news database
         self.news_client = MongoClient(Config.NEWS_MONGODB_URL)
         self.news_db = self.news_client.get_database()
         self.news_collection = self.news_db.news_document
-        
+
         # Test connection
         self.news_client.admin.command('ping')
         self.logger.info("🔧 NewsAudioService initialized successfully")
-    
+
     def get_articles_needing_audio(self, limit: int = None) -> List[Dict[str, Any]]:
         """
         Get articles that need audio generation (audio_path is null)
@@ -45,12 +45,12 @@ class NewsAudioService:
             List of news articles needing audio generation
         """
         try:
-            # Query for articles with no audio_paths and have content
+            # Query for articles with no audio_paths and have short_summary
             # Comprehensive check for articles without audio generation:
             # 1. audio_paths field doesn't exist
             # 2. audio_paths is null
             # 3. audio_paths is empty object {}
-            # 4. audio_paths exists but is missing required fields (title, description, content)
+            # 4. audio_paths exists but is missing short_summary field
             query = {
                 '$and': [
                     {
@@ -59,38 +59,34 @@ class NewsAudioService:
                             {'audio_paths': None},  # Field is null
                             {'audio_paths': {}},  # Field is empty object
                             {'audio_paths': {'$in': [None, {}]}},  # Field is null or empty
-                            # Check if any of the required audio fields are missing
-                            {'audio_paths.title': {'$exists': False}},
-                            {'audio_paths.description': {'$exists': False}},
-                            {'audio_paths.content': {'$exists': False}}
+                            # Check if short_summary audio is missing
+                            {'audio_paths.short_summary': {'$exists': False}}
                         ]
                     },
                     {'status': {'$in': ['completed', 'published']}},  # Only completed articles
-                    {'$or': [
-                        {'content': {'$exists': True, '$ne': '', '$ne': None}},
-                        {'description': {'$exists': True, '$ne': '', '$ne': None}}
-                    ]}
+                    {'short_summary': {'$exists': True, '$ne': '', '$ne': None}}  # Must have short_summary
                 ]
             }
-            
+
             cursor = self.news_collection.find(query).sort('created_at', -1)
             if limit:
                 cursor = cursor.limit(limit)
-                
+
             articles = list(cursor)
             self.logger.info(f"📰 Found {len(articles)} articles needing audio generation")
             return articles
-            
+
         except Exception as e:
             self.logger.error(f"❌ Error getting articles needing audio: {str(e)}")
             return []
-    
-    def generate_audio_for_article(self, article: Dict[str, Any]) -> Dict[str, Any]:
+
+    def generate_audio_for_article(self, article: Dict[str, Any], voice: str = None) -> Dict[str, Any]:
         """
-        Generate audio for a single article (title, description, content)
+        Generate audio for a single article (short_summary only)
 
         Args:
             article: News article document
+            voice: Optional voice to use for audio generation (e.g., 'am_adam', 'af_bella', 'male', 'female')
 
         Returns:
             Dictionary with generation results
@@ -100,7 +96,8 @@ class NewsAudioService:
             'success': False,
             'audio_paths': {},
             'error': None,
-            'generation_time_ms': 0
+            'generation_time_ms': 0,
+            'voice_used': None
         }
 
         try:
@@ -114,17 +111,19 @@ class NewsAudioService:
             self.logger.info(f"🔧 DEFAULT_AUDIO_MODEL: {self.config.DEFAULT_AUDIO_MODEL}")
             self.logger.info(f"🔧 HINDI_AUDIO_MODEL: {self.config.HINDI_AUDIO_MODEL}")
 
+            # Determine voice to use
+            voice_to_use = self._determine_voice(voice, language)
+            self.logger.info(f"🎭 Voice selected: {voice_to_use}")
+            result['voice_used'] = voice_to_use
+
             # Create public directory structure
             import os
             public_dir = "/app/public"
             article_dir = os.path.join(public_dir, str(article_id))
             os.makedirs(article_dir, exist_ok=True)
 
-            # Fields to generate audio for
+            # Fields to generate audio for (only short_summary)
             audio_fields = {
-                'title': article.get('title', ''),
-                'description': article.get('description', ''),
-                'content': article.get('content', ''),
                 'short_summary': article.get('short_summary', '')
             }
 
@@ -137,14 +136,10 @@ class NewsAudioService:
                     self.logger.warning(f"⚠️ No {field_name} content found for article {article_id}")
                     continue
 
-                # Truncate content if too long
-                if field_name == 'content' and len(text_content) > self.config.MAX_TEXT_LENGTH:
-                    text_content = text_content[:self.config.MAX_TEXT_LENGTH].rsplit(' ', 1)[0] + "..."
-
                 self.logger.info(f"🔊 Generating {field_name} audio for article {article_id}")
 
-                # Generate audio via audio-generation service
-                audio_result = self._call_audio_generation_service(text_content.strip(), model)
+                # Generate audio via audio-generation service with voice
+                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use)
 
                 if audio_result['success']:
                     # Move generated file to our structure
@@ -159,17 +154,20 @@ class NewsAudioService:
                     else:
                         self.logger.error(f"❌ Failed to move {field_name} audio file")
                 else:
-                    self.logger.error(f"❌ Failed to generate {field_name} audio: {audio_result.get('error', 'Unknown error')}")
+                    self.logger.error(
+                        f"❌ Failed to generate {field_name} audio: {audio_result.get('error', 'Unknown error')}")
 
             generation_time = int((time.time() - total_start_time) * 1000)
 
             if generated_paths:
-                # Update article with audio paths
+                # Update article with audio paths and voice used
                 update_result = self.news_collection.update_one(
                     {'id': article_id},
                     {
                         '$set': {
                             'audio_paths': generated_paths,
+                            'voice': voice_to_use,
+                            'voice_updated_at': datetime.utcnow(),
                             'updated_at': datetime.utcnow()
                         }
                     }
@@ -179,7 +177,8 @@ class NewsAudioService:
                     result['success'] = True
                     result['audio_paths'] = generated_paths
                     result['generation_time_ms'] = generation_time
-                    self.logger.info(f"✅ All audio files generated for article {article_id}: {list(generated_paths.keys())}")
+                    self.logger.info(
+                        f"✅ All audio files generated for article {article_id}: {list(generated_paths.keys())}")
                 else:
                     result['error'] = "Failed to update article with audio paths"
             else:
@@ -258,15 +257,15 @@ class NewsAudioService:
         """
         # Priority: short_summary > description > content (truncated)
         text_content = None
-        
+
         # First try short_summary (usually 40-70 words, perfect for TTS)
         if article.get('short_summary'):
             text_content = article['short_summary'].strip()
-        
+
         # Fallback to description
         elif article.get('description'):
             text_content = article['description'].strip()
-        
+
         # Last resort: truncated content
         elif article.get('content'):
             content = article['content'].strip()
@@ -275,9 +274,9 @@ class NewsAudioService:
                 text_content = content[:self.config.MAX_TEXT_LENGTH].rsplit(' ', 1)[0] + "..."
             else:
                 text_content = content
-        
+
         return text_content if text_content else None
-    
+
     def _get_audio_model_for_language(self, language: str) -> str:
         """
         Get appropriate audio model for language
@@ -295,16 +294,90 @@ class NewsAudioService:
             'en': self.config.DEFAULT_AUDIO_MODEL,  # English
             'eng': self.config.DEFAULT_AUDIO_MODEL,  # English (alternative code)
         }
-        
+
         return language_models.get(language.lower(), self.config.DEFAULT_AUDIO_MODEL)
-    
-    def _call_audio_generation_service(self, text: str, model: str) -> Dict[str, Any]:
+
+    def _determine_voice(self, voice: str = None, language: str = 'en') -> str:
+        """
+        Determine which voice to use for audio generation
+
+        Args:
+            voice: Requested voice ('male', 'female', or specific voice name like 'am_adam')
+            language: Language code (only English supports multiple voices currently)
+
+        Returns:
+            Voice name to use for generation
+        """
+        # Only Kokoro model (English) supports multiple voices
+        if language.lower() not in ['en', 'eng']:
+            return None  # Non-English models don't support voice selection
+
+        if not voice:
+            # No voice specified, use default male voice
+            return self.config.DEFAULT_MALE_VOICE
+
+        # Handle generic 'male' or 'female' voice requests
+        if voice.lower() == 'male':
+            return self.config.DEFAULT_MALE_VOICE
+        elif voice.lower() == 'female':
+            return self.config.DEFAULT_FEMALE_VOICE
+
+        # Return specific voice name as-is (e.g., 'am_adam', 'af_bella')
+        return voice
+
+    def _get_next_alternating_voice(self) -> str:
+        """
+        Get the next voice in alternating male/female pattern based on last used voice
+
+        Returns:
+            Voice name to use (alternates between male and female)
+        """
+        if not self.config.ENABLE_VOICE_ALTERNATION:
+            return self.config.DEFAULT_MALE_VOICE
+
+        try:
+            # Get the last article with a voice assigned, sorted by voice_updated_at
+            last_article = self.news_collection.find_one(
+                {
+                    'voice': {'$ne': None, '$exists': True},
+                    'voice_updated_at': {'$exists': True}
+                },
+                sort=[('voice_updated_at', -1)]
+            )
+
+            if not last_article or not last_article.get('voice'):
+                # No previous voice, start with male
+                self.logger.info(
+                    f"🎭 No previous voice found, starting with male voice: {self.config.DEFAULT_MALE_VOICE}")
+                return self.config.DEFAULT_MALE_VOICE
+
+            last_voice = last_article['voice']
+            self.logger.info(f"🎭 Last voice used: {last_voice}")
+
+            # Check if last voice was male or female
+            if last_voice in self.config.MALE_VOICES or last_voice == self.config.DEFAULT_MALE_VOICE:
+                # Last was male, use female
+                next_voice = self.config.DEFAULT_FEMALE_VOICE
+                self.logger.info(f"🎭 Last was male, switching to female: {next_voice}")
+                return next_voice
+            else:
+                # Last was female, use male
+                next_voice = self.config.DEFAULT_MALE_VOICE
+                self.logger.info(f"🎭 Last was female, switching to male: {next_voice}")
+                return next_voice
+
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default male voice")
+            return self.config.DEFAULT_MALE_VOICE
+
+    def _call_audio_generation_service(self, text: str, model: str, voice: str = None) -> Dict[str, Any]:
         """
         Call the audio-generation service to generate TTS
 
         Args:
             text: Text to convert to speech
             model: TTS model to use
+            voice: Voice to use for generation (optional)
 
         Returns:
             Dictionary with generation results
@@ -315,7 +388,7 @@ class NewsAudioService:
                 'text': text,
                 'model': model,
                 'format': 'wav',
-                'voice': 'am_adam'  # Default male voice for Kokoro model
+                'voice': voice or self.config.DEFAULT_MALE_VOICE  # Use provided voice or default
             }
 
             self.logger.info(f"🔊 Calling audio generation service: {url}")
@@ -331,7 +404,7 @@ class NewsAudioService:
                 json=payload,
                 timeout=timeout
             )
-            
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
@@ -366,7 +439,7 @@ class NewsAudioService:
                 'success': False,
                 'error': f"Audio generation service error: {str(e)}"
             }
-    
+
     def process_news_audio_generation(self, job_id: str = None, is_on_demand: bool = False) -> Dict[str, Any]:
         """
         Process audio generation for multiple news articles
@@ -405,13 +478,17 @@ class NewsAudioService:
                 batch_articles_found = len(articles)
                 results['total_articles_found'] += batch_articles_found
 
-                self.logger.info(f"🎵 Processing batch {results['batches_processed']}: {batch_articles_found} articles for audio generation in job {job_id}")
+                self.logger.info(
+                    f"🎵 Processing batch {results['batches_processed']}: {batch_articles_found} articles for audio generation in job {job_id}")
 
                 # Process each article in the current batch
                 for article in articles:
                     try:
-                        # Generate audio for article
-                        audio_result = self.generate_audio_for_article(article)
+                        # Get next alternating voice if enabled
+                        voice = self._get_next_alternating_voice() if self.config.ENABLE_VOICE_ALTERNATION else None
+
+                        # Generate audio for article with alternating voice
+                        audio_result = self.generate_audio_for_article(article, voice=voice)
                         results['total_articles_processed'] += 1
 
                         if audio_result['success']:
@@ -443,9 +520,9 @@ class NewsAudioService:
             results['processing_time_ms'] = int((time.time() - start_time) * 1000)
 
             self.logger.info(f"✅ Audio generation completed for job {job_id}: "
-                           f"{results['batches_processed']} batches, "
-                           f"{results['total_articles_success']} success, "
-                           f"{results['total_articles_failed']} failed")
+                             f"{results['batches_processed']} batches, "
+                             f"{results['total_articles_success']} success, "
+                             f"{results['total_articles_failed']} failed")
 
         except Exception as e:
             results['errors'].append(f"Service error: {str(e)}")

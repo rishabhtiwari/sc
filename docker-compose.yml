@@ -569,6 +569,12 @@ services:
       - VOICE_SERVICE_TIMEOUT=10800
       - DEFAULT_LANGUAGE=en
       - MAX_TEXT_LENGTH=2000
+      # Voice/Anchor Alternation Configuration
+      - ENABLE_VOICE_ALTERNATION=true
+      - MALE_VOICES=am_adam,am_michael
+      - FEMALE_VOICES=af_bella,af_sarah
+      - DEFAULT_MALE_VOICE=am_adam
+      - DEFAULT_FEMALE_VOICE=af_bella
       # Chunking Configuration
       - ENABLE_CHUNKING=true
       - CHUNKING_THRESHOLD=300
@@ -819,7 +825,7 @@ services:
       - NEWS_MONGODB_DATABASE=news
       - NEWS_MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
       # Cleanup Configuration
-      - CLEANUP_RETENTION_HOURS=36
+      - CLEANUP_RETENTION_HOURS=4
       - CLEANUP_DRY_RUN=false
       - CLEANUP_BATCH_SIZE=100
       - CLEANUP_MAX_ARTICLES_PER_RUN=10000

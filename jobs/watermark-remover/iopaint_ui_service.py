@@ -890,7 +890,7 @@ def get_stats():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
                 }
             },
             {
@@ -920,7 +920,7 @@ def get_stats():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
                 }
             },
             {
@@ -954,7 +954,7 @@ def get_next_image():
         # Find first document with:
         # 1. Has image but no clean_image
         # 2. Has short_summary field that is not empty/null
-        # 3. short_summary has at least 40 words (minimum requirement)
+        # 3. short_summary has at least 30 words (minimum requirement)
         # Sorted by created_at descending (most recent first)
 
         # Use aggregation pipeline to filter by word count
@@ -980,7 +980,7 @@ def get_next_image():
             },
             {
                 '$match': {
-                    'word_count': {'$gte': 40}  # Minimum 40 words requirement
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
                 }
             },
             {
@@ -995,7 +995,7 @@ def get_next_image():
 
         if not results:
             return jsonify({
-                'error': 'No more images to clean! All images either lack proper short_summary (min 40 words) or are already cleaned.'}), 404
+                'error': 'No more images to clean! All images either lack proper short_summary (min 30 words) or are already cleaned.'}), 404
 
         doc = results[0]
         word_count = doc.get('word_count', 0)
