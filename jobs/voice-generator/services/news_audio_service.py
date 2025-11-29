@@ -266,14 +266,9 @@ class NewsAudioService:
         elif article.get('description'):
             text_content = article['description'].strip()
 
-        # Last resort: truncated content
+        # Last resort: use full content without truncation
         elif article.get('content'):
-            content = article['content'].strip()
-            if len(content) > self.config.MAX_TEXT_LENGTH:
-                # Truncate at word boundary
-                text_content = content[:self.config.MAX_TEXT_LENGTH].rsplit(' ', 1)[0] + "..."
-            else:
-                text_content = content
+            text_content = article['content'].strip()
 
         return text_content if text_content else None
 

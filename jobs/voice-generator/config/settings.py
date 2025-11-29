@@ -41,7 +41,6 @@ class Config:
     # Audio Generation Configuration
     DEFAULT_AUDIO_MODEL = os.getenv('DEFAULT_AUDIO_MODEL', 'kokoro-82m')  # Default to Kokoro-82M for English
     HINDI_AUDIO_MODEL = os.getenv('HINDI_AUDIO_MODEL', 'mms-tts-hin')     # Hindi model
-    MAX_TEXT_LENGTH = int(os.getenv('MAX_TEXT_LENGTH', 1000))             # Max characters for TTS
     AUDIO_BATCH_SIZE = int(os.getenv('AUDIO_BATCH_SIZE', 5))              # Process 5 articles at a time
     AUDIO_GENERATION_DELAY = int(os.getenv('AUDIO_GENERATION_DELAY', 2))  # Delay between generations (seconds)
 
@@ -93,10 +92,7 @@ class Config:
             
         if cls.AUDIO_GENERATION_TIMEOUT <= 0:
             errors.append("AUDIO_GENERATION_TIMEOUT must be > 0")
-            
-        if cls.MAX_TEXT_LENGTH <= 0:
-            errors.append("MAX_TEXT_LENGTH must be > 0")
-            
+
         if cls.AUDIO_BATCH_SIZE <= 0:
             errors.append("AUDIO_BATCH_SIZE must be > 0")
         

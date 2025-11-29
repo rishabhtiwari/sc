@@ -568,7 +568,7 @@ services:
       - AUDIO_GENERATION_SERVICE_URL=http://audio-generation-factory:3000
       - VOICE_SERVICE_TIMEOUT=10800
       - DEFAULT_LANGUAGE=en
-      - MAX_TEXT_LENGTH=2000
+      - AUDIO_BATCH_SIZE=25
       # Voice/Anchor Alternation Configuration
       - ENABLE_VOICE_ALTERNATION=true
       - MALE_VOICES=am_adam,am_michael
@@ -684,7 +684,7 @@ services:
       - VIDEO_WIDTH=1920
       - VIDEO_HEIGHT=1080
       - VIDEO_FPS=30
-      - BATCH_SIZE=5
+      - BATCH_SIZE=25
       - PROCESSING_TIMEOUT=600
       - IMAGE_DOWNLOAD_TIMEOUT=30
       - MAX_IMAGE_SIZE_MB=10
