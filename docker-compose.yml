@@ -25,6 +25,72 @@ services:
     depends_on:
       - ichat-api
 
+  # News Automation Frontend
+  news-automation-frontend:
+    build:
+      context: ./frontend-server
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
+    container_name: news-automation-frontend
+    ports:
+      - "3002:3002"  # Express API proxy
+      - "3003:80"    # Nginx static files (optional)
+    environment:
+      # Server Configuration
+      - NODE_ENV=production
+      - PORT=3002
+
+      # API Server URLs (Docker internal network)
+      - API_SERVER_URL=http://ichat-api-server:8080
+      - NEWS_FETCHER_URL=http://ichat-news-fetcher:8093
+      - IOPAINT_URL=http://ichat-iopaint:8096
+      - YOUTUBE_UPLOADER_URL=http://ichat-youtube-uploader:8097
+      - VOICE_GENERATOR_URL=http://ichat-voice-generator:8094
+      - AUDIO_GENERATION_URL=http://audio-generation-factory:3000
+
+      # Frontend Configuration
+      - VITE_API_BASE_URL=/api
+      - VITE_WS_URL=ws://localhost:3002
+
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+
+      # Security
+      - CORS_ORIGIN=http://localhost:3002,http://localhost:3003
+
+      # Performance
+      - MAX_REQUEST_SIZE=100mb
+      - REQUEST_TIMEOUT=300000
+    volumes:
+      # Logs persistence
+      - ./frontend-server/logs:/app/logs
+      # Data persistence (optional)
+      - ./frontend-server/data:/app/data
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})\"" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    depends_on:
+      ichat-api:
+        condition: service_healthy
+      job-news-fetcher:
+        condition: service_started
+      iopaint:
+        condition: service_started
+      youtube-uploader:
+        condition: service_started
+    labels:
+      - "com.news-automation.service=frontend"
+      - "com.news-automation.version=1.0.0"
+      - "com.news-automation.description=News Automation Frontend Server"
+
   # Main iChat API Server
   ichat-api:
     build:

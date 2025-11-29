@@ -1,0 +1,133 @@
+import React from 'react';
+import { Button } from '../common';
+
+/**
+ * Control Panel Component - Controls for image cleaning operations
+ */
+const ControlPanel = ({
+  brushSize,
+  onBrushSizeChange,
+  currentImage,
+  hasMask,
+  onLoadNext,
+  onAutoDetect,
+  onClearMask,
+  onProcess,
+  onSave,
+  onSkip,
+  loading,
+  processing,
+}) => {
+  return (
+    <div className="space-y-4">
+      {/* Image Info */}
+      {currentImage && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm font-semibold text-blue-900 mb-1">Current Image:</p>
+          <p className="text-sm text-blue-700">{currentImage.title || 'Untitled'}</p>
+          {currentImage.source && (
+            <p className="text-xs text-blue-600 mt-1">Source: {currentImage.source}</p>
+          )}
+        </div>
+      )}
+
+      {/* Instructions */}
+      {currentImage && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm font-semibold text-blue-900 mb-2">📝 Instructions:</p>
+          <ul className="text-xs text-blue-700 space-y-1">
+            <li>• <strong>No watermark?</strong> Click "Save & Mark Done" directly</li>
+            <li>• <strong>Has watermark?</strong> Paint over it, then click "Remove Watermark"</li>
+            <li>• Use brush size slider or "Auto-detect" button</li>
+          </ul>
+        </div>
+      )}
+
+      {/* Brush Size Control */}
+      <div className="space-y-2">
+        <label className="block text-sm font-semibold text-gray-700">
+          Brush Size: {brushSize}px
+        </label>
+        <input
+          type="range"
+          min="5"
+          max="100"
+          value={brushSize}
+          onChange={(e) => onBrushSizeChange(parseInt(e.target.value))}
+          disabled={!currentImage || loading}
+          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: `linear-gradient(to right, #667eea 0%, #667eea ${((brushSize - 5) / 95) * 100}%, #e5e7eb ${((brushSize - 5) / 95) * 100}%, #e5e7eb 100%)`
+          }}
+        />
+      </div>
+
+      {/* Action Buttons */}
+      <div className="space-y-2">
+        <Button
+          variant="primary"
+          icon="📥"
+          onClick={onLoadNext}
+          loading={loading}
+          fullWidth
+        >
+          Load Next Image
+        </Button>
+
+        <Button
+          variant="info"
+          icon="🔍"
+          onClick={onAutoDetect}
+          disabled={!currentImage || loading}
+          fullWidth
+        >
+          Auto-detect Watermark
+        </Button>
+
+        <Button
+          variant="secondary"
+          icon="🗑️"
+          onClick={onClearMask}
+          disabled={!currentImage || !hasMask || loading}
+          fullWidth
+        >
+          Clear Mask
+        </Button>
+
+        <Button
+          variant="primary"
+          icon="✨"
+          onClick={onProcess}
+          disabled={!currentImage || !hasMask || loading}
+          loading={processing}
+          fullWidth
+        >
+          Remove Watermark
+        </Button>
+
+        <Button
+          variant="success"
+          icon="💾"
+          onClick={onSave}
+          disabled={!currentImage || loading}
+          fullWidth
+        >
+          Save & Mark Done
+        </Button>
+
+        <Button
+          variant="danger"
+          icon="⏭️"
+          onClick={onSkip}
+          disabled={!currentImage || loading}
+          fullWidth
+        >
+          Skip This Image
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default ControlPanel;
+

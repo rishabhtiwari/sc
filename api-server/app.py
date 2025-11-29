@@ -19,6 +19,13 @@ from routes.mcp_routes import mcp_bp
 from routes.syncer_routes import syncer_bp
 from routes.github_syncer_routes import github_syncer_bp
 from routes.news_routes import news_bp
+from routes.prompt_routes import prompt_bp
+from routes.voice_config_routes import voice_config_bp
+from routes.frontend_routes import frontend_bp
+from routes.websocket_routes import websocket_bp, init_socketio
+from routes.auth_routes import auth_bp
+from routes.dashboard_routes import dashboard_bp
+from routes.monitoring_routes import monitoring_bp
 
 from config.app_config import AppConfig
 
@@ -75,6 +82,13 @@ def create_app():
     from routes.syncer_routes import syncer_bp
     from routes.github_syncer_routes import github_syncer_bp
     from routes.news_routes import news_bp
+    from routes.prompt_routes import prompt_bp
+    from routes.voice_config_routes import voice_config_bp
+    from routes.frontend_routes import frontend_bp
+    from routes.websocket_routes import websocket_bp
+    from routes.auth_routes import auth_bp
+    from routes.dashboard_routes import dashboard_bp
+    from routes.monitoring_routes import monitoring_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -88,6 +102,17 @@ def create_app():
     app.register_blueprint(syncer_bp, url_prefix='/api')
     app.register_blueprint(github_syncer_bp, url_prefix='/api')
     app.register_blueprint(news_bp, url_prefix='/api')
+    app.register_blueprint(prompt_bp, url_prefix='/api')
+    app.register_blueprint(voice_config_bp, url_prefix='/api')
+    app.register_blueprint(frontend_bp, url_prefix='/api')
+    app.register_blueprint(websocket_bp, url_prefix='/api')
+    app.register_blueprint(auth_bp, url_prefix='/api')
+    app.register_blueprint(dashboard_bp, url_prefix='/api')
+    app.register_blueprint(monitoring_bp, url_prefix='/api')
+
+    # Initialize Socket.IO for real-time updates
+    socketio = init_socketio(app)
+    app.socketio = socketio  # Store reference in app for access in routes
 
     
     # Root endpoint
@@ -110,6 +135,11 @@ def create_app():
                 "context": "/api/context/* (GET/POST/DELETE)",
                 "code": "/api/code/* (GET/POST)",
                 "news": "/api/news/* (GET)",
+                "prompts": "/api/llm/prompts/* (GET/POST/PUT/DELETE)",
+                "voice": "/api/voice/* (GET/POST/PUT)",
+                "frontend": "/api/frontend/* (Proxy to all services)",
+                "websocket": "/api/websocket/* (WebSocket endpoints)",
+                "auth": "/api/auth/* (Authentication)",
                 "home": "/ (GET)"
             },
             "timestamp": int(time.time() * 1000)
@@ -128,18 +158,24 @@ def main():
         print("🔗 Chat endpoint: http://localhost:8080/api/chat")
         print("📄 Document processing: http://localhost:8080/api/documents")
         print("📰 News API: http://localhost:8080/api/news")
+        print("🔌 WebSocket: ws://localhost:8080/socket.io")
+        print("🌐 Frontend Proxy: http://localhost:8080/api/frontend/*")
         print("❤️  Health check: http://localhost:8080/api/health")
         print("🛑 Press Ctrl+C to stop the server")
         print("=" * 50)
-        
+
         app = create_app()
-        app.run(
+
+        # Use socketio.run() instead of app.run() to enable WebSocket support
+        app.socketio.run(
+            app,
             host='0.0.0.0',
             port=8080,
             debug=True,
-            use_reloader=False
+            use_reloader=False,
+            allow_unsafe_werkzeug=True  # Allow for development
         )
-        
+
     except KeyboardInterrupt:
         print("\n👋 iChat API Server stopped")
     except Exception as e:

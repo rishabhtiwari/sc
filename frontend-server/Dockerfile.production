@@ -1,0 +1,79 @@
+# ============================================
+# Production Dockerfile with Nginx
+# ============================================
+# This Dockerfile creates a production-ready build with:
+# - Multi-stage build for smaller image size
+# - Nginx for serving static files
+# - Optimized caching and compression
+# - Security headers
+# ============================================
+
+# ============================================
+# Stage 1: Build Stage
+# ============================================
+FROM node:18-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# ============================================
+# Stage 2: Production Stage with Nginx
+# ============================================
+FROM nginx:1.25-alpine
+
+# Install Node.js for the Express server (API proxy)
+RUN apk add --no-cache nodejs npm curl
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
+
+# Copy server files
+COPY server.js ./
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx-default.conf /etc/nginx/conf.d/default.conf
+
+# Create necessary directories
+RUN mkdir -p /var/log/nginx /var/cache/nginx /var/run && \
+    chown -R nginx:nginx /var/log/nginx /var/cache/nginx /var/run /app
+
+# Expose ports
+# 3002 for Express API proxy
+# 80 for Nginx static files
+EXPOSE 3002 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:3002/health || exit 1
+
+# Copy startup script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Start both Nginx and Node.js server
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
