@@ -207,7 +207,8 @@ class NewsFetcherService:
                     result['articles_fetched'] += len(articles)
 
                     # Save articles to database with category information
-                    saved_count = self._save_articles(articles, seed_url)
+                    # Pass the current category being processed, not the seed_url
+                    saved_count = self._save_articles(articles, category)
                     result['articles_saved'] += saved_count
 
                     self.logger.info(f"✅ Category '{category}': Fetched {len(articles)} articles, Saved {saved_count}")
@@ -299,30 +300,22 @@ class NewsFetcherService:
         self.logger.info(f"🌐 Final URL: {actual_url}")
         return actual_url
 
-    def _save_articles(self, articles: List[Dict[str, Any]], seed_url: Dict[str, Any] = None) -> int:
+    def _save_articles(self, articles: List[Dict[str, Any]], category: str = None) -> int:
         """
         Save articles to the news database, avoiding duplicates
 
         Args:
             articles: List of standardized articles
-            seed_url: Seed URL document containing category information
+            category: Category string for the articles (e.g., 'general', 'sports')
 
         Returns:
             Number of articles actually saved
         """
         saved_count = 0
 
-        # Extract category from seed URL
-        category = Config.DEFAULT_FILTER_CATEGORY  # Default category from config
-        if seed_url:
-            # Try to get category from metadata.api_params first
-            metadata = seed_url.get('metadata', {})
-            api_params = metadata.get('api_params', {})
-            if 'category' in api_params:
-                category = api_params['category']
-            # Fallback to direct category field
-            elif 'category' in seed_url:
-                category = seed_url['category']
+        # Use provided category or fall back to default
+        if not category:
+            category = Config.DEFAULT_FILTER_CATEGORY
 
         for article in articles:
             try:

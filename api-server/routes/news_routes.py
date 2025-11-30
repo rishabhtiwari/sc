@@ -18,14 +18,15 @@ logger = logging.getLogger(__name__)
 def get_news():
     """
     Get news articles with filtering and pagination
-    
+
     Query Parameters:
         - category (str, optional): News category filter
         - language (str, optional): Language filter
-        - country (str, optional): Country filter  
+        - country (str, optional): Country filter
+        - status (str, optional): Article status filter (completed, progress, failed)
         - page (int, optional): Page number (default: 1)
         - page_size (int, optional): Articles per page (default: 10, max: 100)
-    
+
     Returns:
         JSON response with news articles and pagination info
     """
@@ -34,25 +35,27 @@ def get_news():
         category = request.args.get('category')
         language = request.args.get('language')
         country = request.args.get('country')
-        
+        status = request.args.get('status')
+
         # Parse pagination parameters with defaults
         try:
             page = int(request.args.get('page', 1))
         except (ValueError, TypeError):
             page = 1
-            
+
         try:
             page_size = int(request.args.get('page_size', 10))
         except (ValueError, TypeError):
             page_size = 10
-        
-        logger.info(f"📰 GET /news - category={category}, language={language}, country={country}, page={page}, page_size={page_size}")
-        
+
+        logger.info(f"📰 GET /news - category={category}, language={language}, country={country}, status={status}, page={page}, page_size={page_size}")
+
         # Call handler
         result = news_handler.get_news(
             category=category,
             language=language,
             country=country,
+            status=status,
             page=page,
             page_size=page_size
         )
@@ -68,6 +71,52 @@ def get_news():
             
     except Exception as e:
         error_msg = f"Error in GET /news: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/<article_id>', methods=['PUT'])
+def update_news_article(article_id):
+    """
+    Update a news article by ID
+
+    Path Parameters:
+        - article_id (str): MongoDB ObjectId of the article to update
+
+    Request Body:
+        JSON object with fields to update (title, description, content, status, etc.)
+
+    Returns:
+        JSON response with update result
+    """
+    try:
+        logger.info(f"✏️ PUT /news/{article_id}")
+
+        # Get request data
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'error': 'No data provided',
+                'status': 'error'
+            }), 400
+
+        # Call handler
+        result = news_handler.update_article(article_id, data)
+
+        # Return response
+        if result['status'] == 'success':
+            return jsonify(result['data']), 200
+        else:
+            return jsonify({
+                'error': result['error'],
+                'status': 'error'
+            }), 400
+
+    except Exception as e:
+        error_msg = f"Error in PUT /news/{article_id}: {str(e)}"
         logger.error(f"💥 {error_msg}")
         return jsonify({
             'error': error_msg,

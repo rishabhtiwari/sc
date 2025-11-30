@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Input, Button } from '../common';
+import newsService from '../../services/newsService';
 
 /**
  * Seed URL Modal Component - Add/Edit seed URLs
@@ -8,20 +9,43 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
   const [formData, setFormData] = useState({
     partner_name: '',
     url: '',
-    category: '',
+    category: [],
+    country: 'in',
+    language: 'en',
     frequency_minutes: 60,
     is_active: true,
   });
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState([]);
+
+  // Fetch available categories on mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await newsService.getCategories();
+        if (response.data?.categories) {
+          const cats = Object.keys(response.data.categories);
+          setAvailableCategories(cats);
+        }
+      } catch (error) {
+        console.error('Failed to fetch categories:', error);
+        // Fallback to default categories
+        setAvailableCategories(['general', 'world', 'nation', 'business', 'technology', 'entertainment', 'sports', 'science', 'health']);
+      }
+    };
+    fetchCategories();
+  }, []);
 
   useEffect(() => {
     if (seedUrl) {
       setFormData({
         partner_name: seedUrl.partner_name || '',
         url: seedUrl.url || '',
-        category: Array.isArray(seedUrl.category) ? seedUrl.category.join(', ') : seedUrl.category || '',
+        category: Array.isArray(seedUrl.category) ? seedUrl.category : (seedUrl.category ? [seedUrl.category] : []),
+        country: seedUrl.country || 'in',
+        language: seedUrl.language || 'en',
         frequency_minutes: seedUrl.frequency_minutes || 60,
         is_active: seedUrl.is_active !== undefined ? seedUrl.is_active : true,
       });
@@ -29,7 +53,9 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
       setFormData({
         partner_name: '',
         url: '',
-        category: '',
+        category: [],
+        country: 'in',
+        language: 'en',
         frequency_minutes: 60,
         is_active: true,
       });
@@ -46,6 +72,25 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
     // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleCategoryToggle = (category) => {
+    setFormData(prev => {
+      const currentCategories = prev.category || [];
+      const isSelected = currentCategories.includes(category);
+
+      return {
+        ...prev,
+        category: isSelected
+          ? currentCategories.filter(c => c !== category)
+          : [...currentCategories, category]
+      };
+    });
+
+    // Clear error for category field
+    if (errors.category) {
+      setErrors(prev => ({ ...prev, category: '' }));
     }
   };
 
@@ -72,21 +117,16 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!validate()) {
       return;
     }
 
     setSaving(true);
     try {
-      // Convert category string to array if it contains commas
-      const categoryValue = formData.category.includes(',')
-        ? formData.category.split(',').map(c => c.trim()).filter(Boolean)
-        : formData.category.trim();
-
       const dataToSave = {
         ...formData,
-        category: categoryValue,
+        category: formData.category.length === 1 ? formData.category[0] : formData.category,
         frequency_minutes: parseInt(formData.frequency_minutes, 10),
       };
 
@@ -128,15 +168,71 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
           required
         />
 
-        <Input
-          label="Category"
-          name="category"
-          value={formData.category}
-          onChange={handleChange}
-          error={errors.category}
-          placeholder="e.g., technology, sports (comma-separated for multiple)"
-          helperText="Enter one or more categories separated by commas"
-        />
+        {/* Category Checkboxes */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Categories *
+          </label>
+          <div className="grid grid-cols-2 gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50">
+            {availableCategories.map((cat) => (
+              <div key={cat} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id={`category-${cat}`}
+                  checked={formData.category.includes(cat)}
+                  onChange={() => handleCategoryToggle(cat)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor={`category-${cat}`} className="text-sm text-gray-700 capitalize">
+                  {cat}
+                </label>
+              </div>
+            ))}
+          </div>
+          {errors.category && (
+            <p className="text-sm text-red-600">{errors.category}</p>
+          )}
+        </div>
+
+        {/* Country */}
+        <div className="space-y-2">
+          <label htmlFor="country" className="block text-sm font-medium text-gray-700">
+            Country
+          </label>
+          <select
+            id="country"
+            name="country"
+            value={formData.country}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="in">India (in)</option>
+            <option value="us">United States (us)</option>
+            <option value="gb">United Kingdom (gb)</option>
+            <option value="au">Australia (au)</option>
+            <option value="ca">Canada (ca)</option>
+          </select>
+        </div>
+
+        {/* Language */}
+        <div className="space-y-2">
+          <label htmlFor="language" className="block text-sm font-medium text-gray-700">
+            Language
+          </label>
+          <select
+            id="language"
+            name="language"
+            value={formData.language}
+            onChange={handleChange}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="en">English (en)</option>
+            <option value="hi">Hindi (hi)</option>
+            <option value="es">Spanish (es)</option>
+            <option value="fr">French (fr)</option>
+            <option value="de">German (de)</option>
+          </select>
+        </div>
 
         <Input
           label="Fetch Frequency (minutes)"

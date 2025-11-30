@@ -35,9 +35,13 @@ const NewsTable = ({ articles, loading, onViewArticle }) => {
     {
       key: 'category',
       label: 'Category',
-      render: (value) => (
-        <Badge variant="info">{value || 'general'}</Badge>
-      ),
+      render: (value) => {
+        // Handle array of categories
+        const categoryText = Array.isArray(value)
+          ? value.join(', ')
+          : (value || 'general');
+        return <Badge variant="info">{categoryText}</Badge>;
+      },
     },
     {
       key: 'source',

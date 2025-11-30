@@ -11,6 +11,7 @@ class ArticleStatus(Enum):
     PROGRESS = 'progress'
     COMPLETED = 'completed'
     FAILED = 'failed'
+    DONT_PROCESS = 'dont_process'
 
 
 class JobStatus(Enum):

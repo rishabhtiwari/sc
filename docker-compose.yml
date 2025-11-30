@@ -584,7 +584,7 @@ services:
       - MAX_PAGE_SIZE=50
       # Default API Filter Values
       - DEFAULT_FILTER_CATEGORY=general
-      - DEFAULT_FILTER_LANGUAGE=hi
+      - DEFAULT_FILTER_LANGUAGE=en
       - DEFAULT_FILTER_COUNTRY=in
     volumes:
       - ./jobs/news-fetcher/logs:/app/logs

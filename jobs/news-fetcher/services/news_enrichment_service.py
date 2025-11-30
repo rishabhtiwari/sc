@@ -21,6 +21,7 @@ class NewsEnrichmentService:
         self.news_client = MongoClient(config.NEWS_MONGODB_URL)
         self.news_db = self.news_client[config.NEWS_MONGODB_DATABASE]
         self.news_collection = self.news_db['news_document']
+        self.config_collection = self.news_db['enrichment_config']
 
         # LLM service configuration - direct service communication
         self.llm_service_url = getattr(config, 'LLM_SERVICE_URL', 'http://ichat-llm-service:8083')
@@ -47,7 +48,7 @@ class NewsEnrichmentService:
         }
 
         try:
-            # Step 1: Fetch all articles with status='progress'
+            # Step 1: Fetch all articles with status='progress', sorted by newest first
             articles = list(self.news_collection.find({
                 'status': ArticleStatus.PROGRESS.value,
                 '$or': [
@@ -55,10 +56,10 @@ class NewsEnrichmentService:
                     {'short_summary': ''},
                     {'short_summary': None}
                 ]
-            }))
+            }).sort('publishedAt', -1))  # Sort by publishedAt descending (newest first)
 
             results['total_articles_found'] = len(articles)
-            self.logger.info(f"📰 Found {len(articles)} articles to enrich for job {job_id}")
+            self.logger.info(f"📰 Found {len(articles)} articles to enrich for job {job_id} (processing newest first)")
 
             if not articles:
                 self.logger.info(f"✅ No articles found for enrichment in job {job_id}")
@@ -142,56 +143,36 @@ class NewsEnrichmentService:
         Returns:
             Generated summary (40-75 words) or empty string if failed
         """
-        max_retries = 2  # Try up to 2 times
+        # Load configuration from database
+        enrichment_config = self.config_collection.find_one({'config_type': 'enrichment'})
+
+        # Use config values or fallback to defaults
+        max_retries = enrichment_config.get('max_retries', 2) if enrichment_config else 2
+        content_max_chars = enrichment_config.get('content_max_chars', 2000) if enrichment_config else 2000
 
         for attempt in range(max_retries):
             try:
-                # Enhanced prompt with stronger emphasis on word count
-                # On retry, make the prompt even more explicit
+                # Get prompt templates from config
                 if attempt == 0:
-                    prompt = f"""You are a professional news editor. Create a news summary following these STRICT requirements:
-
-CRITICAL REQUIREMENTS:
-1. Write EXACTLY 40-75 words - this is MANDATORY
-2. Count every single word to ensure you meet this requirement
-3. If your summary is less than 40 words, ADD MORE DETAILS
-4. If your summary is more than 75 words, REMOVE LESS IMPORTANT DETAILS
-
-CONTENT RULES:
-- Write in plain, everyday English
-- Use complete, grammatically correct sentences
-- Include key facts: who, what, when, where, why
-- Write ONLY the summary - no titles, labels, or explanations
-- Never use code, markdown, bullets, or special formatting
-
-Article to summarize:
-{content[:2000]}
-
-Write your 40-75 word summary now:"""
+                    prompt_template = enrichment_config.get('prompt_template', '') if enrichment_config else ''
+                    temperature = enrichment_config.get('temperature', 0.6) if enrichment_config else 0.6
                 else:
-                    # More aggressive prompt for retry
-                    prompt = f"""IMPORTANT: Your previous summary was not in the correct range. You MUST write between 40-75 words.
+                    prompt_template = enrichment_config.get('retry_prompt_template', '') if enrichment_config else ''
+                    temperature = enrichment_config.get('retry_temperature', 0.7) if enrichment_config else 0.7
 
-Create a detailed news summary with EXACTLY 45-70 words (count carefully!).
+                # Format prompt with content
+                prompt = prompt_template.replace('{content}', content[:content_max_chars])
 
-MANDATORY RULES:
-- Write AT LEAST 45 words - this is CRITICAL
-- Include MORE details: background, context, implications
-- Use complete sentences with proper grammar
-- Write ONLY the summary text - no labels or formatting
-
-Article:
-{content[:2000]}
-
-Write your 45-70 word detailed summary:"""
+                # Get max_tokens from config
+                max_tokens = enrichment_config.get('max_tokens', 200) if enrichment_config else 200
 
                 # Make request to LLM service directly (no RAG)
                 payload = {
                     "query": prompt,
                     "use_rag": False,
                     "detect_code": False,
-                    "temperature": 0.6 if attempt == 0 else 0.7,  # Higher temp on retry for more output
-                    "max_tokens": 200  # More tokens on retry
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
                 }
 
                 attempt_label = f"(attempt {attempt + 1}/{max_retries})" if max_retries > 1 else ""
@@ -322,14 +303,18 @@ Write your 45-70 word detailed summary:"""
             if summary and summary[-1] not in '.!?':
                 summary += '.'
 
-            # Check word count (LLM asked for 40-75 words, but reject if < 30 or > 100)
+            # Check word count using configurable limits
+            enrichment_config = self.config_collection.find_one({'config_type': 'enrichment'})
+            min_word_count = enrichment_config.get('min_word_count', 30) if enrichment_config else 30
+            max_word_count = enrichment_config.get('max_word_count', 100) if enrichment_config else 100
+
             word_count = len(summary.split())
-            if word_count < 30:  # Too short, likely not a proper summary
-                self.logger.warning(f"⚠️ Summary too short: {word_count} words (minimum 30 required)")
+            if word_count < min_word_count:  # Too short, likely not a proper summary
+                self.logger.warning(f"⚠️ Summary too short: {word_count} words (minimum {min_word_count} required)")
                 return ""
 
-            if word_count > 100:  # Too long
-                self.logger.warning(f"⚠️ Summary too long: {word_count} words (maximum 100 allowed)")
+            if word_count > max_word_count:  # Too long
+                self.logger.warning(f"⚠️ Summary too long: {word_count} words (maximum {max_word_count} allowed)")
                 return ""
 
             return summary
@@ -341,7 +326,7 @@ Write your 45-70 word detailed summary:"""
     def get_enrichment_status(self) -> Dict[str, Any]:
         """
         Get current enrichment status and statistics
-        
+
         Returns:
             Dict with enrichment statistics
         """
@@ -349,16 +334,27 @@ Write your 45-70 word detailed summary:"""
             total_articles = self.news_collection.count_documents({})
             progress_articles = self.news_collection.count_documents({'status': ArticleStatus.PROGRESS.value})
             completed_articles = self.news_collection.count_documents({'status': ArticleStatus.COMPLETED.value})
+
+            # Enriched articles = articles with non-empty short_summary
+            # Use $and with $nin to properly check for non-null and non-empty
             enriched_articles = self.news_collection.count_documents({
-                'short_summary': {'$exists': True, '$ne': '', '$ne': None}
+                'short_summary': {
+                    '$exists': True,
+                    '$nin': [None, '']
+                }
             })
+
+            # Pending enrichment = total - enriched (simpler and more reliable)
+            pending_enrichment = total_articles - enriched_articles
+
+            self.logger.info(f"📊 Enrichment stats - Total: {total_articles}, Enriched: {enriched_articles}, Pending: {pending_enrichment}, Progress: {progress_articles}, Completed: {completed_articles}")
 
             return {
                 'total_articles': total_articles,
                 'progress_articles': progress_articles,
                 'completed_articles': completed_articles,
                 'enriched_articles': enriched_articles,
-                'pending_enrichment': progress_articles,
+                'pending_enrichment': pending_enrichment,
                 'enrichment_rate': round((enriched_articles / total_articles * 100), 2) if total_articles > 0 else 0
             }
 

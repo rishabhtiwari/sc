@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pymongo import MongoClient
+from bson import ObjectId
 from config.settings import Config, ArticleStatus
 
 
@@ -36,15 +37,17 @@ class NewsQueryService:
                            category: Optional[str] = None,
                            language: Optional[str] = None,
                            country: Optional[str] = None,
+                           status: Optional[str] = None,
                            page: int = 1,
                            page_size: Optional[int] = None) -> Dict[str, Any]:
         """
-        Fetch news documents based on category, language, and country filters with pagination
+        Fetch news documents based on category, language, country, and status filters with pagination
 
         Args:
             category: News category to filter by (None for general only)
             language: Language code to filter by (e.g., 'en', 'es', 'fr')
             country: Country code to filter by (e.g., 'us', 'in', 'uk')
+            status: Article status to filter by (e.g., 'completed', 'progress', 'failed')
             page: Page number (1-based)
             page_size: Number of articles per page (defaults to config value)
 
@@ -59,18 +62,18 @@ class NewsQueryService:
                 page_size = self.config.MAX_PAGE_SIZE
             elif page_size < 1:
                 page_size = self.config.DEFAULT_PAGE_SIZE
-                
+
             # Validate page number
             if page < 1:
                 page = 1
-                
+
             # Calculate skip value for pagination
             skip = (page - 1) * page_size
-            
-            # Build query based on category, language, and country logic
-            query = self._build_query(category, language, country)
 
-            self.logger.info(f"🔍 Querying news with category='{category}', language='{language}', country='{country}', page={page}, page_size={page_size}")
+            # Build query based on category, language, country, and status logic
+            query = self._build_query(category, language, country, status)
+
+            self.logger.info(f"🔍 Querying news with category='{category}', language='{language}', country='{country}', status='{status}', page={page}, page_size={page_size}")
             self.logger.info(f"📋 MongoDB query: {query}")
             
             # Build sort criteria: category first (specific category before general), then by time
@@ -108,11 +111,12 @@ class NewsQueryService:
                     'category_filter': category,
                     'language_filter': language,
                     'country_filter': country,
+                    'status_filter': status,
                     'query_executed': query,
                     'sort_criteria': sort_criteria
                 }
             }
-            
+
             self.logger.info(f"✅ Found {len(formatted_articles)} articles (page {page}/{total_pages})")
             return result
             
@@ -137,20 +141,28 @@ class NewsQueryService:
                 }
             }
 
-    def _build_query(self, category: Optional[str], language: Optional[str], country: Optional[str]) -> Dict[str, Any]:
+    def _build_query(self, category: Optional[str], language: Optional[str], country: Optional[str], status: Optional[str] = None) -> Dict[str, Any]:
         """
-        Build MongoDB query based on category, language, and country logic
+        Build MongoDB query based on category, language, country, and status logic
 
         Args:
             category: Category to filter by
             language: Language code to filter by
             country: Country code to filter by
+            status: Status to filter by (if None or empty string, shows all statuses; if specific value, filters by that status)
 
         Returns:
             MongoDB query dictionary
         """
-        # Base query: only include completed articles (enriched articles)
-        base_query = {'status': ArticleStatus.COMPLETED.value}
+        # Base query: filter by status
+        base_query = {}
+
+        # Handle status filtering
+        # Note: status can be None (not provided), empty string (all statuses), or a specific value
+        if status is not None and status != '':
+            # If status is provided and not empty, filter by that specific status
+            base_query['status'] = status.lower()
+        # If status is None or empty string, don't add status filter (show all statuses)
 
         # Handle category filtering
         if category is None or category.lower() == 'general':
@@ -223,11 +235,13 @@ class NewsQueryService:
                 'id': article.get('id', ''),
                 'title': article.get('title', ''),
                 'description': article.get('description', ''),
+                'content': article.get('content', ''),
                 'url': article.get('url', ''),
                 'image': article.get('image', ''),
                 'publishedAt': article.get('publishedAt', ''),
                 'source': article.get('source', {}),
                 'category': article.get('category', 'general'),
+                'lang': article.get('lang', ''),
                 'short_summary': article.get('short_summary', ''),
                 'status': article.get('status', ''),
                 'created_at': article.get('created_at', ''),
@@ -352,4 +366,91 @@ class NewsQueryService:
                 'error': str(e),
                 'languages': {},
                 'countries': {}
+            }
+
+    def update_article(self, article_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update a news article by ID
+
+        Args:
+            article_id: Article ID (MD5 hash) to update
+            update_data: Dictionary containing fields to update
+
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            # Validate article_id is not empty
+            if not article_id or not isinstance(article_id, str):
+                return {
+                    'status': 'error',
+                    'error': 'Invalid article ID'
+                }
+
+            # Prepare update data
+            update_fields = {}
+
+            # Only update fields that are provided and allowed
+            allowed_fields = [
+                'title', 'description', 'content', 'status',
+                'category', 'lang', 'author', 'urlToImage'
+            ]
+
+            for field in allowed_fields:
+                if field in update_data:
+                    update_fields[field] = update_data[field]
+
+            if not update_fields:
+                return {
+                    'status': 'error',
+                    'error': 'No valid fields to update'
+                }
+
+            # Add updated timestamp
+            update_fields['updatedAt'] = datetime.utcnow()
+
+            self.logger.info(f"📝 Updating article {article_id} with fields: {list(update_fields.keys())}")
+
+            # Update the document using the 'id' field (MD5 hash), not '_id' (ObjectId)
+            result = self.news_collection.update_one(
+                {'id': article_id},
+                {'$set': update_fields}
+            )
+
+            if result.matched_count > 0:
+                # Fetch the updated article
+                updated_article = self.news_collection.find_one({'id': article_id})
+
+                # Format the article for response
+                formatted_article = None
+                if updated_article:
+                    # Convert ObjectId to string
+                    if '_id' in updated_article:
+                        updated_article['_id'] = str(updated_article['_id'])
+
+                    # Convert datetime objects to ISO strings
+                    for date_field in ['created_at', 'updated_at', 'updatedAt', 'enriched_at', 'publishedAt']:
+                        if date_field in updated_article and updated_article[date_field]:
+                            if hasattr(updated_article[date_field], 'isoformat'):
+                                updated_article[date_field] = updated_article[date_field].isoformat()
+
+                    formatted_article = updated_article
+
+                return {
+                    'status': 'success',
+                    'message': f'Article {article_id} updated successfully',
+                    'modified_count': result.modified_count,
+                    'article': formatted_article
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'error': f'Article {article_id} not found'
+                }
+
+        except Exception as e:
+            self.logger.error(f"❌ Error updating article: {str(e)}")
+            return {
+                'status': 'error',
+                'error': str(e)
             }

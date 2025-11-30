@@ -19,6 +19,7 @@ from config.settings import Config, JobStatus
 from services.news_fetcher_service import NewsFetcherService
 from services.news_enrichment_service import NewsEnrichmentService
 from services.news_query_service import NewsQueryService
+from services.enrichment_config_service import EnrichmentConfigService
 
 class NewsFetcherJob(BaseJob):
     """
@@ -39,6 +40,7 @@ class NewsFetcherJob(BaseJob):
         self.news_fetcher_service = NewsFetcherService(logger=self.logger)
         self.news_enrichment_service = NewsEnrichmentService(Config, logger=self.logger)
         self.news_query_service = NewsQueryService(logger=self.logger)
+        self.enrichment_config_service = EnrichmentConfigService(Config, logger=self.logger)
 
     def get_job_type(self) -> str:
         """Return the job type identifier"""
@@ -672,10 +674,58 @@ def get_enrichment_status():
             'error': str(e)
         }), 500
 
+@app.route('/enrichment/config', methods=['GET'])
+def get_enrichment_config():
+    """Get enrichment configuration settings"""
+    try:
+        result = news_fetcher_job.enrichment_config_service.get_config()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/enrichment/config', methods=['PUT'])
+def update_enrichment_config():
+    """Update enrichment configuration settings"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'No data provided'
+            }), 400
+
+        result = news_fetcher_job.enrichment_config_service.update_config(data)
+
+        if result['status'] == 'success':
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/enrichment/config/reset', methods=['POST'])
+def reset_enrichment_config():
+    """Reset enrichment configuration to defaults"""
+    try:
+        result = news_fetcher_job.enrichment_config_service.reset_to_defaults()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
 @app.route('/news', methods=['GET'])
 def get_news():
     """
-    Get news articles with category, language, and country filtering and pagination
+    Get news articles with category, language, country, and status filtering and pagination
 
     Query Parameters:
         category (optional): News category to filter by (e.g., 'sports', 'technology')
@@ -683,6 +733,8 @@ def get_news():
                            If specific category, returns that category + general
         language (optional): Language code to filter by (e.g., 'en', 'es', 'fr')
         country (optional): Country code to filter by (e.g., 'us', 'in', 'uk')
+        status (optional): Article status to filter by (e.g., 'completed', 'progress', 'failed')
+                          If not provided, defaults to 'completed' only
         page (optional): Page number (default: 1)
         page_size (optional): Number of articles per page (default: 10, max: 50)
 
@@ -694,6 +746,7 @@ def get_news():
         category = request.args.get('category', Config.DEFAULT_FILTER_CATEGORY)
         language = request.args.get('language', Config.DEFAULT_FILTER_LANGUAGE)
         country = request.args.get('country', Config.DEFAULT_FILTER_COUNTRY)
+        status = request.args.get('status')
         page = request.args.get('page', 1, type=int)
         page_size = request.args.get('page_size', type=int)
 
@@ -702,6 +755,7 @@ def get_news():
             category=category,
             language=language,
             country=country,
+            status=status,
             page=page,
             page_size=page_size
         )
@@ -742,6 +796,41 @@ def get_news_categories():
             'error': str(e),
             'categories': {},
             'total_articles': 0
+        }), 500
+
+@app.route('/news/<article_id>', methods=['PUT'])
+def update_news_article(article_id):
+    """
+    Update a news article by ID
+
+    Args:
+        article_id: MongoDB ObjectId of the article to update
+
+    Request Body:
+        JSON object with fields to update (title, description, content, status, etc.)
+
+    Returns:
+        JSON response with update result
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'No data provided'
+            }), 400
+
+        result = news_fetcher_job.news_query_service.update_article(article_id, data)
+
+        if result['status'] == 'success':
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
         }), 500
 
 @app.route('/news/filters', methods=['GET'])

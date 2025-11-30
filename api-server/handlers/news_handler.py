@@ -16,22 +16,24 @@ class NewsHandler:
         self.video_client = VideoServiceClient()
         self.logger = logging.getLogger(__name__)
     
-    def get_news(self, 
+    def get_news(self,
                  category: Optional[str] = None,
                  language: Optional[str] = None,
                  country: Optional[str] = None,
+                 status: Optional[str] = None,
                  page: int = 1,
                  page_size: int = 10) -> Dict[str, Any]:
         """
         Get news articles with filtering and pagination
-        
+
         Args:
             category: News category filter
-            language: Language filter  
+            language: Language filter
             country: Country filter
+            status: Article status filter (completed, progress, failed)
             page: Page number (1-based)
             page_size: Number of articles per page
-            
+
         Returns:
             Dictionary with news articles and metadata
         """
@@ -43,21 +45,22 @@ class NewsHandler:
                     'error': 'Page number must be >= 1',
                     'data': None
                 }
-            
+
             if page_size < 1 or page_size > 100:
                 return {
-                    'status': 'error', 
+                    'status': 'error',
                     'error': 'Page size must be between 1 and 100',
                     'data': None
                 }
-            
-            self.logger.info(f"📰 Getting news: category={category}, language={language}, country={country}, page={page}, page_size={page_size}")
-            
+
+            self.logger.info(f"📰 Getting news: category={category}, language={language}, country={country}, status={status}, page={page}, page_size={page_size}")
+
             # Call news service
             result = self.news_client.get_news(
                 category=category,
                 language=language,
                 country=country,
+                status=status,
                 page=page,
                 page_size=page_size
             )
@@ -264,6 +267,42 @@ class NewsHandler:
 
         except Exception as e:
             error_msg = f"Error getting download info: {str(e)}"
+            self.logger.error(f"💥 {error_msg}")
+            return {
+                'status': 'error',
+                'error': error_msg,
+                'data': None
+            }
+
+    def update_article(self, article_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update a news article by ID
+
+        Args:
+            article_id: MongoDB ObjectId of the article to update
+            update_data: Dictionary containing fields to update
+
+        Returns:
+            Dictionary with operation result
+        """
+        try:
+            self.logger.info(f"✏️ Updating article {article_id}")
+
+            # Call news service client
+            result = self.news_client.update_article(article_id, update_data)
+
+            if result['status'] == 'success':
+                data = result['data']
+                return {
+                    'status': 'success',
+                    'message': f"Article {article_id} updated successfully",
+                    'data': data
+                }
+            else:
+                return result
+
+        except Exception as e:
+            error_msg = f"Error updating article: {str(e)}"
             self.logger.error(f"💥 {error_msg}")
             return {
                 'status': 'error',

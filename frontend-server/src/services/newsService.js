@@ -12,6 +12,7 @@ import api from './api';
  * @param {string} params.category - Category filter
  * @param {string} params.language - Language filter
  * @param {string} params.country - Country filter
+ * @param {string} params.status - Status filter
  * @returns {Promise} API response
  */
 export const getNews = (params = {}) => {
@@ -23,6 +24,7 @@ export const getNews = (params = {}) => {
   if (params.category) queryParams.category = params.category;
   if (params.language) queryParams.language = params.language;
   if (params.country) queryParams.country = params.country;
+  if (params.status) queryParams.status = params.status;
 
   return api.get('/news', { params: queryParams });
 };
@@ -65,7 +67,7 @@ export const getNewsStats = () => {
  * @returns {Promise} API response
  */
 export const runNewsFetchJob = () => {
-  return api.post('/news/fetch/run');
+  return api.post('/news/run');
 };
 
 /**
@@ -74,6 +76,15 @@ export const runNewsFetchJob = () => {
  */
 export const getSeedUrls = () => {
   return api.get('/news/seed-urls/status');
+};
+
+/**
+ * Get seed URL by partner ID
+ * @param {string} partnerId - Partner ID
+ * @returns {Promise} API response
+ */
+export const getSeedUrlById = (partnerId) => {
+  return api.get(`/news/seed-urls/${partnerId}`);
 };
 
 /**
@@ -112,6 +123,41 @@ export const getEnrichmentStatus = () => {
   return api.get('/news/enrichment/status');
 };
 
+/**
+ * Update news article
+ * @param {string} articleId - Article ID
+ * @param {Object} data - Updated article data
+ * @returns {Promise} API response
+ */
+export const updateArticle = (articleId, data) => {
+  return api.put(`/news/${articleId}`, data);
+};
+
+/**
+ * Get enrichment configuration
+ * @returns {Promise} API response
+ */
+export const getEnrichmentConfig = () => {
+  return api.get('/news/enrichment/config');
+};
+
+/**
+ * Update enrichment configuration
+ * @param {Object} config - Configuration updates
+ * @returns {Promise} API response
+ */
+export const updateEnrichmentConfig = (config) => {
+  return api.put('/news/enrichment/config', config);
+};
+
+/**
+ * Reset enrichment configuration to defaults
+ * @returns {Promise} API response
+ */
+export const resetEnrichmentConfig = () => {
+  return api.post('/news/enrichment/config/reset');
+};
+
 export default {
   getNews,
   getNewsById,
@@ -120,9 +166,14 @@ export default {
   getNewsStats,
   runNewsFetchJob,
   getSeedUrls,
+  getSeedUrlById,
   addSeedUrl,
   updateSeedUrl,
   deleteSeedUrl,
   getEnrichmentStatus,
+  updateArticle,
+  getEnrichmentConfig,
+  updateEnrichmentConfig,
+  resetEnrichmentConfig,
 };
 

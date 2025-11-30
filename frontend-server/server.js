@@ -41,7 +41,8 @@ app.use('/api', async (req, res) => {
         const newsFetcherEndpoints = [
             '/api/news/seed-urls',
             '/api/news/enrichment/status',
-            '/api/news/fetch/run'
+            '/api/news/enrichment/config',
+            '/api/news/run'
         ];
 
         // IOPaint specific endpoints go directly to IOPaint service
@@ -104,14 +105,22 @@ app.use('/api', async (req, res) => {
 
         console.log(`🔄 Proxying ${req.method} ${req.originalUrl} -> ${targetUrl} (${targetService})`);
 
+        // Prepare headers - always use application/json for POST/PUT
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        };
+
+        // Add authorization if present
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
         const response = await axios({
             method: req.method,
             url: targetUrl,
-            data: req.body,
-            headers: {
-                ...req.headers,
-                host: new URL(targetUrl).host
-            },
+            data: req.body || {},
+            headers: headers,
             params: req.query,
             validateStatus: () => true // Don't throw on any status code
         });

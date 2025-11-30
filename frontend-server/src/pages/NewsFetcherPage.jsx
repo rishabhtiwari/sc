@@ -8,6 +8,8 @@ import NewsTable from '../components/NewsFetcher/NewsTable';
 import SeedUrlsTable from '../components/NewsFetcher/SeedUrlsTable';
 import SeedUrlModal from '../components/NewsFetcher/SeedUrlModal';
 import NewsFilters from '../components/NewsFetcher/NewsFilters';
+import ArticleDetailModal from '../components/NewsFetcher/ArticleDetailModal';
+import EnrichmentConfigPanel from '../components/NewsFetcher/EnrichmentConfigPanel';
 
 /**
  * News Fetcher Page - Manage news sources and view articles
@@ -18,6 +20,7 @@ const NewsFetcherPage = () => {
     category: '',
     language: '',
     country: '',
+    status: '',
     pageSize: 25,
     page: 1,
   });
@@ -26,6 +29,8 @@ const NewsFetcherPage = () => {
   const [countries, setCountries] = useState({});
   const [isSeedModalOpen, setIsSeedModalOpen] = useState(false);
   const [editingSeed, setEditingSeed] = useState(null);
+  const [selectedArticle, setSelectedArticle] = useState(null);
+  const [isArticleModalOpen, setIsArticleModalOpen] = useState(false);
 
   const { showToast } = useToast();
 
@@ -91,9 +96,15 @@ const NewsFetcherPage = () => {
   };
 
   const handleViewArticle = (article) => {
-    // TODO: Implement article detail view
-    console.log('View article:', article);
-    showToast('Article detail view coming soon', 'info');
+    setSelectedArticle(article);
+    setIsArticleModalOpen(true);
+  };
+
+  const handleArticleUpdate = (updatedArticle) => {
+    // Refresh the news list after update
+    fetchNews(filters);
+    // Update the selected article with the new data
+    setSelectedArticle(updatedArticle);
   };
 
   const handleAddSeed = () => {
@@ -101,9 +112,19 @@ const NewsFetcherPage = () => {
     setIsSeedModalOpen(true);
   };
 
-  const handleEditSeed = (seed) => {
-    setEditingSeed(seed);
-    setIsSeedModalOpen(true);
+  const handleEditSeed = async (seed) => {
+    try {
+      // Fetch full seed URL data including url and category fields
+      const response = await newsService.getSeedUrlById(seed.partner_id);
+      if (response.data?.status === 'success' && response.data?.seed_url) {
+        setEditingSeed(response.data.seed_url);
+        setIsSeedModalOpen(true);
+      } else {
+        showToast('Failed to load seed URL details', 'error');
+      }
+    } catch (error) {
+      showToast('Failed to load seed URL details', 'error');
+    }
   };
 
   const handleSaveSeed = async (seedData) => {
@@ -154,8 +175,8 @@ const NewsFetcherPage = () => {
   };
 
   const stats = statsData?.data || statsData;
-  const articles = newsData?.data?.articles || [];
-  const pagination = newsData?.data?.pagination || {};
+  const articles = newsData?.articles || [];
+  const pagination = newsData?.pagination || {};
   const seedUrls = seedsData?.data?.seed_urls || seedsData?.seed_urls || [];
 
   return (
@@ -198,6 +219,16 @@ const NewsFetcherPage = () => {
         >
           🌱 Seed URLs
         </button>
+        <button
+          onClick={() => setActiveTab('config')}
+          className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${
+            activeTab === 'config'
+              ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          ⚙️ Enrichment Config
+        </button>
       </div>
 
       {/* Overview Tab */}
@@ -213,7 +244,7 @@ const NewsFetcherPage = () => {
                 onClick={handleRunFetchJob}
                 loading={fetchJobLoading}
               >
-                Run Fetch Job Now
+                Fetch Latest News
               </Button>
               <Button
                 variant="success"
@@ -299,12 +330,25 @@ const NewsFetcherPage = () => {
         </Card>
       )}
 
+      {/* Enrichment Configuration Tab */}
+      {activeTab === 'config' && (
+        <EnrichmentConfigPanel />
+      )}
+
       {/* Seed URL Modal */}
       <SeedUrlModal
         isOpen={isSeedModalOpen}
         onClose={() => setIsSeedModalOpen(false)}
         onSave={handleSaveSeed}
         seedUrl={editingSeed}
+      />
+
+      {/* Article Detail Modal */}
+      <ArticleDetailModal
+        article={selectedArticle}
+        isOpen={isArticleModalOpen}
+        onClose={() => setIsArticleModalOpen(false)}
+        onUpdate={handleArticleUpdate}
       />
     </div>
   );
