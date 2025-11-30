@@ -14,6 +14,7 @@ const API_SERVER_URL = process.env.API_SERVER_URL || 'http://localhost:8080';
 const NEWS_FETCHER_URL = process.env.NEWS_FETCHER_URL || 'http://ichat-news-fetcher:8093';
 const IOPAINT_URL = process.env.IOPAINT_URL || 'http://ichat-iopaint:8096';
 const YOUTUBE_UPLOADER_URL = process.env.YOUTUBE_UPLOADER_URL || 'http://ichat-youtube-uploader:8097';
+const VOICE_GENERATOR_URL = process.env.VOICE_GENERATOR_URL || 'http://ichat-voice-generator:8094';
 
 // Middleware
 app.use(cors());
@@ -69,6 +70,14 @@ app.use('/api', async (req, res) => {
             '/api/youtube/oauth-callback'
         ];
 
+        // Voice generator specific endpoints go directly to voice-generator service
+        const voiceEndpoints = [
+            '/api/news/audio/stats',
+            '/api/news/audio/generate',
+            '/api/news/audio/list',
+            '/api/news/audio/serve'
+        ];
+
         let targetUrl;
         let targetService;
 
@@ -84,6 +93,11 @@ app.use('/api', async (req, res) => {
 
         // Check if this is a YouTube uploader specific endpoint
         const isYoutubeEndpoint = youtubeEndpoints.some(endpoint =>
+            req.originalUrl.startsWith(endpoint)
+        );
+
+        // Check if this is a voice generator specific endpoint
+        const isVoiceEndpoint = voiceEndpoints.some(endpoint =>
             req.originalUrl.startsWith(endpoint)
         );
 
@@ -119,6 +133,10 @@ app.use('/api', async (req, res) => {
             const path = req.originalUrl.replace('/api/youtube', '/api');
             targetUrl = `${YOUTUBE_UPLOADER_URL}${path}`;
             targetService = 'youtube-uploader';
+        } else if (isVoiceEndpoint) {
+            // Forward to voice-generator service with full path
+            targetUrl = `${VOICE_GENERATOR_URL}${req.originalUrl}`;
+            targetService = 'voice-generator';
         } else {
             // Forward to API server
             targetUrl = `${API_SERVER_URL}${req.originalUrl}`;
@@ -132,15 +150,21 @@ app.use('/api', async (req, res) => {
                                 req.originalUrl.startsWith('/api/image/cleaned/') ||
                                 req.originalUrl.startsWith('/api/cleaned-image/');
 
+        // Check if this is an audio endpoint that returns binary data
+        const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve');
+
+        // Check if this is a binary endpoint (image or audio)
+        const isBinaryEndpoint = isImageEndpoint || isAudioEndpoint;
+
         // Prepare headers
         const headers = {};
 
-        // For non-image endpoints, use JSON content type
-        if (!isImageEndpoint && (req.method === 'POST' || req.method === 'PUT')) {
+        // For non-binary endpoints, use JSON content type
+        if (!isBinaryEndpoint && (req.method === 'POST' || req.method === 'PUT')) {
             headers['Content-Type'] = 'application/json';
         }
 
-        if (!isImageEndpoint) {
+        if (!isBinaryEndpoint) {
             headers['Accept'] = 'application/json';
         }
 
@@ -162,17 +186,23 @@ app.use('/api', async (req, res) => {
             axiosConfig.data = req.body;
         }
 
-        // For image endpoints, request binary data
-        if (isImageEndpoint) {
+        // For binary endpoints (image/audio), request binary data
+        if (isBinaryEndpoint) {
             axiosConfig.responseType = 'arraybuffer';
         }
 
         const response = await axios(axiosConfig);
 
         // Forward response
-        if (isImageEndpoint) {
-            // For image endpoints, forward the binary data with correct content type
-            res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
+        if (isBinaryEndpoint) {
+            // For binary endpoints, forward the binary data with correct content type
+            let contentType = response.headers['content-type'];
+            if (isImageEndpoint && !contentType) {
+                contentType = 'image/jpeg';
+            } else if (isAudioEndpoint && !contentType) {
+                contentType = 'audio/wav';
+            }
+            res.set('Content-Type', contentType);
             res.set('Cache-Control', 'no-cache');
             res.status(response.status).send(response.data);
         } else {

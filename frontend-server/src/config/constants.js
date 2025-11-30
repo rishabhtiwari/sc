@@ -36,11 +36,11 @@ export const NAV_ITEMS = [
     label: 'Image Cleaning',
     description: 'Remove watermarks from images'
   },
-  { 
-    path: ROUTES.VOICE_LLM, 
-    icon: '🎤', 
-    label: 'Voice & LLM Config',
-    description: 'Configure prompts and voice settings'
+  {
+    path: ROUTES.VOICE_LLM,
+    icon: '🎤',
+    label: 'Audio Processing',
+    description: 'Voice configuration and audio gallery'
   },
   { 
     path: ROUTES.YOUTUBE, 

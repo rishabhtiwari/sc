@@ -177,7 +177,7 @@ voice_generator_job = VoiceGeneratorJob()
 def get_news_audio_stats():
     """
     Get statistics about news audio generation
-    
+
     Returns:
         JSON response with audio generation statistics
     """
@@ -187,32 +187,44 @@ def get_news_audio_stats():
                 'status': 'error',
                 'error': 'News Audio Service not initialized'
             }), 500
-        
-        # Get articles needing audio
-        articles_needing_audio = voice_generator_job.news_audio_service.get_articles_needing_audio()
-        
-        # Get total articles with audio
-        total_with_audio = voice_generator_job.news_audio_service.news_collection.count_documents({
-            'audio_path': {'$ne': None, '$ne': ''}
+
+        # Get total articles with short_summary (eligible for audio)
+        total_eligible = voice_generator_job.news_audio_service.news_collection.count_documents({
+            'status': {'$in': ['completed', 'published']},
+            'short_summary': {'$exists': True, '$ne': '', '$ne': None}
         })
-        
-        # Get total completed articles
-        total_completed = voice_generator_job.news_audio_service.news_collection.count_documents({
-            'status': {'$in': ['completed', 'published']}
+
+        # Get total articles with audio generated
+        total_generated = voice_generator_job.news_audio_service.news_collection.count_documents({
+            'status': {'$in': ['completed', 'published']},
+            'short_summary': {'$exists': True, '$ne': '', '$ne': None},
+            'audio_paths.short_summary': {'$exists': True, '$ne': None, '$ne': ''}
         })
-        
+
+        # Get total articles pending audio generation
+        total_pending = voice_generator_job.news_audio_service.news_collection.count_documents({
+            'status': {'$in': ['completed', 'published']},
+            'short_summary': {'$exists': True, '$ne': '', '$ne': None},
+            '$or': [
+                {'audio_paths': {'$exists': False}},
+                {'audio_paths': None},
+                {'audio_paths': {}},
+                {'audio_paths.short_summary': {'$exists': False}}
+            ]
+        })
+
         stats = {
-            'articles_needing_audio': len(articles_needing_audio),
-            'articles_with_audio': total_with_audio,
-            'total_completed_articles': total_completed,
-            'audio_coverage_percentage': round((total_with_audio / total_completed * 100), 2) if total_completed > 0 else 0
+            'total': total_eligible,
+            'generated': total_generated,
+            'pending': total_pending,
+            'coverage_percentage': round((total_generated / total_eligible * 100), 2) if total_eligible > 0 else 0
         }
-        
+
         return jsonify({
             'status': 'success',
             'data': stats
         })
-        
+
     except Exception as e:
         voice_generator_job.logger.error(f"❌ Error getting news audio stats: {str(e)}")
         return jsonify({
@@ -225,7 +237,7 @@ def get_news_audio_stats():
 def generate_news_audio():
     """
     Trigger on-demand news audio generation
-    
+
     Returns:
         JSON response with generation results
     """
@@ -235,14 +247,14 @@ def generate_news_audio():
                 'status': 'error',
                 'error': 'News Audio Service not initialized'
             }), 500
-        
+
         # Get optional parameters
         data = request.get_json() or {}
         job_id = data.get('job_id', f'manual_{int(time.time())}')
-        
+
         # Process audio generation
         results = voice_generator_job.process_news_audio_generation(job_id)
-        
+
         if results['success']:
             return jsonify({
                 'status': 'success',
@@ -254,9 +266,210 @@ def generate_news_audio():
                 'status': 'error',
                 'error': results['error']
             }), 500
-            
+
     except Exception as e:
         voice_generator_job.logger.error(f"❌ Error in manual news audio generation: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@voice_generator_job.app.route('/api/news/audio/list', methods=['GET'])
+def list_audio_files():
+    """
+    Get list of audio files with pagination and filtering
+
+    Query Parameters:
+        - page: Page number (default: 1)
+        - limit: Items per page (default: 20)
+        - status: Filter by status (pending, generated, failed)
+
+    Returns:
+        JSON response with audio files list
+    """
+    try:
+        if not voice_generator_job.news_audio_service:
+            return jsonify({
+                'status': 'error',
+                'error': 'News Audio Service not initialized'
+            }), 500
+
+        # Get query parameters
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        status_filter = request.args.get('status', 'all')  # all, pending, generated, failed
+
+        # Calculate skip
+        skip = (page - 1) * limit
+
+        # Build match criteria based on status filter
+        match_criteria = {
+            'status': {'$in': ['completed', 'published']},  # Only completed articles
+            'short_summary': {'$exists': True, '$ne': '', '$ne': None}  # Must have short_summary
+        }
+
+        if status_filter == 'pending':
+            # Articles without audio
+            match_criteria['$or'] = [
+                {'audio_paths': {'$exists': False}},
+                {'audio_paths': None},
+                {'audio_paths': {}},
+                {'audio_paths.short_summary': {'$exists': False}}
+            ]
+        elif status_filter == 'generated':
+            # Articles with audio
+            match_criteria['audio_paths.short_summary'] = {'$exists': True, '$ne': None, '$ne': ''}
+
+        # Build aggregation pipeline
+        pipeline = [
+            {'$match': match_criteria},
+            {'$sort': {'created_at': -1}},  # Most recent first
+            {
+                '$facet': {
+                    'metadata': [{'$count': 'total'}],
+                    'data': [
+                        {'$skip': skip},
+                        {'$limit': limit},
+                        {
+                            '$project': {
+                                '_id': 1,
+                                'id': 1,
+                                'title': 1,
+                                'audio_paths': 1,
+                                'voice': 1,
+                                'voice_updated_at': 1,
+                                'created_at': 1
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+
+        result = list(voice_generator_job.news_audio_service.news_collection.aggregate(pipeline))
+
+        total = result[0]['metadata'][0]['total'] if result[0]['metadata'] else 0
+        audio_files = result[0]['data'] if result else []
+
+        # Format response
+        formatted_files = []
+        for doc in audio_files:
+            doc_id = str(doc.get('_id'))
+            audio_paths = doc.get('audio_paths', {})
+            has_audio = bool(audio_paths and audio_paths.get('short_summary'))
+
+            formatted_files.append({
+                'id': doc_id,
+                'article_id': doc.get('id'),
+                'title': doc.get('title', 'Untitled'),
+                'status': 'generated' if has_audio else 'pending',
+                'audio_url': f'/api/news/audio/serve/{doc_id}/short_summary' if has_audio else None,
+                'voice': doc.get('voice'),
+                'generated_at': doc.get('voice_updated_at').isoformat() if doc.get('voice_updated_at') else None,
+                'created_at': doc.get('created_at').isoformat() if doc.get('created_at') else None
+            })
+
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'audio_files': formatted_files,
+                'pagination': {
+                    'page': page,
+                    'limit': limit,
+                    'total': total,
+                    'pages': (total + limit - 1) // limit if limit > 0 else 0
+                }
+            }
+        })
+
+    except Exception as e:
+        voice_generator_job.logger.error(f"❌ Error listing audio files: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@voice_generator_job.app.route('/api/news/audio/serve/<doc_id>/<audio_type>', methods=['GET'])
+def serve_audio_file(doc_id, audio_type):
+    """
+    Serve audio file for a specific document
+
+    Args:
+        doc_id: Document ID (MongoDB ObjectId as string)
+        audio_type: Type of audio (title, description, content, short_summary)
+
+    Returns:
+        Audio file or error response
+    """
+    try:
+        from flask import send_file
+        from bson import ObjectId
+        import os
+
+        if not voice_generator_job.news_audio_service:
+            return jsonify({
+                'status': 'error',
+                'error': 'News Audio Service not initialized'
+            }), 500
+
+        # Validate audio type
+        valid_audio_types = ['title', 'description', 'content', 'short_summary']
+        if audio_type not in valid_audio_types:
+            return jsonify({
+                'status': 'error',
+                'error': f'Invalid audio type. Must be one of: {", ".join(valid_audio_types)}'
+            }), 400
+
+        # Get document from database
+        try:
+            doc = voice_generator_job.news_audio_service.news_collection.find_one({
+                '_id': ObjectId(doc_id)
+            })
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'error': f'Invalid document ID: {str(e)}'
+            }), 400
+
+        if not doc:
+            return jsonify({
+                'status': 'error',
+                'error': 'Document not found'
+            }), 404
+
+        # Get audio path
+        audio_paths = doc.get('audio_paths', {})
+        audio_path = audio_paths.get(audio_type)
+
+        if not audio_path:
+            return jsonify({
+                'status': 'error',
+                'error': f'No {audio_type} audio found for this document'
+            }), 404
+
+        # Construct full file path
+        # audio_path is like "/public/article_id/short_summary.wav"
+        file_path = audio_path.replace('/public/', '/app/public/')
+
+        if not os.path.exists(file_path):
+            return jsonify({
+                'status': 'error',
+                'error': 'Audio file not found on disk',
+                'path': audio_path
+            }), 404
+
+        # Serve the file
+        return send_file(
+            file_path,
+            mimetype='audio/wav',
+            as_attachment=False,
+            download_name=f'{audio_type}.wav'
+        )
+
+    except Exception as e:
+        voice_generator_job.logger.error(f"❌ Error serving audio file: {str(e)}")
         return jsonify({
             'status': 'error',
             'error': str(e)

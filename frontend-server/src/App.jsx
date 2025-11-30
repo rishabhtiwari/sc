@@ -5,7 +5,7 @@ import Login from './components/Auth/Login';
 import Dashboard from './pages/Dashboard';
 import NewsFetcherPage from './pages/NewsFetcherPage';
 import ImageProcessingPage from './pages/ImageProcessingPage';
-import VoiceLLMPage from './pages/VoiceLLMPage';
+import AudioProcessingPage from './pages/AudioProcessingPage';
 import YouTubePage from './pages/YouTubePage';
 import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
@@ -99,7 +99,7 @@ function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/news-fetcher" element={<NewsFetcherPage />} />
                   <Route path="/image-processing" element={<ImageProcessingPage />} />
-                  <Route path="/voice-llm" element={<VoiceLLMPage />} />
+                  <Route path="/voice-llm" element={<AudioProcessingPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />

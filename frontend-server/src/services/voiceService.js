@@ -75,6 +75,20 @@ export const testVoice = async (data) => {
   return response.data;
 };
 
+/**
+ * Get list of audio files with pagination and filtering
+ * @param {number} page - Page number
+ * @param {string} status - Status filter (all, pending, generated)
+ * @param {number} limit - Items per page
+ * @returns {Promise} API response
+ */
+export const getAudioList = async (page = 1, status = 'all', limit = 20) => {
+  const response = await api.get('/news/audio/list', {
+    params: { page, status, limit }
+  });
+  return response.data;
+};
+
 export default {
   getAudioStats,
   generateAudio,
@@ -83,5 +97,6 @@ export default {
   updateConfig,
   preview,
   testVoice,
+  getAudioList,
 };
 

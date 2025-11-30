@@ -12,7 +12,7 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/', icon: '📊', label: 'Dashboard' },
     { path: '/news-fetcher', icon: '📰', label: 'News Fetcher' },
     { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
-    { path: '/voice-llm', icon: '🎤', label: 'Voice & LLM Config' },
+    { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
     { path: '/youtube', icon: '📺', label: 'YouTube Uploader' },
     { path: '/workflow', icon: '🔄', label: 'Workflow Pipeline' },
     { path: '/monitoring', icon: '📈', label: 'Monitoring & Logs' },
