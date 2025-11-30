@@ -13,6 +13,18 @@ export const getStats = () => {
 };
 
 /**
+ * List all images with pagination and filtering
+ * @param {Object} params - Query parameters
+ * @param {number} params.page - Page number (default: 1)
+ * @param {number} params.limit - Items per page (default: 20)
+ * @param {string} params.status - Status filter: 'all', 'pending', 'cleaned', 'skipped' (default: 'all')
+ * @returns {Promise} API response
+ */
+export const listImages = (params = {}) => {
+  return api.get('/image/images', { params });
+};
+
+/**
  * Get next pending image for cleaning
  * @returns {Promise} API response
  */
@@ -44,6 +56,17 @@ export const saveImage = (data) => {
 };
 
 /**
+ * Replace image URL for an article
+ * @param {Object} data - Replacement data
+ * @param {string} data.doc_id - Document ID
+ * @param {string} data.image_url - New image URL
+ * @returns {Promise} API response
+ */
+export const replaceImage = (data) => {
+  return api.post('/image/replace-image', data);
+};
+
+/**
  * Skip image (mark as skipped)
  * @param {string} docId - Document ID
  * @returns {Promise} API response
@@ -65,9 +88,11 @@ export const getCleanedImage = (docId) => {
 
 export default {
   getStats,
+  listImages,
   getNextImage,
   processImage,
   saveImage,
+  replaceImage,
   skipImage,
   getCleanedImage,
 };

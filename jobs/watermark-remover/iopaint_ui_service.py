@@ -945,6 +945,120 @@ def get_stats():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/images', methods=['GET'])
+def list_images():
+    """List all images with pagination and filtering"""
+    try:
+        collection = get_mongo_client()
+
+        # Get query parameters
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        status_filter = request.args.get('status', 'all')  # all, pending, cleaned, skipped
+
+        skip = (page - 1) * limit
+
+        # Build match criteria
+        match_criteria = {
+            'image': {'$ne': None},
+            'short_summary': {'$ne': None, '$ne': ''},
+            'status': {'$ne': 'dont_process'}
+        }
+
+        # Apply status filter
+        if status_filter == 'pending':
+            match_criteria['clean_image'] = None
+            match_criteria['watermark_skipped'] = {'$ne': True}
+        elif status_filter == 'cleaned':
+            match_criteria['clean_image'] = {'$ne': None}
+        elif status_filter == 'skipped':
+            match_criteria['watermark_skipped'] = True
+
+        # Build aggregation pipeline
+        pipeline = [
+            {'$match': match_criteria},
+            {
+                '$addFields': {
+                    'word_count': {
+                        '$size': {
+                            '$split': [
+                                {'$trim': {'input': '$short_summary'}},
+                                ' '
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                '$match': {
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                }
+            },
+            {'$sort': {'created_at': -1}},  # Sort by most recently created
+            {
+                '$facet': {
+                    'metadata': [{'$count': 'total'}],
+                    'data': [
+                        {'$skip': skip},
+                        {'$limit': limit},
+                        {
+                            '$project': {
+                                '_id': 1,
+                                'title': 1,
+                                'image': 1,
+                                'clean_image': 1,
+                                'watermark_skipped': 1,
+                                'created_at': 1,
+                                'word_count': 1
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+
+        results = list(collection.aggregate(pipeline))
+
+        if not results or not results[0]['data']:
+            return jsonify({
+                'images': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'total_pages': 0
+            })
+
+        total = results[0]['metadata'][0]['total'] if results[0]['metadata'] else 0
+        images = results[0]['data']
+
+        # Format response
+        formatted_images = []
+        for doc in images:
+            doc_id = str(doc['_id'])
+            status = 'cleaned' if doc.get('clean_image') else ('skipped' if doc.get('watermark_skipped') else 'pending')
+
+            formatted_images.append({
+                'id': doc_id,
+                'title': doc.get('title', 'Untitled'),
+                'status': status,
+                'image_url': f'/api/proxy-image/{doc_id}',
+                'cleaned_image_url': f'/api/cleaned-image/{doc_id}' if doc.get('clean_image') else None,
+                'created_at': doc.get('created_at').isoformat() if doc.get('created_at') else None,
+                'word_count': doc.get('word_count', 0)
+            })
+
+        return jsonify({
+            'images': formatted_images,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'total_pages': (total + limit - 1) // limit
+        })
+    except Exception as e:
+        logger.error(f"Error listing images: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/next-image', methods=['GET'])
 def get_next_image():
     """Get next image that needs cleaning (sorted by most recent first)"""
@@ -955,6 +1069,8 @@ def get_next_image():
         # 1. Has image but no clean_image
         # 2. Has short_summary field that is not empty/null
         # 3. short_summary has at least 30 words (minimum requirement)
+        # 4. Not marked as skipped
+        # 5. Status is not 'dont_process'
         # Sorted by created_at descending (most recent first)
 
         # Use aggregation pipeline to filter by word count
@@ -963,7 +1079,9 @@ def get_next_image():
                 '$match': {
                     'image': {'$ne': None},
                     'clean_image': None,
-                    'short_summary': {'$ne': None, '$ne': ''}
+                    'short_summary': {'$ne': None, '$ne': ''},
+                    'watermark_skipped': {'$ne': True},
+                    'status': {'$ne': 'dont_process'}
                 }
             },
             {
@@ -1005,7 +1123,8 @@ def get_next_image():
         return jsonify({
             'doc_id': str(doc['_id']),
             'title': doc.get('title', 'Untitled'),
-            'image_url': f'/api/proxy-image/{str(doc["_id"])}'  # Use proxy endpoint
+            'image_url': f'/api/proxy-image/{str(doc["_id"])}',  # Use proxy endpoint
+            'original_image_url': doc.get('image')  # Original image URL from database
         })
     except Exception as e:
         logger.error(f"Error getting next image: {e}")
@@ -1176,6 +1295,81 @@ def save_image():
         })
     except Exception as e:
         logger.error(f"Error saving image: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/replace-image', methods=['POST'])
+def replace_image():
+    """Replace the original image URL for an article"""
+    try:
+        data = request.json
+        doc_id = data.get('doc_id')
+        new_image_url = data.get('image_url')
+
+        if not doc_id:
+            return jsonify({'error': 'doc_id is required'}), 400
+
+        if not new_image_url:
+            return jsonify({'error': 'image_url is required'}), 400
+
+        collection = get_mongo_client()
+
+        # Update document with new image URL
+        result = collection.update_one(
+            {'_id': ObjectId(doc_id)},
+            {
+                '$set': {
+                    'image': new_image_url,
+                    'image_updated_at': datetime.utcnow()
+                }
+            }
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'error': 'Document not found'}), 404
+
+        logger.info(f"✓ Image URL replaced for doc_id: {doc_id}")
+        return jsonify({
+            'success': True,
+            'message': 'Image URL replaced successfully',
+            'image_url': f'/api/proxy-image/{doc_id}'
+        })
+    except Exception as e:
+        logger.error(f"Error replacing image: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/skip', methods=['POST'])
+def skip_image():
+    """Skip an image (mark it as skipped so it won't be shown again)"""
+    try:
+        data = request.json
+        doc_id = data.get('doc_id')
+
+        if not doc_id:
+            return jsonify({'error': 'doc_id is required'}), 400
+
+        collection = get_mongo_client()
+
+        # Update document to mark as skipped
+        result = collection.update_one(
+            {'_id': ObjectId(doc_id)},
+            {
+                '$set': {
+                    'watermark_skipped': True,
+                    'watermark_skipped_at': datetime.now()
+                }
+            }
+        )
+
+        if result.matched_count == 0:
+            return jsonify({'error': 'Document not found'}), 404
+
+        logger.info(f"✓ Image skipped: {doc_id}")
+        return jsonify({'success': True, 'message': 'Image skipped successfully'})
+
+    except Exception as e:
+        logger.error(f"Error skipping image: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -4,7 +4,7 @@ import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
 import Dashboard from './pages/Dashboard';
 import NewsFetcherPage from './pages/NewsFetcherPage';
-import ImageCleaningPage from './pages/ImageCleaningPage';
+import ImageProcessingPage from './pages/ImageProcessingPage';
 import VoiceLLMPage from './pages/VoiceLLMPage';
 import YouTubePage from './pages/YouTubePage';
 import Workflow from './pages/Workflow';
@@ -98,7 +98,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/news-fetcher" element={<NewsFetcherPage />} />
-                  <Route path="/image-cleaning" element={<ImageCleaningPage />} />
+                  <Route path="/image-processing" element={<ImageProcessingPage />} />
                   <Route path="/voice-llm" element={<VoiceLLMPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/workflow" element={<Workflow />} />

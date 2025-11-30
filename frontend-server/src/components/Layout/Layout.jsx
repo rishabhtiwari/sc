@@ -11,7 +11,7 @@ const Layout = ({ children, user, onLogout }) => {
   const navItems = [
     { path: '/', icon: '📊', label: 'Dashboard' },
     { path: '/news-fetcher', icon: '📰', label: 'News Fetcher' },
-    { path: '/image-cleaning', icon: '🖼️', label: 'Image Cleaning' },
+    { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
     { path: '/voice-llm', icon: '🎤', label: 'Voice & LLM Config' },
     { path: '/youtube', icon: '📺', label: 'YouTube Uploader' },
     { path: '/workflow', icon: '🔄', label: 'Workflow Pipeline' },

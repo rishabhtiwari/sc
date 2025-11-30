@@ -17,6 +17,7 @@ const ImageCanvas = ({
 
   // Load image onto canvas
   useEffect(() => {
+    console.log('[ImageCanvas] useEffect triggered, image:', image ? 'present' : 'null');
     if (!image) {
       setImageLoaded(false);
       return;
@@ -24,11 +25,18 @@ const ImageCanvas = ({
 
     const imageCanvas = imageCanvasRef.current;
     const maskCanvas = maskCanvasRef.current;
+
+    if (!imageCanvas || !maskCanvas) {
+      console.error('[ImageCanvas] Canvas refs not available');
+      return;
+    }
+
     const imageCtx = imageCanvas.getContext('2d');
     const maskCtx = maskCanvas.getContext('2d');
 
     const img = new Image();
     img.onload = () => {
+      console.log('[ImageCanvas] Image loaded in canvas, dimensions:', img.width, 'x', img.height);
       // Set canvas dimensions
       imageCanvas.width = img.width;
       imageCanvas.height = img.height;
@@ -37,11 +45,15 @@ const ImageCanvas = ({
 
       // Draw image
       imageCtx.drawImage(img, 0, 0);
+      console.log('[ImageCanvas] Image drawn to canvas');
 
       // Clear mask
       maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
 
       setImageLoaded(true);
+    };
+    img.onerror = (err) => {
+      console.error('[ImageCanvas] Failed to load image in canvas:', err);
     };
     img.src = image;
   }, [image]);
@@ -68,14 +80,15 @@ const ImageCanvas = ({
       maskCtx.clearRect(0, 0, width, height);
 
       // Draw common watermark areas (bottom-right, bottom-left, top-right)
-      maskCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      
+      // Use RED color for mask - backend expects red channel
+      maskCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+
       // Bottom-right corner
       maskCtx.fillRect(width * 0.7, height * 0.85, width * 0.3, height * 0.15);
-      
+
       // Bottom-left corner
       maskCtx.fillRect(0, height * 0.85, width * 0.3, height * 0.15);
-      
+
       // Top-right corner
       maskCtx.fillRect(width * 0.7, 0, width * 0.3, height * 0.15);
 
@@ -110,7 +123,8 @@ const ImageCanvas = ({
       y = (e.clientY - rect.top) * (maskCanvas.height / rect.height);
     }
 
-    maskCtx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    // Use RED color for mask - backend expects red channel
+    maskCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
     maskCtx.beginPath();
     maskCtx.arc(x, y, brushSize, 0, Math.PI * 2);
     maskCtx.fill();
@@ -145,24 +159,41 @@ const ImageCanvas = ({
           <p className="text-sm mt-2">Click "Load Next Image" to start</p>
         </div>
       ) : (
-        <div className="relative" style={{ maxWidth: '100%', maxHeight: '100%' }}>
-          <canvas
-            ref={imageCanvasRef}
-            className="absolute top-0 left-0 w-full h-full"
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-          />
-          <canvas
-            ref={maskCanvasRef}
-            className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-            onMouseDown={startDrawing}
-            onMouseMove={draw}
-            onMouseUp={stopDrawing}
-            onMouseLeave={stopDrawing}
-            onTouchStart={startDrawing}
-            onTouchMove={draw}
-            onTouchEnd={stopDrawing}
-          />
+        <div className="relative w-full h-full flex items-center justify-center p-4">
+          <div className="relative" style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <canvas
+              ref={imageCanvasRef}
+              className="block"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain'
+              }}
+            />
+            <canvas
+              ref={maskCanvasRef}
+              className="absolute cursor-crosshair"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                width: 'auto',
+                height: 'auto',
+                objectFit: 'contain',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)'
+              }}
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+            />
+          </div>
         </div>
       )}
     </div>

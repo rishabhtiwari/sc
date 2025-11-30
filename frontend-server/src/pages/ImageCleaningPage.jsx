@@ -30,9 +30,9 @@ const ImageCleaningPage = () => {
       const response = await imageService.getStats();
       const data = response.data?.data || response.data;
       setStats({
-        total: data.total_images || 0,
-        cleaned: data.cleaned_images || 0,
-        pending: data.pending_images || 0,
+        total: data.total || 0,
+        cleaned: data.cleaned || 0,
+        pending: data.pending || 0,
       });
     } catch (error) {
       console.error('Failed to load stats:', error);
@@ -65,24 +65,35 @@ const ImageCleaningPage = () => {
 
       // Load image as base64
       if (data.image_url) {
+        console.log('Loading image from URL:', data.image_url);
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0);
-          setImageData(canvas.toDataURL('image/png'));
-          setHasMask(false);
+          console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const dataUrl = canvas.toDataURL('image/png');
+            console.log('Canvas data URL created, length:', dataUrl.length);
+            setImageData(dataUrl);
+            setHasMask(false);
+            showToast('Image loaded successfully', 'success');
+          } catch (err) {
+            console.error('Error converting image to canvas:', err);
+            showToast('Failed to process image: ' + err.message, 'error');
+          }
         };
-        img.onerror = () => {
+        img.onerror = (err) => {
+          console.error('Image load error:', err);
           showToast('Failed to load image', 'error');
         };
         img.src = data.image_url;
+      } else {
+        showToast('No image URL provided', 'warning');
       }
-
-      showToast('Image loaded successfully', 'success');
     } catch (error) {
       console.error('Failed to load next image:', error);
       showToast(error.response?.data?.error || 'Failed to load next image', 'error');
@@ -113,29 +124,48 @@ const ImageCleaningPage = () => {
 
     setProcessing(true);
     try {
+      console.log('[Process] Getting canvas data...');
       // Get canvas data from ImageCanvas component
       const canvasData = window.getImageCanvasData?.();
+      console.log('[Process] Canvas data:', canvasData ? 'present' : 'null');
+      console.log('[Process] Image data length:', canvasData?.imageData?.length);
+      console.log('[Process] Mask data length:', canvasData?.maskData?.length);
+
       if (!canvasData) {
         throw new Error('Failed to get canvas data');
       }
 
+      console.log('[Process] Sending process request for doc_id:', currentImage.id);
       const response = await imageService.processImage({
         doc_id: currentImage.id,
         image_data: canvasData.imageData,
         mask_data: canvasData.maskData,
       });
 
+      console.log('[Process] Response received:', response.data);
       const data = response.data?.data || response.data;
-      
+      console.log('[Process] Processed data:', data);
+
+      // Backend returns 'result_image', not 'processed_image'
+      const resultImage = data.result_image || data.processed_image;
+      console.log('[Process] Has result_image:', !!resultImage);
+      console.log('[Process] Result image length:', resultImage?.length);
+
       // Update image with processed result
-      if (data.processed_image) {
-        setImageData(`data:image/png;base64,${data.processed_image}`);
+      if (resultImage) {
+        const newImageData = `data:image/png;base64,${resultImage}`;
+        console.log('[Process] Setting new image data, length:', newImageData.length);
+        setImageData(newImageData);
         setHasMask(false);
         setClearMaskTrigger(prev => prev + 1);
         showToast('Watermark removed successfully!', 'success');
+      } else {
+        console.error('[Process] No result_image in response');
+        showToast('No processed image returned', 'error');
       }
     } catch (error) {
-      console.error('Failed to process image:', error);
+      console.error('[Process] Failed to process image:', error);
+      console.error('[Process] Error response:', error.response?.data);
       showToast(error.response?.data?.error || 'Failed to remove watermark', 'error');
     } finally {
       setProcessing(false);
@@ -151,24 +181,31 @@ const ImageCleaningPage = () => {
 
     setLoading(true);
     try {
+      console.log('[Save] Getting canvas data...');
       // Get current image data
       const canvasData = window.getImageCanvasData?.();
+      console.log('[Save] Canvas data:', canvasData ? 'present' : 'null');
       if (!canvasData) {
         throw new Error('Failed to get canvas data');
       }
 
-      await imageService.saveImage({
+      console.log('[Save] Saving image for doc_id:', currentImage.id);
+      console.log('[Save] Image data length:', canvasData.imageData?.length);
+
+      const response = await imageService.saveImage({
         doc_id: currentImage.id,
         image_data: canvasData.imageData,
       });
 
+      console.log('[Save] Save response:', response.data);
       showToast('Image saved and marked as done!', 'success');
-      
+
       // Load next image
       await loadStats();
       await loadNextImage();
     } catch (error) {
-      console.error('Failed to save image:', error);
+      console.error('[Save] Failed to save image:', error);
+      console.error('[Save] Error response:', error.response?.data);
       showToast(error.response?.data?.error || 'Failed to save image', 'error');
     } finally {
       setLoading(false);

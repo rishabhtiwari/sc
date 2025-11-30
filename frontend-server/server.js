@@ -17,8 +17,9 @@ const YOUTUBE_UPLOADER_URL = process.env.YOUTUBE_UPLOADER_URL || 'http://ichat-y
 
 // Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body size limit to 50MB for image uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static files from dist directory (production build)
 app.use(express.static(path.join(__dirname, 'dist')));
@@ -48,11 +49,15 @@ app.use('/api', async (req, res) => {
         // IOPaint specific endpoints go directly to IOPaint service
         const iopaintEndpoints = [
             '/api/image/stats',
+            '/api/image/images',
             '/api/image/next',
             '/api/image/process',
             '/api/image/save',
+            '/api/image/replace-image',
             '/api/image/skip',
-            '/api/image/cleaned'
+            '/api/image/cleaned',
+            '/api/proxy-image',
+            '/api/cleaned-image'
         ];
 
         // YouTube uploader specific endpoints go directly to YouTube uploader service
@@ -88,8 +93,25 @@ app.use('/api', async (req, res) => {
             targetUrl = `${NEWS_FETCHER_URL}${path}`;
             targetService = 'news-fetcher';
         } else if (isIopaintEndpoint) {
-            // Remove /api/image prefix and forward to IOPaint service
-            const path = req.originalUrl.replace('/api/image', '/api');
+            // Map /api/image endpoints to IOPaint service endpoints
+            let path = req.originalUrl;
+
+            // Handle specific endpoint mappings
+            if (path.startsWith('/api/proxy-image')) {
+                // Keep /api/proxy-image as-is
+                path = path;
+            } else if (path.startsWith('/api/cleaned-image')) {
+                // Keep /api/cleaned-image as-is
+                path = path;
+            } else if (path.startsWith('/api/image/next')) {
+                path = path.replace('/api/image/next', '/api/next-image');
+            } else if (path.startsWith('/api/image/cleaned/')) {
+                path = path.replace('/api/image/cleaned/', '/api/cleaned-image/');
+            } else {
+                // For other endpoints, just replace /api/image with /api
+                path = path.replace('/api/image', '/api');
+            }
+
             targetUrl = `${IOPAINT_URL}${path}`;
             targetService = 'iopaint';
         } else if (isYoutubeEndpoint) {
@@ -105,28 +127,58 @@ app.use('/api', async (req, res) => {
 
         console.log(`🔄 Proxying ${req.method} ${req.originalUrl} -> ${targetUrl} (${targetService})`);
 
-        // Prepare headers - always use application/json for POST/PUT
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        };
+        // Check if this is an image endpoint that returns binary data
+        const isImageEndpoint = req.originalUrl.startsWith('/api/proxy-image') ||
+                                req.originalUrl.startsWith('/api/image/cleaned/') ||
+                                req.originalUrl.startsWith('/api/cleaned-image/');
+
+        // Prepare headers
+        const headers = {};
+
+        // For non-image endpoints, use JSON content type
+        if (!isImageEndpoint && (req.method === 'POST' || req.method === 'PUT')) {
+            headers['Content-Type'] = 'application/json';
+        }
+
+        if (!isImageEndpoint) {
+            headers['Accept'] = 'application/json';
+        }
 
         // Add authorization if present
         if (req.headers['authorization']) {
             headers['Authorization'] = req.headers['authorization'];
         }
 
-        const response = await axios({
+        const axiosConfig = {
             method: req.method,
             url: targetUrl,
-            data: req.body || {},
             headers: headers,
             params: req.query,
             validateStatus: () => true // Don't throw on any status code
-        });
+        };
+
+        // Add request body for POST/PUT/PATCH
+        if (req.body && (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH')) {
+            axiosConfig.data = req.body;
+        }
+
+        // For image endpoints, request binary data
+        if (isImageEndpoint) {
+            axiosConfig.responseType = 'arraybuffer';
+        }
+
+        const response = await axios(axiosConfig);
 
         // Forward response
-        res.status(response.status).json(response.data);
+        if (isImageEndpoint) {
+            // For image endpoints, forward the binary data with correct content type
+            res.set('Content-Type', response.headers['content-type'] || 'image/jpeg');
+            res.set('Cache-Control', 'no-cache');
+            res.status(response.status).send(response.data);
+        } else {
+            // For JSON endpoints, send JSON response
+            res.status(response.status).json(response.data);
+        }
 
     } catch (error) {
         console.error(`❌ Proxy error: ${error.message}`);

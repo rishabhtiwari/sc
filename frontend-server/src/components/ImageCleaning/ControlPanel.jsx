@@ -15,6 +15,7 @@ const ControlPanel = ({
   onProcess,
   onSave,
   onSkip,
+  onReplaceImage,
   loading,
   processing,
 }) => {
@@ -113,6 +114,16 @@ const ControlPanel = ({
           fullWidth
         >
           Save & Mark Done
+        </Button>
+
+        <Button
+          variant="warning"
+          icon="🔄"
+          onClick={onReplaceImage}
+          disabled={!currentImage || loading}
+          fullWidth
+        >
+          Replace Image URL
         </Button>
 
         <Button
