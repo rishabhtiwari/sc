@@ -21,6 +21,7 @@ from routes.github_syncer_routes import github_syncer_bp
 from routes.news_routes import news_bp
 from routes.prompt_routes import prompt_bp
 from routes.voice_config_routes import voice_config_bp
+from routes.video_config_routes import video_config_bp
 from routes.frontend_routes import frontend_bp
 from routes.websocket_routes import websocket_bp, init_socketio
 from routes.auth_routes import auth_bp
@@ -84,6 +85,7 @@ def create_app():
     from routes.news_routes import news_bp
     from routes.prompt_routes import prompt_bp
     from routes.voice_config_routes import voice_config_bp
+    from routes.video_config_routes import video_config_bp
     from routes.frontend_routes import frontend_bp
     from routes.websocket_routes import websocket_bp
     from routes.auth_routes import auth_bp
@@ -104,6 +106,7 @@ def create_app():
     app.register_blueprint(news_bp, url_prefix='/api')
     app.register_blueprint(prompt_bp, url_prefix='/api')
     app.register_blueprint(voice_config_bp, url_prefix='/api')
+    app.register_blueprint(video_config_bp, url_prefix='/api')
     app.register_blueprint(frontend_bp, url_prefix='/api')
     app.register_blueprint(websocket_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api')

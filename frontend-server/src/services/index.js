@@ -6,6 +6,7 @@
 export { default as newsService } from './newsService';
 export { default as voiceService } from './voiceService';
 export { default as videoService } from './videoService';
+export { default as videoConfigService } from './videoConfigService';
 export { default as youtubeService } from './youtubeService';
 export { default as llmService } from './llmService';
 export { default as imageService } from './imageService';

@@ -318,7 +318,7 @@ class CleanupService:
 
     def _cleanup_temp_folders(self, dry_run: bool) -> Dict[str, Any]:
         """
-        Clean up temporary files in temp folders
+        Clean up temporary files in temp folders and debug files
 
         Args:
             dry_run: If True, only preview what would be deleted
@@ -355,6 +355,8 @@ class CleanupService:
                 self.logger.info(f"   🗑️ Found {len(files)} temp files in {dir_name} folder")
 
                 # Delete each file
+                files_deleted_count = 0
+                space_freed = 0
                 for filename in files:
                     file_path = os.path.join(temp_dir, filename)
                     try:
@@ -362,20 +364,23 @@ class CleanupService:
 
                         if dry_run:
                             self.logger.debug(f"      [DRY-RUN] Would delete: {filename}")
-                            stats['files_deleted'] += 1
-                            stats['space_freed_bytes'] += file_size
+                            files_deleted_count += 1
+                            space_freed += file_size
                         else:
                             os.remove(file_path)
-                            stats['files_deleted'] += 1
-                            stats['space_freed_bytes'] += file_size
+                            files_deleted_count += 1
+                            space_freed += file_size
 
                     except Exception as e:
                         error_msg = f"Error deleting temp file {file_path}: {str(e)}"
                         self.logger.error(f"      ❌ {error_msg}")
                         stats['errors'].append(error_msg)
 
+                stats['files_deleted'] += files_deleted_count
+                stats['space_freed_bytes'] += space_freed
+
                 if not dry_run:
-                    self.logger.info(f"   ✅ Cleaned {dir_name} temp folder: {stats['files_deleted']} files, {self._format_bytes(stats['space_freed_bytes'])}")
+                    self.logger.info(f"   ✅ Cleaned {dir_name} temp folder: {files_deleted_count} files, {self._format_bytes(space_freed)}")
                 else:
                     self.logger.info(f"   [DRY-RUN] Would clean {dir_name} temp folder: {len(files)} files")
 
@@ -383,6 +388,52 @@ class CleanupService:
                 error_msg = f"Error cleaning temp folder {temp_dir}: {str(e)}"
                 self.logger.error(f"   ❌ {error_msg}")
                 stats['errors'].append(error_msg)
+
+        # Clean up debug_mask files in image public directory
+        try:
+            if os.path.exists(self.config.IMAGE_PUBLIC_DIR):
+                debug_files = [f for f in os.listdir(self.config.IMAGE_PUBLIC_DIR)
+                              if os.path.isfile(os.path.join(self.config.IMAGE_PUBLIC_DIR, f))
+                              and f.startswith('debug_mask_')]
+
+                if debug_files:
+                    self.logger.info(f"   🗑️ Found {len(debug_files)} debug_mask files in image folder")
+
+                    files_deleted_count = 0
+                    space_freed = 0
+                    for filename in debug_files:
+                        file_path = os.path.join(self.config.IMAGE_PUBLIC_DIR, filename)
+                        try:
+                            file_size = os.path.getsize(file_path)
+
+                            if dry_run:
+                                self.logger.debug(f"      [DRY-RUN] Would delete: {filename}")
+                                files_deleted_count += 1
+                                space_freed += file_size
+                            else:
+                                os.remove(file_path)
+                                files_deleted_count += 1
+                                space_freed += file_size
+
+                        except Exception as e:
+                            error_msg = f"Error deleting debug_mask file {file_path}: {str(e)}"
+                            self.logger.error(f"      ❌ {error_msg}")
+                            stats['errors'].append(error_msg)
+
+                    stats['files_deleted'] += files_deleted_count
+                    stats['space_freed_bytes'] += space_freed
+
+                    if not dry_run:
+                        self.logger.info(f"   ✅ Cleaned debug_mask files: {files_deleted_count} files, {self._format_bytes(space_freed)}")
+                    else:
+                        self.logger.info(f"   [DRY-RUN] Would clean debug_mask files: {len(debug_files)} files")
+                else:
+                    self.logger.info(f"   ✅ No debug_mask files to clean")
+
+        except Exception as e:
+            error_msg = f"Error cleaning debug_mask files: {str(e)}"
+            self.logger.error(f"   ❌ {error_msg}")
+            stats['errors'].append(error_msg)
 
         return stats
 

@@ -32,7 +32,7 @@ class ThumbnailService:
 
         Args:
             background_image_path: Path to background image (optional, not used in split design)
-            title: Main title text (will be overridden to "TOP 20 NEWS")
+            title: Main title text to display on the thumbnail
             subtitle: Optional subtitle text
             output_path: Where to save the thumbnail
             news_thumbnails: List of paths to news thumbnail images
@@ -41,10 +41,10 @@ class ThumbnailService:
             Path to generated thumbnail
         """
         try:
-            self.logger.info(f"🎨 Generating split-design thumbnail...")
+            self.logger.info(f"🎨 Generating split-design thumbnail with title: {title}")
 
-            # Create split design thumbnail
-            thumbnail = self._create_split_design(news_thumbnails or [])
+            # Create split design thumbnail with custom title
+            thumbnail = self._create_split_design(news_thumbnails or [], title)
 
             # Save thumbnail
             if not output_path:
@@ -62,12 +62,16 @@ class ThumbnailService:
             self.logger.error(f"❌ Thumbnail generation failed: {str(e)}")
             raise
     
-    def _create_split_design(self, news_thumbnails: list) -> Image.Image:
+    def _create_split_design(self, news_thumbnails: list, title: str) -> Image.Image:
         """
         Create a news thumbnail similar to YouTube news channels:
         - Full collage of news images as background
-        - Navy blue banner at top-left with "TOP 20 NEWS" text in white
+        - Navy blue banner at top-left with custom title text in white
         - CNI logo in top-right corner
+
+        Args:
+            news_thumbnails: List of paths to news thumbnail images
+            title: Custom title to display on the banner
         """
         # Create base canvas - will be replaced by news collage
         canvas = Image.new('RGB', (self.thumbnail_width, self.thumbnail_height), (0, 51, 153))
@@ -77,8 +81,8 @@ class ThumbnailService:
             # Create a collage of news images as background
             canvas = self._create_full_width_collage(news_thumbnails)
 
-        # Add blue banner with "TOP 20 NEWS" text at top-left
-        canvas = self._add_top_left_banner(canvas)
+        # Add blue banner with custom title text at top-left
+        canvas = self._add_top_left_banner(canvas, title)
 
         # Add CNI logo to top-right corner
         canvas = self._add_logo_to_thumbnail(canvas)
@@ -120,8 +124,14 @@ class ThumbnailService:
             self.logger.warning(f"⚠️ Failed to add logo to thumbnail: {str(e)}")
             return canvas
 
-    def _add_top_left_banner(self, img: Image.Image) -> Image.Image:
-        """Add blue banner with two-line date-based title at top-left corner - YouTube news style"""
+    def _add_top_left_banner(self, img: Image.Image, title: str) -> Image.Image:
+        """
+        Add blue banner with two-line title at top-left corner - YouTube news style
+
+        Args:
+            img: The image to add the banner to
+            title: Custom title to display (replaces "20 Breaking News")
+        """
         # Convert to RGBA for transparency support
         img_rgba = img.convert('RGBA')
 
@@ -173,14 +183,14 @@ class ThumbnailService:
             date_font = ImageFont.load_default()
             channel_font = ImageFont.load_default()
 
-        # Generate date-based title in IST timezone
-        # Line 1: "20 Breaking News"
-        # Line 2: "27 November 2025"
+        # Generate date in IST timezone
+        # Line 1: Custom title (e.g., "TOP 20 NEWS" or user-configured title)
+        # Line 2: Current date (e.g., "27 November 2025")
         ist = pytz.timezone('Asia/Kolkata')
         current_date = datetime.now(ist)
         date_str = current_date.strftime("%d %B %Y")  # e.g., "27 November 2025"
 
-        line1 = "20 Breaking News"
+        line1 = title  # Use the custom title parameter
         line2 = date_str
         channel_name = "CNI NEWS"
 

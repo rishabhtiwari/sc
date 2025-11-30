@@ -222,7 +222,16 @@ def get_news_health():
 @news_bp.route('/news/videos/merge-latest', methods=['POST'])
 def merge_latest_videos():
     """
-    Merge latest 20 news videos into a single compilation video
+    Merge latest news videos into a single compilation video with configuration
+
+    Request Body:
+        {
+            "categories": ["business", "technology"],  // Optional
+            "country": "us",  // Optional
+            "language": "en",  // Optional
+            "videoCount": 20,  // Required
+            "title": "Top 20 News Stories"  // Required
+        }
 
     Returns:
         JSON response with merge operation status and details
@@ -230,9 +239,13 @@ def merge_latest_videos():
     try:
         logger.info("🎬 POST /news/videos/merge-latest")
 
-        result = news_handler.merge_latest_videos()
+        # Get configuration from request body
+        config = request.get_json() or {}
+        logger.info(f"📋 Merge configuration: {config}")
 
-        if result['status'] == 'success':
+        result = news_handler.merge_latest_videos(config)
+
+        if result['status'] == 'success' or result['status'] == 'processing':
             return jsonify(result['data']), 200
         else:
             return jsonify({
@@ -371,6 +384,179 @@ def download_latest_news_video():
         }), 504
     except Exception as e:
         error_msg = f"Error in GET /news/videos/download/latest-20-news.mp4: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/videos/shorts/<article_id>/<filename>', methods=['GET'])
+def download_short_video(article_id, filename):
+    """
+    Download a YouTube Short video file for a specific article
+
+    Args:
+        article_id: The article ID
+        filename: The video filename (e.g., short.mp4)
+
+    Returns:
+        MP4 video file stream
+    """
+    import requests
+    from flask import Response
+    import os
+
+    try:
+        logger.info(f"📥 GET /news/videos/shorts/{article_id}/{filename} - Downloading short video")
+
+        # Security: Only allow specific file types
+        allowed_extensions = ['.mp4', '.jpg', '.png', '.jpeg']
+        file_ext = os.path.splitext(filename)[1].lower()
+
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'error': 'Invalid file type',
+                'status': 'error'
+            }), 400
+
+        # Proxy the request to the video generator service
+        video_service_url = f"http://ichat-video-generator:8095/download/{article_id}/{filename}"
+
+        response = requests.get(video_service_url, stream=True, timeout=60)
+
+        if response.status_code == 200:
+            # Determine mimetype
+            mimetype = 'video/mp4' if file_ext == '.mp4' else f'image/{file_ext[1:]}'
+
+            # Stream the video file back to the client
+            def generate():
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+
+            return Response(
+                generate(),
+                content_type=mimetype,
+                headers={
+                    'Content-Disposition': f'inline; filename="{filename}"',
+                    'Content-Length': response.headers.get('Content-Length', ''),
+                    'Accept-Ranges': 'bytes'
+                }
+            )
+        else:
+            # Handle error response from video service
+            try:
+                error_data = response.json()
+                return jsonify(error_data), response.status_code
+            except:
+                return jsonify({
+                    'error': f'Video service returned status {response.status_code}',
+                    'status': 'error'
+                }), response.status_code
+
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to video generation service"
+        logger.error(f"🔌 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 503
+    except requests.exceptions.Timeout:
+        error_msg = "Video download request timed out"
+        logger.error(f"⏰ {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 504
+    except Exception as e:
+        error_msg = f"Error downloading short video: {str(e)}"
+        logger.error(f"💥 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 500
+
+
+@news_bp.route('/news/videos/<config_id>/<filename>', methods=['GET'])
+def download_config_file(config_id, filename):
+    """
+    Download config-specific video or thumbnail file
+
+    Args:
+        config_id: The configuration ID
+        filename: The file name (e.g., latest.mp4, latest-thumbnail.jpg)
+
+    Returns:
+        Video or image file stream
+    """
+    import requests
+    from flask import Response
+    import os
+
+    try:
+        logger.info(f"📥 GET /news/videos/{config_id}/{filename} - Downloading config file")
+
+        # Security: Only allow specific file types
+        allowed_files = ['latest.mp4', 'latest-thumbnail.jpg']
+
+        if filename not in allowed_files:
+            return jsonify({
+                'error': f'Invalid filename. Allowed: {", ".join(allowed_files)}',
+                'status': 'error'
+            }), 400
+
+        # Proxy the request to the video generator service
+        video_service_url = f"http://ichat-video-generator:8095/download/configs/{config_id}/{filename}"
+
+        response = requests.get(video_service_url, stream=True, timeout=60)
+
+        if response.status_code == 200:
+            # Determine mimetype
+            mimetype = 'video/mp4' if filename.endswith('.mp4') else 'image/jpeg'
+
+            # Stream the file back to the client
+            def generate():
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+
+            return Response(
+                generate(),
+                content_type=mimetype,
+                headers={
+                    'Content-Disposition': f'inline; filename="{filename}"',
+                    'Content-Length': response.headers.get('Content-Length', ''),
+                    'Accept-Ranges': 'bytes'
+                }
+            )
+        else:
+            # Handle error response from video service
+            try:
+                error_data = response.json()
+                return jsonify(error_data), response.status_code
+            except:
+                return jsonify({
+                    'error': f'Video service returned status {response.status_code}',
+                    'status': 'error'
+                }), response.status_code
+
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to video generation service"
+        logger.error(f"🔌 {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 503
+    except requests.exceptions.Timeout:
+        error_msg = "File download request timed out"
+        logger.error(f"⏰ {error_msg}")
+        return jsonify({
+            'error': error_msg,
+            'status': 'error'
+        }), 504
+    except Exception as e:
+        error_msg = f"Error downloading config file: {str(e)}"
         logger.error(f"💥 {error_msg}")
         return jsonify({
             'error': error_msg,

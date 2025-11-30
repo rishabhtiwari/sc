@@ -598,18 +598,31 @@ def upload_latest_20():
 
 @app.route('/api/shorts/pending', methods=['GET'])
 def get_pending_shorts():
-    """Get list of shorts ready to upload (not yet uploaded)"""
+    """Get list of shorts ready to upload (not yet uploaded) with pagination"""
     try:
+        # Get pagination parameters from query string
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 5))  # Default 5 shorts per page
+
+        # Calculate skip value for pagination
+        skip = (page - 1) * limit
+
+        # Query filter
+        query_filter = {
+            'shorts_video_path': {'$ne': None},
+            '$or': [
+                {'youtube_shorts_id': {'$exists': False}},
+                {'youtube_shorts_id': None}
+            ]
+        }
+
+        # Get total count
+        total_count = news_collection.count_documents(query_filter)
+
         # Query for news with shorts_video_path but no youtube_shorts_id
         # Sort by publishedAt in descending order (most recent first)
         shorts = list(news_collection.find(
-            {
-                'shorts_video_path': {'$ne': None},
-                '$or': [
-                    {'youtube_shorts_id': {'$exists': False}},
-                    {'youtube_shorts_id': None}
-                ]
-            },
+            query_filter,
             {
                 'id': 1,
                 'title': 1,
@@ -619,13 +632,24 @@ def get_pending_shorts():
                 'image': 1,
                 '_id': 0
             }
-        ).sort('publishedAt', -1))  # -1 for descending order (most recent first)
+        ).sort('publishedAt', -1).skip(skip).limit(limit))  # -1 for descending order (most recent first)
 
-        logger.info(f"📋 Found {len(shorts)} shorts ready to upload")
+        # Calculate pagination metadata
+        total_pages = (total_count + limit - 1) // limit  # Ceiling division
+        has_next = page < total_pages
+        has_prev = page > 1
+
+        logger.info(f"📋 Found {len(shorts)} shorts on page {page}/{total_pages} (total: {total_count})")
 
         return jsonify({
             'status': 'success',
             'count': len(shorts),
+            'total': total_count,
+            'page': page,
+            'limit': limit,
+            'total_pages': total_pages,
+            'has_next': has_next,
+            'has_prev': has_prev,
             'shorts': shorts
         })
 

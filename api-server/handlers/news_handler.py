@@ -181,22 +181,34 @@ class NewsHandler:
                 }
             }
 
-    def merge_latest_videos(self) -> Dict[str, Any]:
+    def merge_latest_videos(self, config: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Merge latest 20 news videos into a single compilation video
+        Merge latest news videos into a single compilation video with configuration
+
+        Args:
+            config: Configuration dictionary with optional filters
+                - categories: List of categories to filter
+                - country: Country code to filter
+                - language: Language code to filter
+                - videoCount: Number of videos to merge
+                - title: Title for the video
 
         Returns:
             Dictionary with merge operation status and details
         """
         try:
-            self.logger.info("🎬 Starting merge of latest 20 news videos")
+            if config is None:
+                config = {}
 
-            result = self.video_client.merge_latest_videos()
+            video_count = config.get('videoCount', 20)
+            self.logger.info(f"🎬 Starting merge of {video_count} news videos with config: {config}")
 
-            if result['status'] == 'success':
+            result = self.video_client.merge_latest_videos(config)
+
+            if result['status'] == 'success' or result['status'] == 'processing':
                 data = result['data']
                 return {
-                    'status': 'success',
+                    'status': result['status'],
                     'message': f"Video merge started for {data.get('video_count', 0)} videos",
                     'data': data
                 }

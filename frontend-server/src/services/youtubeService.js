@@ -21,11 +21,15 @@ export const uploadLatest20 = () => {
 };
 
 /**
- * Get pending YouTube Shorts (ready to upload)
+ * Get pending YouTube Shorts (ready to upload) with pagination
+ * @param {number} page - Page number (default: 1)
+ * @param {number} limit - Items per page (default: 5)
  * @returns {Promise} API response
  */
-export const getPendingShorts = () => {
-  return api.get('/youtube/shorts/pending');
+export const getPendingShorts = (page = 1, limit = 5) => {
+  return api.get('/youtube/shorts/pending', {
+    params: { page, limit }
+  });
 };
 
 /**

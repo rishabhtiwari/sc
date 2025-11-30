@@ -69,13 +69,170 @@ class VideoGeneratorJob(BaseJob):
             }
         }
 
+    def _process_scheduled_configs(self):
+        """
+        Process video configurations that are due for scheduled execution
+        """
+        try:
+            self.logger.info("📅 Checking for scheduled video configurations...")
+
+            # Get configurations collection
+            configs_collection = self.news_db['long_video_configs']
+
+            # Find configs that are due for processing
+            from datetime import datetime
+            now = datetime.utcnow()
+
+            due_configs = list(configs_collection.find({
+                'status': 'completed',
+                'frequency': {'$ne': 'none'},
+                'nextRunTime': {'$lte': now}
+            }))
+
+            if not due_configs:
+                self.logger.info("📭 No scheduled configurations due for processing")
+                return
+
+            self.logger.info(f"📋 Found {len(due_configs)} scheduled configurations to process")
+
+            # Process each configuration
+            for config in due_configs:
+                try:
+                    config_id = str(config['_id'])
+                    title = config.get('title', 'Untitled')
+                    frequency = config.get('frequency', 'none')
+
+                    self.logger.info(f"🎬 Processing scheduled config: {title} (ID: {config_id}, Frequency: {frequency})")
+
+                    # Update status to processing
+                    configs_collection.update_one(
+                        {'_id': config['_id']},
+                        {'$set': {
+                            'status': 'processing',
+                            'mergeStartedAt': now,
+                            'lastRunTime': now,
+                            'updatedAt': now
+                        }}
+                    )
+
+                    # Build query filter based on config
+                    query_filter = {"video_path": {"$exists": True, "$ne": None}}
+
+                    categories = config.get('categories', [])
+                    if categories and len(categories) > 0:
+                        query_filter["category"] = {"$in": categories}
+
+                    country = config.get('country', '')
+                    if country:
+                        query_filter["source.country"] = country
+
+                    language = config.get('language', '')
+                    if language:
+                        query_filter["lang"] = language
+
+                    # Get videos
+                    video_count = config.get('videoCount', 20)
+                    latest_news = list(self.news_collection.find(query_filter)
+                                     .sort("publishedAt", -1)
+                                     .limit(video_count))
+
+                    if not latest_news:
+                        self.logger.warning(f"⚠️ No videos found for config: {title}")
+                        configs_collection.update_one(
+                            {'_id': config['_id']},
+                            {'$set': {
+                                'status': 'failed',
+                                'error': 'No videos found matching criteria',
+                                'updatedAt': datetime.utcnow()
+                            }}
+                        )
+                        continue
+
+                    # Merge videos
+                    self.logger.info(f"🎬 Merging {len(latest_news)} videos for config: {title}")
+                    merge_result = self.merge_service.merge_latest_videos(
+                        latest_news,
+                        title=config.get('title', ''),
+                        config_id=str(config['_id'])
+                    )
+
+                    if merge_result['status'] == 'success':
+                        # Calculate next run time
+                        next_run_time = self._calculate_next_run_time(now, frequency)
+                        run_count = config.get('runCount', 0) + 1
+
+                        # Update config with success
+                        configs_collection.update_one(
+                            {'_id': config['_id']},
+                            {'$set': {
+                                'status': 'completed',
+                                'videoPath': merge_result.get('merged_video_path'),
+                                'thumbnailPath': merge_result.get('thumbnail_path'),
+                                'mergeCompletedAt': datetime.utcnow(),
+                                'nextRunTime': next_run_time,
+                                'runCount': run_count,
+                                'error': None,
+                                'updatedAt': datetime.utcnow()
+                            }}
+                        )
+                        self.logger.info(f"✅ Successfully processed config: {title} (Next run: {next_run_time})")
+                    else:
+                        # Update config with failure
+                        configs_collection.update_one(
+                            {'_id': config['_id']},
+                            {'$set': {
+                                'status': 'failed',
+                                'error': merge_result.get('error', 'Unknown error'),
+                                'updatedAt': datetime.utcnow()
+                            }}
+                        )
+                        self.logger.error(f"❌ Failed to process config: {title}")
+
+                except Exception as e:
+                    self.logger.error(f"💥 Error processing config {config.get('title', 'unknown')}: {str(e)}")
+                    try:
+                        configs_collection.update_one(
+                            {'_id': config['_id']},
+                            {'$set': {
+                                'status': 'failed',
+                                'error': str(e),
+                                'updatedAt': datetime.utcnow()
+                            }}
+                        )
+                    except:
+                        pass
+
+        except Exception as e:
+            self.logger.error(f"💥 Error in _process_scheduled_configs: {str(e)}")
+
+    def _calculate_next_run_time(self, current_time, frequency):
+        """Calculate next run time based on frequency"""
+        from datetime import timedelta
+
+        if frequency == 'none':
+            return None
+        elif frequency == 'hourly':
+            return current_time + timedelta(hours=1)
+        elif frequency == 'daily':
+            return current_time + timedelta(days=1)
+        elif frequency == 'weekly':
+            return current_time + timedelta(weeks=1)
+        elif frequency == 'monthly':
+            return current_time + timedelta(days=30)
+        else:
+            return None
+
     def run_job(self, job_id: str, is_on_demand: bool = False, **kwargs) -> dict:
         """
         Main job execution method - finds articles with audio but no video and generates videos
+        Also processes scheduled video configurations
         """
         try:
             self.logger.info(f"🚀 Starting video generation job {job_id} (on_demand: {is_on_demand})...")
             self.logger.info(f"🔍 DEBUG: run_job called with job_id={job_id}, is_on_demand={is_on_demand}")
+
+            # First, process scheduled video configurations
+            self._process_scheduled_configs()
 
             # Get articles that need video generation
             articles_to_process = self._get_articles_for_video_generation()
@@ -402,15 +559,44 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/merge-latest', methods=['POST'])
         def merge_latest_videos():
-            """Merge latest 20 news videos into a single video with alternating male/female anchors"""
+            """Merge latest news videos into a single video with configuration and alternating male/female anchors"""
             try:
-                self.logger.info("🎬 Starting merge of latest 20 news videos with voice alternation")
+                # Get configuration from request body
+                from flask import request
+                config = request.get_json() or {}
+
+                # Extract configuration parameters
+                categories = config.get('categories', [])
+                country = config.get('country', '')
+                language = config.get('language', '')
+                video_count = config.get('videoCount', 20)
+                title = config.get('title', '')
+                config_id = config.get('config_id')  # Optional: if called from /configs/<id>/merge
+
+                self.logger.info(f"🎬 Starting merge with config: categories={categories}, country={country}, language={language}, count={video_count}, title={title}")
+
+                # Build query filter
+                query_filter = {"video_path": {"$exists": True, "$ne": None}}
+
+                # Add category filter if specified
+                if categories and len(categories) > 0:
+                    query_filter["category"] = {"$in": categories}
+
+                # Add country filter if specified
+                if country:
+                    query_filter["source.country"] = country
+
+                # Add language filter if specified
+                if language:
+                    query_filter["lang"] = language
+
+                self.logger.info(f"📋 Query filter: {query_filter}")
 
                 # Get latest news with videos, including voice field
                 latest_news = list(self.news_collection.find(
-                    {"video_path": {"$exists": True, "$ne": None}},
-                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1}
-                ).sort("created_at", -1).limit(20))
+                    query_filter,
+                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1, "category": 1, "source.country": 1, "lang": 1}
+                ).sort("created_at", -1).limit(video_count))
 
                 if not latest_news:
                     return jsonify({
@@ -446,8 +632,8 @@ class VideoGeneratorJob(BaseJob):
                         self.logger.info("🎬 Starting async video merge process...")
                         start_time = time.time()
 
-                        # Merge videos
-                        result = self.merge_service.merge_latest_videos(latest_news)
+                        # Merge videos with title parameter and config_id
+                        result = self.merge_service.merge_latest_videos(latest_news, title=title, config_id=config_id)
 
                         end_time = time.time()
                         processing_time = round(end_time - start_time, 2)
@@ -455,11 +641,67 @@ class VideoGeneratorJob(BaseJob):
                         if result['status'] == 'success':
                             self.logger.info(
                                 f"✅ Video merge completed successfully in {processing_time} seconds - merged {result['video_count']} videos")
+
+                            # If config_id is provided, update the configuration
+                            if config_id:
+                                try:
+                                    from bson import ObjectId
+                                    from datetime import datetime
+                                    configs_collection = self.news_db['long_video_configs']
+                                    configs_collection.update_one(
+                                        {'_id': ObjectId(config_id)},
+                                        {'$set': {
+                                            'status': 'completed',
+                                            'videoPath': result.get('merged_video_path'),
+                                            'thumbnailPath': result.get('thumbnail_path'),
+                                            'mergeCompletedAt': datetime.utcnow(),
+                                            'error': None,
+                                            'updatedAt': datetime.utcnow()
+                                        }}
+                                    )
+                                    self.logger.info(f"✅ Updated config {config_id} with merge results")
+                                except Exception as e:
+                                    self.logger.error(f"⚠️ Failed to update config {config_id}: {str(e)}")
                         else:
                             self.logger.error(f"❌ Video merge failed: {result['error']}")
 
+                            # If config_id is provided, update with failure
+                            if config_id:
+                                try:
+                                    from bson import ObjectId
+                                    from datetime import datetime
+                                    configs_collection = self.news_db['long_video_configs']
+                                    configs_collection.update_one(
+                                        {'_id': ObjectId(config_id)},
+                                        {'$set': {
+                                            'status': 'failed',
+                                            'error': result.get('error', 'Unknown error'),
+                                            'updatedAt': datetime.utcnow()
+                                        }}
+                                    )
+                                    self.logger.info(f"✅ Updated config {config_id} with failure status")
+                                except Exception as e:
+                                    self.logger.error(f"⚠️ Failed to update config {config_id}: {str(e)}")
+
                     except Exception as e:
                         self.logger.error(f"❌ Error in async video merge: {str(e)}")
+
+                        # If config_id is provided, update with error
+                        if config_id:
+                            try:
+                                from bson import ObjectId
+                                from datetime import datetime
+                                configs_collection = self.news_db['long_video_configs']
+                                configs_collection.update_one(
+                                    {'_id': ObjectId(config_id)},
+                                    {'$set': {
+                                        'status': 'failed',
+                                        'error': str(e),
+                                        'updatedAt': datetime.utcnow()
+                                    }}
+                                )
+                            except:
+                                pass
 
                 # Start async processing
                 thread = Thread(target=merge_videos_async)
@@ -578,6 +820,50 @@ class VideoGeneratorJob(BaseJob):
                 self.logger.error(f"❌ Error downloading thumbnail: {str(e)}")
                 return jsonify({
                     "error": f"Failed to download thumbnail: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/download/configs/<config_id>/<filename>', methods=['GET'])
+        def download_config_file(config_id, filename):
+            """Download config-specific video or thumbnail file"""
+            try:
+                # Security: Only allow specific file types
+                allowed_files = ['latest.mp4', 'latest-thumbnail.jpg']
+
+                if filename not in allowed_files:
+                    return jsonify({
+                        "error": f"Invalid filename. Allowed: {', '.join(allowed_files)}",
+                        "status": "error"
+                    }), 400
+
+                # Construct file path: /public/<config_id>/<filename>
+                file_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, config_id, filename)
+
+                if not os.path.exists(file_path):
+                    return jsonify({
+                        "error": f"File not found: {filename}",
+                        "status": "error"
+                    }), 404
+
+                # Determine mimetype
+                if filename.endswith('.mp4'):
+                    mimetype = 'video/mp4'
+                elif filename.endswith('.jpg'):
+                    mimetype = 'image/jpeg'
+                else:
+                    mimetype = 'application/octet-stream'
+
+                return send_file(
+                    file_path,
+                    as_attachment=False,  # Display inline for preview
+                    download_name=filename,
+                    mimetype=mimetype
+                )
+
+            except Exception as e:
+                self.logger.error(f"❌ Error downloading config file: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to download file: {str(e)}",
                     "status": "error"
                 }), 500
 
@@ -1553,6 +1839,495 @@ class VideoGeneratorJob(BaseJob):
                 return jsonify({
                     "error": f"Failed to create subscribe video: {str(e)}",
                     "status": "error"
+                }), 500
+
+        # Video Configuration CRUD Endpoints
+
+        @self.app.route('/configs', methods=['POST'])
+        def create_config():
+            """Create a new video configuration"""
+            try:
+                from flask import request
+                from datetime import datetime, timedelta
+
+                config_data = request.get_json()
+
+                # Validate required fields
+                if not config_data.get('title'):
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'Title is required'
+                    }), 400
+
+                if not config_data.get('videoCount'):
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'Video count is required'
+                    }), 400
+
+                # Prepare document
+                now = datetime.utcnow()
+                frequency = config_data.get('frequency', 'none')
+
+                # Calculate next run time
+                next_run_time = None
+                if frequency != 'none':
+                    if frequency == 'hourly':
+                        next_run_time = now + timedelta(hours=1)
+                    elif frequency == 'daily':
+                        next_run_time = now + timedelta(days=1)
+                    elif frequency == 'weekly':
+                        next_run_time = now + timedelta(weeks=1)
+                    elif frequency == 'monthly':
+                        next_run_time = now + timedelta(days=30)
+
+                document = {
+                    'title': config_data.get('title'),
+                    'categories': config_data.get('categories', []),
+                    'country': config_data.get('country', ''),
+                    'language': config_data.get('language', ''),
+                    'videoCount': config_data.get('videoCount', 20),
+                    'frequency': frequency,
+                    'status': 'unknown',  # Start with 'unknown' status
+                    'videoPath': None,
+                    'thumbnailPath': None,
+                    'youtubeVideoId': None,
+                    'youtubeVideoUrl': None,
+                    'createdAt': now,
+                    'updatedAt': now,
+                    'lastRunTime': None,
+                    'nextRunTime': next_run_time,
+                    'mergeStartedAt': None,
+                    'mergeCompletedAt': None,
+                    'uploadedAt': None,
+                    'error': None,
+                    'runCount': 0
+                }
+
+                # Insert into database
+                configs_collection = self.news_db['long_video_configs']
+                result = configs_collection.insert_one(document)
+
+                # Convert ObjectId to string
+                document['_id'] = str(result.inserted_id)
+                document['createdAt'] = document['createdAt'].isoformat()
+                document['updatedAt'] = document['updatedAt'].isoformat()
+                if document.get('nextRunTime'):
+                    document['nextRunTime'] = document['nextRunTime'].isoformat()
+
+                self.logger.info(f"✅ Created video configuration: {document['title']}")
+
+                return jsonify({
+                    'status': 'success',
+                    '_id': document['_id'],
+                    'config': document
+                }), 201
+
+            except Exception as e:
+                self.logger.error(f"💥 Error creating config: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs', methods=['GET'])
+        def get_configs():
+            """Get all video configurations"""
+            try:
+                from flask import request
+
+                # Get query parameters
+                status = request.args.get('status')
+                limit = int(request.args.get('limit', 50))
+
+                # Build query
+                query = {}
+                if status:
+                    query['status'] = status
+
+                # Get configs
+                configs_collection = self.news_db['long_video_configs']
+                configs = list(configs_collection.find(query).sort('createdAt', -1).limit(limit))
+
+                # Convert ObjectId and datetime to strings
+                for config in configs:
+                    config['_id'] = str(config['_id'])
+                    if config.get('createdAt'):
+                        config['createdAt'] = config['createdAt'].isoformat()
+                    if config.get('updatedAt'):
+                        config['updatedAt'] = config['updatedAt'].isoformat()
+                    if config.get('lastRunTime'):
+                        config['lastRunTime'] = config['lastRunTime'].isoformat()
+                    if config.get('nextRunTime'):
+                        config['nextRunTime'] = config['nextRunTime'].isoformat()
+                    if config.get('mergeStartedAt'):
+                        config['mergeStartedAt'] = config['mergeStartedAt'].isoformat()
+                    if config.get('mergeCompletedAt'):
+                        config['mergeCompletedAt'] = config['mergeCompletedAt'].isoformat()
+                    if config.get('uploadedAt'):
+                        config['uploadedAt'] = config['uploadedAt'].isoformat()
+
+                return jsonify({
+                    'status': 'success',
+                    'count': len(configs),
+                    'configs': configs
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error getting configs: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>', methods=['GET'])
+        def get_config(config_id):
+            """Get a specific video configuration"""
+            try:
+                from bson import ObjectId
+
+                configs_collection = self.news_db['long_video_configs']
+                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                if not config:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                # Convert ObjectId and datetime to strings
+                config['_id'] = str(config['_id'])
+                if config.get('createdAt'):
+                    config['createdAt'] = config['createdAt'].isoformat()
+                if config.get('updatedAt'):
+                    config['updatedAt'] = config['updatedAt'].isoformat()
+                if config.get('lastRunTime'):
+                    config['lastRunTime'] = config['lastRunTime'].isoformat()
+                if config.get('nextRunTime'):
+                    config['nextRunTime'] = config['nextRunTime'].isoformat()
+                if config.get('mergeStartedAt'):
+                    config['mergeStartedAt'] = config['mergeStartedAt'].isoformat()
+                if config.get('mergeCompletedAt'):
+                    config['mergeCompletedAt'] = config['mergeCompletedAt'].isoformat()
+                if config.get('uploadedAt'):
+                    config['uploadedAt'] = config['uploadedAt'].isoformat()
+
+                return jsonify({
+                    'status': 'success',
+                    'config': config
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error getting config: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>', methods=['PUT'])
+        def update_config(config_id):
+            """Update a video configuration"""
+            try:
+                from flask import request
+                from bson import ObjectId
+                from datetime import datetime
+
+                update_data = request.get_json()
+                update_data['updatedAt'] = datetime.utcnow()
+
+                configs_collection = self.news_db['long_video_configs']
+                result = configs_collection.find_one_and_update(
+                    {'_id': ObjectId(config_id)},
+                    {'$set': update_data},
+                    return_document=True
+                )
+
+                if not result:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                # Convert ObjectId and datetime to strings
+                result['_id'] = str(result['_id'])
+                if result.get('createdAt'):
+                    result['createdAt'] = result['createdAt'].isoformat()
+                if result.get('updatedAt'):
+                    result['updatedAt'] = result['updatedAt'].isoformat()
+                if result.get('lastRunTime'):
+                    result['lastRunTime'] = result['lastRunTime'].isoformat()
+                if result.get('nextRunTime'):
+                    result['nextRunTime'] = result['nextRunTime'].isoformat()
+                if result.get('mergeStartedAt'):
+                    result['mergeStartedAt'] = result['mergeStartedAt'].isoformat()
+                if result.get('mergeCompletedAt'):
+                    result['mergeCompletedAt'] = result['mergeCompletedAt'].isoformat()
+                if result.get('uploadedAt'):
+                    result['uploadedAt'] = result['uploadedAt'].isoformat()
+
+                self.logger.info(f"✏️ Updated video configuration: {config_id}")
+
+                return jsonify({
+                    'status': 'success',
+                    'config': result
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error updating config: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>', methods=['DELETE'])
+        def delete_config(config_id):
+            """Delete a video configuration"""
+            try:
+                from bson import ObjectId
+
+                configs_collection = self.news_db['long_video_configs']
+                result = configs_collection.delete_one({'_id': ObjectId(config_id)})
+
+                if result.deleted_count == 0:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                self.logger.info(f"🗑️ Deleted video configuration: {config_id}")
+
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Configuration deleted successfully',
+                    'deleted': True,
+                    'config_id': config_id
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error deleting config: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        # Define specific routes BEFORE generic routes to avoid conflicts
+        @self.app.route('/configs/due', methods=['GET'])
+        def get_due_configs():
+            """Get configurations that are due for processing"""
+            try:
+                from datetime import datetime
+
+                now = datetime.utcnow()
+                configs_collection = self.news_db['long_video_configs']
+
+                due_configs = list(configs_collection.find({
+                    'status': 'completed',
+                    'frequency': {'$ne': 'none'},
+                    'nextRunTime': {'$lte': now}
+                }).sort('nextRunTime', 1))
+
+                # Convert ObjectId and datetime to strings
+                for config in due_configs:
+                    config['_id'] = str(config['_id'])
+                    if config.get('createdAt'):
+                        config['createdAt'] = config['createdAt'].isoformat()
+                    if config.get('updatedAt'):
+                        config['updatedAt'] = config['updatedAt'].isoformat()
+                    if config.get('lastRunTime'):
+                        config['lastRunTime'] = config['lastRunTime'].isoformat()
+                    if config.get('nextRunTime'):
+                        config['nextRunTime'] = config['nextRunTime'].isoformat()
+                    if config.get('mergeStartedAt'):
+                        config['mergeStartedAt'] = config['mergeStartedAt'].isoformat()
+                    if config.get('mergeCompletedAt'):
+                        config['mergeCompletedAt'] = config['mergeCompletedAt'].isoformat()
+                    if config.get('uploadedAt'):
+                        config['uploadedAt'] = config['uploadedAt'].isoformat()
+
+                self.logger.info(f"📅 Found {len(due_configs)} configurations due for processing")
+
+                return jsonify({
+                    'status': 'success',
+                    'count': len(due_configs),
+                    'configs': due_configs
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error getting due configs: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>/merge', methods=['POST'])
+        def merge_config(config_id):
+            """Trigger video merge for a specific configuration - uses existing /merge-latest endpoint"""
+            try:
+                from bson import ObjectId
+                from datetime import datetime, timedelta
+
+                configs_collection = self.news_db['long_video_configs']
+                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                if not config:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                # Calculate next run time
+                now = datetime.utcnow()
+                frequency = config.get('frequency', 'none')
+                next_run_time = None
+                if frequency != 'none':
+                    if frequency == 'hourly':
+                        next_run_time = now + timedelta(hours=1)
+                    elif frequency == 'daily':
+                        next_run_time = now + timedelta(days=1)
+                    elif frequency == 'weekly':
+                        next_run_time = now + timedelta(weeks=1)
+                    elif frequency == 'monthly':
+                        next_run_time = now + timedelta(days=30)
+
+                # Update status to processing
+                run_count = config.get('runCount', 0) + 1
+                configs_collection.update_one(
+                    {'_id': ObjectId(config_id)},
+                    {'$set': {
+                        'status': 'processing',
+                        'mergeStartedAt': now,
+                        'lastRunTime': now,
+                        'nextRunTime': next_run_time,
+                        'runCount': run_count,
+                        'updatedAt': now
+                    }}
+                )
+
+                # Prepare merge config - reuse existing /merge-latest endpoint logic
+                merge_config_data = {
+                    'categories': config.get('categories', []),
+                    'country': config.get('country', ''),
+                    'language': config.get('language', ''),
+                    'videoCount': config.get('videoCount', 20),
+                    'title': config.get('title', ''),
+                    'config_id': config_id  # Pass config_id to update after merge
+                }
+
+                self.logger.info(f"🎬 Triggering merge for config: {config.get('title')} (ID: {config_id})")
+
+                # Call the existing merge_latest_videos function internally
+                # We'll make an internal call to reuse the logic
+                from flask import request as flask_request
+                with self.app.test_request_context(
+                    '/merge-latest',
+                    method='POST',
+                    json=merge_config_data
+                ):
+                    response = merge_latest_videos()
+
+                    # If it's a tuple (response, status_code), extract them
+                    if isinstance(response, tuple):
+                        response_data = response[0].get_json()
+                        status_code = response[1]
+                    else:
+                        response_data = response.get_json()
+                        status_code = 200
+
+                    # Update config based on response
+                    if response_data.get('status') == 'error':
+                        configs_collection.update_one(
+                            {'_id': ObjectId(config_id)},
+                            {'$set': {
+                                'status': 'failed',
+                                'error': response_data.get('error', 'Unknown error'),
+                                'updatedAt': datetime.utcnow()
+                            }}
+                        )
+
+                    return jsonify(response_data), status_code
+
+            except Exception as e:
+                self.logger.error(f"💥 Error merging config: {str(e)}")
+
+                # Update config status to failed
+                try:
+                    from bson import ObjectId
+                    from datetime import datetime
+                    configs_collection = self.news_db['long_video_configs']
+                    configs_collection.update_one(
+                        {'_id': ObjectId(config_id)},
+                        {'$set': {
+                            'status': 'failed',
+                            'error': str(e),
+                            'updatedAt': datetime.utcnow()
+                        }}
+                    )
+                except:
+                    pass
+
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>/merge-status', methods=['GET'])
+        def get_config_merge_status(config_id):
+            """Check the merge status for a specific configuration"""
+            try:
+                from bson import ObjectId
+                import os
+
+                configs_collection = self.news_db['long_video_configs']
+                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                if not config:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                # Check if video file exists
+                video_path = config.get('videoPath')
+                video_exists = False
+                file_size_mb = 0
+                last_updated = None
+
+                if video_path:
+                    # Convert public path to filesystem path
+                    if video_path.startswith('/public/'):
+                        fs_path = os.path.join(
+                            self.config.VIDEO_OUTPUT_DIR,
+                            video_path.replace('/public/', '')
+                        )
+                        if os.path.exists(fs_path):
+                            video_exists = True
+                            file_stats = os.stat(fs_path)
+                            file_size_mb = round(file_stats.st_size / (1024 * 1024), 2)
+                            last_updated = time.ctime(file_stats.st_mtime)
+
+                response = {
+                    'config_id': config_id,
+                    'status': config.get('status', 'unknown'),
+                    'title': config.get('title', ''),
+                    'video_path': video_path,
+                    'thumbnail_path': config.get('thumbnailPath'),
+                    'video_exists': video_exists,
+                    'file_size_mb': file_size_mb if video_exists else None,
+                    'last_updated': last_updated,
+                    'merge_started_at': config.get('mergeStartedAt'),
+                    'merge_completed_at': config.get('mergeCompletedAt'),
+                    'error': config.get('error'),
+                    'run_count': config.get('runCount', 0),
+                    'next_run_time': config.get('nextRunTime')
+                }
+
+                return jsonify(response)
+
+            except Exception as e:
+                self.logger.error(f"❌ Error checking config merge status: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
                 }), 500
 
 

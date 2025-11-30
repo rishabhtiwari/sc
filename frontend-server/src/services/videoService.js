@@ -22,11 +22,17 @@ export const generateVideos = (data = {}) => {
 };
 
 /**
- * Merge latest videos into compilation
+ * Merge latest videos into compilation with configuration
+ * @param {Object} config - Configuration for video merging
+ * @param {Array} config.categories - Categories to filter (optional)
+ * @param {string} config.country - Country to filter (optional)
+ * @param {string} config.language - Language to filter (optional)
+ * @param {number} config.videoCount - Number of videos to merge
+ * @param {string} config.title - Title for the video
  * @returns {Promise} API response
  */
-export const mergeLatestVideos = () => {
-  return api.post('/news/videos/merge-latest');
+export const mergeLatestVideos = (config = {}) => {
+  return api.post('/news/videos/merge-latest', config);
 };
 
 /**

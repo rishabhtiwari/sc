@@ -16,26 +16,39 @@ class VideoServiceClient:
         self.timeout = AppConfig.VIDEO_SERVICE_TIMEOUT
         self.logger = logging.getLogger(__name__)
         
-    def merge_latest_videos(self) -> Dict[str, Any]:
+    def merge_latest_videos(self, config: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Merge latest 20 news videos into a single compilation video
-        
+        Merge latest news videos into a single compilation video with configuration
+
+        Args:
+            config: Configuration dictionary with optional filters
+                - categories: List of categories to filter
+                - country: Country code to filter
+                - language: Language code to filter
+                - videoCount: Number of videos to merge
+                - title: Title for the video
+
         Returns:
             Dictionary with merge operation status and details
         """
         try:
-            self.logger.info("🎬 Starting merge of latest 20 news videos")
-            
+            if config is None:
+                config = {}
+
+            video_count = config.get('videoCount', 20)
+            self.logger.info(f"🎬 Starting merge of {video_count} news videos with config: {config}")
+
             response = requests.post(
                 f"{self.base_url}/merge-latest",
+                json=config,
                 timeout=self.timeout
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 self.logger.info(f"✅ Video merge started successfully for {data.get('video_count', 0)} videos")
                 return {
-                    'status': 'success',
+                    'status': data.get('status', 'success'),
                     'data': data
                 }
             else:

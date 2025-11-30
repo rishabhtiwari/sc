@@ -15,6 +15,7 @@ const NEWS_FETCHER_URL = process.env.NEWS_FETCHER_URL || 'http://ichat-news-fetc
 const IOPAINT_URL = process.env.IOPAINT_URL || 'http://ichat-iopaint:8096';
 const YOUTUBE_UPLOADER_URL = process.env.YOUTUBE_UPLOADER_URL || 'http://ichat-youtube-uploader:8097';
 const VOICE_GENERATOR_URL = process.env.VOICE_GENERATOR_URL || 'http://ichat-voice-generator:8094';
+const VIDEO_GENERATOR_URL = process.env.VIDEO_GENERATOR_URL || 'http://ichat-video-generator:8095';
 
 // Middleware
 app.use(cors());
@@ -153,8 +154,12 @@ app.use('/api', async (req, res) => {
         // Check if this is an audio endpoint that returns binary data
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve');
 
-        // Check if this is a binary endpoint (image or audio)
-        const isBinaryEndpoint = isImageEndpoint || isAudioEndpoint;
+        // Check if this is a video endpoint that returns binary data
+        const isVideoBinaryEndpoint = req.originalUrl.startsWith('/api/news/videos/shorts/') ||
+                                      req.originalUrl.match(/\/api\/news\/videos\/[^\/]+\/(latest\.mp4|latest-thumbnail\.jpg)$/);
+
+        // Check if this is a binary endpoint (image, audio, or video)
+        const isBinaryEndpoint = isImageEndpoint || isAudioEndpoint || isVideoBinaryEndpoint;
 
         // Prepare headers
         const headers = {};
@@ -201,6 +206,13 @@ app.use('/api', async (req, res) => {
                 contentType = 'image/jpeg';
             } else if (isAudioEndpoint && !contentType) {
                 contentType = 'audio/wav';
+            } else if (isVideoBinaryEndpoint && !contentType) {
+                // Determine content type based on file extension
+                if (req.originalUrl.endsWith('.mp4')) {
+                    contentType = 'video/mp4';
+                } else if (req.originalUrl.endsWith('.jpg')) {
+                    contentType = 'image/jpeg';
+                }
             }
             res.set('Content-Type', contentType);
             res.set('Cache-Control', 'no-cache');

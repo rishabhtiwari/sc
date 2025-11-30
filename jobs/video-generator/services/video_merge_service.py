@@ -22,18 +22,23 @@ class VideoMergeService:
         self.effects_factory = EffectsFactory(logger=logger)
         self.thumbnail_service = ThumbnailService(config, logger)
         
-    def merge_latest_videos(self, news_list: List[Dict]) -> Dict:
+    def merge_latest_videos(self, news_list: List[Dict], title: str = None, config_id: str = None) -> Dict:
         """
         Merge latest news videos into a single compilation video
-        
+
         Args:
             news_list: List of news documents with video_path
-            
+            title: Optional title for the video thumbnail
+            config_id: Optional config ID to save video in config-specific folder
+
         Returns:
             Dict with merge result
         """
         try:
-            self.logger.info(f"🎬 Starting merge of {len(news_list)} videos")
+            if title is None:
+                title = "TOP 20 NEWS"
+
+            self.logger.info(f"🎬 Starting merge of {len(news_list)} videos with title: {title}, config_id: {config_id}")
             
             # Collect video clips
             video_clips = []
@@ -81,9 +86,21 @@ class VideoMergeService:
             for clip in video_clips:
                 clip.close()
 
-            # Use FFmpeg directly for fast merging with sliding transitions
-            final_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
-            temp_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.tmp.mp4')
+            # Determine output paths based on config_id
+            if config_id:
+                # Save in config-specific folder: /public/<config_id>/latest.mp4
+                config_dir = os.path.join(self.config.VIDEO_OUTPUT_DIR, config_id)
+                os.makedirs(config_dir, exist_ok=True)
+                final_output_path = os.path.join(config_dir, 'latest.mp4')
+                temp_output_path = os.path.join(config_dir, 'latest.tmp.mp4')
+                video_public_path = f'/public/{config_id}/latest.mp4'
+                thumbnail_public_path = f'/public/{config_id}/latest-thumbnail.jpg'
+            else:
+                # Legacy path for backward compatibility
+                final_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.mp4')
+                temp_output_path = os.path.join(self.config.VIDEO_OUTPUT_DIR, 'latest-20-news.tmp.mp4')
+                video_public_path = '/public/latest-20-news.mp4'
+                thumbnail_public_path = '/public/latest-20-news-thumbnail.jpg'
 
             # Ensure output directory exists
             os.makedirs(os.path.dirname(final_output_path), exist_ok=True)
@@ -127,14 +144,14 @@ class VideoMergeService:
             # Generate thumbnail for the merged video
             thumbnail_path = None
             try:
-                thumbnail_path = self._generate_thumbnail(valid_videos, final_output_path)
+                thumbnail_path = self._generate_thumbnail(valid_videos, final_output_path, title, config_id)
             except Exception as thumb_error:
                 self.logger.warning(f"⚠️ Thumbnail generation failed: {thumb_error}")
 
             return {
                 'status': 'success',
-                'merged_video_path': '/public/latest-20-news.mp4',
-                'thumbnail_path': thumbnail_path,
+                'merged_video_path': video_public_path,
+                'thumbnail_path': thumbnail_path if thumbnail_path else thumbnail_public_path,
                 'video_count': len(valid_videos),
                 'duration_seconds': round(duration, 2),
                 'file_size_mb': round(file_size_mb, 2),
@@ -423,13 +440,15 @@ class VideoMergeService:
 
         return result_clip
 
-    def _generate_thumbnail(self, news_list: List[Dict], video_path: str) -> Optional[str]:
+    def _generate_thumbnail(self, news_list: List[Dict], video_path: str, title: str = "TOP 20 NEWS", config_id: str = None) -> Optional[str]:
         """
         Generate a YouTube-style thumbnail for the merged video
 
         Args:
             news_list: List of news documents
+            title: Title to display on the thumbnail
             video_path: Path to the merged video
+            config_id: Optional config ID to save thumbnail in config-specific folder
 
         Returns:
             Path to generated thumbnail or None
@@ -484,14 +503,23 @@ class VideoMergeService:
                 self.logger.warning(f"⚠️ Could not extract news frames: {frame_error}")
 
             # Generate thumbnail with split design
-            thumbnail_output_path = os.path.join(
-                self.config.VIDEO_OUTPUT_DIR,
-                'latest-20-news-thumbnail.jpg'
-            )
+            if config_id:
+                # Save in config-specific folder
+                thumbnail_output_path = os.path.join(
+                    self.config.VIDEO_OUTPUT_DIR,
+                    config_id,
+                    'latest-thumbnail.jpg'
+                )
+            else:
+                # Legacy path
+                thumbnail_output_path = os.path.join(
+                    self.config.VIDEO_OUTPUT_DIR,
+                    'latest-20-news-thumbnail.jpg'
+                )
 
             thumbnail_path = self.thumbnail_service.generate_thumbnail(
                 background_image_path=None,  # Not used in split design
-                title="TOP 20 NEWS",  # Will be used by split design
+                title=title,  # Use the provided title
                 subtitle=None,
                 output_path=thumbnail_output_path,
                 news_thumbnails=news_thumbnails
@@ -506,7 +534,12 @@ class VideoMergeService:
                     pass
 
             self.logger.info(f"✅ Thumbnail generated: {thumbnail_path}")
-            return '/public/latest-20-news-thumbnail.jpg'
+
+            # Return public path
+            if config_id:
+                return f'/public/{config_id}/latest-thumbnail.jpg'
+            else:
+                return '/public/latest-20-news-thumbnail.jpg'
 
         except Exception as e:
             self.logger.error(f"❌ Thumbnail generation failed: {str(e)}")
