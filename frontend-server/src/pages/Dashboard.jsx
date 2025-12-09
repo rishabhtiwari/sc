@@ -10,7 +10,10 @@ const Dashboard = () => {
     withVideo: 0,
     uploaded: 0,
     processing: 0,
-    failed: 0
+    failed: 0,
+    totalImages: 0,
+    cleanedImages: 0,
+    pendingImages: 0
   });
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -159,7 +162,7 @@ const Dashboard = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <StatCard
           icon="📰"
           label="Total News Articles"
@@ -182,6 +185,13 @@ const Dashboard = () => {
           color="#f59e0b"
           percentage={stats.totalNews > 0 ? Math.round((stats.withVideo / stats.totalNews) * 100) : 0}
           trend={-1.2}
+        />
+        <StatCard
+          icon="🖼️"
+          label="Images Cleaned"
+          value={stats.cleanedImages}
+          color="#8b5cf6"
+          percentage={stats.totalImages > 0 ? Math.round((stats.cleanedImages / stats.totalImages) * 100) : 0}
         />
         <StatCard
           icon="📺"
@@ -229,6 +239,10 @@ const Dashboard = () => {
               <span className="text-lg font-bold text-purple-600">
                 {stats.totalNews > 0 ? Math.round((stats.uploaded / stats.totalNews) * 100) : 0}%
               </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Pending Images</span>
+              <span className="text-lg font-bold text-purple-600">{stats.pendingImages}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Pending Videos</span>
@@ -317,6 +331,14 @@ const Dashboard = () => {
             </div>
             <p className="font-semibold text-sm">LLM Enrichment</p>
             <p className="text-xs text-gray-500 mt-1">Summarize</p>
+          </div>
+          <div className="text-2xl text-gray-300">→</div>
+          <div className="flex-1 text-center">
+            <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-2xl">🖼️</span>
+            </div>
+            <p className="font-semibold text-sm">Clean Images</p>
+            <p className="text-xs text-gray-500 mt-1">IOPaint</p>
           </div>
           <div className="text-2xl text-gray-300">→</div>
           <div className="flex-1 text-center">

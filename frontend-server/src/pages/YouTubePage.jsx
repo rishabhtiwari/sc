@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { youtubeService, videoService, videoConfigService } from '../services';
-import { StatsCards, UploadProgress, ShortsGrid, LongVideoConfig, ConfigCard } from '../components/YouTubeUploader';
+import { StatsCards, UploadProgress, ShortsGrid, LongVideoConfig, ConfigCard, CredentialsManager } from '../components/YouTubeUploader';
 import PlusCard from '../components/YouTubeUploader/PlusCard';
 
 /**
  * YouTube Page - Upload news videos to YouTube
  */
 const YouTubePage = () => {
-  const [activeTab, setActiveTab] = useState('overview'); // overview, shorts, long
+  const [activeTab, setActiveTab] = useState('overview'); // overview, shorts, long, credentials
   const [stats, setStats] = useState({
     ready_to_upload: 0,
     already_uploaded: 0,
@@ -47,6 +47,7 @@ const YouTubePage = () => {
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'shorts', label: 'Shorts', icon: '📱' },
     { id: 'long', label: 'Long Videos', icon: '🎬' },
+    { id: 'credentials', label: 'Credentials', icon: '🔑' },
   ];
 
   // Load statistics
@@ -209,30 +210,35 @@ const YouTubePage = () => {
 
   // Upload long video with configuration
   const handleUploadLongVideo = async (configId) => {
+    if (!window.confirm('Upload this video to YouTube?')) {
+      return;
+    }
+
     setUploading(true);
     setShowProgress(true);
     setUploadProgress(0);
     setUploadLogs([]);
 
     try {
-      const response = await youtubeService.uploadLatest20();
-      const data = response.data;
+      setUploadLogs(prev => [...prev, `📤 Uploading config video: ${configId}`]);
+
+      // Call the config-specific upload endpoint
+      const response = await fetch(`/api/youtube/upload-config/${configId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
 
       if (data.status === 'success') {
         setUploadProgress(100);
         setUploadLogs(prev => [...prev, `✅ ${data.message}`]);
+        setUploadLogs(prev => [...prev, `🔗 Video URL: ${data.video_url}`]);
         showToast('Video uploaded successfully to YouTube!', 'success');
 
-        // Update configuration with YouTube info
-        if (configId && data.video_id) {
-          await videoConfigService.updateConfig(configId, {
-            youtubeVideoId: data.video_id,
-            youtubeVideoUrl: data.video_url,
-            uploadedAt: new Date().toISOString()
-          });
-        }
-
-        // Reload stats and configs
+        // Reload stats and configs (config is already updated by backend)
         await loadStats();
         await loadVideoConfigs();
       } else {
@@ -241,18 +247,19 @@ const YouTubePage = () => {
       }
     } catch (error) {
       console.error('Upload error:', error);
-      setUploadLogs(prev => [...prev, `❌ ${error.response?.data?.error || 'Upload failed'}`]);
-      showToast(error.response?.data?.error || 'Upload failed', 'error');
+      setUploadLogs(prev => [...prev, `❌ ${error.message || 'Upload failed'}`]);
+      showToast(error.message || 'Upload failed', 'error');
     } finally {
       setUploading(false);
+      setShowProgress(false);
     }
   };
 
   // Handle re-compute for a saved configuration
-  const handleRecomputeConfig = async (configId) => {
+  const handleRecomputeConfig = async (configId, articleIds = null) => {
     setMerging(true);
     try {
-      const response = await videoConfigService.mergeConfig(configId);
+      const response = await videoConfigService.mergeConfig(configId, articleIds);
       const data = response.data;
 
       if (data.status === 'success' || data.status === 'processing') {
@@ -397,10 +404,10 @@ const YouTubePage = () => {
 
       if (data.status === 'success') {
         showToast(`Short uploaded successfully! ${data.video_url}`, 'success');
-        
-        // Reload data
+
+        // Reload data - preserve current page
         await loadStats();
-        await loadPendingShorts();
+        await loadPendingShorts(shortsPagination.page, shortsPagination.limit);
       } else {
         showToast(data.error || 'Upload failed', 'error');
       }
@@ -617,6 +624,13 @@ const YouTubePage = () => {
                   />
                 </Card>
               )}
+            </div>
+          )}
+
+          {/* Credentials Tab */}
+          {activeTab === 'credentials' && (
+            <div className="space-y-6">
+              <CredentialsManager />
             </div>
           )}
         </div>

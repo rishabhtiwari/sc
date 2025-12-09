@@ -572,31 +572,53 @@ class VideoGeneratorJob(BaseJob):
                 video_count = config.get('videoCount', 20)
                 title = config.get('title', '')
                 config_id = config.get('config_id')  # Optional: if called from /configs/<id>/merge
+                article_ids = config.get('article_ids', [])  # Optional: manually selected article IDs in order
 
-                self.logger.info(f"🎬 Starting merge with config: categories={categories}, country={country}, language={language}, count={video_count}, title={title}")
+                self.logger.info(f"🎬 Starting merge with config: categories={categories}, country={country}, language={language}, count={video_count}, title={title}, manual_selection={len(article_ids) > 0}")
 
-                # Build query filter
-                query_filter = {"video_path": {"$exists": True, "$ne": None}}
+                # Check if manual selection is provided
+                if article_ids and len(article_ids) > 0:
+                    # Manual selection mode: fetch articles by IDs in the specified order
+                    self.logger.info(f"📝 Using manual selection: {len(article_ids)} articles selected")
 
-                # Add category filter if specified
-                if categories and len(categories) > 0:
-                    query_filter["category"] = {"$in": categories}
+                    latest_news = []
+                    for article_id in article_ids:
+                        article = self.news_collection.find_one(
+                            {"id": article_id, "video_path": {"$exists": True, "$ne": None}},
+                            {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1, "category": 1, "source.country": 1, "lang": 1}
+                        )
+                        if article:
+                            latest_news.append(article)
+                        else:
+                            self.logger.warning(f"⚠️ Article {article_id} not found or has no video")
 
-                # Add country filter if specified
-                if country:
-                    query_filter["source.country"] = country
+                    self.logger.info(f"✅ Found {len(latest_news)} out of {len(article_ids)} selected articles with videos")
+                else:
+                    # Automatic selection mode: use filters
+                    self.logger.info(f"🤖 Using automatic selection with filters")
 
-                # Add language filter if specified
-                if language:
-                    query_filter["lang"] = language
+                    # Build query filter
+                    query_filter = {"video_path": {"$exists": True, "$ne": None}}
 
-                self.logger.info(f"📋 Query filter: {query_filter}")
+                    # Add category filter if specified
+                    if categories and len(categories) > 0:
+                        query_filter["category"] = {"$in": categories}
 
-                # Get latest news with videos, including voice field
-                latest_news = list(self.news_collection.find(
-                    query_filter,
-                    {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1, "category": 1, "source.country": 1, "lang": 1}
-                ).sort("created_at", -1).limit(video_count))
+                    # Add country filter if specified
+                    if country:
+                        query_filter["source.country"] = country
+
+                    # Add language filter if specified
+                    if language:
+                        query_filter["lang"] = language
+
+                    self.logger.info(f"📋 Query filter: {query_filter}")
+
+                    # Get latest news with videos, including voice field
+                    latest_news = list(self.news_collection.find(
+                        query_filter,
+                        {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1, "category": 1, "source.country": 1, "lang": 1}
+                    ).sort("created_at", -1).limit(video_count))
 
                 if not latest_news:
                     return jsonify({
@@ -1054,6 +1076,76 @@ class VideoGeneratorJob(BaseJob):
                 self.logger.error(f"❌ Failed to download file: {str(e)}")
                 return jsonify({
                     "error": f"Failed to download file: {str(e)}",
+                    "status": "error"
+                }), 500
+
+        @self.app.route('/available-news', methods=['GET'])
+        def get_available_news():
+            """Get list of news articles with videos available for merging"""
+            try:
+                from flask import request
+
+                # Get query parameters
+                limit = int(request.args.get('limit', 100))
+                categories = request.args.getlist('categories')
+                country = request.args.get('country', '')
+                language = request.args.get('language', '')
+
+                # Build query filter
+                query_filter = {"video_path": {"$exists": True, "$ne": None}}
+
+                # Add filters if specified
+                if categories and len(categories) > 0:
+                    query_filter["category"] = {"$in": categories}
+                if country:
+                    query_filter["source.country"] = country
+                if language:
+                    query_filter["lang"] = language
+
+                # Get news articles with videos
+                articles = list(self.news_collection.find(
+                    query_filter,
+                    {
+                        "id": 1,
+                        "title": 1,
+                        "video_path": 1,
+                        "created_at": 1,
+                        "publishedAt": 1,
+                        "voice": 1,
+                        "category": 1,
+                        "source": 1,
+                        "lang": 1,
+                        "image": 1,
+                        "clean_image": 1
+                    }
+                ).sort("created_at", -1).limit(limit))
+
+                # Format response
+                formatted_articles = []
+                for article in articles:
+                    formatted_articles.append({
+                        "id": article.get("id"),
+                        "title": article.get("title"),
+                        "video_path": article.get("video_path"),
+                        "created_at": article.get("created_at"),
+                        "publishedAt": article.get("publishedAt"),
+                        "voice": article.get("voice"),
+                        "category": article.get("category"),
+                        "source": article.get("source", {}).get("name", "Unknown"),
+                        "language": article.get("lang"),
+                        "thumbnail": article.get("clean_image") or article.get("image")
+                    })
+
+                return jsonify({
+                    "status": "success",
+                    "count": len(formatted_articles),
+                    "articles": formatted_articles
+                })
+
+            except Exception as e:
+                self.logger.error(f"❌ Failed to get available news: {str(e)}")
+                return jsonify({
+                    "error": f"Failed to get available news: {str(e)}",
                     "status": "error"
                 }), 500
 
@@ -2165,6 +2257,7 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from bson import ObjectId
                 from datetime import datetime, timedelta
+                from flask import request
 
                 configs_collection = self.news_db['long_video_configs']
                 config = configs_collection.find_one({'_id': ObjectId(config_id)})
@@ -2174,6 +2267,15 @@ class VideoGeneratorJob(BaseJob):
                         'status': 'error',
                         'error': f'Configuration not found: {config_id}'
                     }), 404
+
+                # Get optional article_ids from request body (for manual selection)
+                request_data = request.get_json() or {}
+                article_ids = request_data.get('article_ids', [])
+
+                if article_ids:
+                    self.logger.info(f"🎯 Manual selection mode: {len(article_ids)} articles selected for config {config_id}")
+                else:
+                    self.logger.info(f"🤖 Automatic selection mode for config {config_id}")
 
                 # Calculate next run time
                 now = datetime.utcnow()
@@ -2212,6 +2314,10 @@ class VideoGeneratorJob(BaseJob):
                     'title': config.get('title', ''),
                     'config_id': config_id  # Pass config_id to update after merge
                 }
+
+                # Add article_ids if provided (manual selection)
+                if article_ids:
+                    merge_config_data['article_ids'] = article_ids
 
                 self.logger.info(f"🎬 Triggering merge for config: {config.get('title')} (ID: {config_id})")
 

@@ -58,10 +58,12 @@ export const deleteConfig = (configId) => {
 /**
  * Trigger video merge for a configuration
  * @param {string} configId - Configuration ID
+ * @param {Array<string>} articleIds - Optional array of article IDs for manual selection
  * @returns {Promise} API response
  */
-export const mergeConfig = (configId) => {
-  return api.post(`/videos/configs/${configId}/merge`);
+export const mergeConfig = (configId, articleIds = null) => {
+  const payload = articleIds ? { article_ids: articleIds } : {};
+  return api.post(`/videos/configs/${configId}/merge`, payload);
 };
 
 /**

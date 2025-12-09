@@ -102,3 +102,10 @@ def get_due_configs():
     logger.info("📅 GET /videos/configs/due - Proxying to video-generator")
     return proxy_to_video_generator('/configs/due', method='GET')
 
+
+@video_config_bp.route('/videos/available-news', methods=['GET'])
+def get_available_news():
+    """Proxy: Get list of news articles with videos available for merging"""
+    logger.info("📰 GET /videos/available-news - Proxying to video-generator")
+    return proxy_to_video_generator('/available-news', method='GET', params=request.args)
+

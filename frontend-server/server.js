@@ -23,9 +23,6 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve static files from dist directory (production build)
-app.use(express.static(path.join(__dirname, 'dist')));
-
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.json({
@@ -37,6 +34,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Proxy Routes - Forward all /api/* requests to appropriate backend
+// IMPORTANT: This must come BEFORE static file middleware to prevent /api routes from being caught by static handler
 app.use('/api', async (req, res) => {
     try {
         // Determine target URL based on endpoint
@@ -59,16 +57,23 @@ app.use('/api', async (req, res) => {
             '/api/image/skip',
             '/api/image/cleaned',
             '/api/proxy-image',
-            '/api/cleaned-image'
+            '/api/cleaned-image',
+            '/api/stats',
+            '/api/images',
+            '/api/next-image',
+            '/api/skip'
         ];
 
         // YouTube uploader specific endpoints go directly to YouTube uploader service
         const youtubeEndpoints = [
             '/api/youtube/stats',
             '/api/youtube/upload-latest-20',
+            '/api/youtube/upload-config',
             '/api/youtube/shorts/pending',
             '/api/youtube/shorts/upload',
-            '/api/youtube/oauth-callback'
+            '/api/youtube/oauth-callback',
+            '/api/youtube/auth/start',
+            '/api/youtube/credentials'
         ];
 
         // Voice generator specific endpoints go directly to voice-generator service
@@ -117,6 +122,12 @@ app.use('/api', async (req, res) => {
                 path = path;
             } else if (path.startsWith('/api/cleaned-image')) {
                 // Keep /api/cleaned-image as-is
+                path = path;
+            } else if (path.startsWith('/api/stats') ||
+                       path.startsWith('/api/images') ||
+                       path.startsWith('/api/next-image') ||
+                       path.startsWith('/api/skip')) {
+                // Keep direct IOPaint API endpoints as-is
                 path = path;
             } else if (path.startsWith('/api/image/next')) {
                 path = path.replace('/api/image/next', '/api/next-image');
@@ -230,6 +241,10 @@ app.use('/api', async (req, res) => {
         });
     }
 });
+
+// Serve static files from dist directory (production build)
+// IMPORTANT: This must come AFTER API proxy middleware to prevent /api routes from being caught
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Serve React app for all other routes (SPA fallback)
 app.get('*', (req, res) => {

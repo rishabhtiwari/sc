@@ -91,16 +91,18 @@ def get_dashboard_stats():
             'withVideo': 0,
             'uploaded': 0,
             'processing': 0,
-            'failed': 0
+            'failed': 0,
+            'totalImages': 0,
+            'cleanedImages': 0,
+            'pendingImages': 0
         }
-        
+
         # Try to get real stats from News Fetcher service
         try:
             response = requests.get(f"{NEWS_FETCHER_URL}/api/news/stats", timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 news_stats = response.json()
                 stats['totalNews'] = news_stats.get('total', 0)
-                stats['withAudio'] = news_stats.get('with_audio', 0)
                 stats['withVideo'] = news_stats.get('with_video', 0)
                 stats['uploaded'] = news_stats.get('uploaded', 0)
                 stats['processing'] = news_stats.get('processing', 0)
@@ -110,12 +112,36 @@ def get_dashboard_stats():
             # Use mock data if service is unavailable
             stats = {
                 'totalNews': 247,
-                'withAudio': 198,
+                'withAudio': 0,
                 'withVideo': 165,
                 'uploaded': 142,
                 'processing': 12,
-                'failed': 5
+                'failed': 5,
+                'totalImages': 0,
+                'cleanedImages': 0,
+                'pendingImages': 0
             }
+
+        # Try to get audio stats from Voice Generator service
+        try:
+            response = requests.get(f"{VOICE_GENERATOR_URL}/api/news/audio/stats", timeout=REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                audio_stats_response = response.json()
+                audio_stats = audio_stats_response.get('data', {})
+                stats['withAudio'] = audio_stats.get('generated', 0)
+        except Exception as e:
+            logger.warning(f"Failed to fetch audio stats: {e}")
+
+        # Try to get image processing stats from IOPaint service
+        try:
+            response = requests.get(f"{IOPAINT_URL}/api/stats", timeout=REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                image_stats = response.json()
+                stats['totalImages'] = image_stats.get('total', 0)
+                stats['cleanedImages'] = image_stats.get('cleaned', 0)
+                stats['pendingImages'] = image_stats.get('pending', 0)
+        except Exception as e:
+            logger.warning(f"Failed to fetch image processing stats: {e}")
         
         return jsonify({
             'success': True,

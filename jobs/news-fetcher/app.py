@@ -852,6 +852,71 @@ def get_news_filters():
             'countries': {}
         }), 500
 
+@app.route('/api/news/stats', methods=['GET'])
+def get_news_stats():
+    """
+    Get news statistics for dashboard
+
+    Returns:
+        JSON response with news statistics
+    """
+    try:
+        from config.settings import ArticleStatus
+
+        # Get MongoDB collection
+        news_collection = news_fetcher_job.news_enrichment_service.news_collection
+
+        # Count total articles
+        total = news_collection.count_documents({})
+
+        # Count articles with audio (have audio_path)
+        with_audio = news_collection.count_documents({
+            'audio_path': {'$exists': True, '$ne': None, '$ne': ''}
+        })
+
+        # Count articles with video (have video_path)
+        with_video = news_collection.count_documents({
+            'video_path': {'$exists': True, '$ne': None, '$ne': ''}
+        })
+
+        # Count uploaded articles (have youtube_video_id)
+        uploaded = news_collection.count_documents({
+            'youtube_video_id': {'$exists': True, '$ne': None, '$ne': ''}
+        })
+
+        # Count processing articles
+        processing = news_collection.count_documents({
+            'status': ArticleStatus.PROGRESS.value
+        })
+
+        # Count failed articles
+        failed = news_collection.count_documents({
+            'status': ArticleStatus.FAILED.value
+        })
+
+        return jsonify({
+            'total': total,
+            'with_audio': with_audio,
+            'with_video': with_video,
+            'uploaded': uploaded,
+            'processing': processing,
+            'failed': failed
+        })
+    except Exception as e:
+        news_fetcher_job.logger.error(f"❌ Error getting news stats: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'total': 0,
+            'with_audio': 0,
+            'with_video': 0,
+            'uploaded': 0,
+            'processing': 0,
+            'failed': 0
+        }), 500
+
+
+
 if __name__ == '__main__':
     try:
         # Validate configuration

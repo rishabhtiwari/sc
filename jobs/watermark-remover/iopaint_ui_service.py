@@ -440,6 +440,10 @@ HTML_TEMPLATE = """
                 <div class="stat-label">Cleaned</div>
             </div>
             <div class="stat-item">
+                <div class="stat-value" id="skipped-images" style="color: #dc3545;">-</div>
+                <div class="stat-label">Skipped</div>
+            </div>
+            <div class="stat-item">
                 <div class="stat-value" id="pending-images">-</div>
                 <div class="stat-label">Pending</div>
             </div>
@@ -562,7 +566,9 @@ HTML_TEMPLATE = """
             console.log('🔄 Loading next image...');
             showLoading(true);
             try {
-                const response = await fetch('/api/next-image');
+                // Pass current image ID to exclude it from results
+                const url = currentDocId ? `/api/next-image?exclude_id=${currentDocId}` : '/api/next-image';
+                const response = await fetch(url);
                 console.log('📡 Response status:', response.status);
 
                 // Parse JSON response first (even for errors)
@@ -808,8 +814,37 @@ HTML_TEMPLATE = """
         }
         
         // Skip image
-        document.getElementById('skip-btn').addEventListener('click', () => {
-            loadNextImage();
+        document.getElementById('skip-btn').addEventListener('click', async () => {
+            if (!currentDocId) {
+                showToast('No image loaded to skip', 'error');
+                return;
+            }
+
+            showLoading(true);
+            try {
+                const response = await fetch('/api/skip', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ doc_id: currentDocId })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    showLoading(false);
+                    return;
+                }
+
+                showToast('Image skipped successfully!', 'success');
+                updateStats();
+                loadNextImage();
+
+            } catch (error) {
+                console.error('Error skipping image:', error);
+                showToast('Failed to skip image', 'error');
+                showLoading(false);
+            }
         });
         
         // Update stats
@@ -817,9 +852,10 @@ HTML_TEMPLATE = """
             try {
                 const response = await fetch('/api/stats');
                 const data = await response.json();
-                
+
                 document.getElementById('total-images').textContent = data.total;
                 document.getElementById('cleaned-images').textContent = data.cleaned;
+                document.getElementById('skipped-images').textContent = data.skipped || 0;
                 document.getElementById('pending-images').textContent = data.pending;
             } catch (error) {
                 console.error('Error updating stats:', error);
@@ -928,16 +964,50 @@ def get_stats():
             }
         ]
 
+        # Count skipped images (with watermark_skipped: true)
+        pipeline_skipped = [
+            {
+                '$match': {
+                    'image': {'$ne': None},
+                    'watermark_skipped': True,
+                    'short_summary': {'$ne': None, '$ne': ''}
+                }
+            },
+            {
+                '$addFields': {
+                    'word_count': {
+                        '$size': {
+                            '$split': [
+                                {'$trim': {'input': '$short_summary'}},
+                                ' '
+                            ]
+                        }
+                    }
+                }
+            },
+            {
+                '$match': {
+                    'word_count': {'$gte': 30}  # Minimum 30 words requirement
+                }
+            },
+            {
+                '$count': 'total'
+            }
+        ]
+
         total_result = list(collection.aggregate(pipeline_total))
         cleaned_result = list(collection.aggregate(pipeline_cleaned))
+        skipped_result = list(collection.aggregate(pipeline_skipped))
 
         total = total_result[0]['total'] if total_result else 0
         cleaned = cleaned_result[0]['total'] if cleaned_result else 0
-        pending = total - cleaned
+        skipped = skipped_result[0]['total'] if skipped_result else 0
+        pending = total - cleaned - skipped  # Exclude both cleaned and skipped from pending
 
         return jsonify({
             'total': total,
             'cleaned': cleaned,
+            'skipped': skipped,
             'pending': pending
         })
     except Exception as e:
@@ -1065,24 +1135,39 @@ def get_next_image():
     try:
         collection = get_mongo_client()
 
+        # Get optional exclude_id parameter to skip current image
+        exclude_id = request.args.get('exclude_id')
+
         # Find first document with:
         # 1. Has image but no clean_image
         # 2. Has short_summary field that is not empty/null
         # 3. short_summary has at least 30 words (minimum requirement)
         # 4. Not marked as skipped
         # 5. Status is not 'dont_process'
+        # 6. Not the currently displayed image (if exclude_id provided)
         # Sorted by created_at descending (most recent first)
+
+        # Build match criteria
+        match_criteria = {
+            'image': {'$ne': None},
+            'clean_image': None,
+            'short_summary': {'$ne': None, '$ne': ''},
+            'watermark_skipped': {'$ne': True},
+            'status': {'$ne': 'dont_process'}
+        }
+
+        # Exclude current image if provided
+        if exclude_id:
+            try:
+                match_criteria['_id'] = {'$ne': ObjectId(exclude_id)}
+                logger.info(f"🔍 Excluding current image from query: {exclude_id}")
+            except Exception as e:
+                logger.warning(f"⚠️ Invalid exclude_id format: {exclude_id}, error: {e}")
 
         # Use aggregation pipeline to filter by word count
         pipeline = [
             {
-                '$match': {
-                    'image': {'$ne': None},
-                    'clean_image': None,
-                    'short_summary': {'$ne': None, '$ne': ''},
-                    'watermark_skipped': {'$ne': True},
-                    'status': {'$ne': 'dont_process'}
-                }
+                '$match': match_criteria
             },
             {
                 '$addFields': {
@@ -1269,11 +1354,24 @@ def save_image():
         image_bytes = base64.b64decode(image_data.split(',')[1])
         image = Image.open(io.BytesIO(image_bytes))
 
+        # Ensure output directory exists
+        try:
+            os.makedirs(OUTPUT_DIR, exist_ok=True)
+            logger.info(f"📁 Output directory ensured: {OUTPUT_DIR}")
+        except Exception as dir_error:
+            logger.error(f"❌ Failed to create output directory {OUTPUT_DIR}: {dir_error}")
+            raise
+
         # Save to file
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
         filename = f"{doc_id}_cleaned.png"
         filepath = os.path.join(OUTPUT_DIR, filename)
-        image.save(filepath, 'PNG')
+
+        try:
+            image.save(filepath, 'PNG')
+            logger.info(f"💾 Image saved to: {filepath}")
+        except Exception as save_error:
+            logger.error(f"❌ Failed to save image to {filepath}: {save_error}")
+            raise
 
         # Update MongoDB
         collection = get_mongo_client()
@@ -1287,14 +1385,14 @@ def save_image():
             }
         )
 
-        logger.info(f"✅ Saved cleaned image: {filepath}")
+        logger.info(f"✅ Saved cleaned image and updated MongoDB: {filepath}")
 
         return jsonify({
             'success': True,
             'filepath': filepath
         })
     except Exception as e:
-        logger.error(f"Error saving image: {e}")
+        logger.error(f"❌ Error saving image: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 

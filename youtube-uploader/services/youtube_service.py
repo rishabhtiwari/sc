@@ -9,6 +9,7 @@ import socket
 from typing import Optional, Dict, Any
 from datetime import datetime
 import time
+from dateutil import parser
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -20,93 +21,108 @@ from googleapiclient.errors import HttpError
 
 class YouTubeService:
     """Service for uploading videos to YouTube"""
-    
-    def __init__(self, config):
+
+    def __init__(self, config, db=None):
         """
         Initialize YouTube service
 
         Args:
             config: Configuration object
+            db: MongoDB database connection (optional)
         """
         self.config = config
+        self.db = db
         self.logger = logging.getLogger(__name__)
         self.youtube = None
         self._pending_flow = None
         
-    def authenticate(self) -> bool:
+    def authenticate(self, credential_id='default-youtube-credential') -> bool:
         """
-        Authenticate with YouTube API
-        
+        Authenticate with YouTube API using MongoDB credentials
+
+        Args:
+            credential_id: ID of the credential to use from MongoDB
+
         Returns:
             bool: True if authentication successful, False otherwise
         """
         try:
             credentials = None
-            
-            # Load existing credentials if available
-            if os.path.exists(self.config.YOUTUBE_CREDENTIALS_FILE):
-                self.logger.info("Loading existing YouTube credentials...")
-                with open(self.config.YOUTUBE_CREDENTIALS_FILE, 'r') as f:
-                    creds_data = json.load(f)
+
+            # Try to load credentials from MongoDB if database is available
+            if self.db is not None:
+                self.logger.info(f"Loading YouTube credentials from MongoDB (credential_id: {credential_id})...")
+                credentials_collection = self.db['youtube_credentials']
+
+                # Get credential from database
+                credential_doc = credentials_collection.find_one({'credential_id': credential_id})
+
+                if credential_doc and credential_doc.get('is_authenticated'):
+                    # Build credentials object from MongoDB data
+                    creds_data = {
+                        'token': credential_doc.get('access_token'),
+                        'refresh_token': credential_doc.get('refresh_token'),
+                        'token_uri': credential_doc.get('token_uri', 'https://oauth2.googleapis.com/token'),
+                        'client_id': credential_doc.get('client_id'),
+                        'client_secret': credential_doc.get('client_secret'),
+                        'scopes': credential_doc.get('scopes', self.config.YOUTUBE_SCOPES)
+                    }
+
+                    # Convert token expiry to ISO string format (required by from_authorized_user_info)
+                    token_expiry = credential_doc.get('token_expiry')
+                    if token_expiry:
+                        if isinstance(token_expiry, datetime):
+                            # Convert datetime to ISO string
+                            creds_data['expiry'] = token_expiry.isoformat()
+                        elif isinstance(token_expiry, str):
+                            # Already a string, use as-is
+                            creds_data['expiry'] = token_expiry
+
                     credentials = Credentials.from_authorized_user_info(creds_data, self.config.YOUTUBE_SCOPES)
-            
-            # Refresh or get new credentials
+                    self.logger.info("✅ Loaded credentials from MongoDB")
+                else:
+                    self.logger.error(f"❌ No authenticated credential found in MongoDB with ID: {credential_id}")
+                    self.logger.error("Please authenticate using the UI: YouTube Uploader → Credentials → Authenticate")
+                    return False
+            else:
+                # Fallback to file-based credentials (legacy)
+                if os.path.exists(self.config.YOUTUBE_CREDENTIALS_FILE):
+                    self.logger.info("Loading existing YouTube credentials from file...")
+                    with open(self.config.YOUTUBE_CREDENTIALS_FILE, 'r') as f:
+                        creds_data = json.load(f)
+                        credentials = Credentials.from_authorized_user_info(creds_data, self.config.YOUTUBE_SCOPES)
+                else:
+                    self.logger.error("❌ No credentials available. Please authenticate using the UI.")
+                    return False
+
+            # Refresh credentials if expired
             if not credentials or not credentials.valid:
                 if credentials and credentials.expired and credentials.refresh_token:
                     self.logger.info("Refreshing expired credentials...")
-                    credentials.refresh(Request())
-                else:
-                    self.logger.info("Getting new credentials...")
-                    if not os.path.exists(self.config.YOUTUBE_CLIENT_SECRETS_FILE):
-                        self.logger.error(f"Client secrets file not found: {self.config.YOUTUBE_CLIENT_SECRETS_FILE}")
+                    try:
+                        credentials.refresh(Request())
+
+                        # Update MongoDB with new token if using MongoDB
+                        if self.db is not None:
+                            credentials_collection = self.db['youtube_credentials']
+                            update_data = {
+                                'access_token': credentials.token,
+                                'token_expiry': credentials.expiry.isoformat() if credentials.expiry else None,
+                                'updated_at': datetime.now()
+                            }
+                            credentials_collection.update_one(
+                                {'credential_id': credential_id},
+                                {'$set': update_data}
+                            )
+                            self.logger.info("✅ Updated refreshed token in MongoDB")
+                    except Exception as refresh_error:
+                        self.logger.error(f"❌ YouTube authentication failed: {str(refresh_error)}")
+                        self.logger.error("Please re-authenticate using the UI: YouTube Uploader → Credentials → Re-authenticate")
                         return False
-
-                    flow = InstalledAppFlow.from_client_secrets_file(
-                        self.config.YOUTUBE_CLIENT_SECRETS_FILE,
-                        self.config.YOUTUBE_SCOPES
-                    )
-
-                    # Use console-based OAuth flow for Docker environment
-                    flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
-                    auth_url, _ = flow.authorization_url(prompt='consent')
-
-                    self.logger.info("=" * 80)
-                    self.logger.info("🔐 YOUTUBE AUTHENTICATION REQUIRED")
-                    self.logger.info("=" * 80)
-                    self.logger.info("")
-                    self.logger.info("Please visit this URL to authorize the application:")
-                    self.logger.info("")
-                    self.logger.info(f"    {auth_url}")
-                    self.logger.info("")
-                    self.logger.info("After authorization, you will receive an authorization code.")
-                    self.logger.info("Please enter the code using the following command:")
-                    self.logger.info("")
-                    self.logger.info("    curl -X POST http://localhost:8097/api/oauth-callback \\")
-                    self.logger.info("         -H 'Content-Type: application/json' \\")
-                    self.logger.info("         -d '{\"code\": \"YOUR_AUTH_CODE_HERE\"}'")
-                    self.logger.info("")
-                    self.logger.info("=" * 80)
-
-                    # Save the flow state for later use
-                    flow_state = {
-                        'auth_url': auth_url,
-                        'client_config': flow.client_config,
-                        'scopes': self.config.YOUTUBE_SCOPES
-                    }
-
-                    flow_state_file = os.path.join(os.path.dirname(self.config.YOUTUBE_CREDENTIALS_FILE), 'oauth_flow_state.json')
-                    with open(flow_state_file, 'w') as f:
-                        json.dump(flow_state, f)
-
-                    # Store flow instance for callback
-                    self._pending_flow = flow
-
-                    return False  # Authentication pending
-                
-                # Save credentials for future use
-                with open(self.config.YOUTUBE_CREDENTIALS_FILE, 'w') as f:
-                    f.write(credentials.to_json())
-                self.logger.info("Credentials saved successfully")
+                else:
+                    self.logger.error("❌ Credentials invalid and cannot be refreshed")
+                    self.logger.error("Please authenticate using the UI: YouTube Uploader → Credentials → Authenticate")
+                    return False
             
             # Build YouTube service with custom HTTP timeout
             # Set socket timeout to prevent hanging connections

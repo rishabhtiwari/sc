@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Button } from '../common';
+import RecomputeWizard from './RecomputeWizard';
 
 /**
  * Config Card Component - Display a saved video configuration
  */
 const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) => {
   const [showPreview, setShowPreview] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -59,7 +61,19 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
   };
 
   const handleMerge = () => {
-    onMerge(config._id);
+    // Open wizard instead of directly calling onMerge
+    setShowWizard(true);
+  };
+
+  const handleWizardConfirm = (articleIds) => {
+    // Close wizard
+    setShowWizard(false);
+    // Call onMerge with optional article_ids
+    onMerge(config._id, articleIds);
+  };
+
+  const handleWizardCancel = () => {
+    setShowWizard(false);
   };
 
   const handleUpload = () => {
@@ -78,7 +92,7 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
 
   const isCompleted = config.status === 'completed';
   const isProcessing = config.status === 'processing';
-  const canUpload = isCompleted && !config.youtubeVideoId;
+  const canUpload = isCompleted; // Always allow upload if completed, even if already uploaded
   const isUploaded = !!config.youtubeVideoId;
 
   return (
@@ -242,7 +256,7 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
             disabled={loading}
             size="sm"
           >
-            Upload
+            {isUploaded ? 'Re-upload' : 'Upload'}
           </Button>
         )}
 
@@ -266,6 +280,16 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
           Delete
         </Button>
       </div>
+
+      {/* Recompute Wizard Modal */}
+      {showWizard && (
+        <RecomputeWizard
+          config={config}
+          onConfirm={handleWizardConfirm}
+          onCancel={handleWizardCancel}
+          loading={loading}
+        />
+      )}
     </div>
   );
 };
