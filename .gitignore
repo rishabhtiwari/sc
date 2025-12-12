@@ -63,6 +63,8 @@ docker-compose.override.yml
 ### API Keys and Tokens ###
 **/api-keys.txt
 **/tokens.txt
+**/client_secrets.json
+youtube-uploader/credentials/client_secrets.json
 
 ### Backup files and directories ###
 backups/
