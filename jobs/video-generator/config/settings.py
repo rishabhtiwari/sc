@@ -105,6 +105,16 @@ class Config:
     TRANSITION_DURATION = float(os.getenv('TRANSITION_DURATION', 1.0))  # 1 second transition duration
     MUSIC_FADE_OUT_DURATION = float(os.getenv('MUSIC_FADE_OUT_DURATION', 3.0))  # 3 seconds fade out for smoother end
 
+    # Bottom Banner Effect Configuration
+    ENABLE_BOTTOM_BANNER = os.getenv('ENABLE_BOTTOM_BANNER', 'true').lower() == 'true'
+    BOTTOM_BANNER_HEIGHT = int(os.getenv('BOTTOM_BANNER_HEIGHT', 120))  # Height of the banner in pixels
+    BOTTOM_BANNER_COLOR_R = int(os.getenv('BOTTOM_BANNER_COLOR_R', 0))  # Navy Blue RGB - Red component
+    BOTTOM_BANNER_COLOR_G = int(os.getenv('BOTTOM_BANNER_COLOR_G', 51))  # Navy Blue RGB - Green component
+    BOTTOM_BANNER_COLOR_B = int(os.getenv('BOTTOM_BANNER_COLOR_B', 153))  # Navy Blue RGB - Blue component
+    BOTTOM_BANNER_TEXT_COLOR = os.getenv('BOTTOM_BANNER_TEXT_COLOR', 'white')
+    BOTTOM_BANNER_FONT_SIZE = int(os.getenv('BOTTOM_BANNER_FONT_SIZE', 48))
+    BOTTOM_BANNER_DURATION = float(os.getenv('BOTTOM_BANNER_DURATION', 5.0))  # Duration to show the banner in seconds
+
     # Processing Configuration
     BATCH_SIZE = int(os.getenv('BATCH_SIZE', 5))  # Process 5 videos at a time
     PROCESSING_TIMEOUT = int(os.getenv('PROCESSING_TIMEOUT', 600))  # 10 minutes per video

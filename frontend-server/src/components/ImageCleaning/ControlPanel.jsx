@@ -64,77 +64,105 @@ const ControlPanel = ({
       </div>
 
       {/* Action Buttons */}
-      <div className="space-y-2">
-        <Button
-          variant="primary"
-          icon="📥"
-          onClick={onLoadNext}
-          loading={loading}
-          fullWidth
-        >
-          Load Next Image
-        </Button>
+      <div className="space-y-3">
+        {/* Load Image */}
+        <div>
+          <Button
+            variant="primary"
+            icon="📥"
+            onClick={onLoadNext}
+            loading={loading}
+            size="sm"
+            className="w-full shadow-sm hover:shadow-md"
+          >
+            Load Next Image
+          </Button>
+        </div>
 
-        <Button
-          variant="info"
-          icon="🔍"
-          onClick={onAutoDetect}
-          disabled={!currentImage || loading}
-          fullWidth
-        >
-          Auto-detect Watermark
-        </Button>
+        {/* Mask Tools */}
+        <div className="border-t pt-3">
+          <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Mask Tools</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="info"
+              icon="🔍"
+              onClick={onAutoDetect}
+              disabled={!currentImage || loading}
+              size="sm"
+              className="shadow-sm hover:shadow-md"
+            >
+              Auto-detect
+            </Button>
 
-        <Button
-          variant="secondary"
-          icon="🗑️"
-          onClick={onClearMask}
-          disabled={!currentImage || !hasMask || loading}
-          fullWidth
-        >
-          Clear Mask
-        </Button>
+            <Button
+              variant="secondary"
+              icon="🗑️"
+              onClick={onClearMask}
+              disabled={!currentImage || !hasMask || loading}
+              size="sm"
+              className="shadow-sm hover:shadow-md"
+            >
+              Clear Mask
+            </Button>
+          </div>
+        </div>
 
-        <Button
-          variant="primary"
-          icon="✨"
-          onClick={onProcess}
-          disabled={!currentImage || !hasMask || loading}
-          loading={processing}
-          fullWidth
-        >
-          Remove Watermark
-        </Button>
+        {/* Processing */}
+        <div className="border-t pt-3">
+          <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Processing</p>
+          <Button
+            variant="primary"
+            icon="✨"
+            onClick={onProcess}
+            disabled={!currentImage || !hasMask || loading}
+            loading={processing}
+            size="sm"
+            className="w-full shadow-sm hover:shadow-md"
+          >
+            Remove Watermark
+          </Button>
+        </div>
 
-        <Button
-          variant="success"
-          icon="💾"
-          onClick={onSave}
-          disabled={!currentImage || loading}
-          fullWidth
-        >
-          Save & Mark Done
-        </Button>
+        {/* Actions */}
+        <div className="border-t pt-3">
+          <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Actions</p>
+          <div className="space-y-2">
+            <Button
+              variant="success"
+              icon="💾"
+              onClick={onSave}
+              disabled={!currentImage || loading}
+              size="sm"
+              className="w-full shadow-sm hover:shadow-md"
+            >
+              Save & Mark Done
+            </Button>
 
-        <Button
-          variant="warning"
-          icon="🔄"
-          onClick={onReplaceImage}
-          disabled={!currentImage || loading}
-          fullWidth
-        >
-          Replace Image URL
-        </Button>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="warning"
+                icon="🔄"
+                onClick={onReplaceImage}
+                disabled={!currentImage || loading}
+                size="sm"
+                className="shadow-sm hover:shadow-md"
+              >
+                Replace URL
+              </Button>
 
-        <Button
-          variant="danger"
-          icon="⏭️"
-          onClick={onSkip}
-          disabled={!currentImage || loading}
-          fullWidth
-        >
-          Skip This Image
-        </Button>
+              <Button
+                variant="danger"
+                icon="⏭️"
+                onClick={onSkip}
+                disabled={!currentImage || loading}
+                size="sm"
+                className="shadow-sm hover:shadow-md"
+              >
+                Skip Image
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

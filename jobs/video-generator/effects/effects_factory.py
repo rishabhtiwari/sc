@@ -11,6 +11,7 @@ from .fade_text_effect import FadeTextEffect
 from .logo_watermark_effect import LogoWatermarkEffect
 from .background_music_effect import BackgroundMusicEffect
 from .transition_effect import TransitionEffect
+from .bottom_banner_effect import BottomBannerEffect
 
 
 class EffectsFactory:
@@ -28,6 +29,7 @@ class EffectsFactory:
         'logo_watermark': LogoWatermarkEffect,
         'background_music': BackgroundMusicEffect,
         'transition': TransitionEffect,
+        'bottom_banner': BottomBannerEffect,
         # Add more effects here as they are implemented
         # 'color_grading': ColorGradingEffect,
         # etc.

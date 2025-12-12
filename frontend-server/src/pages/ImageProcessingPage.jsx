@@ -12,9 +12,9 @@ import ReplaceImageModal from '../components/ImageCleaning/ReplaceImageModal';
  */
 const ImageProcessingPage = () => {
   const [activeTab, setActiveTab] = useState('editor'); // 'editor' or 'gallery'
-  const [stats, setStats] = useState({ total: 0, cleaned: 0, pending: 0 });
+  const [stats, setStats] = useState({ total: 0, cleaned: 0, skipped: 0, pending: 0 });
   const [statsLoading, setStatsLoading] = useState(false);
-  
+
   // Editor state
   const [currentImage, setCurrentImage] = useState(null);
   const [imageData, setImageData] = useState(null);
@@ -48,6 +48,7 @@ const ImageProcessingPage = () => {
       setStats({
         total: data.total || 0,
         cleaned: data.cleaned || 0,
+        skipped: data.skipped || 0,
         pending: data.pending || 0,
       });
     } catch (error) {

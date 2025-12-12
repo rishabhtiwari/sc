@@ -430,7 +430,29 @@ class VideoGenerationService:
             # Load audio
             audio_clip = AudioFileClip(audio_path)
 
-            # Create text overlays
+            # Apply bottom banner effect if enabled
+            if self.config.ENABLE_BOTTOM_BANNER:
+                # Use full video duration for the banner (it should stay throughout the entire video)
+                banner_duration = float(background_clip.duration) if background_clip.duration else audio_clip.duration
+
+                background_clip = self.effects_factory.apply_effect(
+                    'bottom_banner',
+                    background_clip,
+                    config={
+                        'banner_height': self.config.BOTTOM_BANNER_HEIGHT,
+                        'banner_color': (
+                            self.config.BOTTOM_BANNER_COLOR_R,
+                            self.config.BOTTOM_BANNER_COLOR_G,
+                            self.config.BOTTOM_BANNER_COLOR_B
+                        ),
+                        'text_color': self.config.BOTTOM_BANNER_TEXT_COLOR,
+                        'font_size': self.config.BOTTOM_BANNER_FONT_SIZE,
+                        'duration': banner_duration  # Use full video duration instead of config default
+                    },
+                    heading=title
+                )
+
+            # Create text overlays for description only (title is now in bottom banner)
             text_clips = self._create_text_overlays(title, description, duration)
 
             # Combine all clips
@@ -526,9 +548,10 @@ class VideoGenerationService:
         text_clips = []
 
         try:
-            # Title overlay (appears for first 5 seconds or full duration if shorter)
+            # Skip title overlay if bottom banner is enabled (title is shown in banner)
+            # Otherwise, show title overlay at top
             title_duration = min(5.0, duration)
-            if title and title_duration > 0:
+            if title and title_duration > 0 and not self.config.ENABLE_BOTTOM_BANNER:
                 title_clip = TextClip(
                     self._wrap_text(title, 40),  # Wrap at 40 characters
                     fontsize=self.config.TITLE_FONT_SIZE,
@@ -548,7 +571,8 @@ class VideoGenerationService:
                 text_clips.append(title_clip)
 
             # Description overlay (appears after title, for remaining duration)
-            if description and duration > title_duration:
+            # Skip description if bottom banner is enabled to avoid clutter
+            if description and duration > title_duration and not self.config.ENABLE_BOTTOM_BANNER:
                 desc_start_time = title_duration
                 desc_duration = duration - title_duration
 

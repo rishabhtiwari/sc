@@ -10,7 +10,7 @@ import ControlPanel from '../components/ImageCleaning/ControlPanel';
  * Image Cleaning Page - Remove watermarks from news images
  */
 const ImageCleaningPage = () => {
-  const [stats, setStats] = useState({ total: 0, cleaned: 0, pending: 0 });
+  const [stats, setStats] = useState({ total: 0, cleaned: 0, skipped: 0, pending: 0 });
   const [statsLoading, setStatsLoading] = useState(false);
   const [currentImage, setCurrentImage] = useState(null);
   const [imageData, setImageData] = useState(null);
@@ -32,6 +32,7 @@ const ImageCleaningPage = () => {
       setStats({
         total: data.total || 0,
         cleaned: data.cleaned || 0,
+        skipped: data.skipped || 0,
         pending: data.pending || 0,
       });
     } catch (error) {
