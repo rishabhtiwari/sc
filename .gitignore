@@ -64,7 +64,8 @@ docker-compose.override.yml
 **/api-keys.txt
 **/tokens.txt
 
-### Backup files ###
+### Backup files and directories ###
+backups/
 *.backup
 *.bak
 *~
