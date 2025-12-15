@@ -67,6 +67,7 @@ class VideoGenerationService:
             mongo_id = str(article_data.get('_id'))
             title = article_data.get('title', '')
             description = article_data.get('description', '')
+            short_summary = article_data.get('short_summary', '')  # Extract short_summary for ticker
             audio_paths = article_data.get('audio_paths', {})
             # Use short_summary audio as primary, fallback to content, description, then title
             audio_path = audio_paths.get('short_summary') or audio_paths.get('content') or audio_paths.get('description') or audio_paths.get('title')
@@ -149,6 +150,7 @@ class VideoGenerationService:
                 audio_path=local_audio_path,
                 title=title,
                 description=description,
+                short_summary=short_summary,  # Pass short_summary for ticker
                 duration=audio_duration,
                 output_dir=output_dir
             )
@@ -405,8 +407,8 @@ class VideoGenerationService:
             return 0.0
 
     def _create_video_composition(self, background_image_path: str, audio_path: str,
-                                title: str, description: str, duration: float,
-                                output_dir: str) -> Optional[str]:
+                                title: str, description: str, short_summary: str,
+                                duration: float, output_dir: str) -> Optional[str]:
         """Create the final video composition"""
         try:
             self.logger.info("🎬 Creating video composition...")
@@ -430,7 +432,7 @@ class VideoGenerationService:
             # Load audio
             audio_clip = AudioFileClip(audio_path)
 
-            # Apply bottom banner effect if enabled
+            # Apply bottom banner effect if enabled (two-tier: main banner + ticker)
             if self.config.ENABLE_BOTTOM_BANNER:
                 # Use full video duration for the banner (it should stay throughout the entire video)
                 banner_duration = float(background_clip.duration) if background_clip.duration else audio_clip.duration
@@ -440,16 +442,24 @@ class VideoGenerationService:
                     background_clip,
                     config={
                         'banner_height': self.config.BOTTOM_BANNER_HEIGHT,
+                        'ticker_height': self.config.BOTTOM_TICKER_HEIGHT,
                         'banner_color': (
                             self.config.BOTTOM_BANNER_COLOR_R,
                             self.config.BOTTOM_BANNER_COLOR_G,
                             self.config.BOTTOM_BANNER_COLOR_B
                         ),
+                        'ticker_color': (
+                            self.config.BOTTOM_TICKER_COLOR_R,
+                            self.config.BOTTOM_TICKER_COLOR_G,
+                            self.config.BOTTOM_TICKER_COLOR_B
+                        ),
                         'text_color': self.config.BOTTOM_BANNER_TEXT_COLOR,
                         'font_size': self.config.BOTTOM_BANNER_FONT_SIZE,
+                        'ticker_font_size': self.config.BOTTOM_TICKER_FONT_SIZE,
                         'duration': banner_duration  # Use full video duration instead of config default
                     },
-                    heading=title
+                    heading=title,
+                    summary=short_summary  # Use short_summary as the scrolling ticker text
                 )
 
             # Create text overlays for description only (title is now in bottom banner)
