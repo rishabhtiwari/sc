@@ -22,7 +22,7 @@ class VideoMergeService:
         self.effects_factory = EffectsFactory(logger=logger)
         self.thumbnail_service = ThumbnailService(config, logger)
         
-    def merge_latest_videos(self, news_list: List[Dict], title: str = None, config_id: str = None) -> Dict:
+    def merge_latest_videos(self, news_list: List[Dict], title: str = None, config_id: str = None, background_audio_id: str = None) -> Dict:
         """
         Merge latest news videos into a single compilation video
 
@@ -30,6 +30,7 @@ class VideoMergeService:
             news_list: List of news documents with video_path
             title: Optional title for the video thumbnail
             config_id: Optional config ID to save video in config-specific folder
+            background_audio_id: Optional custom background audio filename from assets directory
 
         Returns:
             Dict with merge result
@@ -121,7 +122,8 @@ class VideoMergeService:
                 video_paths,
                 temp_output_path,
                 transition_duration=self.config.TRANSITION_DURATION if self.config.ENABLE_TRANSITIONS else 0,
-                append_subscribe_video=True  # Always append subscribe video
+                append_subscribe_video=True,  # Always append subscribe video
+                background_audio_id=background_audio_id  # Pass custom background audio
             )
 
             # Atomic operation: Move temp file to final location
@@ -175,7 +177,7 @@ class VideoMergeService:
                 'error': str(e)
             }
 
-    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0, append_subscribe_video: bool = False) -> float:
+    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0, append_subscribe_video: bool = False, background_audio_id: str = None) -> float:
         """
         Merge videos using FFmpeg with xfade sliding transitions for maximum speed
 
@@ -184,6 +186,7 @@ class VideoMergeService:
             output_path: Output file path
             transition_duration: Duration of transition in seconds
             append_subscribe_video: Whether to append CNI News subscribe video at the end
+            background_audio_id: Optional custom background audio filename from assets directory
 
         Returns:
             Total duration of merged video in seconds
@@ -344,6 +347,21 @@ class VideoMergeService:
 
         # Calculate total duration (sum of all durations minus overlaps)
         total_duration = sum(durations) - (transition_duration * (len(video_paths) - 1))
+
+        # Always apply background music to merged videos
+        # Use custom audio if provided, otherwise use default
+        if background_audio_id:
+            self.logger.info(f"🎵 Adding custom background music: {background_audio_id}")
+        else:
+            # Use default background music
+            background_audio_id = "background_music.wav"
+            self.logger.info(f"🎵 Adding default background music: {background_audio_id}")
+
+        output_with_music = self._add_background_music(output_path, background_audio_id, total_duration)
+        if output_with_music:
+            self.logger.info("✅ Background music added successfully!")
+        else:
+            self.logger.warning("⚠️ Failed to add background music, using video without it")
 
         return total_duration
 
@@ -544,4 +562,81 @@ class VideoMergeService:
         except Exception as e:
             self.logger.error(f"❌ Thumbnail generation failed: {str(e)}")
             return None
+
+    def _add_background_music(self, video_path: str, background_audio_id: str, video_duration: float) -> bool:
+        """
+        Add background music to the merged video using FFmpeg
+
+        Args:
+            video_path: Path to the merged video file (will be replaced with version that has background music)
+            background_audio_id: Filename of custom background audio from assets directory
+            video_duration: Duration of the video in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get path to custom background music
+            assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
+            music_path = os.path.join(assets_dir, background_audio_id)
+
+            if not os.path.exists(music_path):
+                self.logger.error(f"❌ Background audio file not found: {music_path}")
+                return False
+
+            self.logger.info(f"🎵 Using background music: {music_path}")
+
+            # Create temporary output path
+            temp_output = video_path.replace('.mp4', '.music.tmp.mp4')
+
+            # Use FFmpeg to mix background music with existing audio
+            # Strategy:
+            # 1. Loop background music to match video duration
+            # 2. Mix it with existing audio at lower volume (15%)
+            # 3. Apply fade in/out to background music
+
+            music_volume = 0.15  # 15% volume for background music
+            fade_duration = 2.0  # 2 seconds fade in/out
+
+            cmd = [
+                'ffmpeg',
+                '-y',  # Overwrite output
+                '-i', video_path,  # Input video with original audio
+                '-stream_loop', '-1',  # Loop background music
+                '-i', music_path,  # Background music
+                '-filter_complex',
+                f'[1:a]volume={music_volume},afade=t=in:st=0:d={fade_duration},afade=t=out:st={video_duration-fade_duration}:d={fade_duration},aloop=loop=-1:size=2e+09[music];'
+                f'[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]',
+                '-map', '0:v',  # Use video from first input
+                '-map', '[aout]',  # Use mixed audio
+                '-c:v', 'copy',  # Copy video stream (no re-encoding)
+                '-c:a', 'aac',  # Encode audio as AAC
+                '-b:a', '192k',  # Audio bitrate
+                '-shortest',  # Stop when shortest stream ends (video)
+                temp_output
+            ]
+
+            self.logger.info("🚀 Running FFmpeg to add background music...")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                self.logger.error(f"❌ FFmpeg error adding background music: {result.stderr}")
+                return False
+
+            # Replace original video with the one that has background music
+            os.replace(temp_output, video_path)
+            self.logger.info(f"✅ Background music added and video replaced: {video_path}")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error adding background music: {str(e)}")
+            # Clean up temp file if it exists
+            try:
+                temp_output = video_path.replace('.mp4', '.music.tmp.mp4')
+                if os.path.exists(temp_output):
+                    os.remove(temp_output)
+            except Exception:
+                pass
+            return False
 

@@ -46,7 +46,7 @@ class VideoGenerationService:
         self.logger.info("Video Generation Service initialized")
         self.logger.info(f"Available effects: {self.effects_factory.get_available_effects()}")
     
-    def generate_video_for_article(self, article_data: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_video_for_article(self, article_data: Dict[str, Any], skip_background_music: bool = False) -> Dict[str, Any]:
         """
         Generate video for a single news article
 
@@ -57,6 +57,7 @@ class VideoGenerationService:
                 - description: Article description
                 - audio_paths: Dictionary with audio file paths (title, description, content, short_summary)
                 - clean_image: Path to cleaned image (from watermark remover)
+            skip_background_music: If True, skip adding background music (for long videos that will have music added at merge level)
 
         Returns:
             Dictionary with generation result
@@ -152,7 +153,8 @@ class VideoGenerationService:
                 description=description,
                 short_summary=short_summary,  # Pass short_summary for ticker
                 duration=audio_duration,
-                output_dir=output_dir
+                output_dir=output_dir,
+                skip_background_music=skip_background_music  # Pass flag to skip background music
             )
             
             if not video_path:
@@ -408,8 +410,12 @@ class VideoGenerationService:
 
     def _create_video_composition(self, background_image_path: str, audio_path: str,
                                 title: str, description: str, short_summary: str,
-                                duration: float, output_dir: str) -> Optional[str]:
-        """Create the final video composition"""
+                                duration: float, output_dir: str, skip_background_music: bool = False) -> Optional[str]:
+        """Create the final video composition
+
+        Args:
+            skip_background_music: If True, skip adding background music (for long videos that will have music added at merge level)
+        """
         try:
             self.logger.info("🎬 Creating video composition...")
 
@@ -483,9 +489,11 @@ class VideoGenerationService:
                     }
                 )
 
-            # Apply background music effect if enabled
-            if self.config.ENABLE_BACKGROUND_MUSIC:
+            # Apply background music effect if enabled AND not skipped
+            # Skip background music for long videos (it will be added at merge level)
+            if self.config.ENABLE_BACKGROUND_MUSIC and not skip_background_music:
                 self.logger.info("🎵 Adding background music to video...")
+
                 final_video = self.effects_factory.apply_effect(
                     'background_music',
                     None,  # Not used by this effect
@@ -500,6 +508,8 @@ class VideoGenerationService:
                 )
             else:
                 # Set audio without background music
+                if skip_background_music:
+                    self.logger.info("⏭️ Skipping background music (will be added at merge level)")
                 final_video = final_video.set_audio(audio_clip)
 
             # Output path

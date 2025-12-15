@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
+import FormData from 'form-data';
+import multer from 'multer';
 
 // ES module equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -19,6 +21,10 @@ const VIDEO_GENERATOR_URL = process.env.VIDEO_GENERATOR_URL || 'http://ichat-vid
 
 // Middleware
 app.use(cors());
+
+// Configure multer for file uploads (store in memory)
+const upload = multer({ storage: multer.memoryStorage() });
+
 // Increase body size limit to 50MB for image uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -31,6 +37,39 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         api_server: API_SERVER_URL
     });
+});
+
+// Special route for background audio file upload (must come before general API proxy)
+app.post('/api/videos/background-audio', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
+
+        const targetUrl = `${VIDEO_GENERATOR_URL}/background-audio`;
+        console.log(`🔄 Proxying file upload ${req.method} ${req.originalUrl} -> ${targetUrl} (video-generator)`);
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: {
+                ...formData.getHeaders()
+            },
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ File upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'File upload proxy error',
+            message: error.message
+        });
+    }
 });
 
 // API Proxy Routes - Forward all /api/* requests to appropriate backend
@@ -84,6 +123,14 @@ app.use('/api', async (req, res) => {
             '/api/news/audio/serve'
         ];
 
+        // Video generator specific endpoints go directly to video-generator service
+        const videoEndpoints = [
+            '/api/videos/background-audio',
+            '/api/videos/configs',
+            '/api/videos/merge',
+            '/api/videos/recompute'
+        ];
+
         let targetUrl;
         let targetService;
 
@@ -104,6 +151,11 @@ app.use('/api', async (req, res) => {
 
         // Check if this is a voice generator specific endpoint
         const isVoiceEndpoint = voiceEndpoints.some(endpoint =>
+            req.originalUrl.startsWith(endpoint)
+        );
+
+        // Check if this is a video generator specific endpoint
+        const isVideoEndpoint = videoEndpoints.some(endpoint =>
             req.originalUrl.startsWith(endpoint)
         );
 
@@ -149,6 +201,11 @@ app.use('/api', async (req, res) => {
             // Forward to voice-generator service with full path
             targetUrl = `${VOICE_GENERATOR_URL}${req.originalUrl}`;
             targetService = 'voice-generator';
+        } else if (isVideoEndpoint) {
+            // Remove /api/videos prefix and forward to video-generator service
+            const path = req.originalUrl.replace('/api/videos', '');
+            targetUrl = `${VIDEO_GENERATOR_URL}${path}`;
+            targetService = 'video-generator';
         } else {
             // Forward to API server
             targetUrl = `${API_SERVER_URL}${req.originalUrl}`;
@@ -163,7 +220,8 @@ app.use('/api', async (req, res) => {
                                 req.originalUrl.startsWith('/api/cleaned-image/');
 
         // Check if this is an audio endpoint that returns binary data
-        const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve');
+        const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
+                                req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 
         // Check if this is a video endpoint that returns binary data
         const isVideoBinaryEndpoint = req.originalUrl.startsWith('/api/news/videos/shorts/') ||

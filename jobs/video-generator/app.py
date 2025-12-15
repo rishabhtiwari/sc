@@ -153,7 +153,8 @@ class VideoGeneratorJob(BaseJob):
                     merge_result = self.merge_service.merge_latest_videos(
                         latest_news,
                         title=config.get('title', ''),
-                        config_id=str(config['_id'])
+                        config_id=str(config['_id']),
+                        background_audio_id=config.get('backgroundAudioId')
                     )
 
                     if merge_result['status'] == 'success':
@@ -350,7 +351,8 @@ class VideoGeneratorJob(BaseJob):
             self.logger.info(f"🎬 Processing video generation for article: {article_id}")
 
             # Generate video using the video service
-            result = self.video_service.generate_video_for_article(article)
+            # Skip background music for individual videos - it will be added at shorts/merge level
+            result = self.video_service.generate_video_for_article(article, skip_background_music=True)
 
             if result['status'] == 'success':
                 self.logger.info(f"✅ Video generated successfully for article: {article_id}")
@@ -654,8 +656,25 @@ class VideoGeneratorJob(BaseJob):
                         self.logger.info("🎬 Starting async video merge process...")
                         start_time = time.time()
 
-                        # Merge videos with title parameter and config_id
-                        result = self.merge_service.merge_latest_videos(latest_news, title=title, config_id=config_id)
+                        # Get background audio ID from config if config_id is provided
+                        background_audio_id = None
+                        if config_id:
+                            try:
+                                from bson import ObjectId
+                                configs_collection = self.news_db['long_video_configs']
+                                config_doc = configs_collection.find_one({'_id': ObjectId(config_id)})
+                                if config_doc:
+                                    background_audio_id = config_doc.get('backgroundAudioId')
+                            except Exception as e:
+                                self.logger.warning(f"Could not fetch background audio from config: {e}")
+
+                        # Merge videos with title parameter, config_id, and background audio
+                        result = self.merge_service.merge_latest_videos(
+                            latest_news,
+                            title=title,
+                            config_id=config_id,
+                            background_audio_id=background_audio_id
+                        )
 
                         end_time = time.time()
                         processing_time = round(end_time - start_time, 2)
@@ -1933,6 +1952,205 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        # Background Audio Library Management Endpoints
+
+        @self.app.route('/background-audio', methods=['GET'])
+        def list_background_audio():
+            """List all available background audio files"""
+            try:
+                import os
+
+                assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+
+                # Create assets directory if it doesn't exist
+                if not os.path.exists(assets_dir):
+                    os.makedirs(assets_dir)
+                    return jsonify({
+                        'status': 'success',
+                        'count': 0,
+                        'audio_files': []
+                    }), 200
+
+                # List all audio files in assets directory
+                audio_extensions = ['.wav', '.mp3', '.m4a', '.aac', '.ogg']
+                audio_files = []
+
+                for filename in os.listdir(assets_dir):
+                    file_path = os.path.join(assets_dir, filename)
+                    if os.path.isfile(file_path):
+                        ext = os.path.splitext(filename)[1].lower()
+                        if ext in audio_extensions:
+                            file_stats = os.stat(file_path)
+                            audio_files.append({
+                                'id': filename,
+                                'name': filename,
+                                'size': file_stats.st_size,
+                                'size_mb': round(file_stats.st_size / (1024 * 1024), 2),
+                                'created_at': datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
+                                'modified_at': datetime.fromtimestamp(file_stats.st_mtime).isoformat(),
+                                'extension': ext
+                            })
+
+                # Sort by name
+                audio_files.sort(key=lambda x: x['name'])
+
+                self.logger.info(f"📋 Found {len(audio_files)} background audio files")
+
+                return jsonify({
+                    'status': 'success',
+                    'count': len(audio_files),
+                    'audio_files': audio_files
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error listing background audio: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/background-audio', methods=['POST'])
+        def upload_background_audio():
+            """Upload a new background audio file"""
+            try:
+                from werkzeug.utils import secure_filename
+                import os
+
+                # Check if file is in request
+                if 'file' not in request.files:
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'No file provided'
+                    }), 400
+
+                file = request.files['file']
+
+                if file.filename == '':
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'No file selected'
+                    }), 400
+
+                # Validate file extension
+                audio_extensions = ['.wav', '.mp3', '.m4a', '.aac', '.ogg']
+                filename = secure_filename(file.filename)
+                ext = os.path.splitext(filename)[1].lower()
+
+                if ext not in audio_extensions:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Invalid file type. Allowed: {", ".join(audio_extensions)}'
+                    }), 400
+
+                # Create assets directory if it doesn't exist
+                assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+                if not os.path.exists(assets_dir):
+                    os.makedirs(assets_dir)
+
+                # Save file
+                file_path = os.path.join(assets_dir, filename)
+
+                # Check if file already exists
+                if os.path.exists(file_path):
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'File "{filename}" already exists. Please rename or delete the existing file first.'
+                    }), 409
+
+                file.save(file_path)
+
+                # Get file stats
+                file_stats = os.stat(file_path)
+
+                self.logger.info(f"✅ Uploaded background audio: {filename} ({file_stats.st_size} bytes)")
+
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Background audio "{filename}" uploaded successfully',
+                    'audio_file': {
+                        'id': filename,
+                        'name': filename,
+                        'size': file_stats.st_size,
+                        'size_mb': round(file_stats.st_size / (1024 * 1024), 2),
+                        'extension': ext
+                    }
+                }), 201
+
+            except Exception as e:
+                self.logger.error(f"💥 Error uploading background audio: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/background-audio/<audio_id>', methods=['DELETE'])
+        def delete_background_audio(audio_id):
+            """Delete a background audio file"""
+            try:
+                from werkzeug.utils import secure_filename
+                import os
+
+                # Secure the filename
+                filename = secure_filename(audio_id)
+                assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+                file_path = os.path.join(assets_dir, filename)
+
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Background audio "{filename}" not found'
+                    }), 404
+
+                # Delete file
+                os.remove(file_path)
+
+                self.logger.info(f"🗑️  Deleted background audio: {filename}")
+
+                return jsonify({
+                    'status': 'success',
+                    'message': f'Background audio "{filename}" deleted successfully'
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"💥 Error deleting background audio: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/background-audio/<audio_id>/download', methods=['GET'])
+        def download_background_audio(audio_id):
+            """Download a background audio file"""
+            try:
+                from werkzeug.utils import secure_filename
+                import os
+
+                # Secure the filename
+                filename = secure_filename(audio_id)
+                assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
+                file_path = os.path.join(assets_dir, filename)
+
+                # Check if file exists
+                if not os.path.exists(file_path):
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Background audio "{filename}" not found'
+                    }), 404
+
+                return send_file(
+                    file_path,
+                    as_attachment=True,
+                    download_name=filename
+                )
+
+            except Exception as e:
+                self.logger.error(f"💥 Error downloading background audio: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
         # Video Configuration CRUD Endpoints
 
         @self.app.route('/configs', methods=['POST'])
@@ -1985,6 +2203,7 @@ class VideoGeneratorJob(BaseJob):
                     'thumbnailPath': None,
                     'youtubeVideoId': None,
                     'youtubeVideoUrl': None,
+                    'backgroundAudioId': config_data.get('backgroundAudioId', None),  # Custom background audio selection
                     'createdAt': now,
                     'updatedAt': now,
                     'lastRunTime': None,

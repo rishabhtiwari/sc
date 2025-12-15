@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { youtubeService, videoService, videoConfigService } from '../services';
-import { StatsCards, UploadProgress, ShortsGrid, LongVideoConfig, ConfigCard, CredentialsManager } from '../components/YouTubeUploader';
+import { StatsCards, UploadProgress, ShortsGrid, LongVideoConfig, ConfigCard, CredentialsManager, BackgroundAudioManager } from '../components/YouTubeUploader';
 import PlusCard from '../components/YouTubeUploader/PlusCard';
 
 /**
  * YouTube Page - Upload news videos to YouTube
  */
 const YouTubePage = () => {
-  const [activeTab, setActiveTab] = useState('overview'); // overview, shorts, long, credentials
+  const [activeTab, setActiveTab] = useState('overview'); // overview, shorts, long, credentials, audio
   const [stats, setStats] = useState({
     ready_to_upload: 0,
     already_uploaded: 0,
@@ -47,6 +47,7 @@ const YouTubePage = () => {
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'shorts', label: 'Shorts', icon: '📱' },
     { id: 'long', label: 'Long Videos', icon: '🎬' },
+    { id: 'audio', label: 'Audio Library', icon: '🎵' },
     { id: 'credentials', label: 'Credentials', icon: '🔑' },
   ];
 
@@ -624,6 +625,13 @@ const YouTubePage = () => {
                   />
                 </Card>
               )}
+            </div>
+          )}
+
+          {/* Audio Library Tab */}
+          {activeTab === 'audio' && (
+            <div className="space-y-6">
+              <BackgroundAudioManager />
             </div>
           )}
 

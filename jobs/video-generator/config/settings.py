@@ -150,6 +150,9 @@ class Config:
     CHANNEL_TAGLINE_FILENAME = "cni_news_subscribe.wav"
     CHANNEL_TAGLINE_MODEL = os.getenv('CHANNEL_TAGLINE_MODEL', 'kokoro-82m')  # Default to Kokoro-82M for English
     CHANNEL_TAGLINE_VOICE = os.getenv('CHANNEL_TAGLINE_VOICE', 'am_adam')  # Default voice
+
+    # Shorts Background Music Configuration
+    SHORTS_BACKGROUND_MUSIC = os.getenv('SHORTS_BACKGROUND_MUSIC', 'background_music.wav')  # Default background music for shorts
     
     @classmethod
     def validate_config(cls):

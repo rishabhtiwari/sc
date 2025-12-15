@@ -10,5 +10,6 @@ export { default as videoConfigService } from './videoConfigService';
 export { default as youtubeService } from './youtubeService';
 export { default as llmService } from './llmService';
 export { default as imageService } from './imageService';
+export { default as backgroundAudioService } from './backgroundAudioService';
 export { default as api } from './api';
 

@@ -177,15 +177,30 @@ class ShortsGenerationService:
                 self.logger.warning("⚠️ Subscribe video not found, skipping...")
 
             # Step 3: Concatenate videos using FFmpeg
+            temp_short_path = short_path.replace('.mp4', '.temp.mp4')
             if len(video_paths) == 1:
                 # Only news video, just copy it
                 self.logger.info("📋 Single video - copying directly")
                 import subprocess
-                subprocess.run(['cp', video_paths[0], short_path], check=True)
+                subprocess.run(['cp', video_paths[0], temp_short_path], check=True)
             else:
                 # Concatenate news + subscribe using FFmpeg
                 self.logger.info(f"🎨 Concatenating {len(video_paths)} videos using FFmpeg...")
-                self._concatenate_videos_ffmpeg(video_paths, short_path)
+                self._concatenate_videos_ffmpeg(video_paths, temp_short_path)
+
+            # Step 4: Add default background music to the short
+            self.logger.info("🎵 Adding default background music to short...")
+            success = self._add_background_music_to_short(temp_short_path, short_path)
+
+            if not success:
+                self.logger.warning("⚠️ Failed to add background music, using short without it")
+                # If background music fails, use the temp file as final
+                import subprocess
+                subprocess.run(['mv', temp_short_path, short_path], check=True)
+            else:
+                # Clean up temp file
+                if os.path.exists(temp_short_path):
+                    os.remove(temp_short_path)
 
             # Clean up temp files after successful concatenation
             try:
@@ -505,4 +520,75 @@ class ShortsGenerationService:
         except Exception as e:
             self.logger.error(f"Error processing subscribe video: {str(e)}")
             raise
+
+    def _add_background_music_to_short(self, input_path: str, output_path: str) -> bool:
+        """
+        Add background music to the short video using FFmpeg
+        Uses the configured background music from settings (SHORTS_BACKGROUND_MUSIC)
+
+        Args:
+            input_path: Path to the short video without background music
+            output_path: Path to save the short with background music
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            import subprocess
+            from moviepy.editor import VideoFileClip
+
+            # Get path to configured background music for shorts
+            assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
+            music_filename = self.config.SHORTS_BACKGROUND_MUSIC
+            music_path = os.path.join(assets_dir, music_filename)
+
+            if not os.path.exists(music_path):
+                self.logger.error(f"❌ Configured background music not found: {music_path}")
+                self.logger.error(f"❌ Please check SHORTS_BACKGROUND_MUSIC setting: {music_filename}")
+                return False
+
+            # Get video duration
+            video = VideoFileClip(input_path)
+            video_duration = video.duration
+            video.close()
+
+            self.logger.info(f"🎵 Using configured background music for shorts: {music_filename}")
+            self.logger.info(f"🎵 Music path: {music_path}")
+            self.logger.info(f"📊 Video duration: {video_duration:.2f}s")
+
+            # Use FFmpeg to mix background music with existing audio
+            music_volume = 0.15  # 15% volume for background music
+            fade_duration = 2.0  # 2 seconds fade in/out
+
+            cmd = [
+                'ffmpeg',
+                '-y',  # Overwrite output
+                '-i', input_path,  # Input video with original audio
+                '-stream_loop', '-1',  # Loop background music
+                '-i', music_path,  # Background music
+                '-filter_complex',
+                f'[1:a]volume={music_volume},afade=t=in:st=0:d={fade_duration},afade=t=out:st={video_duration-fade_duration}:d={fade_duration},aloop=loop=-1:size=2e+09[music];'
+                f'[0:a][music]amix=inputs=2:duration=first:dropout_transition=0[aout]',
+                '-map', '0:v',  # Use video from first input
+                '-map', '[aout]',  # Use mixed audio
+                '-c:v', 'copy',  # Copy video stream (no re-encoding)
+                '-c:a', 'aac',  # Encode audio as AAC
+                '-b:a', '192k',  # Audio bitrate
+                '-shortest',  # Stop when shortest stream ends (video)
+                output_path
+            ]
+
+            self.logger.info("🚀 Running FFmpeg to add background music to short...")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                self.logger.error(f"❌ FFmpeg error adding background music: {result.stderr}")
+                return False
+
+            self.logger.info(f"✅ Background music added to short successfully")
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error adding background music to short: {str(e)}")
+            return False
 

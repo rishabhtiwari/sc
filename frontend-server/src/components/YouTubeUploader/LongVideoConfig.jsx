@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../common';
 import NewsSelector from './NewsSelector';
+import { backgroundAudioService } from '../../services';
 
 /**
  * Long Video Configuration Component - Configure and create compilation videos
@@ -16,13 +17,17 @@ const LongVideoConfig = ({ initialConfig, onSave, onCancel, loading }) => {
     youtubeTitle: '',
     youtubeDescription: '',
     youtubeTags: [],
+    backgroundAudioId: null,
   });
 
   const [availableCategories, setAvailableCategories] = useState([]);
+  const [audioFiles, setAudioFiles] = useState([]);
+  const [audioLoading, setAudioLoading] = useState(false);
 
-  // Fetch available categories on mount
+  // Fetch available categories and audio files on mount
   useEffect(() => {
     fetchCategories();
+    fetchAudioFiles();
   }, []);
 
   // Load initial config if editing
@@ -38,6 +43,7 @@ const LongVideoConfig = ({ initialConfig, onSave, onCancel, loading }) => {
         youtubeTitle: initialConfig.youtubeTitle || '',
         youtubeDescription: initialConfig.youtubeDescription || '',
         youtubeTags: initialConfig.youtubeTags || [],
+        backgroundAudioId: initialConfig.backgroundAudioId || null,
       });
     }
   }, [initialConfig]);
@@ -56,6 +62,23 @@ const LongVideoConfig = ({ initialConfig, onSave, onCancel, loading }) => {
     } catch (error) {
       console.error('Failed to fetch categories:', error);
       setAvailableCategories([]);
+    }
+  };
+
+  const fetchAudioFiles = async () => {
+    try {
+      setAudioLoading(true);
+      const response = await backgroundAudioService.getBackgroundAudioList();
+      if (response.data.status === 'success') {
+        setAudioFiles(response.data.audio_files || []);
+      } else {
+        setAudioFiles([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch audio files:', error);
+      setAudioFiles([]);
+    } finally {
+      setAudioLoading(false);
     }
   };
 
@@ -218,6 +241,35 @@ const LongVideoConfig = ({ initialConfig, onSave, onCancel, loading }) => {
           </select>
           <p className="mt-1 text-xs text-gray-500">
             Automatically recompute this video based on the selected frequency
+          </p>
+        </div>
+
+        {/* Background Audio */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Background Audio (Optional)
+          </label>
+          <select
+            value={config.backgroundAudioId || ''}
+            onChange={(e) => handleInputChange('backgroundAudioId', e.target.value || null)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+            disabled={audioLoading}
+          >
+            <option value="">Default Background Music</option>
+            {audioFiles.map((audio) => (
+              <option key={audio.id} value={audio.id}>
+                🎵 {audio.name} ({audio.size_mb} MB)
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            {audioLoading ? (
+              'Loading audio files...'
+            ) : audioFiles.length === 0 ? (
+              <>Upload background audio files in the "Audio Library" tab to use custom music</>
+            ) : (
+              <>Select custom background audio or use default music. {audioFiles.length} audio file(s) available.</>
+            )}
           </p>
         </div>
 
