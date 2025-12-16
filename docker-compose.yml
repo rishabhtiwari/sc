@@ -863,6 +863,54 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Auth Service - Authentication and User Management
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: ichat-auth-service
+    ports:
+      - "8098:8098"
+    environment:
+      # Flask Configuration
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8098
+      - FLASK_DEBUG=false
+      - FLASK_ENV=production
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=news
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      # JWT Configuration
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production-2024
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
+      # Password Configuration
+      - BCRYPT_ROUNDS=12
+      - MIN_PASSWORD_LENGTH=8
+      # Account Lockout Configuration
+      - MAX_FAILED_LOGIN_ATTEMPTS=5
+      - ACCOUNT_LOCKOUT_MINUTES=30
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_FILE=logs/auth-service.log
+    volumes:
+      - ./auth-service/logs:/app/logs
+    networks:
+      - ichat-network
+    depends_on:
+      - ichat-mongodb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8098/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
   # Cleanup Job Service - Deletes old news articles and their files
   job-cleanup:
     build:
@@ -870,11 +918,11 @@ services:
       dockerfile: cleanup/Dockerfile
     container_name: ichat-cleanup
     ports:
-      - "8099:8099"
+      - "8100:8100"
     environment:
       # Flask Configuration
       - FLASK_HOST=0.0.0.0
-      - FLASK_PORT=8099
+      - FLASK_PORT=8100
       - FLASK_DEBUG=false
       - FLASK_ENV=production
       # Job Configuration - Run every 1 hour (3600 seconds)
@@ -910,7 +958,7 @@ services:
     depends_on:
       - ichat-mongodb
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8099/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8100/health" ]
       interval: 30s
       timeout: 10s
       retries: 3

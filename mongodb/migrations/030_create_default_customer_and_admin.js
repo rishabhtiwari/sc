@@ -52,12 +52,13 @@ print('  - Status: ' + defaultCustomer.status);
 
 // Create super admin user
 // Password: admin123
-// Hash generated with: bcrypt.hashSync('admin123', 12)
+// Password: admin123
+// Hash generated with Python: bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt(rounds=12))
 const superAdminUser = {
     user_id: 'user_super_admin',
     customer_id: 'customer_default',
     email: 'admin@newsautomation.com',
-    password_hash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIq.Zu3u8u',
+    password_hash: '$2b$12$qc62sgy/WnsXW8WPBe5YG.aM5TroVSJowo8hejli06gEXFvDPgul.',
     first_name: 'Super',
     last_name: 'Admin',
     role_id: 'role_super_admin',
