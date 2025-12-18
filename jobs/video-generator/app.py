@@ -9,10 +9,17 @@ from datetime import datetime
 
 # Add common directory to path for job framework
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from flask import send_file, jsonify, request
 from common.models.base_job import BaseJob
 from common.utils.logger import setup_logger
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_insert_document,
+    prepare_update_document,
+    extract_user_context_from_headers
+)
 from config.settings import Config
 from services.video_generation_service import VideoGenerationService
 from services.video_merge_service import VideoMergeService
@@ -51,6 +58,15 @@ class VideoGeneratorJob(BaseJob):
         """Return the job type identifier"""
         return "video-generator"
 
+    def is_multi_tenant_job(self) -> bool:
+        """
+        Video generator is a multi-tenant job - runs separately for each customer
+
+        Returns:
+            True to enable per-customer job execution
+        """
+        return True
+
     def get_service_info(self) -> dict:
         """Return service information"""
         return {
@@ -69,9 +85,12 @@ class VideoGeneratorJob(BaseJob):
             }
         }
 
-    def _process_scheduled_configs(self):
+    def _process_scheduled_configs(self, customer_id: str = None):
         """
         Process video configurations that are due for scheduled execution
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
         """
         try:
             self.logger.info("📅 Checking for scheduled video configurations...")
@@ -83,11 +102,15 @@ class VideoGeneratorJob(BaseJob):
             from datetime import datetime
             now = datetime.utcnow()
 
-            due_configs = list(configs_collection.find({
+            # Build query with multi-tenant filter
+            base_query = {
                 'status': 'completed',
                 'frequency': {'$ne': 'none'},
                 'nextRunTime': {'$lte': now}
-            }))
+            }
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            due_configs = list(configs_collection.find(query))
 
             if not due_configs:
                 self.logger.info("📭 No scheduled configurations due for processing")
@@ -105,30 +128,36 @@ class VideoGeneratorJob(BaseJob):
                     self.logger.info(f"🎬 Processing scheduled config: {title} (ID: {config_id}, Frequency: {frequency})")
 
                     # Update status to processing
+                    update_data = {
+                        'status': 'processing',
+                        'mergeStartedAt': now,
+                        'lastRunTime': now,
+                        'updatedAt': now
+                    }
+                    prepare_update_document(update_data, user_id='system')
                     configs_collection.update_one(
                         {'_id': config['_id']},
-                        {'$set': {
-                            'status': 'processing',
-                            'mergeStartedAt': now,
-                            'lastRunTime': now,
-                            'updatedAt': now
-                        }}
+                        {'$set': update_data}
                     )
 
                     # Build query filter based on config
-                    query_filter = {"video_path": {"$exists": True, "$ne": None}}
+                    base_query_filter = {"video_path": {"$exists": True, "$ne": None}}
 
                     categories = config.get('categories', [])
                     if categories and len(categories) > 0:
-                        query_filter["category"] = {"$in": categories}
+                        base_query_filter["category"] = {"$in": categories}
 
                     country = config.get('country', '')
                     if country:
-                        query_filter["source.country"] = country
+                        base_query_filter["source.country"] = country
 
                     language = config.get('language', '')
                     if language:
-                        query_filter["lang"] = language
+                        base_query_filter["lang"] = language
+
+                    # Add customer_id filter for multi-tenancy
+                    config_customer_id = config.get('customer_id')
+                    query_filter = build_multi_tenant_query(base_query_filter, customer_id=config_customer_id)
 
                     # Get videos
                     video_count = config.get('videoCount', 20)
@@ -138,13 +167,15 @@ class VideoGeneratorJob(BaseJob):
 
                     if not latest_news:
                         self.logger.warning(f"⚠️ No videos found for config: {title}")
+                        update_data = {
+                            'status': 'failed',
+                            'error': 'No videos found matching criteria',
+                            'updatedAt': datetime.utcnow()
+                        }
+                        prepare_update_document(update_data, user_id='system')
                         configs_collection.update_one(
                             {'_id': config['_id']},
-                            {'$set': {
-                                'status': 'failed',
-                                'error': 'No videos found matching criteria',
-                                'updatedAt': datetime.utcnow()
-                            }}
+                            {'$set': update_data}
                         )
                         continue
 
@@ -163,42 +194,48 @@ class VideoGeneratorJob(BaseJob):
                         run_count = config.get('runCount', 0) + 1
 
                         # Update config with success
+                        update_data = {
+                            'status': 'completed',
+                            'videoPath': merge_result.get('merged_video_path'),
+                            'thumbnailPath': merge_result.get('thumbnail_path'),
+                            'mergeCompletedAt': datetime.utcnow(),
+                            'nextRunTime': next_run_time,
+                            'runCount': run_count,
+                            'error': None,
+                            'updatedAt': datetime.utcnow()
+                        }
+                        prepare_update_document(update_data, user_id='system')
                         configs_collection.update_one(
                             {'_id': config['_id']},
-                            {'$set': {
-                                'status': 'completed',
-                                'videoPath': merge_result.get('merged_video_path'),
-                                'thumbnailPath': merge_result.get('thumbnail_path'),
-                                'mergeCompletedAt': datetime.utcnow(),
-                                'nextRunTime': next_run_time,
-                                'runCount': run_count,
-                                'error': None,
-                                'updatedAt': datetime.utcnow()
-                            }}
+                            {'$set': update_data}
                         )
                         self.logger.info(f"✅ Successfully processed config: {title} (Next run: {next_run_time})")
                     else:
                         # Update config with failure
+                        update_data = {
+                            'status': 'failed',
+                            'error': merge_result.get('error', 'Unknown error'),
+                            'updatedAt': datetime.utcnow()
+                        }
+                        prepare_update_document(update_data, user_id='system')
                         configs_collection.update_one(
                             {'_id': config['_id']},
-                            {'$set': {
-                                'status': 'failed',
-                                'error': merge_result.get('error', 'Unknown error'),
-                                'updatedAt': datetime.utcnow()
-                            }}
+                            {'$set': update_data}
                         )
                         self.logger.error(f"❌ Failed to process config: {title}")
 
                 except Exception as e:
                     self.logger.error(f"💥 Error processing config {config.get('title', 'unknown')}: {str(e)}")
                     try:
+                        update_data = {
+                            'status': 'failed',
+                            'error': str(e),
+                            'updatedAt': datetime.utcnow()
+                        }
+                        prepare_update_document(update_data, user_id='system')
                         configs_collection.update_one(
                             {'_id': config['_id']},
-                            {'$set': {
-                                'status': 'failed',
-                                'error': str(e),
-                                'updatedAt': datetime.utcnow()
-                            }}
+                            {'$set': update_data}
                         )
                     except:
                         pass
@@ -227,16 +264,26 @@ class VideoGeneratorJob(BaseJob):
         """
         Main job execution method - finds articles with audio but no video and generates videos
         Also processes scheduled video configurations
+
+        Args:
+            job_id: Job instance ID for tracking
+            is_on_demand: True if this is a manual/on-demand job
+            **kwargs: Additional job parameters (customer_id, user_id)
         """
         try:
-            self.logger.info(f"🚀 Starting video generation job {job_id} (on_demand: {is_on_demand})...")
-            self.logger.info(f"🔍 DEBUG: run_job called with job_id={job_id}, is_on_demand={is_on_demand}")
+            # Extract customer_id and user_id from kwargs
+            customer_id = kwargs.get('customer_id')
+            user_id = kwargs.get('user_id')
+
+            customer_info = f" for customer {customer_id}" if customer_id else ""
+            self.logger.info(f"🚀 Starting video generation job {job_id}{customer_info} (on_demand: {is_on_demand})...")
+            self.logger.info(f"🔍 DEBUG: run_job called with job_id={job_id}, is_on_demand={is_on_demand}, customer_id={customer_id}")
 
             # First, process scheduled video configurations
-            self._process_scheduled_configs()
+            self._process_scheduled_configs(customer_id=customer_id)
 
             # Get articles that need video generation
-            articles_to_process = self._get_articles_for_video_generation()
+            articles_to_process = self._get_articles_for_video_generation(customer_id=customer_id)
 
             if not articles_to_process:
                 self.logger.info("📭 No articles found that need video generation")
@@ -340,19 +387,21 @@ class VideoGeneratorJob(BaseJob):
         Args:
             article: Article document from database
             job_id: Job ID passed by BaseJob framework
-            **kwargs: Additional parameters from BaseJob framework
+            **kwargs: Additional parameters from BaseJob framework (customer_id, user_id)
 
         Returns:
             Result dictionary with processing outcome
         """
         try:
             article_id = article['id']
+            # Extract customer_id from article or kwargs
+            customer_id = article.get('customer_id') or kwargs.get('customer_id')
 
-            self.logger.info(f"🎬 Processing video generation for article: {article_id}")
+            self.logger.info(f"🎬 Processing video generation for article: {article_id} (customer_id: {customer_id})")
 
             # Generate video using the video service
             # Skip background music for individual videos - it will be added at shorts/merge level
-            result = self.video_service.generate_video_for_article(article, skip_background_music=True)
+            result = self.video_service.generate_video_for_article(article, skip_background_music=True, customer_id=customer_id)
 
             if result['status'] == 'success':
                 self.logger.info(f"✅ Video generated successfully for article: {article_id}")
@@ -369,10 +418,14 @@ class VideoGeneratorJob(BaseJob):
                 if result.get('file_size_mb'):
                     update_data['video_file_size_mb'] = result['file_size_mb']
 
-                self.news_collection.update_one(
-                    {'id': article_id},
-                    {'$set': update_data}
-                )
+                # Add audit tracking
+                prepare_update_document(update_data, user_id='system')
+
+                # Build query with customer_id filter
+                article_customer_id = article.get('customer_id')
+                query = build_multi_tenant_query({'id': article_id}, customer_id=article_customer_id)
+
+                self.news_collection.update_one(query, {'$set': update_data})
                 self.logger.info(f"✅ Database updated with video_path for article: {article_id}")
 
                 # Also generate YouTube Short
@@ -414,13 +467,17 @@ class VideoGeneratorJob(BaseJob):
                             # Convert to relative path like /public/article_id/short.mp4
                             relative_shorts_path = shorts_path.replace('/app', '')
 
-                            self.news_collection.update_one(
-                                {'id': article_id},
-                                {'$set': {
-                                    'shorts_video_path': relative_shorts_path,
-                                    'updated_at': datetime.utcnow()
-                                }}
-                            )
+                            # Add audit tracking
+                            update_data = {
+                                'shorts_video_path': relative_shorts_path,
+                                'updated_at': datetime.utcnow()
+                            }
+                            prepare_update_document(update_data, user_id='system')
+
+                            # Build query with customer_id filter
+                            query = build_multi_tenant_query({'id': article_id}, customer_id=article_customer_id)
+
+                            self.news_collection.update_one(query, {'$set': update_data})
 
                             self.logger.info(f"✅ YouTube Short generated successfully: {relative_shorts_path}")
                             result['shorts_video_path'] = relative_shorts_path
@@ -450,21 +507,27 @@ class VideoGeneratorJob(BaseJob):
                 'article_id': article.get('id', 'unknown')
             }
 
-    def _get_articles_for_video_generation(self) -> list:
+    def _get_articles_for_video_generation(self, customer_id: str = None) -> list:
         """
         Get articles that have audio and cleaned image but no video generated yet
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             List of article documents that need video generation
         """
         try:
             # Query for articles that have audio_paths, clean_image, but no video_path
-            query = {
+            base_query = {
                 'audio_paths': {'$ne': None, '$exists': True},  # Has audio paths
                 'clean_image': {'$ne': None, '$exists': True},  # Has cleaned image
                 'video_path': {'$in': [None, '']},  # No video yet
                 'status': {'$in': ['completed', 'published']}  # Only process completed articles
             }
+
+            # Add customer_id filter for multi-tenancy
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
 
             # Get all articles that need video generation
             articles = list(
@@ -520,12 +583,16 @@ class VideoGeneratorJob(BaseJob):
 
                     # Only update if there's something to update beyond updated_at
                     if len(update_data) > 1:
+                        # Add audit tracking
+                        prepare_update_document(update_data, user_id='system')
+
+                        # Build query with customer_id filter
+                        article_customer_id = result.get('customer_id')
+                        query = build_multi_tenant_query({'id': article_id}, customer_id=article_customer_id)
+
                         # Update the document
                         self.logger.info(f"🔍 DEBUG: Executing MongoDB update for article: {article_id}")
-                        update_result = self.news_collection.update_one(
-                            {'id': article_id},
-                            {'$set': update_data}
-                        )
+                        update_result = self.news_collection.update_one(query, {'$set': update_data})
 
                         self.logger.info(
                             f"🔍 DEBUG: MongoDB update result - matched: {update_result.matched_count}, modified: {update_result.modified_count}")
@@ -563,6 +630,11 @@ class VideoGeneratorJob(BaseJob):
         def merge_latest_videos():
             """Merge latest news videos into a single video with configuration and alternating male/female anchors"""
             try:
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 # Get configuration from request body
                 from flask import request
                 config = request.get_json() or {}
@@ -576,7 +648,7 @@ class VideoGeneratorJob(BaseJob):
                 config_id = config.get('config_id')  # Optional: if called from /configs/<id>/merge
                 article_ids = config.get('article_ids', [])  # Optional: manually selected article IDs in order
 
-                self.logger.info(f"🎬 Starting merge with config: categories={categories}, country={country}, language={language}, count={video_count}, title={title}, manual_selection={len(article_ids) > 0}")
+                self.logger.info(f"🎬 Starting merge with config: categories={categories}, country={country}, language={language}, count={video_count}, title={title}, manual_selection={len(article_ids) > 0}, customer_id={customer_id}")
 
                 # Check if manual selection is provided
                 if article_ids and len(article_ids) > 0:
@@ -585,8 +657,12 @@ class VideoGeneratorJob(BaseJob):
 
                     latest_news = []
                     for article_id in article_ids:
+                        # Build query with customer_id filter
+                        base_query = {"id": article_id, "video_path": {"$exists": True, "$ne": None}}
+                        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
                         article = self.news_collection.find_one(
-                            {"id": article_id, "video_path": {"$exists": True, "$ne": None}},
+                            query,
                             {"id": 1, "title": 1, "video_path": 1, "created_at": 1, "voice": 1, "category": 1, "source.country": 1, "lang": 1}
                         )
                         if article:
@@ -600,19 +676,22 @@ class VideoGeneratorJob(BaseJob):
                     self.logger.info(f"🤖 Using automatic selection with filters")
 
                     # Build query filter
-                    query_filter = {"video_path": {"$exists": True, "$ne": None}}
+                    base_query_filter = {"video_path": {"$exists": True, "$ne": None}}
 
                     # Add category filter if specified
                     if categories and len(categories) > 0:
-                        query_filter["category"] = {"$in": categories}
+                        base_query_filter["category"] = {"$in": categories}
 
                     # Add country filter if specified
                     if country:
-                        query_filter["source.country"] = country
+                        base_query_filter["source.country"] = country
 
                     # Add language filter if specified
                     if language:
-                        query_filter["lang"] = language
+                        base_query_filter["lang"] = language
+
+                    # Add customer_id filter for multi-tenancy
+                    query_filter = build_multi_tenant_query(base_query_filter, customer_id=customer_id)
 
                     self.logger.info(f"📋 Query filter: {query_filter}")
 
@@ -668,12 +747,13 @@ class VideoGeneratorJob(BaseJob):
                             except Exception as e:
                                 self.logger.warning(f"Could not fetch background audio from config: {e}")
 
-                        # Merge videos with title parameter, config_id, and background audio
+                        # Merge videos with title parameter, config_id, background audio, and customer_id
                         result = self.merge_service.merge_latest_videos(
                             latest_news,
                             title=title,
                             config_id=config_id,
-                            background_audio_id=background_audio_id
+                            background_audio_id=background_audio_id,
+                            customer_id=customer_id
                         )
 
                         end_time = time.time()
@@ -689,16 +769,21 @@ class VideoGeneratorJob(BaseJob):
                                     from bson import ObjectId
                                     from datetime import datetime
                                     configs_collection = self.news_db['long_video_configs']
+
+                                    # Prepare update data with audit tracking
+                                    update_data = {
+                                        'status': 'completed',
+                                        'videoPath': result.get('merged_video_path'),
+                                        'thumbnailPath': result.get('thumbnail_path'),
+                                        'mergeCompletedAt': datetime.utcnow(),
+                                        'error': None,
+                                        'updatedAt': datetime.utcnow()
+                                    }
+                                    prepare_update_document(update_data, user_id=user_id or 'system')
+
                                     configs_collection.update_one(
                                         {'_id': ObjectId(config_id)},
-                                        {'$set': {
-                                            'status': 'completed',
-                                            'videoPath': result.get('merged_video_path'),
-                                            'thumbnailPath': result.get('thumbnail_path'),
-                                            'mergeCompletedAt': datetime.utcnow(),
-                                            'error': None,
-                                            'updatedAt': datetime.utcnow()
-                                        }}
+                                        {'$set': update_data}
                                     )
                                     self.logger.info(f"✅ Updated config {config_id} with merge results")
                                 except Exception as e:
@@ -712,13 +797,18 @@ class VideoGeneratorJob(BaseJob):
                                     from bson import ObjectId
                                     from datetime import datetime
                                     configs_collection = self.news_db['long_video_configs']
+
+                                    # Prepare update data with audit tracking
+                                    update_data = {
+                                        'status': 'failed',
+                                        'error': result.get('error', 'Unknown error'),
+                                        'updatedAt': datetime.utcnow()
+                                    }
+                                    prepare_update_document(update_data, user_id=user_id or 'system')
+
                                     configs_collection.update_one(
                                         {'_id': ObjectId(config_id)},
-                                        {'$set': {
-                                            'status': 'failed',
-                                            'error': result.get('error', 'Unknown error'),
-                                            'updatedAt': datetime.utcnow()
-                                        }}
+                                        {'$set': update_data}
                                     )
                                     self.logger.info(f"✅ Updated config {config_id} with failure status")
                                 except Exception as e:
@@ -733,13 +823,18 @@ class VideoGeneratorJob(BaseJob):
                                 from bson import ObjectId
                                 from datetime import datetime
                                 configs_collection = self.news_db['long_video_configs']
+
+                                # Prepare update data with audit tracking
+                                update_data = {
+                                    'status': 'failed',
+                                    'error': str(e),
+                                    'updatedAt': datetime.utcnow()
+                                }
+                                prepare_update_document(update_data, user_id=user_id or 'system')
+
                                 configs_collection.update_one(
                                     {'_id': ObjectId(config_id)},
-                                    {'$set': {
-                                        'status': 'failed',
-                                        'error': str(e),
-                                        'updatedAt': datetime.utcnow()
-                                    }}
+                                    {'$set': update_data}
                                 )
                             except:
                                 pass
@@ -912,6 +1007,11 @@ class VideoGeneratorJob(BaseJob):
         def generate_short():
             """Generate YouTube Short for a news article with voice anchor information"""
             try:
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 data = request.get_json() or {}
                 article_id = data.get('article_id')
 
@@ -923,8 +1023,10 @@ class VideoGeneratorJob(BaseJob):
 
                 self.logger.info(f"🎬 Generating YouTube Short for article: {article_id}")
 
-                # Get article from database (including voice field)
-                article = self.news_collection.find_one({'id': article_id})
+                # Get article from database with multi-tenant filter
+                base_query = {'id': article_id}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                article = self.news_collection.find_one(query)
 
                 if not article:
                     return jsonify({
@@ -982,12 +1084,16 @@ class VideoGeneratorJob(BaseJob):
                     # Store relative path
                     relative_shorts_path = os.path.join(article_id, os.path.basename(shorts_path))
 
-                    self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': {
-                            'shorts_video_path': relative_shorts_path,
-                            'updated_at': datetime.utcnow()
-                        }}
+                    # Prepare update with audit tracking
+                    update_data = {
+                        'shorts_video_path': relative_shorts_path,
+                        'updated_at': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Update with multi-tenant filter
+                    query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+                    self.news_collection.update_one(query, {'$set': update_data}
                     )
 
                     self.logger.info(f"✅ Short generated and saved: {shorts_path}")
@@ -1104,6 +1210,10 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 # Get query parameters
                 limit = int(request.args.get('limit', 100))
                 categories = request.args.getlist('categories')
@@ -1111,15 +1221,18 @@ class VideoGeneratorJob(BaseJob):
                 language = request.args.get('language', '')
 
                 # Build query filter
-                query_filter = {"video_path": {"$exists": True, "$ne": None}}
+                base_query_filter = {"video_path": {"$exists": True, "$ne": None}}
 
                 # Add filters if specified
                 if categories and len(categories) > 0:
-                    query_filter["category"] = {"$in": categories}
+                    base_query_filter["category"] = {"$in": categories}
                 if country:
-                    query_filter["source.country"] = country
+                    base_query_filter["source.country"] = country
                 if language:
-                    query_filter["lang"] = language
+                    base_query_filter["lang"] = language
+
+                # Apply multi-tenant filter
+                query_filter = build_multi_tenant_query(base_query_filter, customer_id=customer_id)
 
                 # Get news articles with videos
                 articles = list(self.news_collection.find(
@@ -1207,6 +1320,11 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 self.logger.info("🎬 Testing Ken Burns effect on a video")
 
                 # Get parameters from request
@@ -1215,14 +1333,13 @@ class VideoGeneratorJob(BaseJob):
 
                 # If no article_id provided, get the latest article with audio
                 if not article_id:
-                    latest_article = self.news_collection.find_one(
-                        {
-                            'audio_paths': {'$ne': None, '$exists': True},
-                            'image': {'$ne': None, '$exists': True},
-                            'status': {'$in': ['completed', 'published']}
-                        },
-                        sort=[('created_at', -1)]
-                    )
+                    base_query = {
+                        'audio_paths': {'$ne': None, '$exists': True},
+                        'image': {'$ne': None, '$exists': True},
+                        'status': {'$in': ['completed', 'published']}
+                    }
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query, sort=[('created_at', -1)])
 
                     if not latest_article:
                         return jsonify({
@@ -1232,7 +1349,9 @@ class VideoGeneratorJob(BaseJob):
 
                     article_id = latest_article['id']
                 else:
-                    latest_article = self.news_collection.find_one({'id': article_id})
+                    base_query = {'id': article_id}
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query)
 
                     if not latest_article:
                         return jsonify({
@@ -1246,14 +1365,16 @@ class VideoGeneratorJob(BaseJob):
                 result = self.video_service.generate_video_for_article(latest_article)
 
                 if result['status'] == 'success':
-                    # Update database with video path
-                    self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': {
-                            'video_path': result['video_path'],
-                            'updated_at': datetime.utcnow()
-                        }}
-                    )
+                    # Prepare update with audit tracking
+                    update_data = {
+                        'video_path': result['video_path'],
+                        'updated_at': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Update database with multi-tenant filter
+                    query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+                    self.news_collection.update_one(query, {'$set': update_data})
 
                     return jsonify({
                         "message": "Ken Burns effect test completed successfully",
@@ -1288,6 +1409,11 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 self.logger.info("🎬 Testing Fade Text effect on a video")
 
                 # Get parameters from request
@@ -1301,14 +1427,13 @@ class VideoGeneratorJob(BaseJob):
 
                 # If no article_id provided, get the latest article with audio
                 if not article_id:
-                    latest_article = self.news_collection.find_one(
-                        {
-                            'audio_paths': {'$ne': None, '$exists': True},
-                            'image': {'$ne': None, '$exists': True},
-                            'status': {'$in': ['completed', 'published']}
-                        },
-                        sort=[('created_at', -1)]
-                    )
+                    base_query = {
+                        'audio_paths': {'$ne': None, '$exists': True},
+                        'image': {'$ne': None, '$exists': True},
+                        'status': {'$in': ['completed', 'published']}
+                    }
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query, sort=[('created_at', -1)])
 
                     if not latest_article:
                         return jsonify({
@@ -1318,7 +1443,9 @@ class VideoGeneratorJob(BaseJob):
 
                     article_id = latest_article['id']
                 else:
-                    latest_article = self.news_collection.find_one({'id': article_id})
+                    base_query = {'id': article_id}
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query)
 
                     if not latest_article:
                         return jsonify({
@@ -1347,14 +1474,16 @@ class VideoGeneratorJob(BaseJob):
                     self.config.FADE_TEXT_TYPE = original_fade_type
 
                 if result['status'] == 'success':
-                    # Update database with video path
-                    self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': {
-                            'video_path': result['video_path'],
-                            'updated_at': datetime.utcnow()
-                        }}
-                    )
+                    # Prepare update with audit tracking
+                    update_data = {
+                        'video_path': result['video_path'],
+                        'updated_at': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Update database with multi-tenant filter
+                    query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+                    self.news_collection.update_one(query, {'$set': update_data})
 
                     return jsonify({
                         "message": "Fade Text effect test completed successfully",
@@ -1395,6 +1524,11 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 self.logger.info("🎬 Testing Logo Watermark effect on a video")
 
                 # Get parameters from request
@@ -1409,14 +1543,13 @@ class VideoGeneratorJob(BaseJob):
 
                 # If no article_id provided, get the latest article with audio
                 if not article_id:
-                    latest_article = self.news_collection.find_one(
-                        {
-                            'audio_paths': {'$ne': None, '$exists': True},
-                            'image': {'$ne': None, '$exists': True},
-                            'status': {'$in': ['completed', 'published']}
-                        },
-                        sort=[('created_at', -1)]
-                    )
+                    base_query = {
+                        'audio_paths': {'$ne': None, '$exists': True},
+                        'image': {'$ne': None, '$exists': True},
+                        'status': {'$in': ['completed', 'published']}
+                    }
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query, sort=[('created_at', -1)])
 
                     if not latest_article:
                         return jsonify({
@@ -1426,7 +1559,9 @@ class VideoGeneratorJob(BaseJob):
 
                     article_id = latest_article['id']
                 else:
-                    latest_article = self.news_collection.find_one({'id': article_id})
+                    base_query = {'id': article_id}
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query)
 
                     if not latest_article:
                         return jsonify({
@@ -1458,14 +1593,16 @@ class VideoGeneratorJob(BaseJob):
                     self.config.LOGO_MARGIN = original_margin
 
                 if result['status'] == 'success':
-                    # Update database with video path
-                    self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': {
-                            'video_path': result['video_path'],
-                            'updated_at': datetime.utcnow()
-                        }}
-                    )
+                    # Prepare update with audit tracking
+                    update_data = {
+                        'video_path': result['video_path'],
+                        'updated_at': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Update database with multi-tenant filter
+                    query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+                    self.news_collection.update_one(query, {'$set': update_data})
 
                     return jsonify({
                         "message": "Logo Watermark effect test completed successfully",
@@ -1514,6 +1651,11 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 self.logger.info("🎵 Testing Background Music effect on a video")
 
                 # Get parameters from request
@@ -1528,14 +1670,13 @@ class VideoGeneratorJob(BaseJob):
 
                 # If no article_id provided, get the latest article with audio
                 if not article_id:
-                    latest_article = self.news_collection.find_one(
-                        {
-                            'audio_paths': {'$ne': None, '$exists': True},
-                            'image': {'$ne': None, '$exists': True},
-                            'status': {'$in': ['completed', 'published']}
-                        },
-                        sort=[('created_at', -1)]
-                    )
+                    base_query = {
+                        'audio_paths': {'$ne': None, '$exists': True},
+                        'image': {'$ne': None, '$exists': True},
+                        'status': {'$in': ['completed', 'published']}
+                    }
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query, sort=[('created_at', -1)])
 
                     if not latest_article:
                         return jsonify({
@@ -1545,7 +1686,9 @@ class VideoGeneratorJob(BaseJob):
 
                     article_id = latest_article['id']
                 else:
-                    latest_article = self.news_collection.find_one({'id': article_id})
+                    base_query = {'id': article_id}
+                    query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                    latest_article = self.news_collection.find_one(query)
 
                     if not latest_article:
                         return jsonify({
@@ -1581,14 +1724,16 @@ class VideoGeneratorJob(BaseJob):
                     self.config.MUSIC_FADE_OUT_DURATION = original_fade_out
 
                 if result['status'] == 'success':
-                    # Update database with video path
-                    self.news_collection.update_one(
-                        {'id': article_id},
-                        {'$set': {
-                            'video_path': result['video_path'],
-                            'updated_at': datetime.utcnow()
-                        }}
-                    )
+                    # Prepare update with audit tracking
+                    update_data = {
+                        'video_path': result['video_path'],
+                        'updated_at': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Update database with multi-tenant filter
+                    query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+                    self.news_collection.update_one(query, {'$set': update_data})
 
                     return jsonify({
                         "message": "Background Music effect test completed successfully",
@@ -1630,6 +1775,10 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 self.logger.info("🎬 Testing Smooth Transitions effect")
 
                 # Get parameters from request
@@ -1640,9 +1789,13 @@ class VideoGeneratorJob(BaseJob):
 
                 self.logger.info(f"📊 Testing {transition_type} transition with {video_count} videos")
 
+                # Build query with multi-tenant filter
+                base_query = {"video_path": {"$exists": True, "$ne": None}}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
                 # Get latest videos
                 latest_news = list(self.news_collection.find(
-                    {"video_path": {"$exists": True, "$ne": None}},
+                    query,
                     {"id": 1, "title": 1, "video_path": 1, "created_at": 1}
                 ).sort("created_at", -1).limit(video_count))
 
@@ -1956,27 +2109,38 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/background-audio', methods=['GET'])
         def list_background_audio():
-            """List all available background audio files"""
+            """List all available background audio files for the customer"""
             try:
                 import os
+                from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+                # Extract customer_id from headers for multi-tenant isolation
+                context = extract_user_context_from_headers(request.headers)
+                customer_id = context['customer_id']
+                user_id = context.get('user_id')
 
                 assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
 
-                # Create assets directory if it doesn't exist
-                if not os.path.exists(assets_dir):
-                    os.makedirs(assets_dir)
+                # Customer-specific directory
+                customer_assets_dir = os.path.join(assets_dir, customer_id)
+
+                # Create customer assets directory if it doesn't exist
+                if not os.path.exists(customer_assets_dir):
+                    os.makedirs(customer_assets_dir)
+                    self.logger.info(f"📁 Created customer assets directory: {customer_assets_dir}")
                     return jsonify({
                         'status': 'success',
                         'count': 0,
-                        'audio_files': []
+                        'audio_files': [],
+                        'customer_id': customer_id
                     }), 200
 
-                # List all audio files in assets directory
+                # List all audio files in customer's assets directory
                 audio_extensions = ['.wav', '.mp3', '.m4a', '.aac', '.ogg']
                 audio_files = []
 
-                for filename in os.listdir(assets_dir):
-                    file_path = os.path.join(assets_dir, filename)
+                for filename in os.listdir(customer_assets_dir):
+                    file_path = os.path.join(customer_assets_dir, filename)
                     if os.path.isfile(file_path):
                         ext = os.path.splitext(filename)[1].lower()
                         if ext in audio_extensions:
@@ -1994,12 +2158,13 @@ class VideoGeneratorJob(BaseJob):
                 # Sort by name
                 audio_files.sort(key=lambda x: x['name'])
 
-                self.logger.info(f"📋 Found {len(audio_files)} background audio files")
+                self.logger.info(f"📋 Found {len(audio_files)} background audio files for customer: {customer_id}")
 
                 return jsonify({
                     'status': 'success',
                     'count': len(audio_files),
-                    'audio_files': audio_files
+                    'audio_files': audio_files,
+                    'customer_id': customer_id
                 }), 200
 
             except Exception as e:
@@ -2011,10 +2176,19 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/background-audio', methods=['POST'])
         def upload_background_audio():
-            """Upload a new background audio file"""
+            """Upload a new background audio file for the customer"""
             try:
                 from werkzeug.utils import secure_filename
                 import os
+                from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+                # Extract customer_id from headers for multi-tenant isolation
+                context = extract_user_context_from_headers(request.headers)
+                customer_id = context['customer_id']
+                user_id = context.get('user_id')
+
+                self.logger.info(f"📤 Upload request for customer: {customer_id}, user: {user_id}")
+                self.logger.info(f"📤 Request headers: X-Customer-ID={request.headers.get('X-Customer-ID')}, X-User-ID={request.headers.get('X-User-ID')}")
 
                 # Check if file is in request
                 if 'file' not in request.files:
@@ -2024,6 +2198,8 @@ class VideoGeneratorJob(BaseJob):
                     }), 400
 
                 file = request.files['file']
+
+                self.logger.info(f"📤 Received file: filename='{file.filename}', content_type='{file.content_type}'")
 
                 if file.filename == '':
                     return jsonify({
@@ -2036,19 +2212,28 @@ class VideoGeneratorJob(BaseJob):
                 filename = secure_filename(file.filename)
                 ext = os.path.splitext(filename)[1].lower()
 
+                self.logger.info(f"📤 Parsed filename: '{filename}', extension: '{ext}'")
+
                 if ext not in audio_extensions:
                     return jsonify({
                         'status': 'error',
                         'error': f'Invalid file type. Allowed: {", ".join(audio_extensions)}'
                     }), 400
 
-                # Create assets directory if it doesn't exist
+                # Create customer-specific assets directory
                 assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
-                if not os.path.exists(assets_dir):
-                    os.makedirs(assets_dir)
+                customer_assets_dir = os.path.join(assets_dir, customer_id)
 
-                # Save file
-                file_path = os.path.join(assets_dir, filename)
+                if not os.path.exists(customer_assets_dir):
+                    os.makedirs(customer_assets_dir)
+                    self.logger.info(f"📁 Created customer assets directory: {customer_assets_dir}")
+
+                # Save file to customer's directory
+                file_path = os.path.join(customer_assets_dir, filename)
+
+                self.logger.info(f"📁 Customer assets directory: {customer_assets_dir}")
+                self.logger.info(f"📁 Target file path: {file_path}")
+                self.logger.info(f"📁 File exists check: {os.path.exists(file_path)}")
 
                 # Check if file already exists
                 if os.path.exists(file_path):
@@ -2062,7 +2247,7 @@ class VideoGeneratorJob(BaseJob):
                 # Get file stats
                 file_stats = os.stat(file_path)
 
-                self.logger.info(f"✅ Uploaded background audio: {filename} ({file_stats.st_size} bytes)")
+                self.logger.info(f"✅ Uploaded background audio for customer {customer_id}: {filename} ({file_stats.st_size} bytes)")
 
                 return jsonify({
                     'status': 'success',
@@ -2073,7 +2258,8 @@ class VideoGeneratorJob(BaseJob):
                         'size': file_stats.st_size,
                         'size_mb': round(file_stats.st_size / (1024 * 1024), 2),
                         'extension': ext
-                    }
+                    },
+                    'customer_id': customer_id
                 }), 201
 
             except Exception as e:
@@ -2085,31 +2271,39 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/background-audio/<audio_id>', methods=['DELETE'])
         def delete_background_audio(audio_id):
-            """Delete a background audio file"""
+            """Delete a background audio file for the customer"""
             try:
                 from werkzeug.utils import secure_filename
                 import os
+                from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+                # Extract customer_id from headers for multi-tenant isolation
+                context = extract_user_context_from_headers(request.headers)
+                customer_id = context['customer_id']
+                user_id = context.get('user_id')
 
                 # Secure the filename
                 filename = secure_filename(audio_id)
                 assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
-                file_path = os.path.join(assets_dir, filename)
+                customer_assets_dir = os.path.join(assets_dir, customer_id)
+                file_path = os.path.join(customer_assets_dir, filename)
 
                 # Check if file exists
                 if not os.path.exists(file_path):
                     return jsonify({
                         'status': 'error',
-                        'error': f'Background audio "{filename}" not found'
+                        'error': f'Background audio "{filename}" not found for customer {customer_id}'
                     }), 404
 
                 # Delete file
                 os.remove(file_path)
 
-                self.logger.info(f"🗑️  Deleted background audio: {filename}")
+                self.logger.info(f"🗑️  Deleted background audio for customer {customer_id}: {filename}")
 
                 return jsonify({
                     'status': 'success',
-                    'message': f'Background audio "{filename}" deleted successfully'
+                    'message': f'Background audio "{filename}" deleted successfully',
+                    'customer_id': customer_id
                 }), 200
 
             except Exception as e:
@@ -2121,22 +2315,31 @@ class VideoGeneratorJob(BaseJob):
 
         @self.app.route('/background-audio/<audio_id>/download', methods=['GET'])
         def download_background_audio(audio_id):
-            """Download a background audio file"""
+            """Download a background audio file for the customer"""
             try:
                 from werkzeug.utils import secure_filename
                 import os
+                from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+                # Extract customer_id from headers for multi-tenant isolation
+                context = extract_user_context_from_headers(request.headers)
+                customer_id = context['customer_id']
+                user_id = context.get('user_id')
 
                 # Secure the filename
                 filename = secure_filename(audio_id)
                 assets_dir = os.path.join(os.path.dirname(__file__), 'assets')
-                file_path = os.path.join(assets_dir, filename)
+                customer_assets_dir = os.path.join(assets_dir, customer_id)
+                file_path = os.path.join(customer_assets_dir, filename)
 
                 # Check if file exists
                 if not os.path.exists(file_path):
                     return jsonify({
                         'status': 'error',
-                        'error': f'Background audio "{filename}" not found'
+                        'error': f'Background audio "{filename}" not found for customer {customer_id}'
                     }), 404
+
+                self.logger.info(f"📥 Downloading background audio for customer {customer_id}: {filename}")
 
                 return send_file(
                     file_path,
@@ -2159,6 +2362,11 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
                 from datetime import datetime, timedelta
+
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
 
                 config_data = request.get_json()
 
@@ -2215,6 +2423,9 @@ class VideoGeneratorJob(BaseJob):
                     'runCount': 0
                 }
 
+                # Add multi-tenant fields (customer_id, created_by, updated_by, timestamps)
+                prepare_insert_document(document, customer_id=customer_id, user_id=user_id)
+
                 # Insert into database
                 configs_collection = self.news_db['long_video_configs']
                 result = configs_collection.insert_one(document)
@@ -2247,14 +2458,20 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 # Get query parameters
                 status = request.args.get('status')
                 limit = int(request.args.get('limit', 50))
 
-                # Build query
-                query = {}
+                # Build query with multi-tenant filter
+                base_query = {}
                 if status:
-                    query['status'] = status
+                    base_query['status'] = status
+
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
 
                 # Get configs
                 configs_collection = self.news_db['long_video_configs']
@@ -2297,8 +2514,17 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from bson import ObjectId
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 configs_collection = self.news_db['long_video_configs']
-                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                # Build query with customer_id filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+                config = configs_collection.find_one(query)
 
                 if not config:
                     return jsonify({
@@ -2343,13 +2569,25 @@ class VideoGeneratorJob(BaseJob):
                 from bson import ObjectId
                 from datetime import datetime
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 update_data = request.get_json()
-                update_data['updatedAt'] = datetime.utcnow()
+
+                # Use prepare_update_document to add updated_by and updated_at
+                prepared_updates = prepare_update_document(update_data, user_id=user_id)
 
                 configs_collection = self.news_db['long_video_configs']
+
+                # Build query with customer_id filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
                 result = configs_collection.find_one_and_update(
-                    {'_id': ObjectId(config_id)},
-                    {'$set': update_data},
+                    query,
+                    {'$set': prepared_updates},
                     return_document=True
                 )
 
@@ -2396,8 +2634,17 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from bson import ObjectId
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 configs_collection = self.news_db['long_video_configs']
-                result = configs_collection.delete_one({'_id': ObjectId(config_id)})
+
+                # Build query with customer_id filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+                result = configs_collection.delete_one(query)
 
                 if result.deleted_count == 0:
                     return jsonify({
@@ -2428,14 +2675,22 @@ class VideoGeneratorJob(BaseJob):
             try:
                 from datetime import datetime
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 now = datetime.utcnow()
                 configs_collection = self.news_db['long_video_configs']
 
-                due_configs = list(configs_collection.find({
+                # Build query with multi-tenant filter
+                base_query = {
                     'status': 'completed',
                     'frequency': {'$ne': 'none'},
                     'nextRunTime': {'$lte': now}
-                }).sort('nextRunTime', 1))
+                }
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+                due_configs = list(configs_collection.find(query).sort('nextRunTime', 1))
 
                 # Convert ObjectId and datetime to strings
                 for config in due_configs:
@@ -2478,8 +2733,18 @@ class VideoGeneratorJob(BaseJob):
                 from datetime import datetime, timedelta
                 from flask import request
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 configs_collection = self.news_db['long_video_configs']
-                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                # Build query with customer_id filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+                config = configs_collection.find_one(query)
 
                 if not config:
                     return jsonify({
@@ -2512,16 +2777,20 @@ class VideoGeneratorJob(BaseJob):
 
                 # Update status to processing
                 run_count = config.get('runCount', 0) + 1
+                update_data = {
+                    'status': 'processing',
+                    'mergeStartedAt': now,
+                    'lastRunTime': now,
+                    'nextRunTime': next_run_time,
+                    'runCount': run_count,
+                    'updatedAt': now
+                }
+                prepare_update_document(update_data, user_id=user_id or 'system')
+
+                # Use multi-tenant query for update
                 configs_collection.update_one(
-                    {'_id': ObjectId(config_id)},
-                    {'$set': {
-                        'status': 'processing',
-                        'mergeStartedAt': now,
-                        'lastRunTime': now,
-                        'nextRunTime': next_run_time,
-                        'runCount': run_count,
-                        'updatedAt': now
-                    }}
+                    query,
+                    {'$set': update_data}
                 )
 
                 # Prepare merge config - reuse existing /merge-latest endpoint logic
@@ -2560,13 +2829,17 @@ class VideoGeneratorJob(BaseJob):
 
                     # Update config based on response
                     if response_data.get('status') == 'error':
+                        update_data = {
+                            'status': 'failed',
+                            'error': response_data.get('error', 'Unknown error'),
+                            'updatedAt': datetime.utcnow()
+                        }
+                        prepare_update_document(update_data, user_id=user_id or 'system')
+
+                        # Use multi-tenant query for update
                         configs_collection.update_one(
-                            {'_id': ObjectId(config_id)},
-                            {'$set': {
-                                'status': 'failed',
-                                'error': response_data.get('error', 'Unknown error'),
-                                'updatedAt': datetime.utcnow()
-                            }}
+                            query,
+                            {'$set': update_data}
                         )
 
                     return jsonify(response_data), status_code
@@ -2579,13 +2852,18 @@ class VideoGeneratorJob(BaseJob):
                     from bson import ObjectId
                     from datetime import datetime
                     configs_collection = self.news_db['long_video_configs']
+
+                    update_data = {
+                        'status': 'failed',
+                        'error': str(e),
+                        'updatedAt': datetime.utcnow()
+                    }
+                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                    # Use multi-tenant query for update
                     configs_collection.update_one(
-                        {'_id': ObjectId(config_id)},
-                        {'$set': {
-                            'status': 'failed',
-                            'error': str(e),
-                            'updatedAt': datetime.utcnow()
-                        }}
+                        query,
+                        {'$set': update_data}
                     )
                 except:
                     pass
@@ -2602,8 +2880,16 @@ class VideoGeneratorJob(BaseJob):
                 from bson import ObjectId
                 import os
 
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+
                 configs_collection = self.news_db['long_video_configs']
-                config = configs_collection.find_one({'_id': ObjectId(config_id)})
+
+                # Build query with multi-tenant filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                config = configs_collection.find_one(query)
 
                 if not config:
                     return jsonify({

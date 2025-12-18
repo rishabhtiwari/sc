@@ -3,6 +3,7 @@ News Audio Service - Generate audio for news articles using audio-generation ser
 """
 
 import os
+import sys
 import logging
 import requests
 import time
@@ -10,6 +11,15 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pymongo import MongoClient
 from config.settings import Config
+
+# Add parent directory to path for common utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
+
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_update_document
+)
 
 
 class NewsAudioService:
@@ -34,13 +44,14 @@ class NewsAudioService:
         self.news_client.admin.command('ping')
         self.logger.info("🔧 NewsAudioService initialized successfully")
 
-    def get_articles_needing_audio(self, limit: int = None) -> List[Dict[str, Any]]:
+    def get_articles_needing_audio(self, limit: int = None, customer_id: str = None) -> List[Dict[str, Any]]:
         """
         Get articles that need audio generation (audio_path is null)
-        
+
         Args:
             limit: Maximum number of articles to return
-            
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+
         Returns:
             List of news articles needing audio generation
         """
@@ -51,7 +62,7 @@ class NewsAudioService:
             # 2. audio_paths is null
             # 3. audio_paths is empty object {}
             # 4. audio_paths exists but is missing short_summary field
-            query = {
+            base_query = {
                 '$and': [
                     {
                         '$or': [
@@ -68,6 +79,9 @@ class NewsAudioService:
                 ]
             }
 
+            # Apply multi-tenant filter
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
             cursor = self.news_collection.find(query).sort('created_at', -1)
             if limit:
                 cursor = cursor.limit(limit)
@@ -80,13 +94,14 @@ class NewsAudioService:
             self.logger.error(f"❌ Error getting articles needing audio: {str(e)}")
             return []
 
-    def generate_audio_for_article(self, article: Dict[str, Any], voice: str = None) -> Dict[str, Any]:
+    def generate_audio_for_article(self, article: Dict[str, Any], voice: str = None, customer_id: str = None) -> Dict[str, Any]:
         """
         Generate audio for a single article (short_summary only)
 
         Args:
             article: News article document
             voice: Optional voice to use for audio generation (e.g., 'am_adam', 'af_bella', 'male', 'female')
+            customer_id: Customer ID for loading voice configuration
 
         Returns:
             Dictionary with generation results
@@ -104,15 +119,19 @@ class NewsAudioService:
             article_id = article.get('id', 'unknown')
             self.logger.info(f"🎵 Generating audio for article: {article_id}")
 
-            # Determine language and model
+            # Get customer_id from article if not provided
+            if not customer_id:
+                customer_id = article.get('customer_id')
+
+            # Determine language and model (pass customer_id to load their model config)
             language = article.get('lang', 'en')
-            model = self._get_audio_model_for_language(language)
+            model = self._get_audio_model_for_language(language, customer_id=customer_id)
             self.logger.info(f"🌍 Article language: {language}, Selected model: {model}")
             self.logger.info(f"🔧 DEFAULT_AUDIO_MODEL: {self.config.DEFAULT_AUDIO_MODEL}")
             self.logger.info(f"🔧 HINDI_AUDIO_MODEL: {self.config.HINDI_AUDIO_MODEL}")
 
-            # Determine voice to use
-            voice_to_use = self._determine_voice(voice, language)
+            # Determine voice to use (pass customer_id to load their config)
+            voice_to_use = self._determine_voice(voice, language, customer_id=customer_id)
             self.logger.info(f"🎭 Voice selected: {voice_to_use}")
             result['voice_used'] = voice_to_use
 
@@ -160,17 +179,19 @@ class NewsAudioService:
             generation_time = int((time.time() - total_start_time) * 1000)
 
             if generated_paths:
+                # Prepare update data with audit tracking
+                update_data = {
+                    'audio_paths': generated_paths,
+                    'voice': voice_to_use,
+                    'voice_updated_at': datetime.utcnow(),
+                    'updated_at': datetime.utcnow()
+                }
+                prepare_update_document(update_data, user_id='system')
+
                 # Update article with audio paths and voice used
                 update_result = self.news_collection.update_one(
                     {'id': article_id},
-                    {
-                        '$set': {
-                            'audio_paths': generated_paths,
-                            'voice': voice_to_use,
-                            'voice_updated_at': datetime.utcnow(),
-                            'updated_at': datetime.utcnow()
-                        }
-                    }
+                    {'$set': update_data}
                 )
 
                 if update_result.modified_count > 0:
@@ -272,98 +293,263 @@ class NewsAudioService:
 
         return text_content if text_content else None
 
-    def _get_audio_model_for_language(self, language: str) -> str:
+    def _get_audio_model_for_language(self, language: str, customer_id: str = None) -> str:
         """
-        Get appropriate audio model for language
-        
+        Get appropriate audio model for language from customer's voice config
+
         Args:
             language: Language code (e.g., 'en', 'hi')
-            
+            customer_id: Customer ID for loading their model configuration
+
         Returns:
             Model name for audio generation
         """
-        # Map language codes to models
-        language_models = {
-            'hi': self.config.HINDI_AUDIO_MODEL,  # Hindi
-            'hin': self.config.HINDI_AUDIO_MODEL,  # Hindi (alternative code)
-            'en': self.config.DEFAULT_AUDIO_MODEL,  # English
-            'eng': self.config.DEFAULT_AUDIO_MODEL,  # English (alternative code)
-        }
+        # Load customer's voice config from database
+        voice_config = self._get_voice_config(customer_id=customer_id)
+        models = voice_config.get('models', {})
 
-        return language_models.get(language.lower(), self.config.DEFAULT_AUDIO_MODEL)
+        # Normalize language code
+        lang_code = language.lower()
+        if lang_code in ['hin']:
+            lang_code = 'hi'
+        elif lang_code in ['eng']:
+            lang_code = 'en'
 
-    def _determine_voice(self, voice: str = None, language: str = 'en') -> str:
+        # Get model from config, fallback to defaults
+        if lang_code in models:
+            return models[lang_code]
+
+        # Fallback to hardcoded defaults if not in config
+        if lang_code == 'hi':
+            return self.config.HINDI_AUDIO_MODEL
+        else:
+            return self.config.DEFAULT_AUDIO_MODEL
+
+    def _get_voice_config(self, customer_id: str = None) -> Dict[str, Any]:
         """
-        Determine which voice to use for audio generation
+        Get voice configuration for customer from database
 
         Args:
-            voice: Requested voice ('male', 'female', or specific voice name like 'am_adam')
-            language: Language code (only English supports multiple voices currently)
+            customer_id: Customer ID for multi-tenant filtering
+
+        Returns:
+            Voice configuration dictionary with new structure:
+            {
+                'language': 'en',
+                'models': {'en': 'kokoro-82m', 'hi': 'mms-tts-hin'},
+                'voices': {
+                    'en': {'defaultVoice': '...', 'enableAlternation': True, ...},
+                    'hi': {'defaultVoice': '...', 'enableAlternation': True, ...}
+                }
+            }
+        """
+        try:
+            base_query = {}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            voice_config_collection = self.news_db['voice_config']
+            config = voice_config_collection.find_one(query)
+
+            if not config:
+                # Return default config if not found
+                self.logger.warning(
+                    f"No voice config found for customer {customer_id}, using defaults")
+                return {
+                    'language': 'en',
+                    'models': {
+                        'en': 'kokoro-82m',
+                        'hi': 'mms-tts-hin'
+                    },
+                    'voices': {
+                        'en': {
+                            'defaultVoice': 'am_adam',
+                            'enableAlternation': True,
+                            'maleVoices': ['am_adam', 'am_michael'],
+                            'femaleVoices': ['af_bella', 'af_sarah']
+                        },
+                        'hi': {
+                            'defaultVoice': 'hi_default',
+                            'enableAlternation': False,  # MMS Hindi only has one voice
+                            'maleVoices': [],
+                            'femaleVoices': []
+                        }
+                    }
+                }
+
+            return config
+        except Exception as e:
+            self.logger.error(f"Error loading voice config: {e}")
+            # Return default config on error
+            return {
+                'language': 'en',
+                'models': {
+                    'en': 'kokoro-82m',
+                    'hi': 'mms-tts-hin'
+                },
+                'voices': {
+                    'en': {
+                        'defaultVoice': 'am_adam',
+                        'enableAlternation': True,
+                        'maleVoices': ['am_adam', 'am_michael'],
+                        'femaleVoices': ['af_bella', 'af_sarah']
+                    },
+                    'hi': {
+                        'defaultVoice': 'hi_default',
+                        'enableAlternation': False,  # MMS Hindi only has one voice
+                        'maleVoices': [],
+                        'femaleVoices': []
+                    }
+                }
+            }
+
+    def _determine_voice(self, voice: str = None, language: str = 'en', customer_id: str = None) -> str:
+        """
+        Determine which voice to use based on language and customer config
+
+        Args:
+            voice: Requested voice ('male', 'female', or specific voice name)
+            language: Article language code (e.g., 'en', 'hi')
+            customer_id: Customer ID for loading config
 
         Returns:
             Voice name to use for generation
         """
-        # Only Kokoro model (English) supports multiple voices
-        if language.lower() not in ['en', 'eng']:
-            return None  # Non-English models don't support voice selection
+        # Load customer's voice config from database
+        voice_config = self._get_voice_config(customer_id=customer_id)
+        voices = voice_config.get('voices', {})
 
+        # Normalize language code
+        lang_code = language.lower()
+        if lang_code in ['hin']:
+            lang_code = 'hi'
+        elif lang_code in ['eng']:
+            lang_code = 'en'
+
+        # Get voice config for this language
+        lang_voice_config = voices.get(lang_code, {})
+
+        if not lang_voice_config:
+            # Fallback to default language config
+            self.logger.warning(f"No voice config for language {lang_code}, using defaults")
+            if lang_code == 'hi':
+                lang_voice_config = {
+                    'defaultVoice': 'hi_default',
+                    'maleVoices': [],
+                    'femaleVoices': []
+                }
+            else:
+                lang_voice_config = {
+                    'defaultVoice': 'am_adam',
+                    'maleVoices': ['am_adam', 'am_michael'],
+                    'femaleVoices': ['af_bella', 'af_sarah']
+                }
+
+        # Determine voice based on request
         if not voice:
-            # No voice specified, use default male voice
-            return self.config.DEFAULT_MALE_VOICE
+            # No specific voice requested, use default
+            return lang_voice_config.get('defaultVoice', 'am_adam')
 
-        # Handle generic 'male' or 'female' voice requests
+        # Handle generic 'male' or 'female'
         if voice.lower() == 'male':
-            return self.config.DEFAULT_MALE_VOICE
+            male_voices = lang_voice_config.get('maleVoices', ['am_adam'])
+            return male_voices[0] if male_voices else 'am_adam'
         elif voice.lower() == 'female':
-            return self.config.DEFAULT_FEMALE_VOICE
+            female_voices = lang_voice_config.get('femaleVoices', ['af_bella'])
+            return female_voices[0] if female_voices else 'af_bella'
 
-        # Return specific voice name as-is (e.g., 'am_adam', 'af_bella')
+        # Return specific voice name as-is
         return voice
 
-    def _get_next_alternating_voice(self) -> str:
+    def _get_next_alternating_voice(self, customer_id: str = None, language: str = 'en') -> str:
         """
         Get the next voice in alternating male/female pattern based on last used voice
+        Uses customer's voice configuration from database
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            language: Language code to get voices for (e.g., 'en', 'hi')
 
         Returns:
             Voice name to use (alternates between male and female)
         """
-        if not self.config.ENABLE_VOICE_ALTERNATION:
-            return self.config.DEFAULT_MALE_VOICE
+        # Load voice config from database
+        voice_config = self._get_voice_config(customer_id=customer_id)
+        voices = voice_config.get('voices', {})
+
+        # Normalize language code
+        lang_code = language.lower()
+        if lang_code in ['hin']:
+            lang_code = 'hi'
+        elif lang_code in ['eng']:
+            lang_code = 'en'
+
+        # Get voice config for this language
+        lang_voice_config = voices.get(lang_code, {})
+
+        if not lang_voice_config:
+            # Fallback to defaults
+            if lang_code == 'hi':
+                lang_voice_config = {
+                    'defaultVoice': 'hi_default',
+                    'enableAlternation': False,  # MMS Hindi only has one voice
+                    'maleVoices': [],
+                    'femaleVoices': []
+                }
+            else:
+                lang_voice_config = {
+                    'defaultVoice': 'am_adam',
+                    'enableAlternation': True,
+                    'maleVoices': ['am_adam', 'am_michael'],
+                    'femaleVoices': ['af_bella', 'af_sarah']
+                }
+
+        # Check if alternation is enabled for this language
+        if not lang_voice_config.get('enableAlternation', True):
+            default_voice = lang_voice_config.get('defaultVoice', 'am_adam')
+            self.logger.info(f"🎭 Voice alternation disabled for {lang_code}, using default: {default_voice}")
+            return default_voice
 
         try:
+            # Get voice lists from language config
+            male_voices = lang_voice_config.get('maleVoices', ['am_adam'])
+            female_voices = lang_voice_config.get('femaleVoices', ['af_bella'])
+
+            # Build query with multi-tenant filter
+            base_query = {
+                'voice': {'$ne': None, '$exists': True},
+                'voice_updated_at': {'$exists': True},
+                'lang': lang_code  # Filter by language
+            }
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
             # Get the last article with a voice assigned, sorted by voice_updated_at
-            last_article = self.news_collection.find_one(
-                {
-                    'voice': {'$ne': None, '$exists': True},
-                    'voice_updated_at': {'$exists': True}
-                },
-                sort=[('voice_updated_at', -1)]
-            )
+            last_article = self.news_collection.find_one(query, sort=[('voice_updated_at', -1)])
 
             if not last_article or not last_article.get('voice'):
-                # No previous voice, start with male
+                # No previous voice, start with first male voice from config
+                first_male = male_voices[0] if male_voices else 'am_adam'
                 self.logger.info(
-                    f"🎭 No previous voice found, starting with male voice: {self.config.DEFAULT_MALE_VOICE}")
-                return self.config.DEFAULT_MALE_VOICE
+                    f"🎭 No previous voice found for {lang_code}, starting with male voice: {first_male}")
+                return first_male
 
             last_voice = last_article['voice']
-            self.logger.info(f"🎭 Last voice used: {last_voice}")
+            self.logger.info(f"🎭 Last voice used for {lang_code}: {last_voice}")
 
             # Check if last voice was male or female
-            if last_voice in self.config.MALE_VOICES or last_voice == self.config.DEFAULT_MALE_VOICE:
+            if last_voice in male_voices:
                 # Last was male, use female
-                next_voice = self.config.DEFAULT_FEMALE_VOICE
+                next_voice = female_voices[0] if female_voices else 'af_bella'
                 self.logger.info(f"🎭 Last was male, switching to female: {next_voice}")
                 return next_voice
             else:
-                # Last was female, use male
-                next_voice = self.config.DEFAULT_MALE_VOICE
+                # Last was female (or unknown), use male
+                next_voice = male_voices[0] if male_voices else 'am_adam'
                 self.logger.info(f"🎭 Last was female, switching to male: {next_voice}")
                 return next_voice
 
         except Exception as e:
-            self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default male voice")
-            return self.config.DEFAULT_MALE_VOICE
+            self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default")
+            return lang_voice_config.get('defaultVoice', 'am_adam')
 
     def _call_audio_generation_service(self, text: str, model: str, voice: str = None) -> Dict[str, Any]:
         """
@@ -435,7 +621,7 @@ class NewsAudioService:
                 'error': f"Audio generation service error: {str(e)}"
             }
 
-    def process_news_audio_generation(self, job_id: str = None, is_on_demand: bool = False) -> Dict[str, Any]:
+    def process_news_audio_generation(self, job_id: str = None, is_on_demand: bool = False, customer_id: str = None) -> Dict[str, Any]:
         """
         Process audio generation for multiple news articles
         Continues processing until all articles have audio generated
@@ -443,6 +629,7 @@ class NewsAudioService:
         Args:
             job_id: Job ID for tracking
             is_on_demand: Whether this is an on-demand job execution
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with processing results
@@ -462,8 +649,8 @@ class NewsAudioService:
         try:
             # Continue processing until no more articles need audio
             while True:
-                # Get articles needing audio generation (batch processing)
-                articles = self.get_articles_needing_audio(limit=self.config.AUDIO_BATCH_SIZE)
+                # Get articles needing audio generation (batch processing) with customer filter
+                articles = self.get_articles_needing_audio(limit=self.config.AUDIO_BATCH_SIZE, customer_id=customer_id)
 
                 if not articles:
                     self.logger.info(f"✅ No more articles found needing audio generation for job {job_id}")
@@ -479,11 +666,46 @@ class NewsAudioService:
                 # Process each article in the current batch
                 for article in articles:
                     try:
-                        # Get next alternating voice if enabled
-                        voice = self._get_next_alternating_voice() if self.config.ENABLE_VOICE_ALTERNATION else None
+                        # Get customer_id and language from article
+                        article_customer_id = customer_id or article.get('customer_id')
+                        article_language = article.get('lang', 'en')
 
-                        # Generate audio for article with alternating voice
-                        audio_result = self.generate_audio_for_article(article, voice=voice)
+                        # Load voice config from database for this customer
+                        voice_config = self._get_voice_config(customer_id=article_customer_id)
+                        voices = voice_config.get('voices', {})
+
+                        # Normalize language code
+                        lang_code = article_language.lower()
+                        if lang_code in ['hin']:
+                            lang_code = 'hi'
+                        elif lang_code in ['eng']:
+                            lang_code = 'en'
+
+                        # Get voice config for this language
+                        lang_voice_config = voices.get(lang_code, {})
+
+                        # Determine voice based on customer's configuration for this language
+                        if lang_voice_config.get('enableAlternation', True):
+                            # Use alternating voice pattern for this language
+                            voice = self._get_next_alternating_voice(
+                                customer_id=article_customer_id,
+                                language=article_language
+                            )
+                        else:
+                            # Use default voice from config for this language
+                            voice = lang_voice_config.get('defaultVoice', 'am_adam')
+
+                        self.logger.info(
+                            f"🎭 Using voice '{voice}' for article {article.get('id')} "
+                            f"(customer: {article_customer_id}, lang: {lang_code}, "
+                            f"alternation: {lang_voice_config.get('enableAlternation')})")
+
+                        # Generate audio for article with selected voice
+                        audio_result = self.generate_audio_for_article(
+                            article,
+                            voice=voice,
+                            customer_id=article_customer_id
+                        )
                         results['total_articles_processed'] += 1
 
                         if audio_result['success']:

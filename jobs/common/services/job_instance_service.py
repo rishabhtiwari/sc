@@ -36,18 +36,41 @@ class JobInstanceService:
             raise Exception(f"Error connecting to MongoDB: {str(e)}")
     
     def create_job_instance(self, job_type: str, status: str = 'pending',
-                          metadata: Optional[Dict] = None, check_running: bool = True) -> str:
-        """Create a new job instance"""
+                          metadata: Optional[Dict] = None, check_running: bool = True,
+                          customer_id: Optional[str] = None) -> str:
+        """
+        Create a new job instance
+
+        Args:
+            job_type: Type of job (e.g., 'news_fetch', 'github_sync')
+            status: Initial status (default: 'pending')
+            metadata: Additional metadata for the job
+            check_running: Whether to check if a job of this type is already running
+            customer_id: Customer ID for multi-tenant jobs (None for system-wide jobs)
+
+        Returns:
+            job_id: Unique identifier for the created job instance
+        """
         try:
-            # Check if there's already a running job of this type (if check_running is True)
+            # Check if there's already a running job of this type for this customer (if check_running is True)
             if check_running:
-                running_job = self.collection.find_one({
+                query = {
                     'job_type': job_type,
                     'status': {'$in': ['pending', 'running']},
                     'cancelled': {'$ne': True}
-                })
+                }
+
+                # Add customer_id filter for multi-tenant jobs
+                if customer_id is not None:
+                    query['customer_id'] = customer_id
+                else:
+                    # For system-wide jobs, check for jobs with null customer_id
+                    query['customer_id'] = None
+
+                running_job = self.collection.find_one(query)
                 if running_job:
-                    raise Exception(f"Job of type '{job_type}' is already running (job_id: {running_job['job_id']})")
+                    customer_info = f" for customer {customer_id}" if customer_id else ""
+                    raise Exception(f"Job of type '{job_type}'{customer_info} is already running (job_id: {running_job['job_id']})")
 
             job_id = str(uuid.uuid4())
             now = datetime.utcnow()
@@ -55,6 +78,7 @@ class JobInstanceService:
             job_doc = {
                 'job_id': job_id,
                 'job_type': job_type,
+                'customer_id': customer_id,  # Add customer_id field
                 'status': status,
                 'created_at': now,
                 'updated_at': now,
@@ -135,8 +159,20 @@ class JobInstanceService:
     
     def list_job_instances(self, job_type: Optional[str] = None,
                          status: Optional[str] = None,
-                         limit: int = 50) -> List[Dict]:
-        """List job instances with optional filtering"""
+                         limit: int = 50,
+                         customer_id: Optional[str] = None) -> List[Dict]:
+        """
+        List job instances with optional filtering
+
+        Args:
+            job_type: Filter by job type
+            status: Filter by status
+            limit: Maximum number of results
+            customer_id: Filter by customer ID (None for system-wide jobs, omit to get all)
+
+        Returns:
+            List of job instances
+        """
         try:
             query_filter = {}
 
@@ -145,6 +181,10 @@ class JobInstanceService:
 
             if status:
                 query_filter['status'] = status
+
+            # Add customer_id filter if specified
+            if customer_id is not None:
+                query_filter['customer_id'] = customer_id
 
             cursor = self.collection.find(query_filter).sort('created_at', -1).limit(limit)
 

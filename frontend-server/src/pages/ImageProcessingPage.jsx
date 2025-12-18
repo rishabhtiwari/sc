@@ -104,32 +104,54 @@ const ImageProcessingPage = () => {
 
       // Load image into canvas
       if (data.image_url) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            console.log('Loading image from URL:', data.image_url);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const dataUrl = canvas.toDataURL('image/png');
-            console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
-            console.log('Canvas data URL created, length:', dataUrl.length);
-            setImageData(dataUrl);
-            setHasMask(false);
-            setClearMaskTrigger(prev => prev + 1);
-          } catch (err) {
-            console.error('Error converting image to canvas:', err);
-            showToast('Failed to process image: ' + err.message, 'error');
-          }
-        };
-        img.onerror = (err) => {
-          console.error('Image load error:', err);
-          showToast('Failed to load image', 'error');
-        };
-        img.src = data.image_url;
+        // Fetch image with authentication headers
+        const token = localStorage.getItem('auth_token');
+        const headers = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        fetch(data.image_url, { headers })
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`Failed to fetch image: ${response.status}`);
+            }
+            return response.blob();
+          })
+          .then(blob => {
+            const img = new Image();
+            img.onload = () => {
+              try {
+                console.log('Loading image from URL:', data.image_url);
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const dataUrl = canvas.toDataURL('image/png');
+                console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
+                console.log('Canvas data URL created, length:', dataUrl.length);
+                setImageData(dataUrl);
+                setHasMask(false);
+                setClearMaskTrigger(prev => prev + 1);
+                // Clean up blob URL
+                URL.revokeObjectURL(img.src);
+              } catch (err) {
+                console.error('Error converting image to canvas:', err);
+                showToast('Failed to process image: ' + err.message, 'error');
+              }
+            };
+            img.onerror = (err) => {
+              console.error('Image load error:', err);
+              showToast('Failed to load image', 'error');
+              URL.revokeObjectURL(img.src);
+            };
+            img.src = URL.createObjectURL(blob);
+          })
+          .catch(err => {
+            console.error('Failed to fetch image:', err);
+            showToast('Failed to fetch image: ' + err.message, 'error');
+          });
       } else {
         showToast('No image URL provided', 'warning');
       }

@@ -8,6 +8,12 @@ import requests
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 import os
+import sys
+
+# Add parent directory to path for middleware
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from middleware.auth_middleware import token_required
 
 # Create blueprint
 monitoring_bp = Blueprint('monitoring', __name__)
@@ -24,27 +30,31 @@ REQUEST_TIMEOUT = 5
 
 
 @monitoring_bp.route('/monitoring/logs', methods=['GET'])
+@token_required
 def get_logs():
     """
     Get system logs with filtering
-    
+
     Query Parameters:
         - level: Log level filter (info, warning, error, debug)
         - service: Service name filter
         - limit: Number of logs to return (default: 100)
         - offset: Pagination offset (default: 0)
-        
+
     Returns:
         JSON response with filtered logs
     """
     try:
+        # Extract customer context for multi-tenancy
+        customer_id = request.headers.get('X-Customer-ID')
+
         # Get query parameters
         level = request.args.get('level', 'all')
         service = request.args.get('service', 'all')
         limit = int(request.args.get('limit', 100))
         offset = int(request.args.get('offset', 0))
-        
-        logger.info(f"📜 GET /monitoring/logs - level={level}, service={service}, limit={limit}, offset={offset}")
+
+        logger.info(f"📜 GET /monitoring/logs - customer={customer_id}, level={level}, service={service}, limit={limit}, offset={offset}")
         
         # Mock log data (in production, this would come from a centralized logging system)
         all_logs = [
@@ -163,22 +173,26 @@ def get_logs():
 
 
 @monitoring_bp.route('/monitoring/errors', methods=['GET'])
+@token_required
 def get_errors():
     """
     Get error tracking information
-    
+
     Query Parameters:
         - hours: Time range in hours (default: 24)
         - service: Service name filter
-        
+
     Returns:
         JSON response with error statistics and recent errors
     """
     try:
+        # Extract customer context for multi-tenancy
+        customer_id = request.headers.get('X-Customer-ID')
+
         hours = int(request.args.get('hours', 24))
         service = request.args.get('service', 'all')
-        
-        logger.info(f"🚨 GET /monitoring/errors - hours={hours}, service={service}")
+
+        logger.info(f"🚨 GET /monitoring/errors - customer={customer_id}, hours={hours}, service={service}")
         
         # Mock error data
         errors = [
@@ -263,15 +277,19 @@ def get_errors():
 
 
 @monitoring_bp.route('/monitoring/alerts', methods=['GET'])
+@token_required
 def get_alerts():
     """
     Get active alerts and notifications
-    
+
     Returns:
         JSON response with active alerts
     """
     try:
-        logger.info("🔔 GET /monitoring/alerts")
+        # Extract customer context for multi-tenancy
+        customer_id = request.headers.get('X-Customer-ID')
+
+        logger.info(f"🔔 GET /monitoring/alerts - customer={customer_id}")
         
         # Mock alerts data
         alerts = [
@@ -337,18 +355,23 @@ def get_alerts():
 
 
 @monitoring_bp.route('/monitoring/alerts/<int:alert_id>/acknowledge', methods=['POST'])
+@token_required
 def acknowledge_alert(alert_id):
     """
     Acknowledge an alert
-    
+
     Args:
         alert_id: ID of the alert to acknowledge
-        
+
     Returns:
         JSON response confirming acknowledgment
     """
     try:
-        logger.info(f"✅ POST /monitoring/alerts/{alert_id}/acknowledge")
+        # Extract customer context for multi-tenancy
+        customer_id = request.headers.get('X-Customer-ID')
+        user_id = request.headers.get('X-User-ID')
+
+        logger.info(f"✅ POST /monitoring/alerts/{alert_id}/acknowledge - customer={customer_id}, user={user_id}")
         
         # In production, this would update the alert in the database
         return jsonify({
@@ -366,15 +389,19 @@ def acknowledge_alert(alert_id):
 
 
 @monitoring_bp.route('/monitoring/metrics', methods=['GET'])
+@token_required
 def get_metrics():
     """
     Get system performance metrics
-    
+
     Returns:
         JSON response with performance metrics
     """
     try:
-        logger.info("📈 GET /monitoring/metrics")
+        # Extract customer context for multi-tenancy
+        customer_id = request.headers.get('X-Customer-ID')
+
+        logger.info(f"📈 GET /monitoring/metrics - customer={customer_id}")
         
         # Mock metrics data
         metrics = {

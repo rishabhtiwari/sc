@@ -46,7 +46,7 @@ class VideoGenerationService:
         self.logger.info("Video Generation Service initialized")
         self.logger.info(f"Available effects: {self.effects_factory.get_available_effects()}")
     
-    def generate_video_for_article(self, article_data: Dict[str, Any], skip_background_music: bool = False) -> Dict[str, Any]:
+    def generate_video_for_article(self, article_data: Dict[str, Any], skip_background_music: bool = False, customer_id: str = None) -> Dict[str, Any]:
         """
         Generate video for a single news article
 
@@ -58,6 +58,7 @@ class VideoGenerationService:
                 - audio_paths: Dictionary with audio file paths (title, description, content, short_summary)
                 - clean_image: Path to cleaned image (from watermark remover)
             skip_background_music: If True, skip adding background music (for long videos that will have music added at merge level)
+            customer_id: Customer ID for multi-tenant context (for API calls to IOPaint service)
 
         Returns:
             Dictionary with generation result
@@ -73,7 +74,11 @@ class VideoGenerationService:
             # Use short_summary audio as primary, fallback to content, description, then title
             audio_path = audio_paths.get('short_summary') or audio_paths.get('content') or audio_paths.get('description') or audio_paths.get('title')
 
-            self.logger.info(f"🎬 Starting video generation for article: {article_id} (MongoDB ID: {mongo_id})")
+            # Extract customer_id from article if not provided
+            if not customer_id:
+                customer_id = article_data.get('customer_id')
+
+            self.logger.info(f"🎬 Starting video generation for article: {article_id} (MongoDB ID: {mongo_id}, customer_id: {customer_id})")
 
             # Validate inputs
             validation_result = self._validate_inputs(article_data)
@@ -90,7 +95,7 @@ class VideoGenerationService:
 
             # Step 1: Download cleaned image from IOPaint service
             self.logger.info(f"📸 Downloading cleaned image from IOPaint service for MongoDB ID: {mongo_id}")
-            background_image_path = self._download_cleaned_image(mongo_id, output_dir)
+            background_image_path = self._download_cleaned_image(mongo_id, output_dir, customer_id=customer_id)
 
             if not background_image_path:
                 return {
@@ -220,13 +225,14 @@ class VideoGenerationService:
             'error': '; '.join(errors) if errors else None
         }
     
-    def _download_cleaned_image(self, mongo_id: str, output_dir: str) -> Optional[str]:
+    def _download_cleaned_image(self, mongo_id: str, output_dir: str, customer_id: str = None) -> Optional[str]:
         """
         Download cleaned image from IOPaint service
 
         Args:
             mongo_id: MongoDB document ID (as string)
             output_dir: Directory to save the image
+            customer_id: Customer ID for multi-tenant context
 
         Returns:
             Path to processed image or None if failed
@@ -237,14 +243,21 @@ class VideoGenerationService:
 
             self.logger.info(f"📸 Downloading cleaned image from: {iopaint_url}")
 
+            # Prepare headers with customer_id for multi-tenant isolation
+            headers = {}
+            if customer_id:
+                headers['X-Customer-ID'] = customer_id
+                self.logger.info(f"📸 Using customer_id: {customer_id} for image download")
+
             # Download cleaned image
             response = requests.get(
                 iopaint_url,
+                headers=headers,
                 timeout=self.config.IOPAINT_TIMEOUT
             )
 
             if response.status_code == 404:
-                self.logger.error(f"Cleaned image not found for MongoDB ID: {mongo_id}")
+                self.logger.error(f"Cleaned image not found for MongoDB ID: {mongo_id} (customer_id: {customer_id})")
                 return None
 
             response.raise_for_status()

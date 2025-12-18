@@ -88,6 +88,14 @@ export const getSeedUrlById = (partnerId) => {
 };
 
 /**
+ * Get supported categories for seed URL configuration
+ * @returns {Promise} API response with list of supported categories
+ */
+export const getSupportedCategories = () => {
+  return api.get('/news/seed-urls/config/supported-categories');
+};
+
+/**
  * Add seed URL
  * @param {Object} data - Seed URL data
  * @returns {Promise} API response
@@ -167,6 +175,7 @@ export default {
   runNewsFetchJob,
   getSeedUrls,
   getSeedUrlById,
+  getSupportedCategories,
   addSeedUrl,
   updateSeedUrl,
   deleteSeedUrl,

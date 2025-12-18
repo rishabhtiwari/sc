@@ -5,9 +5,16 @@ Dashboard Routes - API endpoints for dashboard statistics, activity logs, and mo
 
 import logging
 import requests
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
 import os
+import sys
+
+# Add parent directory to path for middleware
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+from middleware.auth_middleware import token_required
+from middleware.jwt_middleware import get_request_headers_with_context
 
 # Create blueprint
 dashboard_bp = Blueprint('dashboard', __name__)
@@ -75,16 +82,21 @@ def check_service_health(service_name, service_url):
 
 
 @dashboard_bp.route('/dashboard/stats', methods=['GET'])
+@token_required
 def get_dashboard_stats():
     """
     Get comprehensive dashboard statistics
-    
+
     Returns:
         JSON response with statistics from all services
     """
     try:
         logger.info("📊 GET /dashboard/stats")
-        
+
+        # Get headers with customer_id and user_id from JWT middleware
+        headers = get_request_headers_with_context()
+        logger.info(f"📊 Dashboard stats headers: {headers}")
+
         stats = {
             'totalNews': 0,
             'withAudio': 0,
@@ -99,7 +111,7 @@ def get_dashboard_stats():
 
         # Try to get real stats from News Fetcher service
         try:
-            response = requests.get(f"{NEWS_FETCHER_URL}/api/news/stats", timeout=REQUEST_TIMEOUT)
+            response = requests.get(f"{NEWS_FETCHER_URL}/api/news/stats", headers=headers, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 news_stats = response.json()
                 stats['totalNews'] = news_stats.get('total', 0)
@@ -124,7 +136,7 @@ def get_dashboard_stats():
 
         # Try to get audio stats from Voice Generator service
         try:
-            response = requests.get(f"{VOICE_GENERATOR_URL}/api/news/audio/stats", timeout=REQUEST_TIMEOUT)
+            response = requests.get(f"{VOICE_GENERATOR_URL}/api/news/audio/stats", headers=headers, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 audio_stats_response = response.json()
                 audio_stats = audio_stats_response.get('data', {})
@@ -134,7 +146,7 @@ def get_dashboard_stats():
 
         # Try to get image processing stats from IOPaint service
         try:
-            response = requests.get(f"{IOPAINT_URL}/api/stats", timeout=REQUEST_TIMEOUT)
+            response = requests.get(f"{IOPAINT_URL}/api/stats", headers=headers, timeout=REQUEST_TIMEOUT)
             if response.status_code == 200:
                 image_stats = response.json()
                 stats['totalImages'] = image_stats.get('total', 0)

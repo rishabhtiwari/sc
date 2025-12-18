@@ -20,10 +20,10 @@ class RoleService:
     def get_roles(self, customer_id=None):
         """
         Get list of roles
-        
+
         Args:
             customer_id: Customer ID (None for system roles)
-            
+
         Returns:
             dict: List of roles
         """
@@ -32,30 +32,30 @@ class RoleService:
             if customer_id:
                 query = {
                     '$or': [
-                        {'is_system_role': True},
+                        {'role_type': 'system'},
                         {'customer_id': customer_id}
                     ],
                     'is_deleted': {'$ne': True}
                 }
             else:
                 query = {
-                    'is_system_role': True,
+                    'role_type': 'system',
                     'is_deleted': {'$ne': True}
                 }
-            
+
             # Get roles
             roles = list(self.db.roles.find(query).sort('role_name', 1))
-            
+
             # Convert ObjectId to string
             for role in roles:
                 if '_id' in role:
                     role['_id'] = str(role['_id'])
-            
+
             return {
                 'success': True,
                 'roles': roles
             }
-            
+
         except Exception as e:
             logger.error(f"Get roles error: {str(e)}")
             return {
@@ -144,7 +144,7 @@ class RoleService:
                 'slug': data['slug'],
                 'description': data.get('description'),
                 'permissions': data.get('permissions', []),
-                'is_system_role': False,
+                'role_type': 'custom',
                 'is_default': data.get('is_default', False),
                 'created_at': datetime.utcnow(),
                 'updated_at': datetime.utcnow(),
@@ -196,8 +196,8 @@ class RoleService:
                     'success': False,
                     'error': 'Role not found'
                 }
-            
-            if role.get('is_system_role'):
+
+            if role.get('role_type') == 'system':
                 return {
                     'success': False,
                     'error': 'Cannot update system roles'
@@ -262,8 +262,8 @@ class RoleService:
                     'success': False,
                     'error': 'Role not found'
                 }
-            
-            if role.get('is_system_role'):
+
+            if role.get('role_type') == 'system':
                 return {
                     'success': False,
                     'error': 'Cannot delete system roles'

@@ -20,6 +20,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from common.services.job_instance_service import JobInstanceService
 from common.utils.logger import setup_logger
+from pymongo import MongoClient
 
 class BaseJob(ABC):
     """
@@ -88,6 +89,50 @@ class BaseJob(ABC):
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         pass
+
+    def is_multi_tenant_job(self) -> bool:
+        """
+        Override this method to indicate if the job should run per customer.
+
+        Returns:
+            True if job should run separately for each customer, False for system-wide jobs
+        """
+        return False
+
+    def get_active_customers(self) -> List[Dict[str, str]]:
+        """
+        Get list of active customers for multi-tenant job execution.
+
+        Returns:
+            List of customer dictionaries with customer_id and company_name
+        """
+        try:
+            # Connect to MongoDB to get active customers
+            client = MongoClient(self.config.MONGODB_URL)
+            db = client.get_database('news')  # Use 'news' database where customers are stored
+            customers_collection = db.get_collection('customers')
+
+            # Get all active customers
+            active_customers = list(customers_collection.find(
+                {'status': 'active'},
+                {'customer_id': 1, 'company_name': 1, '_id': 0}
+            ))
+
+            # Also include trial customers
+            trial_customers = list(customers_collection.find(
+                {'status': 'trial'},
+                {'customer_id': 1, 'company_name': 1, '_id': 0}
+            ))
+
+            all_customers = active_customers + trial_customers
+
+            client.close()
+
+            return all_customers
+
+        except Exception as e:
+            self.logger.error(f"Error getting active customers: {str(e)}")
+            return []
 
     def get_parallel_tasks(self) -> List[Dict[str, Any]]:
         """
@@ -250,8 +295,20 @@ class BaseJob(ABC):
         def trigger_job():
             """Manually trigger job execution"""
             try:
+                # Extract customer_id and user_id from headers for multi-tenant support
+                from common.utils.multi_tenant_db import extract_user_context_from_headers
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id')
+
                 # Get job parameters from request
                 params = request.get_json() or {}
+
+                # Add customer_id and user_id to params if not already present
+                if 'customer_id' not in params and customer_id:
+                    params['customer_id'] = customer_id
+                if 'user_id' not in params and user_id:
+                    params['user_id'] = user_id
 
                 # Validate parameters
                 validation_errors = self.validate_job_params(params)
@@ -261,7 +318,8 @@ class BaseJob(ABC):
                         'validation_errors': validation_errors
                     }), 400
 
-                self.logger.info(f"Manual {self.get_job_type()} job triggered")
+                customer_info = f" for customer {customer_id}" if customer_id else ""
+                self.logger.info(f"Manual {self.get_job_type()} job triggered{customer_info}")
 
                 # Cancel any existing running jobs of this type (manual or scheduled) before starting new on-demand job
                 # This ensures on-demand jobs always start fresh and take priority
@@ -275,6 +333,7 @@ class BaseJob(ABC):
                 job_id = self.job_instance_service.create_job_instance(
                     job_type=self.get_job_type(),
                     status='running',
+                    customer_id=customer_id,  # Add customer_id for multi-tenant tracking
                     metadata={
                         'trigger': 'manual',
                         'started_at': datetime.utcnow().isoformat(),
@@ -408,63 +467,17 @@ class BaseJob(ABC):
                 return jsonify({'error': str(e)}), 500
     
     def _setup_scheduled_job(self):
-        """Setup scheduled job execution"""
+        """Setup scheduled job execution with multi-tenant support"""
         def scheduled_job_wrapper():
-            """Wrapper for scheduled job execution with overlap prevention"""
-            job_id = None
-            try:
-                # Check if there's already a running job of this type
-                running_jobs_count = self.job_instance_service.collection.count_documents({
-                    'job_type': self.get_job_type(),
-                    'status': {'$in': ['pending', 'running']},
-                    'cancelled': {'$ne': True}
-                })
+            """Wrapper for scheduled job execution with overlap prevention and multi-tenant support"""
+            # Check if this is a multi-tenant job
+            if self.is_multi_tenant_job():
+                # Run job for each active customer
+                self._run_multi_tenant_scheduled_jobs()
+            else:
+                # Run single system-wide job
+                self._run_single_scheduled_job(customer_id=None)
 
-                if running_jobs_count > 0:
-                    self.logger.info(f"Skipping scheduled {self.get_job_type()} job - previous job still running")
-                    return
-
-                self.logger.info(f"Starting scheduled {self.get_job_type()} job")
-
-                # Create job instance
-                job_id = self.job_instance_service.create_job_instance(
-                    job_type=self.get_job_type(),
-                    status='running',
-                    metadata={
-                        'trigger': 'scheduled',
-                        'started_at': datetime.utcnow().isoformat()
-                    },
-                    check_running=False  # We already checked above
-                )
-
-                # Run the job (scheduled job)
-                result = self.run_job(job_id, is_on_demand=False)
-
-                # Check if job was cancelled during execution
-                if self.job_instance_service.is_job_cancelled(job_id):
-                    self.logger.info(f"Scheduled job {job_id} was cancelled during execution")
-                    return
-
-                # Update job instance with results
-                self.job_instance_service.update_job_instance(
-                    job_id,
-                    status='completed',
-                    result=result,
-                    metadata={'completed_at': datetime.utcnow().isoformat()}
-                )
-
-                self.logger.info(f"Scheduled {self.get_job_type()} job completed successfully. Job ID: {job_id}")
-
-            except Exception as e:
-                self.logger.error(f"Error in scheduled {self.get_job_type()} job: {str(e)}")
-                if job_id:
-                    self.job_instance_service.update_job_instance(
-                        job_id,
-                        status='failed',
-                        error_message=str(e),
-                        metadata={'failed_at': datetime.utcnow().isoformat()}
-                    )
-        
         # Schedule the job with overlap prevention
         # Support both minutes and seconds configuration
         if hasattr(self.config, 'JOB_INTERVAL_SECONDS') and self.config.JOB_INTERVAL_SECONDS > 0:
@@ -483,7 +496,110 @@ class BaseJob(ABC):
             max_instances=1  # Only allow one instance of this job to run at a time
         )
 
-        self.logger.info(f"Scheduled job setup: {self.job_name} every {interval_desc}")
+        job_mode = "multi-tenant" if self.is_multi_tenant_job() else "system-wide"
+        self.logger.info(f"Scheduled job setup: {self.job_name} every {interval_desc} ({job_mode} mode)")
+
+    def _run_single_scheduled_job(self, customer_id: Optional[str] = None):
+        """
+        Run a single scheduled job instance
+
+        Args:
+            customer_id: Customer ID for multi-tenant jobs, None for system-wide jobs
+        """
+        job_id = None
+        try:
+            # Check if there's already a running job of this type for this customer
+            query = {
+                'job_type': self.get_job_type(),
+                'status': {'$in': ['pending', 'running']},
+                'cancelled': {'$ne': True}
+            }
+
+            if customer_id is not None:
+                query['customer_id'] = customer_id
+            else:
+                query['customer_id'] = None
+
+            running_jobs_count = self.job_instance_service.collection.count_documents(query)
+
+            if running_jobs_count > 0:
+                customer_info = f" for customer {customer_id}" if customer_id else ""
+                self.logger.info(f"Skipping scheduled {self.get_job_type()} job{customer_info} - previous job still running")
+                return
+
+            customer_info = f" for customer {customer_id}" if customer_id else ""
+            self.logger.info(f"Starting scheduled {self.get_job_type()} job{customer_info}")
+
+            # Create job instance
+            job_id = self.job_instance_service.create_job_instance(
+                job_type=self.get_job_type(),
+                status='running',
+                customer_id=customer_id,
+                metadata={
+                    'trigger': 'scheduled',
+                    'started_at': datetime.utcnow().isoformat()
+                },
+                check_running=False  # We already checked above
+            )
+
+            # Run the job (scheduled job) - pass customer_id as kwarg
+            kwargs = {'customer_id': customer_id} if customer_id else {}
+            result = self.run_job(job_id, is_on_demand=False, **kwargs)
+
+            # Check if job was cancelled during execution
+            if self.job_instance_service.is_job_cancelled(job_id):
+                self.logger.info(f"Scheduled job {job_id} was cancelled during execution")
+                return
+
+            # Update job instance with results
+            self.job_instance_service.update_job_instance(
+                job_id,
+                status='completed',
+                result=result,
+                metadata={'completed_at': datetime.utcnow().isoformat()}
+            )
+
+            self.logger.info(f"Scheduled {self.get_job_type()} job{customer_info} completed successfully. Job ID: {job_id}")
+
+        except Exception as e:
+            self.logger.error(f"Error in scheduled {self.get_job_type()} job: {str(e)}")
+            if job_id:
+                self.job_instance_service.update_job_instance(
+                    job_id,
+                    status='failed',
+                    error_message=str(e),
+                    metadata={'failed_at': datetime.utcnow().isoformat()}
+                )
+
+    def _run_multi_tenant_scheduled_jobs(self):
+        """Run scheduled jobs for all active customers"""
+        try:
+            # Get all active customers
+            customers = self.get_active_customers()
+
+            if not customers:
+                self.logger.warning(f"No active customers found for multi-tenant job {self.get_job_type()}")
+                return
+
+            self.logger.info(f"Running multi-tenant job {self.get_job_type()} for {len(customers)} customer(s)")
+
+            # Run job for each customer
+            for customer in customers:
+                customer_id = customer.get('customer_id')
+                company_name = customer.get('company_name', 'Unknown')
+
+                try:
+                    self.logger.info(f"Processing customer: {company_name} ({customer_id})")
+                    self._run_single_scheduled_job(customer_id=customer_id)
+                except Exception as e:
+                    self.logger.error(f"Error running job for customer {company_name} ({customer_id}): {str(e)}")
+                    # Continue with next customer even if one fails
+                    continue
+
+            self.logger.info(f"Completed multi-tenant job {self.get_job_type()} for all customers")
+
+        except Exception as e:
+            self.logger.error(f"Error in multi-tenant scheduled job execution: {str(e)}")
     
     def run_flask_app(self):
         """Run the Flask application"""

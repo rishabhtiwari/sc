@@ -1,17 +1,19 @@
 """
-News Routes - REST API endpoints for news operations
+News Routes - Proxy routes for news fetcher service
+All /api/news/* requests are forwarded to the news fetcher service
 """
 
 import logging
-from flask import Blueprint, request, jsonify
-from handlers.news_handler import NewsHandler
+import requests
+from flask import Blueprint, request, jsonify, Response
+from middleware.jwt_middleware import get_request_headers_with_context
 
 # Create blueprint
 news_bp = Blueprint('news', __name__)
-
-# Initialize handler
-news_handler = NewsHandler()
 logger = logging.getLogger(__name__)
+
+# News fetcher service URL
+NEWS_FETCHER_URL = 'http://ichat-news-fetcher:8093'
 
 
 @news_bp.route('/news', methods=['GET'])
@@ -31,51 +33,24 @@ def get_news():
         JSON response with news articles and pagination info
     """
     try:
-        # Extract query parameters
-        category = request.args.get('category')
-        language = request.args.get('language')
-        country = request.args.get('country')
-        status = request.args.get('status')
+        logger.info(f"📰 GET /news - Proxying to news-fetcher")
 
-        # Parse pagination parameters with defaults
-        try:
-            page = int(request.args.get('page', 1))
-        except (ValueError, TypeError):
-            page = 1
+        # Get headers with customer_id/user_id from JWT middleware
+        headers = get_request_headers_with_context()
 
-        try:
-            page_size = int(request.args.get('page_size', 10))
-        except (ValueError, TypeError):
-            page_size = 10
-
-        logger.info(f"📰 GET /news - category={category}, language={language}, country={country}, status={status}, page={page}, page_size={page_size}")
-
-        # Call handler
-        result = news_handler.get_news(
-            category=category,
-            language=language,
-            country=country,
-            status=status,
-            page=page,
-            page_size=page_size
+        # Proxy request to news-fetcher service
+        response = requests.get(
+            f'{NEWS_FETCHER_URL}/news',
+            params=request.args,
+            headers=headers,
+            timeout=30
         )
-        
-        # Return response
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-            
+
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+
     except Exception as e:
-        error_msg = f"Error in GET /news: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+        logger.error(f"Error proxying to news-fetcher /news: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @news_bp.route('/news/<article_id>', methods=['PUT'])
@@ -93,302 +68,113 @@ def update_news_article(article_id):
         JSON response with update result
     """
     try:
-        logger.info(f"✏️ PUT /news/{article_id}")
+        logger.info(f"✏️ PUT /news/{article_id} - Proxying to news-fetcher")
 
-        # Get request data
-        data = request.get_json()
-        if not data:
-            return jsonify({
-                'error': 'No data provided',
-                'status': 'error'
-            }), 400
+        # Get headers with customer_id/user_id from JWT middleware
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
 
-        # Call handler
-        result = news_handler.update_article(article_id, data)
+        # Proxy request to news-fetcher service
+        response = requests.put(
+            f'{NEWS_FETCHER_URL}/news/{article_id}',
+            json=request.get_json(),
+            headers=headers,
+            timeout=30
+        )
 
-        # Return response
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
 
     except Exception as e:
-        error_msg = f"Error in PUT /news/{article_id}: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+        logger.error(f"Error proxying to news-fetcher PUT /news/{article_id}: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @news_bp.route('/news/categories', methods=['GET'])
 def get_categories():
     """
     Get available news categories with article counts
-    
+
     Returns:
         JSON response with categories and counts
     """
     try:
-        logger.info("📂 GET /news/categories")
-        
-        result = news_handler.get_categories()
-        
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-            
+        logger.info("📂 GET /news/categories - Proxying to news-fetcher")
+
+        # Get headers with customer_id/user_id from JWT middleware
+        headers = get_request_headers_with_context()
+
+        # Proxy request to news-fetcher service
+        response = requests.get(
+            f'{NEWS_FETCHER_URL}/news/categories',
+            headers=headers,
+            timeout=30
+        )
+
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+
     except Exception as e:
-        error_msg = f"Error in GET /news/categories: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+        logger.error(f"Error proxying to news-fetcher /news/categories: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @news_bp.route('/news/filters', methods=['GET'])
 def get_filters():
     """
     Get available news filters (languages, countries) with counts
-    
+
     Returns:
         JSON response with available languages and countries
     """
     try:
-        logger.info("🔍 GET /news/filters")
-        
-        result = news_handler.get_filters()
-        
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-            
+        logger.info("🔍 GET /news/filters - Proxying to news-fetcher")
+
+        # Get headers with customer_id/user_id from JWT middleware
+        headers = get_request_headers_with_context()
+
+        # Proxy request to news-fetcher service
+        response = requests.get(
+            f'{NEWS_FETCHER_URL}/news/filters',
+            headers=headers,
+            timeout=30
+        )
+
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+
     except Exception as e:
-        error_msg = f"Error in GET /news/filters: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+        logger.error(f"Error proxying to news-fetcher /news/filters: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @news_bp.route('/news/health', methods=['GET'])
 def get_news_health():
     """
     Check news service health status
-    
+
     Returns:
         JSON response with health status
     """
     try:
-        logger.info("❤️ GET /news/health")
-        
-        result = news_handler.get_news_health()
-        
-        if result['status'] == 'success':
-            health_data = result['data']
-            if health_data['status'] == 'healthy':
-                return jsonify(health_data), 200
-            else:
-                return jsonify(health_data), 503  # Service Unavailable
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 500
-            
-    except Exception as e:
-        error_msg = f"Error in GET /news/health: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error',
-            'service': 'news-fetcher'
-        }), 500
+        logger.info("❤️ GET /news/health - Proxying to news-fetcher")
 
+        # Get headers with customer_id/user_id from JWT middleware
+        headers = get_request_headers_with_context()
 
-@news_bp.route('/news/videos/merge-latest', methods=['POST'])
-def merge_latest_videos():
-    """
-    Merge latest news videos into a single compilation video with configuration
+        # Proxy request to news-fetcher service
+        response = requests.get(
+            f'{NEWS_FETCHER_URL}/health',
+            headers=headers,
+            timeout=10
+        )
 
-    Request Body:
-        {
-            "categories": ["business", "technology"],  // Optional
-            "country": "us",  // Optional
-            "language": "en",  // Optional
-            "videoCount": 20,  // Required
-            "title": "Top 20 News Stories"  // Required
-        }
-
-    Returns:
-        JSON response with merge operation status and details
-    """
-    try:
-        logger.info("🎬 POST /news/videos/merge-latest")
-
-        # Get configuration from request body
-        config = request.get_json() or {}
-        logger.info(f"📋 Merge configuration: {config}")
-
-        result = news_handler.merge_latest_videos(config)
-
-        if result['status'] == 'success' or result['status'] == 'processing':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
 
     except Exception as e:
-        error_msg = f"Error in POST /news/videos/merge-latest: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+        logger.error(f"Error proxying to news-fetcher /health: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error', 'service': 'news-fetcher'}), 500
 
 
-@news_bp.route('/news/videos/merge-status', methods=['GET'])
-def get_video_merge_status():
-    """
-    Check the status of video merging process
-
-    Returns:
-        JSON response with merge status and file info
-    """
-    try:
-        logger.info("🔍 GET /news/videos/merge-status")
-
-        result = news_handler.get_video_merge_status()
-
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-
-    except Exception as e:
-        error_msg = f"Error in GET /news/videos/merge-status: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
-
-
-@news_bp.route('/news/videos/download', methods=['GET'])
-def get_video_download():
-    """
-    Get download information for the merged video
-
-    Returns:
-        JSON response with download URL and file info
-    """
-    try:
-        logger.info("📥 GET /news/videos/download")
-
-        result = news_handler.get_video_download_info()
-
-        if result['status'] == 'success':
-            return jsonify(result['data']), 200
-        else:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-
-    except Exception as e:
-        error_msg = f"Error in GET /news/videos/download: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
-
-
-@news_bp.route('/news/videos/latest-20-news.mp4', methods=['GET'])
-def download_latest_news_video():
-    """
-    Download the latest 20 news compilation video
-
-    Returns:
-        MP4 video file stream containing latest news compilation
-    """
-    import requests
-    from flask import Response
-
-    try:
-        logger.info("📥 GET /news/videos/latest-20-news.mp4 - Downloading latest news compilation video")
-
-        # Proxy the request to the video generator service
-        video_service_url = "http://ichat-video-generator:8095/download/latest-20-news.mp4"
-
-        response = requests.get(video_service_url, stream=True, timeout=60)
-
-        if response.status_code == 200:
-            # Stream the video file back to the client
-            def generate():
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        yield chunk
-
-            return Response(
-                generate(),
-                content_type='video/mp4',
-                headers={
-                    'Content-Disposition': 'attachment; filename="latest-20-news.mp4"',
-                    'Content-Length': response.headers.get('Content-Length', ''),
-                    'Accept-Ranges': 'bytes'
-                }
-            )
-        else:
-            # Handle error response from video service
-            try:
-                error_data = response.json()
-                return jsonify(error_data), response.status_code
-            except:
-                return jsonify({
-                    'error': f'Video service returned status {response.status_code}',
-                    'status': 'error'
-                }), response.status_code
-
-    except requests.exceptions.ConnectionError:
-        error_msg = "Could not connect to video generation service"
-        logger.error(f"🔌 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 503
-    except requests.exceptions.Timeout:
-        error_msg = "Video download request timed out"
-        logger.error(f"⏰ {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 504
-    except Exception as e:
-        error_msg = f"Error in GET /news/videos/download/latest-20-news.mp4: {str(e)}"
-        logger.error(f"💥 {error_msg}")
-        return jsonify({
-            'error': error_msg,
-            'status': 'error'
-        }), 500
+# Video routes have been moved to video_routes.py
+# Use /api/videos/* endpoints instead of /api/news/videos/*
 
 
 @news_bp.route('/news/videos/shorts/<article_id>/<filename>', methods=['GET'])
@@ -572,6 +358,101 @@ def news_not_found(error):
         'error': 'News endpoint not found',
         'status': 'error'
     }), 404
+
+
+# ============================================================================
+# NEWS-FETCHER JOB MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@news_bp.route('/news/seed-urls', methods=['GET', 'POST'])
+def manage_seed_urls():
+    """Get or create seed URLs for news fetching"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+
+        if request.method == 'GET':
+            response = requests.get(f'{news_fetcher_url}/seed-urls', headers=headers, timeout=30)
+        else:  # POST
+            headers['Content-Type'] = 'application/json'
+            response = requests.post(f'{news_fetcher_url}/seed-urls', json=request.get_json(), headers=headers, timeout=30)
+
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher seed-urls: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@news_bp.route('/news/seed-urls/<partner_id>', methods=['GET', 'PUT', 'DELETE'])
+def manage_seed_url(partner_id):
+    """Get, update, or delete a specific seed URL"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+
+        if request.method == 'GET':
+            response = requests.get(f'{news_fetcher_url}/seed-urls/{partner_id}', headers=headers, timeout=30)
+        elif request.method == 'PUT':
+            headers['Content-Type'] = 'application/json'
+            response = requests.put(f'{news_fetcher_url}/seed-urls/{partner_id}', json=request.get_json(), headers=headers, timeout=30)
+        else:  # DELETE
+            response = requests.delete(f'{news_fetcher_url}/seed-urls/{partner_id}', headers=headers, timeout=30)
+
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher seed-url: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@news_bp.route('/news/enrichment/status', methods=['GET'])
+def get_enrichment_status():
+    """Get news enrichment status"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+        response = requests.get(f'{news_fetcher_url}/enrichment/status', headers=headers, timeout=30)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher enrichment/status: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@news_bp.route('/news/enrichment/config', methods=['GET', 'PUT'])
+def manage_enrichment_config():
+    """Get or update news enrichment configuration"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+
+        if request.method == 'GET':
+            response = requests.get(f'{news_fetcher_url}/enrichment/config', headers=headers, timeout=30)
+        else:  # PUT
+            headers['Content-Type'] = 'application/json'
+            response = requests.put(f'{news_fetcher_url}/enrichment/config', json=request.get_json(), headers=headers, timeout=30)
+
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher enrichment/config: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@news_bp.route('/news/run', methods=['POST'])
+def run_news_fetch():
+    """Trigger news fetch job"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+        response = requests.post(f'{news_fetcher_url}/run', json=request.get_json(), headers=headers, timeout=300)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher run: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @news_bp.errorhandler(405)

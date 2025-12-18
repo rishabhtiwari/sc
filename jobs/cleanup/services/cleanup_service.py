@@ -3,10 +3,16 @@ Cleanup Service - Deletes old news articles and their associated files
 """
 
 import os
+import sys
 import shutil
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
 from pymongo import MongoClient
+
+# Add parent directories to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from common.utils.multi_tenant_db import build_multi_tenant_query
 
 
 class CleanupService:
@@ -34,13 +40,14 @@ class CleanupService:
             self.news_collection = db['news_document']
             self.logger.info("✅ MongoDB connection established")
 
-    def cleanup_old_articles(self, retention_hours: int = None, dry_run: bool = None) -> Dict[str, Any]:
+    def cleanup_old_articles(self, retention_hours: int = None, dry_run: bool = None, customer_id: str = None) -> Dict[str, Any]:
         """
         Clean up old news articles and their associated files
 
         Args:
             retention_hours: Hours to retain articles (default from config)
             dry_run: If True, only preview what would be deleted (default from config)
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dict containing cleanup statistics
@@ -51,8 +58,9 @@ class CleanupService:
         if dry_run is None:
             dry_run = self.config.CLEANUP_DRY_RUN
 
+        customer_info = f" for customer {customer_id}" if customer_id else ""
         self.logger.info("=" * 80)
-        self.logger.info(f"🧹 Starting cleanup process")
+        self.logger.info(f"🧹 Starting cleanup process{customer_info}")
         self.logger.info(f"📅 Retention period: {retention_hours} hours")
         self.logger.info(f"🔍 Dry-run mode: {dry_run}")
         self.logger.info("=" * 80)
@@ -79,8 +87,9 @@ class CleanupService:
         }
 
         try:
-            # Find old articles
-            query = {'created_at': {'$lt': cutoff_date}}
+            # Find old articles with multi-tenant filter
+            base_query = {'created_at': {'$lt': cutoff_date}}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
             old_articles = list(self.news_collection.find(query).limit(self.config.CLEANUP_MAX_ARTICLES_PER_RUN))
             stats['total_articles_found'] = len(old_articles)
 

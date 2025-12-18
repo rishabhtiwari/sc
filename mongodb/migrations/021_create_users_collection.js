@@ -120,11 +120,11 @@ print('✓ Created users collection with schema validation');
 db.users.createIndex({ user_id: 1 }, { unique: true });
 print('✓ Created unique index on user_id');
 
-db.users.createIndex({ customer_id: 1, email: 1 }, { unique: true });
-print('✓ Created compound unique index on customer_id + email');
+db.users.createIndex({ email: 1 }, { unique: true, partialFilterExpression: { is_deleted: false } });
+print('✓ Created unique index on email (globally unique, excluding deleted users)');
 
-db.users.createIndex({ email: 1 });
-print('✓ Created index on email');
+db.users.createIndex({ customer_id: 1, email: 1 });
+print('✓ Created compound index on customer_id + email');
 
 db.users.createIndex({ customer_id: 1, status: 1 });
 print('✓ Created compound index on customer_id + status');

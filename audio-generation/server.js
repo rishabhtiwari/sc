@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-// app.use('/temp', express.static('data/temp')); // Serve temp files for Kokoro model
+app.use('/temp', express.static('public/temp')); // Serve temp files for preview and temporary audio
 
 // Voice service instance with cache directory
 const cacheDir = path.join(__dirname, 'data', 'models');
@@ -30,9 +30,9 @@ async function initializeModels() {
         await voiceService.loadModel('kokoro-82m', false);
         console.log('✅ Kokoro-82M English model loaded successfully!');
 
-        // Hindi model disabled for now
-        // await voiceService.loadModel('mms-tts-hin', true);
-        // console.log('✅ Hindi MMS model loaded successfully!');
+        // Load Hindi MMS model
+        await voiceService.loadModel('mms-tts-hin', false);
+        console.log('✅ Hindi MMS model loaded successfully!');
 
         console.log('🎉 Voice model(s) initialized successfully!');
     } catch (error) {
@@ -298,7 +298,7 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Supported Languages: English (kokoro-82m)`);
+        console.log(`🌍 Supported Languages: English (kokoro-82m), Hindi (mms-tts-hin)`);
     });
 }
 

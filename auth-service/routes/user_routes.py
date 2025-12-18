@@ -20,7 +20,7 @@ audit_service = AuditService()
 logger = logging.getLogger(__name__)
 
 
-@user_bp.route('/users', methods=['POST'])
+@user_bp.route('/auth/users', methods=['POST'])
 @token_required
 @permission_required('user.create')
 def create_user():
@@ -45,7 +45,7 @@ def create_user():
         return jsonify({'success': False, 'error': 'Failed to create user'}), 500
 
 
-@user_bp.route('/users', methods=['GET'])
+@user_bp.route('/auth/users', methods=['GET'])
 @token_required
 @permission_required('user.view')
 def get_users():
@@ -68,7 +68,7 @@ def get_users():
         return jsonify({'success': False, 'error': 'Failed to get users'}), 500
 
 
-@user_bp.route('/users/<user_id>', methods=['GET'])
+@user_bp.route('/auth/users/<user_id>', methods=['GET'])
 @token_required
 @permission_required('user.view')
 def get_user(user_id):
@@ -90,7 +90,7 @@ def get_user(user_id):
         return jsonify({'success': False, 'error': 'Failed to get user'}), 500
 
 
-@user_bp.route('/users/<user_id>', methods=['PUT'])
+@user_bp.route('/auth/users/<user_id>', methods=['PUT'])
 @token_required
 @permission_required('user.edit')
 def update_user(user_id):
@@ -115,7 +115,7 @@ def update_user(user_id):
         return jsonify({'success': False, 'error': 'Failed to update user'}), 500
 
 
-@user_bp.route('/users/<user_id>', methods=['DELETE'])
+@user_bp.route('/auth/users/<user_id>', methods=['DELETE'])
 @token_required
 @permission_required('user.delete')
 def delete_user(user_id):
@@ -142,7 +142,7 @@ def delete_user(user_id):
         return jsonify({'success': False, 'error': 'Failed to delete user'}), 500
 
 
-@user_bp.route('/users/<user_id>/reset-password', methods=['POST'])
+@user_bp.route('/auth/users/<user_id>/reset-password', methods=['POST'])
 @token_required
 @permission_required('user.edit')
 def reset_password(user_id):
@@ -172,7 +172,7 @@ def reset_password(user_id):
         return jsonify({'success': False, 'error': 'Failed to reset password'}), 500
 
 
-@user_bp.route('/users/<user_id>/suspend', methods=['POST'])
+@user_bp.route('/auth/users/<user_id>/suspend', methods=['POST'])
 @token_required
 @customer_admin_required
 def suspend_user(user_id):
@@ -199,7 +199,7 @@ def suspend_user(user_id):
         return jsonify({'success': False, 'error': 'Failed to suspend user'}), 500
 
 
-@user_bp.route('/users/<user_id>/activate', methods=['POST'])
+@user_bp.route('/auth/users/<user_id>/activate', methods=['POST'])
 @token_required
 @customer_admin_required
 def activate_user(user_id):
@@ -207,18 +207,57 @@ def activate_user(user_id):
     try:
         current_user_id = request.current_user.get('user_id')
         customer_id = request.current_user.get('customer_id')
-        
+
         result = user_service.activate_user(user_id)
-        
+
         if result['success']:
             audit_service.log_action(
                 customer_id=customer_id, user_id=current_user_id, action='update',
                 resource_type='user', resource_id=user_id, changes={'action': 'activate'},
                 metadata={'ip_address': request.remote_addr}
             )
-        
+
         return jsonify(result), 200 if result['success'] else 400
     except Exception as e:
         logger.error(f"Activate user error: {str(e)}")
         return jsonify({'success': False, 'error': 'Failed to activate user'}), 500
+
+
+@user_bp.route('/auth/users/<user_id>/deactivate', methods=['POST'])
+@token_required
+@customer_admin_required
+def deactivate_user(user_id):
+    """Toggle user active status (deactivate if active, activate if inactive)"""
+    try:
+        current_user_id = request.current_user.get('user_id')
+        customer_id = request.current_user.get('customer_id')
+
+        if user_id == current_user_id:
+            return jsonify({'success': False, 'error': 'Cannot deactivate your own account'}), 400
+
+        # Get user to check current status
+        user = user_service.get_user(user_id)
+        if not user.get('success'):
+            return jsonify(user), 400
+
+        # Toggle status
+        is_active = user.get('user', {}).get('is_active', True)
+        if is_active:
+            result = user_service.suspend_user(user_id)
+            action = 'suspend'
+        else:
+            result = user_service.activate_user(user_id)
+            action = 'activate'
+
+        if result['success']:
+            audit_service.log_action(
+                customer_id=customer_id, user_id=current_user_id, action='update',
+                resource_type='user', resource_id=user_id, changes={'action': action},
+                metadata={'ip_address': request.remote_addr}
+            )
+
+        return jsonify(result), 200 if result['success'] else 400
+    except Exception as e:
+        logger.error(f"Deactivate user error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to toggle user status'}), 500
 

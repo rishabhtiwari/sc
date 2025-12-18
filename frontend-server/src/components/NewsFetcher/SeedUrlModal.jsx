@@ -14,23 +14,23 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
     language: 'en',
     frequency_minutes: 60,
     is_active: true,
+    api_key: '',
   });
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [availableCategories, setAvailableCategories] = useState([]);
 
-  // Fetch available categories on mount
+  // Fetch supported categories for seed URL configuration on mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await newsService.getCategories();
+        const response = await newsService.getSupportedCategories();
         if (response.data?.categories) {
-          const cats = Object.keys(response.data.categories);
-          setAvailableCategories(cats);
+          setAvailableCategories(response.data.categories);
         }
       } catch (error) {
-        console.error('Failed to fetch categories:', error);
+        console.error('Failed to fetch supported categories:', error);
         // Fallback to default categories
         setAvailableCategories(['general', 'world', 'nation', 'business', 'technology', 'entertainment', 'sports', 'science', 'health']);
       }
@@ -48,6 +48,7 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
         language: seedUrl.language || 'en',
         frequency_minutes: seedUrl.frequency_minutes || 60,
         is_active: seedUrl.is_active !== undefined ? seedUrl.is_active : true,
+        api_key: seedUrl.parameters?.api_key?.default || '',
       });
     } else {
       setFormData({
@@ -58,6 +59,7 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
         language: 'en',
         frequency_minutes: 60,
         is_active: true,
+        api_key: '',
       });
     }
     setErrors({});
@@ -130,6 +132,18 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
         frequency_minutes: parseInt(formData.frequency_minutes, 10),
       };
 
+      // Build parameters object if api_key is provided
+      if (formData.api_key && formData.api_key.trim()) {
+        dataToSave.parameters = {
+          api_key: {
+            type: 'string',
+            required: true,
+            description: 'API key for the news provider',
+            default: formData.api_key.trim()
+          }
+        };
+      }
+
       await onSave(dataToSave);
       onClose();
     } catch (error) {
@@ -164,8 +178,19 @@ const SeedUrlModal = ({ isOpen, onClose, onSave, seedUrl }) => {
           value={formData.url}
           onChange={handleChange}
           error={errors.url}
-          placeholder="https://example.com/rss"
+          placeholder="https://gnews.io/api/v4/top-headlines?category={category}&apikey={api_key}"
           required
+        />
+
+        <Input
+          label="API Key (Optional)"
+          name="api_key"
+          type="text"
+          value={formData.api_key}
+          onChange={handleChange}
+          error={errors.api_key}
+          placeholder="Enter API key if URL contains {api_key} placeholder"
+          helpText="Required only if your URL template uses {api_key} placeholder"
         />
 
         {/* Category Checkboxes */}

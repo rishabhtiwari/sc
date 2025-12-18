@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY youtube-uploader/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -17,8 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Download spaCy English model directly via pip
 RUN pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
+# Copy common utilities
+COPY jobs/common /app/common
+
 # Copy application code
-COPY . .
+COPY youtube-uploader /app
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/credentials

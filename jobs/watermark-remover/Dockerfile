@@ -18,8 +18,11 @@ RUN pip install --no-cache-dir \
     pymongo==4.6.0 \
     requests==2.31.0
 
+# Copy common utilities
+COPY common /app/common
+
 # Copy service files
-COPY iopaint_ui_service.py /app/iopaint_ui_service.py
+COPY watermark-remover/iopaint_ui_service.py /app/iopaint_ui_service.py
 
 # Create output directory
 RUN mkdir -p /app/output

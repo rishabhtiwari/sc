@@ -19,7 +19,7 @@ audit_service = AuditService()
 logger = logging.getLogger(__name__)
 
 
-@audit_bp.route('/audit-logs', methods=['GET'])
+@audit_bp.route('/auth/audit-logs', methods=['GET'])
 @token_required
 @permission_required('audit.view')
 def get_audit_logs():
@@ -56,7 +56,7 @@ def get_audit_logs():
         return jsonify({'success': False, 'error': 'Failed to get audit logs'}), 500
 
 
-@audit_bp.route('/audit-logs/<log_id>', methods=['GET'])
+@audit_bp.route('/auth/audit-logs/<log_id>', methods=['GET'])
 @token_required
 @permission_required('audit.view')
 def get_audit_log(log_id):

@@ -29,7 +29,7 @@ const Login = ({ onLoginSuccess }) => {
       if (response.data.success) {
         // Store token in localStorage
         localStorage.setItem('auth_token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        localStorage.setItem('user_info', JSON.stringify(response.data.user));
 
         // Call success callback
         if (onLoginSuccess) {

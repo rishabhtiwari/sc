@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../common';
 import { useToast } from '../../hooks/useToast';
+import api from '../../services/api';
 
 /**
  * Credentials Manager Component - Manage YouTube OAuth credentials
@@ -33,9 +34,9 @@ const CredentialsManager = () => {
   const loadCredentials = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/youtube/credentials');
-      const data = await response.json();
-      
+      const response = await api.get('/youtube/credentials');
+      const data = response.data;
+
       if (data.status === 'success') {
         setCredentials(data.data || []);
       } else {
@@ -67,21 +68,11 @@ const CredentialsManager = () => {
     }
 
     try {
-      const url = editingId
-        ? `/api/youtube/credentials/${editingId}`
-        : '/api/youtube/credentials';
+      const response = editingId
+        ? await api.put(`/youtube/credentials/${editingId}`, formData)
+        : await api.post('/youtube/credentials', formData);
 
-      const method = editingId ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
+      const data = response.data;
 
       if (data.status === 'success') {
         showToast(editingId ? 'Credential updated successfully' : 'Credential created successfully', 'success');
@@ -116,15 +107,8 @@ const CredentialsManager = () => {
   const handleAuthenticate = async (credentialId) => {
     try {
       // Start OAuth flow
-      const response = await fetch('/api/youtube/auth/start', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ credential_id: credentialId })
-      });
-
-      const data = await response.json();
+      const response = await api.post('/youtube/auth/start', { credential_id: credentialId });
+      const data = response.data;
 
       if (data.status === 'success') {
         // Open OAuth URL in new tab
@@ -150,18 +134,12 @@ const CredentialsManager = () => {
     }
 
     try {
-      const callbackResponse = await fetch('/api/youtube/oauth-callback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          code: authCode.trim(),
-          credential_id: authenticatingCredentialId
-        })
+      const callbackResponse = await api.post('/youtube/oauth-callback', {
+        code: authCode.trim(),
+        credential_id: authenticatingCredentialId
       });
 
-      const callbackData = await callbackResponse.json();
+      const callbackData = callbackResponse.data;
 
       if (callbackData.status === 'success') {
         showToast('✅ Authentication successful!', 'success');
@@ -191,11 +169,8 @@ const CredentialsManager = () => {
     }
 
     try {
-      const response = await fetch(`/api/youtube/credentials/${credentialId}`, {
-        method: 'DELETE'
-      });
-
-      const data = await response.json();
+      const response = await api.delete(`/youtube/credentials/${credentialId}`);
+      const data = response.data;
 
       if (data.status === 'success') {
         showToast('Credential deleted successfully', 'success');

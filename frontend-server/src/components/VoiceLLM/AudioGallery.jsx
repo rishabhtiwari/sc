@@ -14,6 +14,7 @@ const AudioGallery = ({ onLoadData, onLoadStats }) => {
   const [stats, setStats] = useState({ total: 0, pending: 0, generated: 0 });
   const [playingAudio, setPlayingAudio] = useState(null);
   const audioRefs = useRef({});
+  const [audioUrls, setAudioUrls] = useState({}); // Store blob URLs for authenticated audio
 
   // Load stats separately
   const loadStats = async () => {
@@ -40,9 +41,36 @@ const AudioGallery = ({ onLoadData, onLoadStats }) => {
     setLoading(true);
     try {
       const data = await onLoadData(currentPage, statusFilter);
-      setAudioFiles(data.audio_files || []);
+      const files = data.audio_files || [];
+      setAudioFiles(files);
       setTotalPages(data.pagination?.pages || 1);
       setTotalFiles(data.pagination?.total || 0);
+
+      // Fetch authenticated audio URLs for files with audio
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const newAudioUrls = {};
+        for (const file of files) {
+          if (file.status === 'generated' && file.audio_url) {
+            try {
+              const response = await fetch(file.audio_url, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              if (response.ok) {
+                const blob = await response.blob();
+                newAudioUrls[file.id] = URL.createObjectURL(blob);
+              } else {
+                console.error(`Failed to fetch audio for ${file.id}:`, response.status);
+              }
+            } catch (err) {
+              console.error(`Error fetching audio for ${file.id}:`, err);
+            }
+          }
+        }
+        setAudioUrls(newAudioUrls);
+      }
     } catch (error) {
       console.error('Failed to load audio files:', error);
     } finally {
@@ -58,6 +86,13 @@ const AudioGallery = ({ onLoadData, onLoadStats }) => {
   // Load data when page or filter changes
   useEffect(() => {
     loadAudioFiles();
+
+    // Cleanup blob URLs when component unmounts or when audio files change
+    return () => {
+      Object.values(audioUrls).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
   }, [currentPage, statusFilter]);
 
   // Handle audio play
@@ -176,7 +211,7 @@ const AudioGallery = ({ onLoadData, onLoadStats }) => {
 
                   {/* Audio Player or Pending Message */}
                   <div className="mt-auto">
-                    {audio.status === 'generated' && audio.audio_url ? (
+                    {audio.status === 'generated' && audioUrls[audio.id] ? (
                       <div className="bg-gray-50 rounded-lg p-2">
                         <audio
                           ref={(el) => {
@@ -189,10 +224,16 @@ const AudioGallery = ({ onLoadData, onLoadStats }) => {
                           onPause={handlePause}
                           onEnded={handlePause}
                           preload="metadata"
+                          src={audioUrls[audio.id]}
                         >
-                          <source src={audio.audio_url} type="audio/wav" />
                           Your browser does not support the audio element.
                         </audio>
+                      </div>
+                    ) : audio.status === 'generated' && audio.audio_url ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2">
+                        <p className="text-xs text-yellow-800">
+                          ⏳ Loading audio...
+                        </p>
                       </div>
                     ) : (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">

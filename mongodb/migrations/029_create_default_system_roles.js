@@ -24,7 +24,7 @@ const systemRoles = [
             'customer.view', 'customer.create', 'customer.edit', 'customer.delete',
             'audit.view', 'audit.export'
         ],
-        is_system_role: true,
+        role_type: 'system',
         is_default: false,
         created_at: new Date(),
         updated_at: new Date(),
@@ -45,7 +45,7 @@ const systemRoles = [
             'settings.view', 'settings.edit', 'settings.manage_audio',
             'audit.view', 'audit.export'
         ],
-        is_system_role: true,
+        role_type: 'system',
         is_default: false,
         created_at: new Date(),
         updated_at: new Date(),
@@ -64,7 +64,7 @@ const systemRoles = [
             'youtube.view',
             'settings.view', 'settings.manage_audio'
         ],
-        is_system_role: true,
+        role_type: 'system',
         is_default: true,
         created_at: new Date(),
         updated_at: new Date(),
@@ -83,7 +83,7 @@ const systemRoles = [
             'youtube.view', 'youtube.upload',
             'settings.view'
         ],
-        is_system_role: true,
+        role_type: 'system',
         is_default: false,
         created_at: new Date(),
         updated_at: new Date(),
@@ -102,7 +102,7 @@ const systemRoles = [
             'youtube.view',
             'settings.view'
         ],
-        is_system_role: true,
+        role_type: 'system',
         is_default: false,
         created_at: new Date(),
         updated_at: new Date(),

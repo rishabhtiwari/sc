@@ -4,11 +4,22 @@ Handles fetching news documents with category filtering and pagination
 """
 
 import logging
+import sys
+import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from pymongo import MongoClient
 from bson import ObjectId
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from config.settings import Config, ArticleStatus
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_update_document,
+    add_customer_filter
+)
 
 
 class NewsQueryService:
@@ -39,7 +50,8 @@ class NewsQueryService:
                            country: Optional[str] = None,
                            status: Optional[str] = None,
                            page: int = 1,
-                           page_size: Optional[int] = None) -> Dict[str, Any]:
+                           page_size: Optional[int] = None,
+                           customer_id: str = None) -> Dict[str, Any]:
         """
         Fetch news documents based on category, language, country, and status filters with pagination
 
@@ -50,6 +62,8 @@ class NewsQueryService:
             status: Article status to filter by (e.g., 'completed', 'progress', 'failed')
             page: Page number (1-based)
             page_size: Number of articles per page (defaults to config value)
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            customer_id: Customer ID for multi-tenant filtering
 
         Returns:
             Dictionary with news articles and pagination info
@@ -71,14 +85,17 @@ class NewsQueryService:
             skip = (page - 1) * page_size
 
             # Build query based on category, language, country, and status logic
-            query = self._build_query(category, language, country, status)
+            base_query = self._build_query(category, language, country, status)
 
-            self.logger.info(f"🔍 Querying news with category='{category}', language='{language}', country='{country}', status='{status}', page={page}, page_size={page_size}")
+            # Add customer_id filter for multi-tenancy
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            self.logger.info(f"🔍 Querying news with category='{category}', language='{language}', country='{country}', status='{status}', customer_id='{customer_id}', page={page}, page_size={page_size}")
             self.logger.info(f"📋 MongoDB query: {query}")
-            
+
             # Build sort criteria: category first (specific category before general), then by time
             sort_criteria = self._build_sort_criteria(category)
-            
+
             # Execute query with pagination
             cursor = self.news_collection.find(query).sort(sort_criteria).skip(skip).limit(page_size)
             articles = list(cursor)
@@ -165,8 +182,12 @@ class NewsQueryService:
         # If status is None or empty string, don't add status filter (show all statuses)
 
         # Handle category filtering
-        if category is None or category.lower() == 'general':
-            # If no category or general requested, return only general category
+        if category is None or category == '':
+            # If no category provided (All Categories), don't filter by category
+            # This shows all categories
+            pass
+        elif category.lower() == 'general':
+            # If general category requested, return only general category
             base_query['category'] = 'general'
         else:
             # If specific category requested, return that category + general
@@ -253,18 +274,27 @@ class NewsQueryService:
             
         return formatted
 
-    def get_available_categories(self) -> Dict[str, Any]:
+    def get_available_categories(self, customer_id: str = None) -> Dict[str, Any]:
         """
         Get list of available categories with article counts
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with available categories and their counts
         """
         try:
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build match query with customer_id filter
+            base_match = {'status': ArticleStatus.COMPLETED.value}
+            match_query = build_multi_tenant_query(base_match, customer_id=customer_id)
+
             # Aggregate to get category counts
             # Use $unwind to handle array categories (some documents have category as array)
             pipeline = [
-                {'$match': {'status': ArticleStatus.COMPLETED.value}},
+                {'$match': match_query},
                 # Unwind category array if it exists, otherwise keep as single value
                 {'$unwind': {
                     'path': '$category',
@@ -277,7 +307,9 @@ class NewsQueryService:
                 {'$sort': {'_id': 1}}
             ]
 
+            self.logger.info(f"🔍 get_available_categories - customer_id: {customer_id}, match_query: {match_query}")
             result = list(self.news_collection.aggregate(pipeline))
+            self.logger.info(f"📊 get_available_categories - aggregation result: {result}")
 
             categories = {}
             total_articles = 0
@@ -309,17 +341,26 @@ class NewsQueryService:
                 'total_articles': 0
             }
 
-    def get_available_filters(self) -> Dict[str, Any]:
+    def get_available_filters(self, customer_id: str = None) -> Dict[str, Any]:
         """
         Get list of available languages and countries with article counts
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with available languages, countries and their counts
         """
         try:
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build match query with customer_id filter
+            base_match = {'status': ArticleStatus.COMPLETED.value}
+            match_query = build_multi_tenant_query(base_match, customer_id=customer_id)
+
             # Aggregate to get language counts
             language_pipeline = [
-                {'$match': {'status': ArticleStatus.COMPLETED.value}},
+                {'$match': match_query},
                 {'$group': {
                     '_id': '$lang',
                     'count': {'$sum': 1}
@@ -329,7 +370,7 @@ class NewsQueryService:
 
             # Aggregate to get country counts
             country_pipeline = [
-                {'$match': {'status': ArticleStatus.COMPLETED.value}},
+                {'$match': match_query},
                 {'$group': {
                     '_id': '$source.country',
                     'count': {'$sum': 1}
@@ -368,13 +409,16 @@ class NewsQueryService:
                 'countries': {}
             }
 
-    def update_article(self, article_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_article(self, article_id: str, update_data: Dict[str, Any],
+                      customer_id: str = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Update a news article by ID
 
         Args:
             article_id: Article ID (MD5 hash) to update
             update_data: Dictionary containing fields to update
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: User ID for audit tracking
 
         Returns:
             Dictionary with operation result
@@ -406,14 +450,20 @@ class NewsQueryService:
                     'error': 'No valid fields to update'
                 }
 
-            # Add updated timestamp
+            # Add audit fields for update
+            prepare_update_document(update_fields, user_id=user_id)
+
+            # Also add legacy updatedAt field for backward compatibility
             update_fields['updatedAt'] = datetime.utcnow()
 
             self.logger.info(f"📝 Updating article {article_id} with fields: {list(update_fields.keys())}")
 
+            # Build query with customer_id filter for multi-tenancy
+            query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+
             # Update the document using the 'id' field (MD5 hash), not '_id' (ObjectId)
             result = self.news_collection.update_one(
-                {'id': article_id},
+                query,
                 {'$set': update_fields}
             )
 

@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify
 import logging
 import requests
 import os
+from middleware.jwt_middleware import get_request_headers_with_context
 
 # Create blueprint
 video_config_bp = Blueprint('video_config', __name__)
@@ -19,18 +20,22 @@ VIDEO_GENERATOR_URL = os.getenv('VIDEO_GENERATOR_URL', 'http://job-video-generat
 
 # Helper function to proxy requests
 def proxy_to_video_generator(path, method='GET', json_data=None, params=None):
-    """Proxy request to video-generator service"""
+    """Proxy request to video-generator service with customer context headers"""
     try:
         url = f'{VIDEO_GENERATOR_URL}{path}'
 
+        # Get headers with customer context (X-Customer-ID, X-User-ID)
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+
         if method == 'GET':
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, params=params, headers=headers, timeout=30)
         elif method == 'POST':
-            response = requests.post(url, json=json_data, timeout=30)
+            response = requests.post(url, json=json_data, headers=headers, timeout=30)
         elif method == 'PUT':
-            response = requests.put(url, json=json_data, timeout=30)
+            response = requests.put(url, json=json_data, headers=headers, timeout=30)
         elif method == 'DELETE':
-            response = requests.delete(url, timeout=30)
+            response = requests.delete(url, headers=headers, timeout=30)
         else:
             return jsonify({'status': 'error', 'error': 'Invalid method'}), 400
 

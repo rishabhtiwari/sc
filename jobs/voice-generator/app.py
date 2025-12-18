@@ -5,13 +5,14 @@ Voice Generator Job - Generate audio for news articles
 import os
 import sys
 import time
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from flask import jsonify, request
 
 # Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.models.base_job import BaseJob
+from common.utils.multi_tenant_db import extract_user_context_from_headers
 from config.settings import Config
 from services.news_audio_service import NewsAudioService
 
@@ -36,6 +37,15 @@ class VoiceGeneratorJob(BaseJob):
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         return 'voice_generation'
+
+    def is_multi_tenant_job(self) -> bool:
+        """
+        Voice generator is a multi-tenant job - runs separately for each customer
+
+        Returns:
+            True to enable per-customer job execution
+        """
+        return True
 
     def get_parallel_tasks(self) -> List[Dict[str, Any]]:
         """
@@ -78,13 +88,18 @@ class VoiceGeneratorJob(BaseJob):
         Args:
             job_id: Unique identifier for this job execution
             is_on_demand: True if this is a manual/on-demand job
-            **kwargs: Additional parameters for the job
+            **kwargs: Additional parameters for the job (customer_id, user_id)
 
         Returns:
             Dict containing job results and metadata
         """
-        self.logger.info(f"🎵 Starting Voice Generator Job {job_id} (on_demand: {is_on_demand})")
-        
+        # Extract customer_id and user_id from kwargs
+        customer_id = kwargs.get('customer_id')
+        user_id = kwargs.get('user_id')
+
+        customer_info = f" for customer {customer_id}" if customer_id else ""
+        self.logger.info(f"🎵 Starting Voice Generator Job {job_id}{customer_info} (on_demand: {is_on_demand})")
+
         job_results = {
             'job_id': job_id,
             'job_type': self.get_job_type(),
@@ -96,8 +111,13 @@ class VoiceGeneratorJob(BaseJob):
         }
 
         try:
-            # Execute parallel tasks
-            parallel_results = self.run_parallel_tasks(job_id, is_on_demand=is_on_demand)
+            # Execute parallel tasks with customer_id and user_id
+            # Note: customer_id and user_id are already in kwargs, don't pass them again
+            parallel_results = self.run_parallel_tasks(
+                job_id,
+                is_on_demand=is_on_demand,
+                **kwargs
+            )
 
             # Process results from task_details
             for task_name, task_result in parallel_results.get('task_details', {}).items():
@@ -137,13 +157,14 @@ class VoiceGeneratorJob(BaseJob):
 
         return job_results
 
-    def process_news_audio_generation(self, job_id: str = None) -> Dict[str, Any]:
+    def process_news_audio_generation(self, job_id: str = None, customer_id: str = None) -> Dict[str, Any]:
         """
         Process news audio generation (wrapper for API endpoints)
-        
+
         Args:
             job_id: Job ID for tracking
-            
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+
         Returns:
             Dictionary with processing results
         """
@@ -153,9 +174,9 @@ class VoiceGeneratorJob(BaseJob):
                 'error': 'News Audio Service not initialized',
                 'results': {}
             }
-        
+
         try:
-            results = self.news_audio_service.process_news_audio_generation(job_id)
+            results = self.news_audio_service.process_news_audio_generation(job_id, customer_id=customer_id)
             return {
                 'success': True,
                 'results': results
@@ -182,27 +203,41 @@ def get_news_audio_stats():
         JSON response with audio generation statistics
     """
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         if not voice_generator_job.news_audio_service:
             return jsonify({
                 'status': 'error',
                 'error': 'News Audio Service not initialized'
             }), 500
 
-        # Get total articles with short_summary (eligible for audio)
-        total_eligible = voice_generator_job.news_audio_service.news_collection.count_documents({
+        from common.utils.multi_tenant_db import build_multi_tenant_query
+
+        # Build base query with multi-tenant filter
+        base_query_eligible = {
             'status': {'$in': ['completed', 'published']},
             'short_summary': {'$exists': True, '$ne': '', '$ne': None}
-        })
+        }
+        query_eligible = build_multi_tenant_query(base_query_eligible, customer_id=customer_id)
 
-        # Get total articles with audio generated
-        total_generated = voice_generator_job.news_audio_service.news_collection.count_documents({
+        # Get total articles with short_summary (eligible for audio)
+        total_eligible = voice_generator_job.news_audio_service.news_collection.count_documents(query_eligible)
+
+        # Build query for generated audio
+        base_query_generated = {
             'status': {'$in': ['completed', 'published']},
             'short_summary': {'$exists': True, '$ne': '', '$ne': None},
             'audio_paths.short_summary': {'$exists': True, '$ne': None, '$ne': ''}
-        })
+        }
+        query_generated = build_multi_tenant_query(base_query_generated, customer_id=customer_id)
 
-        # Get total articles pending audio generation
-        total_pending = voice_generator_job.news_audio_service.news_collection.count_documents({
+        # Get total articles with audio generated
+        total_generated = voice_generator_job.news_audio_service.news_collection.count_documents(query_generated)
+
+        # Build query for pending audio
+        base_query_pending = {
             'status': {'$in': ['completed', 'published']},
             'short_summary': {'$exists': True, '$ne': '', '$ne': None},
             '$or': [
@@ -211,7 +246,11 @@ def get_news_audio_stats():
                 {'audio_paths': {}},
                 {'audio_paths.short_summary': {'$exists': False}}
             ]
-        })
+        }
+        query_pending = build_multi_tenant_query(base_query_pending, customer_id=customer_id)
+
+        # Get total articles pending audio generation
+        total_pending = voice_generator_job.news_audio_service.news_collection.count_documents(query_pending)
 
         stats = {
             'total': total_eligible,
@@ -242,6 +281,10 @@ def generate_news_audio():
         JSON response with generation results
     """
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         if not voice_generator_job.news_audio_service:
             return jsonify({
                 'status': 'error',
@@ -252,8 +295,8 @@ def generate_news_audio():
         data = request.get_json() or {}
         job_id = data.get('job_id', f'manual_{int(time.time())}')
 
-        # Process audio generation
-        results = voice_generator_job.process_news_audio_generation(job_id)
+        # Process audio generation with customer_id
+        results = voice_generator_job.process_news_audio_generation(job_id, customer_id=customer_id)
 
         if results['success']:
             return jsonify({
@@ -289,11 +332,17 @@ def list_audio_files():
         JSON response with audio files list
     """
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         if not voice_generator_job.news_audio_service:
             return jsonify({
                 'status': 'error',
                 'error': 'News Audio Service not initialized'
             }), 500
+
+        from common.utils.multi_tenant_db import build_multi_tenant_query
 
         # Get query parameters
         page = int(request.args.get('page', 1))
@@ -320,6 +369,9 @@ def list_audio_files():
         elif status_filter == 'generated':
             # Articles with audio
             match_criteria['audio_paths.short_summary'] = {'$exists': True, '$ne': None, '$ne': ''}
+
+        # Apply multi-tenant filter
+        match_criteria = build_multi_tenant_query(match_criteria, customer_id=customer_id)
 
         # Build aggregation pipeline
         pipeline = [
@@ -406,7 +458,12 @@ def serve_audio_file(doc_id, audio_type):
     try:
         from flask import send_file
         from bson import ObjectId
+        from common.utils.multi_tenant_db import build_multi_tenant_query
         import os
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
 
         if not voice_generator_job.news_audio_service:
             return jsonify({
@@ -422,11 +479,11 @@ def serve_audio_file(doc_id, audio_type):
                 'error': f'Invalid audio type. Must be one of: {", ".join(valid_audio_types)}'
             }), 400
 
-        # Get document from database
+        # Get document from database with multi-tenant filter
         try:
-            doc = voice_generator_job.news_audio_service.news_collection.find_one({
-                '_id': ObjectId(doc_id)
-            })
+            base_query = {'_id': ObjectId(doc_id)}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+            doc = voice_generator_job.news_audio_service.news_collection.find_one(query)
         except Exception as e:
             return jsonify({
                 'status': 'error',
@@ -474,6 +531,415 @@ def serve_audio_file(doc_id, audio_type):
             'status': 'error',
             'error': str(e)
         }), 500
+
+
+@voice_generator_job.app.route('/api/voice/config', methods=['GET'])
+def get_voice_config():
+    """Get voice configuration for the authenticated customer"""
+    try:
+        from common.utils.multi_tenant_db import (
+            extract_user_context_from_headers,
+            build_multi_tenant_query,
+            prepare_insert_document
+        )
+
+        # Extract user context from headers
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        # Build multi-tenant query
+        base_query = {}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        # Access voice_config collection through news_audio_service
+        voice_config_collection = voice_generator_job.news_audio_service.news_db['voice_config']
+        config = voice_config_collection.find_one(query)
+
+        if not config:
+            # Create default configuration for this customer with new structure
+            default_config = {
+                'language': 'en',  # Primary language
+                'models': {
+                    'en': 'kokoro-82m',
+                    'hi': 'mms-tts-hin'
+                },
+                'voices': {
+                    'en': {
+                        'defaultVoice': 'am_adam',
+                        'enableAlternation': True,
+                        'maleVoices': ['am_adam', 'am_michael'],
+                        'femaleVoices': ['af_bella', 'af_sarah']
+                    },
+                    'hi': {
+                        'defaultVoice': 'hi_male',
+                        'enableAlternation': True,
+                        'maleVoices': ['hi_male'],
+                        'femaleVoices': ['hi_female']
+                    }
+                }
+            }
+
+            # Use prepare_insert_document to add multi-tenant fields
+            prepared_config = prepare_insert_document(
+                default_config,
+                customer_id=customer_id,
+                user_id=user_id
+            )
+
+            voice_config_collection.insert_one(prepared_config)
+            config = prepared_config
+
+        # Convert ObjectId to string if present
+        if '_id' in config:
+            config['_id'] = str(config['_id'])
+
+        return jsonify(config), 200
+    except Exception as e:
+        voice_generator_job.logger.error(f"Error fetching voice config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@voice_generator_job.app.route('/api/voice/config', methods=['PUT'])
+def update_voice_config():
+    """Update voice configuration for the authenticated customer"""
+    try:
+        from common.utils.multi_tenant_db import (
+            extract_user_context_from_headers,
+            build_multi_tenant_query,
+            prepare_update_document,
+            prepare_insert_document
+        )
+
+        # Extract user context from headers
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        data = request.get_json()
+
+        # Build multi-tenant query
+        base_query = {}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        # Access voice_config collection through news_audio_service
+        voice_config_collection = voice_generator_job.news_audio_service.news_db['voice_config']
+
+        # Check if config exists
+        existing_config = voice_config_collection.find_one(query)
+
+        if existing_config:
+            # Update existing config
+            update_data = {}
+
+            # Handle top-level fields
+            if 'language' in data:
+                update_data['language'] = data['language']
+
+            # Handle models object
+            if 'models' in data:
+                update_data['models'] = data['models']
+
+            # Handle voices object (nested structure)
+            if 'voices' in data:
+                update_data['voices'] = data['voices']
+
+            # Use prepare_update_document to add updated_by and updated_at
+            prepared_updates = prepare_update_document(
+                update_data,
+                user_id=user_id
+            )
+
+            # Update configuration
+            voice_config_collection.update_one(
+                query,
+                {'$set': prepared_updates}
+            )
+        else:
+            # Create new config with default structure
+            new_config = {
+                'language': data.get('language', 'en'),
+                'models': data.get('models', {
+                    'en': 'kokoro-82m',
+                    'hi': 'mms-tts-hin'
+                }),
+                'voices': data.get('voices', {
+                    'en': {
+                        'defaultVoice': 'am_adam',
+                        'enableAlternation': True,
+                        'maleVoices': ['am_adam', 'am_michael'],
+                        'femaleVoices': ['af_bella', 'af_sarah']
+                    },
+                    'hi': {
+                        'defaultVoice': 'hi_male',
+                        'enableAlternation': True,
+                        'maleVoices': ['hi_male'],
+                        'femaleVoices': ['hi_female']
+                    }
+                })
+            }
+
+            # Use prepare_insert_document to add multi-tenant fields
+            prepared_config = prepare_insert_document(
+                new_config,
+                customer_id=customer_id,
+                user_id=user_id
+            )
+
+            voice_config_collection.insert_one(prepared_config)
+
+        # Fetch updated config
+        config = voice_config_collection.find_one(query)
+        if config and '_id' in config:
+            config['_id'] = str(config['_id'])
+
+        return jsonify(config), 200
+    except Exception as e:
+        voice_generator_job.logger.error(f"Error updating voice config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@voice_generator_job.app.route('/api/voice/available-models', methods=['GET'])
+def get_available_models():
+    """Get list of available TTS models with their supported languages and voices"""
+    try:
+        models = {
+            'kokoro-82m': {
+                'id': 'kokoro-82m',
+                'name': 'Kokoro TTS',
+                'description': 'High-quality English text-to-speech with multiple voices',
+                'languages': ['en'],
+                'voices': {
+                    'male': [
+                        {'id': 'am_adam', 'name': 'Adam (American Male)'},
+                        {'id': 'am_michael', 'name': 'Michael (American Male)'},
+                        {'id': 'bm_george', 'name': 'George (British Male)'},
+                        {'id': 'bm_lewis', 'name': 'Lewis (British Male)'},
+                    ],
+                    'female': [
+                        {'id': 'af_bella', 'name': 'Bella (American Female)'},
+                        {'id': 'af_sarah', 'name': 'Sarah (American Female)'},
+                        {'id': 'bf_emma', 'name': 'Emma (British Female)'},
+                        {'id': 'bf_isabella', 'name': 'Isabella (British Female)'},
+                    ]
+                }
+            },
+            'mms-tts-hin': {
+                'id': 'mms-tts-hin',
+                'name': 'MMS Hindi TTS',
+                'description': 'Hindi text-to-speech model (single voice only)',
+                'languages': ['hi'],
+                'voices': {
+                    'default': [
+                        {'id': 'hi_default', 'name': 'Hindi Voice (Default)'},
+                    ],
+                    'male': [],
+                    'female': []
+                },
+                'note': 'MMS Hindi model only supports one voice. Male/female alternation is not available for this model.'
+            }
+        }
+
+        return jsonify({'models': models}), 200
+    except Exception as e:
+        voice_generator_job.logger.error(f"Error fetching available models: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@voice_generator_job.app.route('/api/voice/available', methods=['GET'])
+def get_available_voices():
+    """Get list of available voices (legacy endpoint - kept for backward compatibility)"""
+    try:
+        # English voices (Kokoro-82M)
+        english_voices = {
+            'male': [
+                {'id': 'am_adam', 'name': 'Adam (American Male)', 'gender': 'male', 'language': 'en'},
+                {'id': 'am_michael', 'name': 'Michael (American Male)', 'gender': 'male', 'language': 'en'},
+                {'id': 'bm_george', 'name': 'George (British Male)', 'gender': 'male', 'language': 'en'},
+                {'id': 'bm_lewis', 'name': 'Lewis (British Male)', 'gender': 'male', 'language': 'en'},
+            ],
+            'female': [
+                {'id': 'af_bella', 'name': 'Bella (American Female)', 'gender': 'female', 'language': 'en'},
+                {'id': 'af_sarah', 'name': 'Sarah (American Female)', 'gender': 'female', 'language': 'en'},
+                {'id': 'bf_emma', 'name': 'Emma (British Female)', 'gender': 'female', 'language': 'en'},
+                {'id': 'bf_isabella', 'name': 'Isabella (British Female)', 'gender': 'female', 'language': 'en'},
+            ],
+            'default': []
+        }
+
+        # Hindi voices (MMS-TTS-HIN - single voice only)
+        hindi_voices = {
+            'male': [],
+            'female': [],
+            'default': [
+                {'id': 'hi_default', 'name': 'Hindi Voice (Default)', 'gender': 'default', 'language': 'hi'},
+            ]
+        }
+
+        return jsonify({
+            'english': english_voices,
+            'hindi': hindi_voices
+        }), 200
+    except Exception as e:
+        voice_generator_job.logger.error(f"Error fetching available voices: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@voice_generator_job.app.route('/api/voice/preview', methods=['POST'])
+def preview_voice():
+    """
+    Preview a voice with sample text
+
+    Request body:
+        {
+            "voice": "am_adam",
+            "text": "Sample text to preview"
+        }
+
+    Returns:
+        JSON response with audio URL
+    """
+    try:
+        import tempfile
+        import os
+        from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+        # Extract user context from headers
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        # Get request data
+        data = request.get_json()
+        voice = data.get('voice')
+
+        if not voice:
+            return jsonify({'error': 'Voice ID is required'}), 400
+
+        # Determine language from voice ID
+        # hi_default, hi_male, hi_female all map to Hindi
+        language = 'hi' if voice.startswith('hi_') else 'en'
+
+        # Use language-appropriate default preview text if not provided
+        default_preview_texts = {
+            'en': 'This is a preview of the selected voice for news narration.',
+            'hi': 'यह समाचार वाचन के लिए चयनित आवाज का पूर्वावलोकन है।'
+        }
+        text = data.get('text', default_preview_texts.get(language, default_preview_texts['en']))
+
+        # Get appropriate model for language
+        if not voice_generator_job.news_audio_service:
+            return jsonify({'error': 'News Audio Service not initialized'}), 500
+
+        model = voice_generator_job.news_audio_service._get_audio_model_for_language(
+            language,
+            customer_id=customer_id
+        )
+
+        # Generate audio using audio generation service
+        result = voice_generator_job.news_audio_service._call_audio_generation_service(
+            text=text,
+            model=model,
+            voice=voice
+        )
+
+        if not result.get('success'):
+            error_msg = result.get('error', 'Failed to generate preview audio')
+
+            # Check if error is due to model not being loaded
+            if 'not loaded' in error_msg.lower():
+                return jsonify({
+                    'error': error_msg,
+                    'model_loading': True,
+                    'message': f'The {model} model is currently loading. This may take a few minutes on first use. Please try again in a moment.'
+                }), 503  # Service Unavailable
+
+            return jsonify({
+                'error': error_msg
+            }), 500
+
+        # The audio generation service returns audio_url which is a relative path
+        # Return a URL that the frontend can access via the API proxy
+        audio_url = result.get('audio_url')
+        if not audio_url:
+            error_msg = 'No audio URL returned from generation service'
+            return jsonify({'error': error_msg}), 500
+
+        # Return a URL that points to our proxy endpoint
+        # The audio_url is like "/temp/kokoro_1234567890_abc.wav"
+        # Extract just the filename
+        import os
+        filename = os.path.basename(audio_url)
+
+        # Return URL that will be proxied through API server
+        proxy_url = f'/api/voice/preview/audio/{filename}'
+
+        return jsonify({
+            'audioUrl': proxy_url,
+            'voice': voice,
+            'model': model,
+            'language': language
+        }), 200
+
+    except Exception as e:
+        voice_generator_job.logger.error(f"❌ Error previewing voice: {str(e)}")
+        import traceback
+        voice_generator_job.logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@voice_generator_job.app.route('/api/voice/preview/audio/<filename>', methods=['GET'])
+def serve_preview_audio(filename):
+    """
+    Proxy audio file from audio-generation service
+
+    Args:
+        filename: Audio filename to serve
+
+    Returns:
+        Audio file stream
+    """
+    try:
+        import requests
+        from flask import Response
+
+        # Try multiple locations for the audio file
+        # Kokoro files are in /temp/, MMS files are in root /
+        possible_urls = [
+            f'http://audio-generation-factory:3000/temp/{filename}',  # Kokoro location
+            f'http://audio-generation-factory:3000/{filename}'         # MMS location
+        ]
+
+        response = None
+        for audio_url in possible_urls:
+            try:
+                response = requests.get(audio_url, stream=True, timeout=30)
+                if response.status_code == 200:
+                    break
+            except:
+                continue
+
+        if not response or response.status_code != 200:
+            voice_generator_job.logger.error(f"❌ Audio file not found at any location: {filename}")
+            return jsonify({
+                'error': 'Audio file not found'
+            }), 404
+
+        # Return the audio stream
+        return Response(
+            response.iter_content(chunk_size=8192),
+            status=response.status_code,
+            content_type='audio/wav',
+            headers={
+                'Content-Disposition': f'inline; filename="{filename}"'
+            }
+        )
+
+    except Exception as e:
+        voice_generator_job.logger.error(f"❌ Error serving preview audio: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+
 
 
 if __name__ == '__main__':

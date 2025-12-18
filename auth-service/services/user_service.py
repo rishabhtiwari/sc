@@ -51,18 +51,17 @@ class UserService:
             
             # Determine customer_id
             customer_id = data.get('customer_id', creator_customer_id)
-            
-            # Check if email already exists for this customer
+
+            # Check if email already exists globally (across all customers)
             existing = self.db.users.find_one({
-                'customer_id': customer_id,
                 'email': data['email'],
                 'is_deleted': {'$ne': True}
             })
-            
+
             if existing:
                 return {
                     'success': False,
-                    'error': 'Email already exists for this customer'
+                    'error': 'Email already exists'
                 }
             
             # Verify role exists
@@ -181,10 +180,13 @@ class UserService:
             for user in users:
                 if '_id' in user:
                     user['_id'] = str(user['_id'])
-                
+
                 # Get role name
                 role = self.db.roles.find_one({'role_id': user.get('role_id')})
                 user['role_name'] = role.get('role_name') if role else None
+
+                # Add is_active computed field based on status
+                user['is_active'] = user.get('status') == 'active'
             
             return {
                 'success': True,
@@ -229,11 +231,14 @@ class UserService:
             # Convert ObjectId to string
             if '_id' in user:
                 user['_id'] = str(user['_id'])
-            
+
             # Get role name
             role = self.db.roles.find_one({'role_id': user.get('role_id')})
             user['role_name'] = role.get('role_name') if role else None
-            
+
+            # Add is_active computed field based on status
+            user['is_active'] = user.get('status') == 'active'
+
             return {
                 'success': True,
                 'user': user

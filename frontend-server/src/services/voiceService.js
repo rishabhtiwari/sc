@@ -33,6 +33,15 @@ export const getAvailableVoices = async () => {
 };
 
 /**
+ * Get available TTS models with their voices
+ * @returns {Promise} API response
+ */
+export const getAvailableModels = async () => {
+  const response = await api.get('/voice/available-models');
+  return response.data;
+};
+
+/**
  * Get voice configuration
  * @returns {Promise} API response
  */
@@ -56,13 +65,25 @@ export const updateConfig = async (data) => {
  * @param {string} voiceId - Voice ID
  * @param {string} text - Sample text
  * @returns {Promise<string>} Audio URL
+ * @throws {Error} Error with model_loading flag if model is still loading
  */
 export const preview = async (voiceId, text) => {
-  const response = await api.post('/voice/preview', {
-    voice: voiceId,
-    text: text,
-  });
-  return response.data.audioUrl;
+  try {
+    const response = await api.post('/voice/preview', {
+      voice: voiceId,
+      text: text,
+    });
+    return response.data.audioUrl;
+  } catch (error) {
+    // Check if error is due to model loading
+    if (error.response?.status === 503 && error.response?.data?.model_loading) {
+      const err = new Error(error.response.data.message || 'Model is loading, please try again');
+      err.model_loading = true;
+      err.model = error.response.data.model;
+      throw err;
+    }
+    throw error;
+  }
 };
 
 /**
@@ -93,6 +114,7 @@ export default {
   getAudioStats,
   generateAudio,
   getAvailableVoices,
+  getAvailableModels,
   getConfig,
   updateConfig,
   preview,

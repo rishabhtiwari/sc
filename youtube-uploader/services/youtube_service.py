@@ -3,6 +3,7 @@ YouTube Upload Service
 Handles video uploads to YouTube using YouTube Data API v3
 """
 import os
+import sys
 import logging
 import json
 import socket
@@ -17,6 +18,10 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
+
+# Add parent directory to path for common utilities
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common.utils.multi_tenant_db import build_multi_tenant_query
 
 
 class YouTubeService:
@@ -36,12 +41,13 @@ class YouTubeService:
         self.youtube = None
         self._pending_flow = None
         
-    def authenticate(self, credential_id='default-youtube-credential') -> bool:
+    def authenticate(self, credential_id='default-youtube-credential', customer_id=None) -> bool:
         """
         Authenticate with YouTube API using MongoDB credentials
 
         Args:
             credential_id: ID of the credential to use from MongoDB
+            customer_id: Customer ID for multi-tenancy (optional)
 
         Returns:
             bool: True if authentication successful, False otherwise
@@ -51,11 +57,13 @@ class YouTubeService:
 
             # Try to load credentials from MongoDB if database is available
             if self.db is not None:
-                self.logger.info(f"Loading YouTube credentials from MongoDB (credential_id: {credential_id})...")
+                self.logger.info(f"Loading YouTube credentials from MongoDB (credential_id: {credential_id}, customer_id: {customer_id})...")
                 credentials_collection = self.db['youtube_credentials']
 
-                # Get credential from database
-                credential_doc = credentials_collection.find_one({'credential_id': credential_id})
+                # Get credential from database with multi-tenant filter
+                base_query = {'credential_id': credential_id}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                credential_doc = credentials_collection.find_one(query)
 
                 if credential_doc and credential_doc.get('is_authenticated'):
                     # Build credentials object from MongoDB data
@@ -110,8 +118,11 @@ class YouTubeService:
                                 'token_expiry': credentials.expiry.isoformat() if credentials.expiry else None,
                                 'updated_at': datetime.now()
                             }
+                            # Use multi-tenant query for update
+                            base_query = {'credential_id': credential_id}
+                            query = build_multi_tenant_query(base_query, customer_id=customer_id)
                             credentials_collection.update_one(
-                                {'credential_id': credential_id},
+                                query,
                                 {'$set': update_data}
                             )
                             self.logger.info("✅ Updated refreshed token in MongoDB")
@@ -150,7 +161,9 @@ class YouTubeService:
         tags: Optional[list] = None,
         category_id: Optional[str] = None,
         privacy_status: Optional[str] = None,
-        thumbnail_path: Optional[str] = None
+        thumbnail_path: Optional[str] = None,
+        credential_id: str = 'default-youtube-credential',
+        customer_id: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Upload a video to YouTube
@@ -163,13 +176,15 @@ class YouTubeService:
             category_id: YouTube category ID
             privacy_status: Privacy status (public, private, unlisted)
             thumbnail_path: Path to thumbnail image file (optional)
+            credential_id: ID of the credential to use from MongoDB
+            customer_id: Customer ID for multi-tenancy (optional)
 
         Returns:
             Dictionary with upload result or None if failed
         """
         try:
             if not self.youtube:
-                if not self.authenticate():
+                if not self.authenticate(credential_id=credential_id, customer_id=customer_id):
                     return None
             
             # Validate video file exists

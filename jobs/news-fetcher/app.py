@@ -7,9 +7,8 @@ Fetches news from various seed URLs and processes them using factory pattern par
 import os
 import sys
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from flask import jsonify, request, render_template, send_from_directory
-from typing import List
 
 # Add parent directories to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,6 +19,7 @@ from services.news_fetcher_service import NewsFetcherService
 from services.news_enrichment_service import NewsEnrichmentService
 from services.news_query_service import NewsQueryService
 from services.enrichment_config_service import EnrichmentConfigService
+from common.utils.multi_tenant_db import extract_user_context_from_headers
 
 class NewsFetcherJob(BaseJob):
     """
@@ -45,6 +45,15 @@ class NewsFetcherJob(BaseJob):
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         return 'news_fetch'
+
+    def is_multi_tenant_job(self) -> bool:
+        """
+        News fetcher is a multi-tenant job - runs separately for each customer
+
+        Returns:
+            True to enable per-customer job execution
+        """
+        return True
 
     def get_parallel_tasks(self) -> List[Dict[str, Any]]:
         """
@@ -89,13 +98,18 @@ class NewsFetcherJob(BaseJob):
         Args:
             job_id: Job instance ID for tracking
             is_on_demand: True if this is a manual/on-demand job, False for scheduled jobs
-            **kwargs: Additional job parameters
+            **kwargs: Additional job parameters (customer_id, user_id)
 
         Returns:
             Job execution results
         """
         try:
-            self.logger.info(f"🚀 Starting news fetch job {job_id} with parallel tasks")
+            # Extract customer_id and user_id from kwargs
+            customer_id = kwargs.get('customer_id')
+            user_id = kwargs.get('user_id')
+
+            customer_info = f" for customer {customer_id}" if customer_id else ""
+            self.logger.info(f"🚀 Starting news fetch job {job_id}{customer_info} with parallel tasks")
 
             # Check if job was cancelled before starting
             if self.job_instance_service.is_job_cancelled(job_id):
@@ -104,8 +118,13 @@ class NewsFetcherJob(BaseJob):
 
             start_time = datetime.utcnow()
 
-            # Execute all parallel tasks
-            task_results = self.run_parallel_tasks(job_id, is_on_demand=is_on_demand, **kwargs)
+            # Execute all parallel tasks with customer_id and user_id
+            # Note: customer_id and user_id are already in kwargs, don't pass them again
+            task_results = self.run_parallel_tasks(
+                job_id,
+                is_on_demand=is_on_demand,
+                **kwargs
+            )
 
             # Check if job was cancelled during execution
             if self.job_instance_service.is_job_cancelled(job_id):
@@ -206,15 +225,18 @@ class NewsFetcherJob(BaseJob):
                 'execution_time_seconds': 0
             }
 
-    def get_seed_url_status(self) -> Dict[str, Any]:
+    def get_seed_url_status(self, customer_id: str = None) -> Dict[str, Any]:
         """
         Get status of all seed URLs
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with seed URL status information
         """
         try:
-            status_list = self.news_fetcher_service.get_seed_url_status()
+            status_list = self.news_fetcher_service.get_seed_url_status(customer_id=customer_id)
             return {
                 'status': 'success',
                 'seed_urls': status_list,
@@ -228,12 +250,14 @@ class NewsFetcherJob(BaseJob):
                 'total_seed_urls': 0
             }
 
-    def add_seed_url(self, seed_url_data: Dict[str, Any]) -> Dict[str, Any]:
+    def add_seed_url(self, seed_url_data: Dict[str, Any], customer_id: str = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Add a new seed URL to the database
 
         Args:
             seed_url_data: Dictionary containing seed URL information
+            customer_id: Customer ID for multi-tenant support (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: Optional user ID for audit tracking
 
         Returns:
             Dictionary with operation result
@@ -241,6 +265,7 @@ class NewsFetcherJob(BaseJob):
         try:
             from datetime import datetime
             import uuid
+            from common.utils.multi_tenant_db import prepare_insert_document
 
             # Auto-generate partner_id if not provided
             if 'partner_id' not in seed_url_data or not seed_url_data['partner_id']:
@@ -264,16 +289,58 @@ class NewsFetcherJob(BaseJob):
 
             # Build parameters with category support
             parameters = seed_url_data.get('parameters', {})
+            url_template = seed_url_data['url']
+
+            # Auto-add parameter definitions based on URL placeholders
+            # UI can send complete parameters, or we auto-fill missing ones
+
             if 'category' in parameters:
                 # Update the default value in parameters to support array
                 parameters['category']['default'] = category
-            else:
-                # Add category parameter if not present
+            elif '{category}' in url_template:
+                # Add category parameter if URL has placeholder
                 parameters['category'] = {
                     'type': 'string' if isinstance(category, str) else 'array',
                     'required': False,
                     'description': 'News category or categories',
                     'default': category
+                }
+
+            # Auto-add api_key parameter if URL has placeholder and not provided by UI
+            if 'api_key' not in parameters and '{api_key}' in url_template:
+                # Use config API key as fallback only if not provided
+                parameters['api_key'] = {
+                    'type': 'string',
+                    'required': True,
+                    'description': 'API key for the news provider',
+                    'default': self.config.API_KEY
+                }
+
+            # Auto-add lang parameter if URL has placeholder and not provided
+            if 'lang' not in parameters and '{lang}' in url_template:
+                parameters['lang'] = {
+                    'type': 'string',
+                    'required': False,
+                    'description': 'Language code',
+                    'default': seed_url_data.get('language', 'en')
+                }
+
+            # Auto-add country parameter if URL has placeholder and not provided
+            if 'country' not in parameters and '{country}' in url_template:
+                parameters['country'] = {
+                    'type': 'string',
+                    'required': False,
+                    'description': 'Country code',
+                    'default': seed_url_data.get('country', 'in')
+                }
+
+            # Auto-add max parameter if URL has placeholder and not provided
+            if 'max' not in parameters and '{max}' in url_template:
+                parameters['max'] = {
+                    'type': 'integer',
+                    'required': False,
+                    'description': 'Maximum number of articles to fetch',
+                    'default': getattr(self.config, 'MAX_ARTICLES_PER_FETCH', 100)
                 }
 
             # Set default values
@@ -333,6 +400,9 @@ class NewsFetcherJob(BaseJob):
                     'error': f'Seed URL with same URL and API parameters already exists'
                 }
 
+            # Add multi-tenant fields (customer_id, created_by, updated_by, timestamps)
+            prepare_insert_document(seed_url, customer_id=customer_id, user_id=user_id)
+
             # Insert the seed URL
             result = self.news_fetcher_service.seed_urls_collection.insert_one(seed_url)
 
@@ -351,15 +421,24 @@ class NewsFetcherJob(BaseJob):
                 'error': str(e)
             }
 
-    def get_all_seed_urls(self) -> Dict[str, Any]:
+    def get_all_seed_urls(self, customer_id: str = None) -> Dict[str, Any]:
         """
         Get all seed URLs from database
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with all seed URLs
         """
         try:
-            seed_urls = list(self.news_fetcher_service.seed_urls_collection.find())
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build query with multi-tenant filter
+            base_query = {}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            seed_urls = list(self.news_fetcher_service.seed_urls_collection.find(query))
 
             # Convert ObjectId to string for JSON serialization
             for seed_url in seed_urls:
@@ -384,20 +463,25 @@ class NewsFetcherJob(BaseJob):
                 'total': 0
             }
 
-    def get_seed_url(self, partner_id: str) -> Dict[str, Any]:
+    def get_seed_url(self, partner_id: str, customer_id: str = None) -> Dict[str, Any]:
         """
         Get a single seed URL by partner_id
 
         Args:
             partner_id: Partner ID of the seed URL to retrieve
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with seed URL data
         """
         try:
-            seed_url = self.news_fetcher_service.seed_urls_collection.find_one({
-                'partner_id': partner_id
-            })
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build query with multi-tenant filter
+            base_query = {'partner_id': partner_id}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
 
             if not seed_url:
                 return {
@@ -425,18 +509,22 @@ class NewsFetcherJob(BaseJob):
                 'error': str(e)
             }
 
-    def update_seed_url(self, partner_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+    def update_seed_url(self, partner_id: str, update_data: Dict[str, Any], customer_id: str = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Update an existing seed URL by partner_id
 
         Args:
             partner_id: Partner ID of the seed URL to update
             update_data: Dictionary containing fields to update
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: Optional user ID for audit tracking
 
         Returns:
             Dictionary with operation result
         """
         try:
+            from common.utils.multi_tenant_db import build_multi_tenant_query, prepare_update_document
+
             # Prepare update data
             update_fields = {}
 
@@ -460,9 +548,9 @@ class NewsFetcherJob(BaseJob):
 
                 # Update parameters.category.default to match
                 # First, get the existing seed URL to preserve other parameters
-                existing_seed_url = self.news_fetcher_service.seed_urls_collection.find_one({
-                    'partner_id': partner_id
-                })
+                base_query = {'partner_id': partner_id}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                existing_seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
 
                 if existing_seed_url:
                     parameters = existing_seed_url.get('parameters', {})
@@ -492,9 +580,15 @@ class NewsFetcherJob(BaseJob):
             # Add updated timestamp
             update_fields['updated_at'] = datetime.utcnow()
 
-            # Update the document
+            # Add audit tracking (updated_by, updated_at)
+            prepare_update_document(update_fields, user_id=user_id or 'system')
+
+            # Update the document with customer_id filter
+            base_query = {'partner_id': partner_id}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
             result = self.news_fetcher_service.seed_urls_collection.update_one(
-                {'partner_id': partner_id},
+                query,
                 {'$set': update_fields}
             )
 
@@ -516,20 +610,25 @@ class NewsFetcherJob(BaseJob):
                 'error': str(e)
             }
 
-    def delete_seed_url(self, partner_id: str) -> Dict[str, Any]:
+    def delete_seed_url(self, partner_id: str, customer_id: str = None) -> Dict[str, Any]:
         """
         Delete a seed URL by partner_id
 
         Args:
             partner_id: Partner ID of the seed URL to delete
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dictionary with operation result
         """
         try:
-            result = self.news_fetcher_service.seed_urls_collection.delete_one({
-                'partner_id': partner_id
-            })
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build query with multi-tenant filter
+            base_query = {'partner_id': partner_id}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            result = self.news_fetcher_service.seed_urls_collection.delete_one(query)
 
             if result.deleted_count > 0:
                 return {
@@ -571,7 +670,11 @@ def serve_static(filename):
 def get_seed_urls_status():
     """Get status of all seed URLs"""
     try:
-        result = news_fetcher_job.get_seed_url_status()
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.get_seed_url_status(customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -583,7 +686,11 @@ def get_seed_urls_status():
 def get_seed_urls():
     """Get all seed URLs"""
     try:
-        result = news_fetcher_job.get_all_seed_urls()
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.get_all_seed_urls(customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -595,6 +702,11 @@ def get_seed_urls():
 def add_seed_url():
     """Add a new seed URL for news fetching"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.get_json()
         if not data:
             return jsonify({
@@ -611,7 +723,7 @@ def add_seed_url():
                     'error': f'Missing required field: {field}'
                 }), 400
 
-        result = news_fetcher_job.add_seed_url(data)
+        result = news_fetcher_job.add_seed_url(data, customer_id=customer_id, user_id=user_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -623,7 +735,11 @@ def add_seed_url():
 def get_seed_url(partner_id):
     """Get a single seed URL by partner_id"""
     try:
-        result = news_fetcher_job.get_seed_url(partner_id)
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.get_seed_url(partner_id, customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -635,6 +751,11 @@ def get_seed_url(partner_id):
 def update_seed_url(partner_id):
     """Update an existing seed URL by partner_id"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.get_json()
         if not data:
             return jsonify({
@@ -642,7 +763,7 @@ def update_seed_url(partner_id):
                 'error': 'No data provided'
             }), 400
 
-        result = news_fetcher_job.update_seed_url(partner_id, data)
+        result = news_fetcher_job.update_seed_url(partner_id, data, customer_id=customer_id, user_id=user_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -654,7 +775,11 @@ def update_seed_url(partner_id):
 def delete_seed_url(partner_id):
     """Delete a seed URL by partner_id"""
     try:
-        result = news_fetcher_job.delete_seed_url(partner_id)
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.delete_seed_url(partner_id, customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -662,11 +787,50 @@ def delete_seed_url(partner_id):
             'error': str(e)
         }), 500
 
+@app.route('/seed-urls/config/supported-categories', methods=['GET'])
+def get_supported_categories():
+    """
+    Get list of supported categories for seed URL configuration
+
+    Returns:
+        JSON response with supported categories for GNews API
+    """
+    try:
+        # Static list of supported categories for GNews API
+        # Reference: https://gnews.io/docs/v4#top-headlines-endpoint
+        supported_categories = [
+            'general',
+            'world',
+            'nation',
+            'business',
+            'technology',
+            'entertainment',
+            'sports',
+            'science',
+            'health'
+        ]
+
+        return jsonify({
+            'status': 'success',
+            'categories': supported_categories,
+            'total': len(supported_categories)
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'categories': []
+        }), 500
+
 @app.route('/enrichment/status', methods=['GET'])
 def get_enrichment_status():
     """Get news enrichment status and statistics"""
     try:
-        result = news_fetcher_job.news_enrichment_service.get_enrichment_status()
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.news_enrichment_service.get_enrichment_status(customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -742,22 +906,29 @@ def get_news():
         JSON response with news articles and pagination info
     """
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         # Get query parameters
-        category = request.args.get('category', Config.DEFAULT_FILTER_CATEGORY)
-        language = request.args.get('language', Config.DEFAULT_FILTER_LANGUAGE)
-        country = request.args.get('country', Config.DEFAULT_FILTER_COUNTRY)
+        # Use None as default to allow "All Categories/Languages/Countries" selection
+        # Don't use Config defaults here - let the frontend control filtering
+        category = request.args.get('category', None)
+        language = request.args.get('language', None)
+        country = request.args.get('country', None)
         status = request.args.get('status')
         page = request.args.get('page', 1, type=int)
         page_size = request.args.get('page_size', type=int)
 
-        # Query news using the news query service
+        # Query news using the news query service with customer_id filter
         result = news_fetcher_job.news_query_service.get_news_by_category(
             category=category,
             language=language,
             country=country,
             status=status,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            customer_id=customer_id
         )
 
         return jsonify(result)
@@ -788,7 +959,11 @@ def get_news_categories():
         JSON response with available categories and their counts
     """
     try:
-        result = news_fetcher_job.news_query_service.get_available_categories()
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.news_query_service.get_available_categories(customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -813,6 +988,11 @@ def update_news_article(article_id):
         JSON response with update result
     """
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.get_json()
         if not data:
             return jsonify({
@@ -820,7 +1000,9 @@ def update_news_article(article_id):
                 'error': 'No data provided'
             }), 400
 
-        result = news_fetcher_job.news_query_service.update_article(article_id, data)
+        result = news_fetcher_job.news_query_service.update_article(
+            article_id, data, customer_id=customer_id, user_id=user_id
+        )
 
         if result['status'] == 'success':
             return jsonify(result), 200
@@ -842,7 +1024,11 @@ def get_news_filters():
         JSON response with available languages and countries and their counts
     """
     try:
-        result = news_fetcher_job.news_query_service.get_available_filters()
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        result = news_fetcher_job.news_query_service.get_available_filters(customer_id=customer_id)
         return jsonify(result)
     except Exception as e:
         return jsonify({
@@ -862,37 +1048,55 @@ def get_news_stats():
     """
     try:
         from config.settings import ArticleStatus
+        from common.utils.multi_tenant_db import build_multi_tenant_query
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        news_fetcher_job.logger.info(f"📊 GET /api/news/stats - customer_id: {customer_id}")
 
         # Get MongoDB collection
         news_collection = news_fetcher_job.news_enrichment_service.news_collection
 
+        # Build base query with customer filter
+        base_query = {}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        news_fetcher_job.logger.info(f"📊 Query filter: {query}")
+
         # Count total articles
-        total = news_collection.count_documents({})
+        total = news_collection.count_documents(query)
 
         # Count articles with audio (have audio_path)
-        with_audio = news_collection.count_documents({
+        audio_query = build_multi_tenant_query({
             'audio_path': {'$exists': True, '$ne': None, '$ne': ''}
-        })
+        }, customer_id=customer_id)
+        with_audio = news_collection.count_documents(audio_query)
 
         # Count articles with video (have video_path)
-        with_video = news_collection.count_documents({
+        video_query = build_multi_tenant_query({
             'video_path': {'$exists': True, '$ne': None, '$ne': ''}
-        })
+        }, customer_id=customer_id)
+        with_video = news_collection.count_documents(video_query)
 
         # Count uploaded articles (have youtube_video_id)
-        uploaded = news_collection.count_documents({
+        uploaded_query = build_multi_tenant_query({
             'youtube_video_id': {'$exists': True, '$ne': None, '$ne': ''}
-        })
+        }, customer_id=customer_id)
+        uploaded = news_collection.count_documents(uploaded_query)
 
         # Count processing articles
-        processing = news_collection.count_documents({
+        processing_query = build_multi_tenant_query({
             'status': ArticleStatus.PROGRESS.value
-        })
+        }, customer_id=customer_id)
+        processing = news_collection.count_documents(processing_query)
 
         # Count failed articles
-        failed = news_collection.count_documents({
+        failed_query = build_multi_tenant_query({
             'status': ArticleStatus.FAILED.value
-        })
+        }, customer_id=customer_id)
+        failed = news_collection.count_documents(failed_query)
 
         return jsonify({
             'total': total,

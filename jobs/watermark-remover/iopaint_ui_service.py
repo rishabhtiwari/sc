@@ -6,6 +6,7 @@ Provides a web UI for manually removing watermarks from news images
 
 import os
 import io
+import sys
 import logging
 import base64
 import time
@@ -18,6 +19,16 @@ import cv2
 from pymongo import MongoClient
 from bson import ObjectId
 import requests
+from typing import Optional, Dict, Any
+
+# Add current directory to path for common utilities
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_update_document,
+    extract_user_context_from_headers
+)
 
 # Configure logging
 logging.basicConfig(
@@ -901,16 +912,24 @@ def index():
 def get_stats():
     """Get statistics about images (only counts images with valid short_summary)"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         collection = get_mongo_client()
+
+        # Build base match query with multi-tenant filter
+        base_match = {
+            'image': {'$ne': None},
+            'short_summary': {'$ne': None, '$ne': ''}
+        }
+        match_query = build_multi_tenant_query(base_match, customer_id=customer_id)
 
         # Count only images that have valid short_summary (min 30 words)
         # Use aggregation to filter by word count
         pipeline_total = [
             {
-                '$match': {
-                    'image': {'$ne': None},
-                    'short_summary': {'$ne': None, '$ne': ''}
-                }
+                '$match': match_query
             },
             {
                 '$addFields': {
@@ -934,13 +953,17 @@ def get_stats():
             }
         ]
 
+        # Build match query for cleaned images
+        cleaned_match = {
+            'image': {'$ne': None},
+            'clean_image': {'$ne': None},
+            'short_summary': {'$ne': None, '$ne': ''}
+        }
+        cleaned_match_query = build_multi_tenant_query(cleaned_match, customer_id=customer_id)
+
         pipeline_cleaned = [
             {
-                '$match': {
-                    'image': {'$ne': None},
-                    'clean_image': {'$ne': None},
-                    'short_summary': {'$ne': None, '$ne': ''}
-                }
+                '$match': cleaned_match_query
             },
             {
                 '$addFields': {
@@ -963,15 +986,19 @@ def get_stats():
                 '$count': 'total'
             }
         ]
+
+        # Build match query for skipped images
+        skipped_match = {
+            'image': {'$ne': None},
+            'watermark_skipped': True,
+            'short_summary': {'$ne': None, '$ne': ''}
+        }
+        skipped_match_query = build_multi_tenant_query(skipped_match, customer_id=customer_id)
 
         # Count skipped images (with watermark_skipped: true)
         pipeline_skipped = [
             {
-                '$match': {
-                    'image': {'$ne': None},
-                    'watermark_skipped': True,
-                    'short_summary': {'$ne': None, '$ne': ''}
-                }
+                '$match': skipped_match_query
             },
             {
                 '$addFields': {
@@ -1019,6 +1046,10 @@ def get_stats():
 def list_images():
     """List all images with pagination and filtering"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         collection = get_mongo_client()
 
         # Get query parameters
@@ -1043,6 +1074,9 @@ def list_images():
             match_criteria['clean_image'] = {'$ne': None}
         elif status_filter == 'skipped':
             match_criteria['watermark_skipped'] = True
+
+        # Apply multi-tenant filter
+        match_criteria = build_multi_tenant_query(match_criteria, customer_id=customer_id)
 
         # Build aggregation pipeline
         pipeline = [
@@ -1133,6 +1167,10 @@ def list_images():
 def get_next_image():
     """Get next image that needs cleaning (sorted by most recent first)"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         collection = get_mongo_client()
 
         # Get optional exclude_id parameter to skip current image
@@ -1163,6 +1201,9 @@ def get_next_image():
                 logger.info(f"🔍 Excluding current image from query: {exclude_id}")
             except Exception as e:
                 logger.warning(f"⚠️ Invalid exclude_id format: {exclude_id}, error: {e}")
+
+        # Apply multi-tenant filter
+        match_criteria = build_multi_tenant_query(match_criteria, customer_id=customer_id)
 
         # Use aggregation pipeline to filter by word count
         pipeline = [
@@ -1220,10 +1261,16 @@ def get_next_image():
 def proxy_image(doc_id):
     """Proxy external images to avoid CORS issues"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         collection = get_mongo_client()
 
-        # Get document
-        doc = collection.find_one({'_id': ObjectId(doc_id)})
+        # Get document with multi-tenant filter
+        base_query = {'_id': ObjectId(doc_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        doc = collection.find_one(query)
         if not doc or 'image' not in doc:
             return jsonify({'error': 'Image not found'}), 404
 
@@ -1346,6 +1393,11 @@ def process_image():
 def save_image():
     """Save cleaned image and update MongoDB"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.json
         doc_id = data['doc_id']
         image_data = data['image_data']
@@ -1373,17 +1425,20 @@ def save_image():
             logger.error(f"❌ Failed to save image to {filepath}: {save_error}")
             raise
 
-        # Update MongoDB
+        # Update MongoDB with multi-tenant filter
         collection = get_mongo_client()
-        collection.update_one(
-            {'_id': ObjectId(doc_id)},
-            {
-                '$set': {
-                    'clean_image': filepath,
-                    'clean_image_updated_at': datetime.utcnow()
-                }
-            }
-        )
+
+        # Prepare update data with audit tracking
+        update_data = {
+            'clean_image': filepath,
+            'clean_image_updated_at': datetime.utcnow()
+        }
+        prepare_update_document(update_data, user_id=user_id or 'system')
+
+        base_query = {'_id': ObjectId(doc_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        collection.update_one(query, {'$set': update_data})
 
         logger.info(f"✅ Saved cleaned image and updated MongoDB: {filepath}")
 
@@ -1400,6 +1455,11 @@ def save_image():
 def replace_image():
     """Replace the original image URL for an article"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.json
         doc_id = data.get('doc_id')
         new_image_url = data.get('image_url')
@@ -1412,16 +1472,18 @@ def replace_image():
 
         collection = get_mongo_client()
 
-        # Update document with new image URL
-        result = collection.update_one(
-            {'_id': ObjectId(doc_id)},
-            {
-                '$set': {
-                    'image': new_image_url,
-                    'image_updated_at': datetime.utcnow()
-                }
-            }
-        )
+        # Prepare update data with audit tracking
+        update_data = {
+            'image': new_image_url,
+            'image_updated_at': datetime.utcnow()
+        }
+        prepare_update_document(update_data, user_id=user_id or 'system')
+
+        # Update document with new image URL and multi-tenant filter
+        base_query = {'_id': ObjectId(doc_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        result = collection.update_one(query, {'$set': update_data})
 
         if result.matched_count == 0:
             return jsonify({'error': 'Document not found'}), 404
@@ -1441,6 +1503,11 @@ def replace_image():
 def skip_image():
     """Skip an image (mark it as skipped so it won't be shown again)"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.json
         doc_id = data.get('doc_id')
 
@@ -1449,16 +1516,18 @@ def skip_image():
 
         collection = get_mongo_client()
 
-        # Update document to mark as skipped
-        result = collection.update_one(
-            {'_id': ObjectId(doc_id)},
-            {
-                '$set': {
-                    'watermark_skipped': True,
-                    'watermark_skipped_at': datetime.now()
-                }
-            }
-        )
+        # Prepare update data with audit tracking
+        update_data = {
+            'watermark_skipped': True,
+            'watermark_skipped_at': datetime.now()
+        }
+        prepare_update_document(update_data, user_id=user_id or 'system')
+
+        # Update document to mark as skipped with multi-tenant filter
+        base_query = {'_id': ObjectId(doc_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+        result = collection.update_one(query, {'$set': update_data})
 
         if result.matched_count == 0:
             return jsonify({'error': 'Document not found'}), 404
@@ -1475,10 +1544,16 @@ def skip_image():
 def get_cleaned_image(doc_id):
     """Get cleaned image for a news article by document ID"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         collection = get_mongo_client()
 
-        # Get document
-        doc = collection.find_one({'_id': ObjectId(doc_id)})
+        # Get document with multi-tenant filter
+        base_query = {'_id': ObjectId(doc_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        doc = collection.find_one(query)
         if not doc:
             return jsonify({'error': 'Document not found'}), 404
 

@@ -30,14 +30,20 @@ class NewsEnrichmentService:
     def enrich_news_articles(self, job_id: str, **kwargs) -> Dict[str, Any]:
         """
         Main enrichment task - processes articles with status='progress'
-        
+
         Args:
             job_id: Job identifier for tracking
-            **kwargs: Additional parameters
-            
+            **kwargs: Additional parameters (customer_id, user_id)
+
         Returns:
             Dict with enrichment results
         """
+        from common.utils.multi_tenant_db import build_multi_tenant_query
+
+        # Extract customer_id and user_id from kwargs
+        customer_id = kwargs.get('customer_id')
+        user_id = kwargs.get('user_id')
+
         results = {
             'job_id': job_id,
             'total_articles_found': 0,
@@ -48,15 +54,20 @@ class NewsEnrichmentService:
         }
 
         try:
-            # Step 1: Fetch all articles with status='progress', sorted by newest first
-            articles = list(self.news_collection.find({
+            # Step 1: Fetch all articles with status='progress' for this customer, sorted by newest first
+            base_query = {
                 'status': ArticleStatus.PROGRESS.value,
                 '$or': [
                     {'short_summary': {'$exists': False}},
                     {'short_summary': ''},
                     {'short_summary': None}
                 ]
-            }).sort('publishedAt', -1))  # Sort by publishedAt descending (newest first)
+            }
+
+            # Add customer_id filter for multi-tenancy
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            articles = list(self.news_collection.find(query).sort('publishedAt', -1))  # Sort by publishedAt descending (newest first)
 
             results['total_articles_found'] = len(articles)
             self.logger.info(f"📰 Found {len(articles)} articles to enrich for job {job_id} (processing newest first)")
@@ -91,8 +102,11 @@ class NewsEnrichmentService:
 
                     if summary:
                         # Step 5: Store summary in short_summary field
+                        # Use customer_id filter to ensure we only update articles for this customer
+                        update_query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
+
                         update_result = self.news_collection.update_one(
-                            {'id': article_id},
+                            update_query,
                             {
                                 '$set': {
                                     'short_summary': summary,
@@ -323,31 +337,45 @@ class NewsEnrichmentService:
             self.logger.error(f"💥 Error cleaning summary: {str(e)}")
             return ""
 
-    def get_enrichment_status(self) -> Dict[str, Any]:
+    def get_enrichment_status(self, customer_id: str = None) -> Dict[str, Any]:
         """
         Get current enrichment status and statistics
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Dict with enrichment statistics
         """
         try:
-            total_articles = self.news_collection.count_documents({})
-            progress_articles = self.news_collection.count_documents({'status': ArticleStatus.PROGRESS.value})
-            completed_articles = self.news_collection.count_documents({'status': ArticleStatus.COMPLETED.value})
+            from common.utils.multi_tenant_db import build_multi_tenant_query
+
+            # Build queries with customer_id filter
+            base_query = {}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            total_articles = self.news_collection.count_documents(query)
+
+            progress_query = build_multi_tenant_query({'status': ArticleStatus.PROGRESS.value}, customer_id=customer_id)
+            progress_articles = self.news_collection.count_documents(progress_query)
+
+            completed_query = build_multi_tenant_query({'status': ArticleStatus.COMPLETED.value}, customer_id=customer_id)
+            completed_articles = self.news_collection.count_documents(completed_query)
 
             # Enriched articles = articles with non-empty short_summary
             # Use $and with $nin to properly check for non-null and non-empty
-            enriched_articles = self.news_collection.count_documents({
+            enriched_query = build_multi_tenant_query({
                 'short_summary': {
                     '$exists': True,
                     '$nin': [None, '']
                 }
-            })
+            }, customer_id=customer_id)
+            enriched_articles = self.news_collection.count_documents(enriched_query)
 
             # Pending enrichment = total - enriched (simpler and more reliable)
             pending_enrichment = total_articles - enriched_articles
 
-            self.logger.info(f"📊 Enrichment stats - Total: {total_articles}, Enriched: {enriched_articles}, Pending: {pending_enrichment}, Progress: {progress_articles}, Completed: {completed_articles}")
+            self.logger.info(f"📊 Enrichment stats (customer_id: {customer_id}) - Total: {total_articles}, Enriched: {enriched_articles}, Pending: {pending_enrichment}, Progress: {progress_articles}, Completed: {completed_articles}")
 
             return {
                 'total_articles': total_articles,

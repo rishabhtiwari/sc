@@ -40,6 +40,7 @@ app.get('/health', (req, res) => {
 });
 
 // Special route for background audio file upload (must come before general API proxy)
+// This proxies to API server (not directly to video-generator) to maintain API Gateway pattern
 app.post('/api/videos/background-audio', upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -47,18 +48,31 @@ app.post('/api/videos/background-audio', upload.single('file'), async (req, res)
         }
 
         const formData = new FormData();
+        // IMPORTANT: Pass the file buffer as a stream with proper filename and content type
         formData.append('file', req.file.buffer, {
             filename: req.file.originalname,
-            contentType: req.file.mimetype
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
         });
 
-        const targetUrl = `${VIDEO_GENERATOR_URL}/background-audio`;
-        console.log(`🔄 Proxying file upload ${req.method} ${req.originalUrl} -> ${targetUrl} (video-generator)`);
+        // IMPORTANT: Proxy to API server (API Gateway), not directly to video-generator
+        const targetUrl = `${API_SERVER_URL}/api/videos/background-audio`;
+        console.log(`🔄 Proxying file upload ${req.method} ${req.originalUrl} -> ${targetUrl} (api-server)`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward Authorization header (CRITICAL for multi-tenant isolation)
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
 
         const response = await axios.post(targetUrl, formData, {
-            headers: {
-                ...formData.getHeaders()
-            },
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
             validateStatus: () => true
         });
 
@@ -72,145 +86,14 @@ app.post('/api/videos/background-audio', upload.single('file'), async (req, res)
     }
 });
 
-// API Proxy Routes - Forward all /api/* requests to appropriate backend
+// API Proxy Routes - Forward ALL /api/* requests to API server (API Gateway pattern)
 // IMPORTANT: This must come BEFORE static file middleware to prevent /api routes from being caught by static handler
+// The API server will handle routing to appropriate backend services with proper JWT middleware
 app.use('/api', async (req, res) => {
     try {
-        // Determine target URL based on endpoint
-        // News-fetcher specific endpoints go directly to news-fetcher service
-        const newsFetcherEndpoints = [
-            '/api/news/seed-urls',
-            '/api/news/enrichment/status',
-            '/api/news/enrichment/config',
-            '/api/news/run'
-        ];
-
-        // IOPaint specific endpoints go directly to IOPaint service
-        const iopaintEndpoints = [
-            '/api/image/stats',
-            '/api/image/images',
-            '/api/image/next',
-            '/api/image/process',
-            '/api/image/save',
-            '/api/image/replace-image',
-            '/api/image/skip',
-            '/api/image/cleaned',
-            '/api/proxy-image',
-            '/api/cleaned-image',
-            '/api/stats',
-            '/api/images',
-            '/api/next-image',
-            '/api/skip'
-        ];
-
-        // YouTube uploader specific endpoints go directly to YouTube uploader service
-        const youtubeEndpoints = [
-            '/api/youtube/stats',
-            '/api/youtube/upload-latest-20',
-            '/api/youtube/upload-config',
-            '/api/youtube/shorts/pending',
-            '/api/youtube/shorts/upload',
-            '/api/youtube/oauth-callback',
-            '/api/youtube/auth/start',
-            '/api/youtube/credentials'
-        ];
-
-        // Voice generator specific endpoints go directly to voice-generator service
-        const voiceEndpoints = [
-            '/api/news/audio/stats',
-            '/api/news/audio/generate',
-            '/api/news/audio/list',
-            '/api/news/audio/serve'
-        ];
-
-        // Video generator specific endpoints go directly to video-generator service
-        const videoEndpoints = [
-            '/api/videos/background-audio',
-            '/api/videos/configs',
-            '/api/videos/merge',
-            '/api/videos/recompute'
-        ];
-
-        let targetUrl;
-        let targetService;
-
-        // Check if this is a news-fetcher specific endpoint
-        const isNewsFetcherEndpoint = newsFetcherEndpoints.some(endpoint =>
-            req.originalUrl.startsWith(endpoint)
-        );
-
-        // Check if this is an IOPaint specific endpoint
-        const isIopaintEndpoint = iopaintEndpoints.some(endpoint =>
-            req.originalUrl.startsWith(endpoint)
-        );
-
-        // Check if this is a YouTube uploader specific endpoint
-        const isYoutubeEndpoint = youtubeEndpoints.some(endpoint =>
-            req.originalUrl.startsWith(endpoint)
-        );
-
-        // Check if this is a voice generator specific endpoint
-        const isVoiceEndpoint = voiceEndpoints.some(endpoint =>
-            req.originalUrl.startsWith(endpoint)
-        );
-
-        // Check if this is a video generator specific endpoint
-        const isVideoEndpoint = videoEndpoints.some(endpoint =>
-            req.originalUrl.startsWith(endpoint)
-        );
-
-        if (isNewsFetcherEndpoint) {
-            // Remove /api/news prefix and forward to news-fetcher service
-            const path = req.originalUrl.replace('/api/news', '');
-            targetUrl = `${NEWS_FETCHER_URL}${path}`;
-            targetService = 'news-fetcher';
-        } else if (isIopaintEndpoint) {
-            // Map /api/image endpoints to IOPaint service endpoints
-            let path = req.originalUrl;
-
-            // Handle specific endpoint mappings
-            if (path.startsWith('/api/proxy-image')) {
-                // Keep /api/proxy-image as-is
-                path = path;
-            } else if (path.startsWith('/api/cleaned-image')) {
-                // Keep /api/cleaned-image as-is
-                path = path;
-            } else if (path.startsWith('/api/stats') ||
-                       path.startsWith('/api/images') ||
-                       path.startsWith('/api/next-image') ||
-                       path.startsWith('/api/skip')) {
-                // Keep direct IOPaint API endpoints as-is
-                path = path;
-            } else if (path.startsWith('/api/image/next')) {
-                path = path.replace('/api/image/next', '/api/next-image');
-            } else if (path.startsWith('/api/image/cleaned/')) {
-                path = path.replace('/api/image/cleaned/', '/api/cleaned-image/');
-            } else {
-                // For other endpoints, just replace /api/image with /api
-                path = path.replace('/api/image', '/api');
-            }
-
-            targetUrl = `${IOPAINT_URL}${path}`;
-            targetService = 'iopaint';
-        } else if (isYoutubeEndpoint) {
-            // Remove /api/youtube prefix and forward to YouTube uploader service
-            const path = req.originalUrl.replace('/api/youtube', '/api');
-            targetUrl = `${YOUTUBE_UPLOADER_URL}${path}`;
-            targetService = 'youtube-uploader';
-        } else if (isVoiceEndpoint) {
-            // Forward to voice-generator service with full path
-            targetUrl = `${VOICE_GENERATOR_URL}${req.originalUrl}`;
-            targetService = 'voice-generator';
-        } else if (isVideoEndpoint) {
-            // Remove /api/videos prefix and forward to video-generator service
-            const path = req.originalUrl.replace('/api/videos', '');
-            targetUrl = `${VIDEO_GENERATOR_URL}${path}`;
-            targetService = 'video-generator';
-        } else {
-            // Forward to API server
-            targetUrl = `${API_SERVER_URL}${req.originalUrl}`;
-            targetService = 'api-server';
-        }
+        // ALL requests go through API server - it acts as the API Gateway
+        const targetUrl = `${API_SERVER_URL}${req.originalUrl}`;
+        const targetService = 'api-server';
 
         console.log(`🔄 Proxying ${req.method} ${req.originalUrl} -> ${targetUrl} (${targetService})`);
 
@@ -221,6 +104,7 @@ app.use('/api', async (req, res) => {
 
         // Check if this is an audio endpoint that returns binary data
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
+                                req.originalUrl.startsWith('/api/voice/preview/audio/') ||
                                 req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 
         // Check if this is a video endpoint that returns binary data
@@ -245,6 +129,14 @@ app.use('/api', async (req, res) => {
         // Add authorization if present
         if (req.headers['authorization']) {
             headers['Authorization'] = req.headers['authorization'];
+        }
+
+        // Forward multi-tenant headers (CRITICAL for data isolation)
+        if (req.headers['x-customer-id']) {
+            headers['X-Customer-ID'] = req.headers['x-customer-id'];
+        }
+        if (req.headers['x-user-id']) {
+            headers['X-User-ID'] = req.headers['x-user-id'];
         }
 
         const axiosConfig = {

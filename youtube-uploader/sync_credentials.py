@@ -4,9 +4,13 @@ Sync YouTube credentials from file system to MongoDB
 """
 import json
 import os
+import sys
 from datetime import datetime
 from pymongo import MongoClient
 import uuid
+
+# Add parent directory to path for common utilities
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # MongoDB connection
 MONGO_URI = os.getenv('MONGO_URI', 'mongodb://ichat_admin:ichat_secure_password_2024@ichat-mongodb:27017/')
@@ -14,8 +18,13 @@ client = MongoClient(MONGO_URI)
 db = client['news']
 credentials_collection = db['youtube_credentials']
 
-def sync_credentials():
-    """Sync credentials from file system to MongoDB"""
+def sync_credentials(customer_id='customer_default'):
+    """
+    Sync credentials from file system to MongoDB
+
+    Args:
+        customer_id: Customer ID to assign to the credential (default: 'customer_default')
+    """
     
     # Load client secrets
     client_secrets_path = '/app/credentials/client_secrets.json'
@@ -69,7 +78,9 @@ def sync_credentials():
         'created_at': datetime.now(),
         'updated_at': datetime.now(),
         'created_by': 'system',
-        'notes': 'Synced from file system credentials'
+        'notes': 'Synced from file system credentials',
+        'customer_id': customer_id,  # Add customer_id for multi-tenancy
+        'is_deleted': False
     }
     
     # Insert or update the credential
@@ -98,5 +109,9 @@ def sync_credentials():
         print(f"   - Has Refresh Token: {bool(inserted.get('refresh_token'))}")
 
 if __name__ == '__main__':
-    sync_credentials()
+    # Get customer_id from command line argument or environment variable
+    import sys
+    customer_id = sys.argv[1] if len(sys.argv) > 1 else os.getenv('CUSTOMER_ID', 'customer_default')
+    print(f"Syncing credentials for customer: {customer_id}")
+    sync_credentials(customer_id=customer_id)
 

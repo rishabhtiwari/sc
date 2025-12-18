@@ -5,16 +5,17 @@
 #
 # This script deploys all news-related services in the correct order:
 # 1. MongoDB (database)
-# 2. News Fetcher Job (fetches news articles)
-# 3. LLM Service (generates summaries)
-# 4. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
-# 5. Voice Generator Job (generates audio from news)
-# 6. IOPaint Watermark Remover (removes watermarks from images)
-# 7. Video Generator Job (creates videos from news + audio)
-# 8. YouTube Uploader (uploads videos to YouTube)
-# 9. Cleanup Job (cleans up old files and MongoDB records)
-# 10. API Server (serves news data to frontend)
-# 11. News Automation Frontend (React UI for managing news automation)
+# 2. Auth Service (authentication and user management)
+# 3. News Fetcher Job (fetches news articles)
+# 4. LLM Service (generates summaries)
+# 5. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
+# 6. Voice Generator Job (generates audio from news)
+# 7. IOPaint Watermark Remover (removes watermarks from images)
+# 8. Video Generator Job (creates videos from news + audio)
+# 9. YouTube Uploader (uploads videos to YouTube)
+# 10. Cleanup Job (cleans up old files and MongoDB records)
+# 11. API Server (serves news data to frontend)
+# 12. News Automation Frontend (React UI for managing news automation)
 #
 # Usage:
 #   ./deploy-news-services.sh [options]
@@ -40,6 +41,7 @@ NC='\033[0m' # No Color
 # Service names
 SERVICES=(
     "ichat-mongodb"
+    "auth-service"
     "job-news-fetcher"
     "llm-service"
     "audio-generation-factory"
@@ -242,57 +244,62 @@ deploy_all_services() {
     echo ""
     
     # 1. MongoDB
-    print_header "Step 1/11: MongoDB Database"
+    print_header "Step 1/12: MongoDB Database"
     deploy_service "ichat-mongodb" "$build_flag"
     # wait_for_health "ichat-mongodb" 60
 
-    # 2. News Fetcher
-    print_header "Step 2/11: News Fetcher Job"
+    # 2. Auth Service
+    print_header "Step 2/12: Auth Service (Authentication & User Management)"
+    deploy_service "auth-service" "$build_flag"
+    # wait_for_health "ichat-auth-service" 60
+
+    # 3. News Fetcher
+    print_header "Step 3/12: News Fetcher Job"
     deploy_service "job-news-fetcher" "$build_flag"
     # wait_for_health "ichat-news-fetcher" 60
 
-    # 3. LLM Service
-    print_header "Step 3/11: LLM Service"
+    # 4. LLM Service
+    print_header "Step 4/12: LLM Service"
     deploy_service "llm-service" "$build_flag"
     # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
 
-    # 4. Audio Generation Factory
-    print_header "Step 4/11: Audio Generation Factory (Kokoro + Veena TTS)"
+    # 5. Audio Generation Factory
+    print_header "Step 5/12: Audio Generation Factory (Kokoro + Veena TTS)"
     deploy_service "audio-generation-factory" "$build_flag"
     # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
 
-    # 5. Voice Generator Job
-    print_header "Step 5/11: Voice Generator Job"
+    # 6. Voice Generator Job
+    print_header "Step 6/12: Voice Generator Job"
     deploy_service "job-voice-generator" "$build_flag"
     # wait_for_health "ichat-voice-generator" 60
 
-    # 6. IOPaint Watermark Remover
-    print_header "Step 6/11: IOPaint Watermark Remover"
+    # 7. IOPaint Watermark Remover
+    print_header "Step 7/12: IOPaint Watermark Remover"
     deploy_service "iopaint" "$build_flag"
     # wait_for_health "ichat-iopaint" 60
 
-    # 7. Video Generator Job
-    print_header "Step 7/11: Video Generator Job"
+    # 8. Video Generator Job
+    print_header "Step 8/12: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
     # wait_for_health "ichat-video-generator" 60
 
-    # 8. YouTube Uploader
-    print_header "Step 8/11: YouTube Uploader"
+    # 9. YouTube Uploader
+    print_header "Step 9/12: YouTube Uploader"
     deploy_service "youtube-uploader" "$build_flag"
     # wait_for_health "ichat-youtube-uploader" 60
 
-    # 9. Cleanup Job
-    print_header "Step 9/11: Cleanup Job"
+    # 10. Cleanup Job
+    print_header "Step 10/12: Cleanup Job"
     deploy_service "job-cleanup" "$build_flag"
     # wait_for_health "ichat-cleanup" 60
 
-    # 10. API Server
-    print_header "Step 10/11: API Server"
+    # 11. API Server
+    print_header "Step 11/12: API Server"
     deploy_service "ichat-api" "$build_flag"
     # wait_for_health "ichat-api-server" 60
 
-    # 11. News Automation Frontend
-    print_header "Step 11/11: News Automation Frontend"
+    # 12. News Automation Frontend
+    print_header "Step 12/12: News Automation Frontend"
     deploy_service "news-automation-frontend" "$build_flag"
     # wait_for_health "news-automation-frontend" 60
     
@@ -307,6 +314,7 @@ deploy_all_services() {
     print_info "Service URLs:"
     echo "  • Frontend UI:          http://localhost:3002"
     echo "  • API Server:           http://localhost:8080"
+    echo "  • Auth Service:         http://localhost:8098"
     echo "  • News Fetcher:         http://localhost:8093"
     echo "  • LLM Service:          http://localhost:8083"
     echo "  • Audio Generation:     http://localhost:3000"
@@ -316,6 +324,10 @@ deploy_all_services() {
     echo "  • YouTube Uploader:     http://localhost:8097"
     echo "  • Cleanup Job:          http://localhost:8099"
     echo "  • MongoDB:              mongodb://localhost:27017"
+    echo ""
+    print_info "Default Admin Credentials:"
+    echo "  • Email:    admin@newsautomation.com"
+    echo "  • Password: admin123"
     echo ""
     print_info "To view logs: ./deploy-news-services.sh --logs"
     print_info "To check status: ./deploy-news-services.sh --status"
@@ -329,16 +341,17 @@ News Services Deployment Script
 
 This script manages deployment of all news-related services:
   1. MongoDB (database)
-  2. News Fetcher Job (fetches news articles)
-  3. LLM Service (generates summaries)
-  4. Audio Generation Factory (TTS: Kokoro English + Veena Hindi)
-  5. Voice Generator Job (generates audio from news)
-  6. IOPaint Watermark Remover (removes watermarks from images)
-  7. Video Generator Job (creates videos from news + audio)
-  8. YouTube Uploader (uploads videos to YouTube)
-  9. Cleanup Job (cleans up old files and MongoDB records)
-  10. API Server (serves news data to frontend)
-  11. News Automation Frontend (React UI for managing news automation)
+  2. Auth Service (authentication and user management)
+  3. News Fetcher Job (fetches news articles)
+  4. LLM Service (generates summaries)
+  5. Audio Generation Factory (TTS: Kokoro English + Veena Hindi)
+  6. Voice Generator Job (generates audio from news)
+  7. IOPaint Watermark Remover (removes watermarks from images)
+  8. Video Generator Job (creates videos from news + audio)
+  9. YouTube Uploader (uploads videos to YouTube)
+  10. Cleanup Job (cleans up old files and MongoDB records)
+  11. API Server (serves news data to frontend)
+  12. News Automation Frontend (React UI for managing news automation)
 
 Usage:
   ./deploy-news-services.sh [options]

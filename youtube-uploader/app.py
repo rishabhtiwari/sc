@@ -5,6 +5,7 @@ Provides UI and API for uploading news videos to YouTube
 """
 
 import os
+import sys
 import glob
 import logging
 import requests
@@ -18,6 +19,16 @@ from pymongo import MongoClient
 from config import Config
 from services import YouTubeService, YouTubeMetadataBuilder
 import spacy
+
+# Add current directory to path for common utilities
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_insert_document,
+    prepare_update_document,
+    extract_user_context_from_headers
+)
 
 # Configure logging
 logging.basicConfig(
@@ -172,40 +183,56 @@ def index():
 def get_stats():
     """Get upload statistics"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         # Count videos ready to upload (have video_path but no youtube_video_id)
-        ready_to_upload = news_collection.count_documents({
+        base_query_ready = {
             'video_path': {'$ne': None},
             'youtube_video_id': {'$exists': False}
-        })
+        }
+        query_ready = build_multi_tenant_query(base_query_ready, customer_id=customer_id)
+        ready_to_upload = news_collection.count_documents(query_ready)
 
         # Count already uploaded videos
-        already_uploaded = news_collection.count_documents({
+        base_query_uploaded = {
             'youtube_video_id': {'$exists': True, '$ne': None}
-        })
+        }
+        query_uploaded = build_multi_tenant_query(base_query_uploaded, customer_id=customer_id)
+        already_uploaded = news_collection.count_documents(query_uploaded)
 
         # Count total videos
-        total_videos = news_collection.count_documents({
+        base_query_total = {
             'video_path': {'$ne': None}
-        })
+        }
+        query_total = build_multi_tenant_query(base_query_total, customer_id=customer_id)
+        total_videos = news_collection.count_documents(query_total)
 
         # Count shorts ready to upload (have shorts_video_path but no youtube_shorts_id)
-        shorts_ready_to_upload = news_collection.count_documents({
+        base_query_shorts_ready = {
             'shorts_video_path': {'$ne': None},
             '$or': [
                 {'youtube_shorts_id': {'$exists': False}},
                 {'youtube_shorts_id': None}
             ]
-        })
+        }
+        query_shorts_ready = build_multi_tenant_query(base_query_shorts_ready, customer_id=customer_id)
+        shorts_ready_to_upload = news_collection.count_documents(query_shorts_ready)
 
         # Count already uploaded shorts
-        shorts_already_uploaded = news_collection.count_documents({
+        base_query_shorts_uploaded = {
             'youtube_shorts_id': {'$exists': True, '$ne': None}
-        })
+        }
+        query_shorts_uploaded = build_multi_tenant_query(base_query_shorts_uploaded, customer_id=customer_id)
+        shorts_already_uploaded = news_collection.count_documents(query_shorts_uploaded)
 
         # Count total shorts
-        total_shorts = news_collection.count_documents({
+        base_query_total_shorts = {
             'shorts_video_path': {'$ne': None}
-        })
+        }
+        query_total_shorts = build_multi_tenant_query(base_query_total_shorts, customer_id=customer_id)
+        total_shorts = news_collection.count_documents(query_total_shorts)
 
         return jsonify({
             'ready_to_upload': ready_to_upload,
@@ -341,6 +368,11 @@ def upload_latest_20():
     try:
         logger.info("📤 Starting upload of latest 20 news compilation video...")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         # Step 1: Generate merged video first by calling video-generator service
         logger.info("🎬 Step 1: Generating merged video...")
         video_generator_url = os.getenv('VIDEO_GENERATOR_URL', 'http://ichat-video-generator:8095')
@@ -413,9 +445,9 @@ def upload_latest_20():
 
         # Step 3: Get latest 20 news for metadata generation
         logger.info("📋 Step 3: Fetching news items for metadata...")
-        news_items = list(news_collection.find({
-            'video_path': {'$ne': None}
-        }).sort('publishedAt', -1).limit(20))
+        base_query = {'video_path': {'$ne': None}}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        news_items = list(news_collection.find(query).sort('publishedAt', -1).limit(20))
 
         if not news_items:
             return jsonify({
@@ -566,7 +598,8 @@ def upload_latest_20():
             title=title,
             description=description,
             tags=tags,
-            thumbnail_path=thumbnail_path
+            thumbnail_path=thumbnail_path,
+            customer_id=customer_id
         )
 
         if upload_result and upload_result['status'] == 'success':
@@ -603,12 +636,19 @@ def upload_config_video(config_id):
     try:
         logger.info(f"📤 Starting upload of config video: {config_id}")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         # Step 1: Get config from database
         logger.info("🔍 Step 1: Fetching config from database...")
         configs_collection = db['long_video_configs']
 
         from bson import ObjectId
-        config = configs_collection.find_one({'_id': ObjectId(config_id)})
+        base_query = {'_id': ObjectId(config_id)}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        config = configs_collection.find_one(query)
 
         if not config:
             return jsonify({
@@ -667,20 +707,25 @@ def upload_config_video(config_id):
         # We want to fetch the LATEST news matching the config filters for rich metadata
 
         # Build query based on config filters
-        query = {'status': 'completed'}  # Only get completed articles
+        base_query = {'status': 'completed'}  # Only get completed articles
 
         if config.get('categories') and len(config.get('categories', [])) > 0:
-            query['category'] = {'$in': config['categories']}
+            base_query['category'] = {'$in': config['categories']}
 
         if config.get('country'):
             # Country is stored as source.country in MongoDB
-            query['source.country'] = config['country'].lower()
+            base_query['source.country'] = config['country'].lower()
 
         if config.get('language'):
             # Language is stored as lang in MongoDB
-            query['lang'] = config['language'].lower()
+            base_query['lang'] = config['language'].lower()
 
         video_count = config.get('videoCount', 20)
+
+        # Add multi-tenant filter - use customer_id from config (not from headers)
+        # because we want to fetch news for the customer who owns this config
+        config_customer_id = config.get('customer_id')
+        query = build_multi_tenant_query(base_query, customer_id=config_customer_id)
 
         logger.info(f"🔍 Querying news with filters: {query}")
         news_items = list(news_collection.find(query).sort('publishedAt', -1).limit(video_count))
@@ -803,20 +848,24 @@ def upload_config_video(config_id):
             title=title,
             description=description,
             tags=tags,
-            thumbnail_path=thumbnail_path
+            thumbnail_path=thumbnail_path,
+            customer_id=customer_id
         )
 
         if upload_result and upload_result['status'] == 'success':
             logger.info(f"✅ Successfully uploaded config video: {upload_result['video_url']}")
 
             # Update config with YouTube info
+            update_data = {
+                'youtubeVideoId': upload_result['video_id'],
+                'youtubeVideoUrl': upload_result['video_url'],
+                'uploadedAt': datetime.utcnow()
+            }
+            prepare_update_document(update_data, user_id=user_id or 'system')
+
             configs_collection.update_one(
                 {'_id': ObjectId(config_id)},
-                {'$set': {
-                    'youtubeVideoId': upload_result['video_id'],
-                    'youtubeVideoUrl': upload_result['video_url'],
-                    'uploadedAt': datetime.utcnow()
-                }}
+                {'$set': update_data}
             )
 
             return jsonify({
@@ -850,6 +899,10 @@ def upload_config_video(config_id):
 def get_pending_shorts():
     """Get list of shorts ready to upload (not yet uploaded) with pagination"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         # Get pagination parameters from query string
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 5))  # Default 5 shorts per page
@@ -858,13 +911,16 @@ def get_pending_shorts():
         skip = (page - 1) * limit
 
         # Query filter
-        query_filter = {
+        base_query_filter = {
             'shorts_video_path': {'$ne': None},
             '$or': [
                 {'youtube_shorts_id': {'$exists': False}},
                 {'youtube_shorts_id': None}
             ]
         }
+
+        # Add multi-tenant filter
+        query_filter = build_multi_tenant_query(base_query_filter, customer_id=customer_id)
 
         # Get total count
         total_count = news_collection.count_documents(query_filter)
@@ -917,8 +973,15 @@ def upload_short(article_id):
     try:
         logger.info(f"📤 Starting upload of YouTube Short for article: {article_id}")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         # Fetch article from database
-        article = news_collection.find_one({'id': article_id})
+        base_query = {'id': article_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        article = news_collection.find_one(query)
 
         if not article:
             return jsonify({
@@ -998,7 +1061,8 @@ def upload_short(article_id):
             description=metadata['description'],
             tags=metadata['tags'],
             category_id='25',  # News & Politics
-            privacy_status='public'
+            privacy_status='public',
+            customer_id=customer_id
         )
 
         # Clean up temp file
@@ -1007,16 +1071,19 @@ def upload_short(article_id):
 
         if upload_result and upload_result['status'] == 'success':
             # Update database with YouTube Shorts info
+            update_data = {
+                'youtube_shorts_id': upload_result['video_id'],
+                'youtube_shorts_url': upload_result['video_url'],
+                'youtube_shorts_uploaded_at': datetime.utcnow(),
+                'updated_at': datetime.utcnow()
+            }
+            prepare_update_document(update_data, user_id=user_id or 'system')
+
+            # Update with multi-tenant filter
+            update_query = build_multi_tenant_query({'id': article_id}, customer_id=customer_id)
             news_collection.update_one(
-                {'id': article_id},
-                {
-                    '$set': {
-                        'youtube_shorts_id': upload_result['video_id'],
-                        'youtube_shorts_url': upload_result['video_url'],
-                        'youtube_shorts_uploaded_at': datetime.utcnow(),
-                        'updated_at': datetime.utcnow()
-                    }
-                }
+                update_query,
+                {'$set': update_data}
             )
 
             logger.info(f"✅ Successfully uploaded short: {upload_result['video_url']}")
@@ -1048,6 +1115,10 @@ def upload_short(article_id):
 def start_auth():
     """Start OAuth authentication flow for a credential"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         data = request.get_json()
         credential_id = data.get('credential_id')
 
@@ -1060,8 +1131,10 @@ def start_auth():
         # Get credentials collection
         credentials_collection = db['youtube_credentials']
 
-        # Get credential from database
-        credential = credentials_collection.find_one({'credential_id': credential_id})
+        # Get credential from database with multi-tenant filter
+        base_query = {'credential_id': credential_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        credential = credentials_collection.find_one(query)
         if not credential:
             return jsonify({
                 'status': 'error',
@@ -1129,6 +1202,11 @@ def start_auth():
 def oauth_callback():
     """Handle OAuth authorization code callback"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.get_json()
         auth_code = data.get('code')
         credential_id = data.get('credential_id')
@@ -1174,19 +1252,20 @@ def oauth_callback():
         flow.fetch_token(code=auth_code)
         credentials = flow.credentials
 
-        # Update credential in database with tokens
-        credentials_collection.update_one(
-            {'credential_id': credential_id},
-            {
-                '$set': {
-                    'access_token': credentials.token,
-                    'refresh_token': credentials.refresh_token,
-                    'token_expiry': credentials.expiry.isoformat() if credentials.expiry else None,
-                    'is_authenticated': True,
-                    'updated_at': datetime.now()
-                }
-            }
-        )
+        # Prepare update data with audit tracking
+        update_data = {
+            'access_token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_expiry': credentials.expiry.isoformat() if credentials.expiry else None,
+            'is_authenticated': True,
+            'updated_at': datetime.now()
+        }
+        prepare_update_document(update_data, user_id=user_id or 'system')
+
+        # Update credential in database with tokens and multi-tenant filter
+        base_query = {'credential_id': credential_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        credentials_collection.update_one(query, {'$set': update_data})
 
         # Clean up flow state file
         if os.path.exists(flow_state_file):
@@ -1217,12 +1296,20 @@ def get_credentials():
     try:
         logger.info("📋 GET /api/credentials")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         # Get credentials collection
         credentials_collection = db['youtube_credentials']
 
+        # Build query with multi-tenant filter
+        base_query = {}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
         # Fetch all credentials (excluding sensitive fields)
         credentials = list(credentials_collection.find(
-            {},
+            query,
             {
                 '_id': 0,
                 'client_secret': 0,
@@ -1266,11 +1353,19 @@ def get_credential(credential_id):
     try:
         logger.info(f"📋 GET /api/credentials/{credential_id}")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         credentials_collection = db['youtube_credentials']
+
+        # Build query with multi-tenant filter
+        base_query = {'credential_id': credential_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
 
         # Fetch credential (excluding sensitive fields)
         credential = credentials_collection.find_one(
-            {'credential_id': credential_id},
+            query,
             {
                 '_id': 0,
                 'client_secret': 0,
@@ -1317,6 +1412,14 @@ def create_credential():
     """Create a new YouTube credential"""
     try:
         logger.info("➕ POST /api/credentials")
+        logger.info(f"📋 Request headers: X-Customer-ID={request.headers.get('X-Customer-ID')}, X-User-ID={request.headers.get('X-User-ID')}, Authorization={request.headers.get('Authorization', 'Not present')[:50]}...")
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        logger.info(f"📋 Extracted context: customer_id={customer_id}, user_id={user_id}")
 
         data = request.get_json()
 
@@ -1361,6 +1464,9 @@ def create_credential():
             'notes': data.get('notes', '')
         }
 
+        # Add multi-tenant fields (customer_id, created_by, updated_by, timestamps)
+        prepare_insert_document(credential, customer_id=customer_id, user_id=user_id)
+
         # Insert credential
         credentials_collection.insert_one(credential)
 
@@ -1394,11 +1500,18 @@ def update_credential(credential_id):
     try:
         logger.info(f"✏️ PUT /api/credentials/{credential_id}")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
         data = request.get_json()
         credentials_collection = db['youtube_credentials']
 
-        # Check if credential exists
-        existing = credentials_collection.find_one({'credential_id': credential_id})
+        # Check if credential exists (with customer_id filter)
+        base_query = {'credential_id': credential_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        existing = credentials_collection.find_one(query)
         if not existing:
             return jsonify({
                 'status': 'error',
@@ -1419,24 +1532,31 @@ def update_credential(credential_id):
             if field in data:
                 update_data[field] = data[field]
 
-        # If setting this credential as active, deactivate others
+        # Add audit tracking
+        prepare_update_document(update_data, user_id=user_id or 'system')
+
+        # If setting this credential as active, deactivate others (within same customer)
         if data.get('is_active') == True:
+            deactivate_base_query = {'credential_id': {'$ne': credential_id}}
+            deactivate_query = build_multi_tenant_query(deactivate_base_query, customer_id=customer_id)
             credentials_collection.update_many(
-                {'credential_id': {'$ne': credential_id}},
+                deactivate_query,
                 {'$set': {'is_active': False}}
             )
 
-        # Update credential
+        # Update credential with multi-tenant filter
+        update_query = build_multi_tenant_query({'credential_id': credential_id}, customer_id=customer_id)
         credentials_collection.update_one(
-            {'credential_id': credential_id},
+            update_query,
             {'$set': update_data}
         )
 
         logger.info(f"✅ Updated credential: {credential_id}")
 
-        # Fetch and return updated credential
+        # Fetch and return updated credential with multi-tenant filter
+        fetch_query = build_multi_tenant_query({'credential_id': credential_id}, customer_id=customer_id)
         updated = credentials_collection.find_one(
-            {'credential_id': credential_id},
+            fetch_query,
             {
                 '_id': 0,
                 'client_secret': 0,
@@ -1473,18 +1593,24 @@ def delete_credential(credential_id):
     try:
         logger.info(f"🗑️ DELETE /api/credentials/{credential_id}")
 
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         credentials_collection = db['youtube_credentials']
 
-        # Check if credential exists
-        existing = credentials_collection.find_one({'credential_id': credential_id})
+        # Check if credential exists (with customer_id filter)
+        base_query = {'credential_id': credential_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+        existing = credentials_collection.find_one(query)
         if not existing:
             return jsonify({
                 'status': 'error',
                 'error': 'Credential not found'
             }), 404
 
-        # Delete credential
-        credentials_collection.delete_one({'credential_id': credential_id})
+        # Delete credential (with customer_id filter for safety)
+        credentials_collection.delete_one(query)
 
         logger.info(f"✅ Deleted credential: {credential_id}")
 

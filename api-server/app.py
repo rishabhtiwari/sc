@@ -58,7 +58,7 @@ def create_app():
     logging.getLogger('api-server').setLevel(log_level)
 
     app.logger.info(f"🔧 Logging configured at {app.config.get('LOG_LEVEL', 'INFO')} level")
-    
+
     # Enable CORS for cross-origin requests with comprehensive localhost configuration
     CORS(app,
          origins=[
@@ -68,8 +68,14 @@ def create_app():
              'http://0.0.0.0:3001'  # All interfaces
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept', 'Accept-Encoding', 'Cache-Control'],
+         allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept', 'Accept-Encoding', 'Cache-Control', 'X-Customer-ID', 'X-User-ID'],
          supports_credentials=True)
+
+    # Register global JWT middleware to extract customer_id/user_id from JWT tokens
+    # This ensures all backend services receive proper multi-tenant context
+    from middleware.jwt_middleware import extract_and_inject_jwt_context
+    app.before_request(extract_and_inject_jwt_context)
+    app.logger.info("🔐 JWT middleware registered - will extract customer_id/user_id from tokens")
     
     # Import blueprints
     from routes.chat_routes import chat_bp
@@ -91,6 +97,11 @@ def create_app():
     from routes.auth_routes import auth_bp
     from routes.dashboard_routes import dashboard_bp
     from routes.monitoring_routes import monitoring_bp
+    # New service proxy routes
+    from routes.image_routes import image_bp
+    from routes.youtube_routes import youtube_bp
+    from routes.video_routes import video_bp
+    from routes.voice_routes import voice_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -112,6 +123,11 @@ def create_app():
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(dashboard_bp, url_prefix='/api')
     app.register_blueprint(monitoring_bp, url_prefix='/api')
+    # Register new service proxy routes
+    app.register_blueprint(image_bp, url_prefix='/api')
+    app.register_blueprint(youtube_bp, url_prefix='/api')
+    app.register_blueprint(video_bp, url_prefix='/api')
+    app.register_blueprint(voice_bp, url_prefix='/api')
 
     # Initialize Socket.IO for real-time updates
     socketio = init_socketio(app)

@@ -14,6 +14,7 @@ from flask import jsonify, request
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from common.models.base_job import BaseJob
+from common.utils.multi_tenant_db import extract_user_context_from_headers
 from config.settings import Config, JobStatus
 from services.cleanup_service import CleanupService
 
@@ -42,34 +43,49 @@ class CleanupJob(BaseJob):
         """Return the job type identifier"""
         return 'cleanup'
 
+    def is_multi_tenant_job(self) -> bool:
+        """
+        Cleanup is a multi-tenant job - runs separately for each customer
+
+        Returns:
+            True to enable per-customer job execution
+        """
+        return True
+
     def run_job(self, job_id: str, is_on_demand: bool = False, **kwargs) -> Dict[str, Any]:
         """
         Execute the cleanup job
-        
+
         Args:
             job_id: Unique identifier for this job execution
             is_on_demand: True if this is a manual/on-demand job
-            **kwargs: Additional parameters (retention_hours, dry_run)
-        
+            **kwargs: Additional parameters (retention_hours, dry_run, customer_id, user_id)
+
         Returns:
             Dict containing job results and statistics
         """
+        # Extract customer_id and user_id from kwargs
+        customer_id = kwargs.get('customer_id')
+        user_id = kwargs.get('user_id')
+
+        customer_info = f" for customer {customer_id}" if customer_id else ""
         self.logger.info("=" * 80)
-        self.logger.info(f"🧹 Starting Cleanup Job - ID: {job_id}")
+        self.logger.info(f"🧹 Starting Cleanup Job - ID: {job_id}{customer_info}")
         self.logger.info(f"🎯 Trigger: {'On-Demand' if is_on_demand else 'Scheduled'}")
         self.logger.info("=" * 80)
 
         start_time = datetime.utcnow()
-        
+
         try:
             # Get parameters from kwargs or use config defaults
             retention_hours = kwargs.get('retention_hours', Config.CLEANUP_RETENTION_HOURS)
             dry_run = kwargs.get('dry_run', Config.CLEANUP_DRY_RUN)
-            
-            # Run cleanup
+
+            # Run cleanup with customer_id for multi-tenancy
             cleanup_stats = self.cleanup_service.cleanup_old_articles(
                 retention_hours=retention_hours,
-                dry_run=dry_run
+                dry_run=dry_run,
+                customer_id=customer_id
             )
             
             end_time = datetime.utcnow()

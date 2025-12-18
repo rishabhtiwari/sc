@@ -6,14 +6,25 @@ Handles fetching news from seed URLs and processing responses
 import requests
 import time
 import logging
+import sys
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 from pymongo import MongoClient
 from urllib.parse import urlparse
 import re
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 from config.settings import Config, ArticleStatus
 from parsers.parser_factory import ParserFactory
+from common.utils.multi_tenant_db import (
+    build_multi_tenant_query,
+    prepare_insert_document,
+    prepare_update_document,
+    add_customer_filter
+)
 
 
 class NewsFetcherService:
@@ -44,12 +55,16 @@ class NewsFetcherService:
         self.news_client.admin.command('ping')
         self.logger.info("🔧 NewsFetcherService initialized successfully")
 
-    def fetch_all_due_news(self, is_on_demand: bool = False, job_id: str = None) -> Dict[str, Any]:
+    def fetch_all_due_news(self, is_on_demand: bool = False, job_id: str = None,
+                          customer_id: str = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Fetch news from all seed URLs that are due for execution
 
         Args:
             is_on_demand: If True, skip frequency check for all seed URLs (for manual jobs)
+            job_id: Job instance ID for tracking
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: User ID for audit tracking
 
         Returns:
             Dictionary with execution results and statistics
@@ -65,15 +80,16 @@ class NewsFetcherService:
         }
 
         try:
-            # Get all active seed URLs
-            seed_urls = list(self.seed_urls_collection.find({'is_active': True}))
+            # Get all active seed URLs filtered by customer_id
+            query = build_multi_tenant_query({'is_active': True}, customer_id=customer_id)
+            seed_urls = list(self.seed_urls_collection.find(query))
             results['total_seed_urls'] = len(seed_urls)
 
             for seed_url in seed_urls:
                 try:
                     if self._is_seed_url_due(seed_url, is_on_demand):
                         # Process this seed URL and store articles directly in DB
-                        fetch_result = self._fetch_and_store_from_seed_url(seed_url)
+                        fetch_result = self._fetch_and_store_from_seed_url(seed_url, customer_id=customer_id, user_id=user_id)
 
                         # Update results summary only
                         results['processed_seed_urls'] += 1
@@ -88,7 +104,7 @@ class NewsFetcherService:
                         })
 
                         # Update last_fetched_at timestamp
-                        self._update_seed_url_last_fetched(seed_url['_id'])
+                        self._update_seed_url_last_fetched(seed_url['_id'], user_id=user_id)
 
                     else:
                         results['skipped_seed_urls'] += 1
@@ -151,13 +167,17 @@ class NewsFetcherService:
 
         return time_since_last_fetch >= required_interval
 
-    def _fetch_and_store_from_seed_url(self, seed_url: Dict[str, Any]) -> Dict[str, Any]:
+    def _fetch_and_store_from_seed_url(self, seed_url: Dict[str, Any],
+                                       customer_id: str = None,
+                                       user_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Fetch news from a specific seed URL and store articles directly in database
         Supports multiple categories - if category is an array, fetches news for each category
 
         Args:
             seed_url: Seed URL document from database
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: User ID for audit tracking
 
         Returns:
             Dictionary with fetch results
@@ -208,7 +228,7 @@ class NewsFetcherService:
 
                     # Save articles to database with category information
                     # Pass the current category being processed, not the seed_url
-                    saved_count = self._save_articles(articles, category)
+                    saved_count = self._save_articles(articles, category, customer_id=customer_id, user_id=user_id)
                     result['articles_saved'] += saved_count
 
                     self.logger.info(f"✅ Category '{category}': Fetched {len(articles)} articles, Saved {saved_count}")
@@ -280,6 +300,24 @@ class NewsFetcherService:
                 max_articles = getattr(self.config, 'MAX_ARTICLES_PER_FETCH', param_def.get('default', 100))
                 actual_params['max'] = max_articles
 
+        # Check for missing placeholders in URL and add defaults
+        # This handles cases where seed URL has placeholders but no parameter definitions
+        if '{api_key}' in base_url and 'apikey' not in actual_params:
+            actual_params['apikey'] = self.config.API_KEY
+        if '{lang}' in base_url and 'lang' not in actual_params:
+            actual_params['lang'] = seed_url.get('language', 'en')
+        if '{country}' in base_url and 'country' not in actual_params:
+            actual_params['country'] = seed_url.get('country', 'in')
+        if '{max}' in base_url and 'max' not in actual_params:
+            actual_params['max'] = getattr(self.config, 'MAX_ARTICLES_PER_FETCH', 100)
+        if '{category}' in base_url and 'category' not in actual_params:
+            if category:
+                actual_params['category'] = category
+            else:
+                # Try to get from seed URL category field
+                seed_category = seed_url.get('category', 'general')
+                actual_params['category'] = seed_category[0] if isinstance(seed_category, list) else seed_category
+
         # Debug: Show parameters being applied
         self.logger.info(f"🔧 URL Building Details:")
         self.logger.info(f"   Base URL Template: {base_url}")
@@ -300,13 +338,16 @@ class NewsFetcherService:
         self.logger.info(f"🌐 Final URL: {actual_url}")
         return actual_url
 
-    def _save_articles(self, articles: List[Dict[str, Any]], category: str = None) -> int:
+    def _save_articles(self, articles: List[Dict[str, Any]], category: str = None,
+                      customer_id: str = None, user_id: Optional[str] = None) -> int:
         """
         Save articles to the news database, avoiding duplicates
 
         Args:
             articles: List of standardized articles
             category: Category string for the articles (e.g., 'general', 'sports')
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: User ID for audit tracking
 
         Returns:
             Number of articles actually saved
@@ -319,28 +360,37 @@ class NewsFetcherService:
 
         for article in articles:
             try:
-                # Check if article already exists (by ID)
-                existing = self.news_collection.find_one({'id': article['id']})
+                # Check if article already exists (by ID and customer_id)
+                query = build_multi_tenant_query({'id': article['id']}, customer_id=customer_id)
+                existing = self.news_collection.find_one(query)
 
                 if not existing:
                     # Insert new article with status='progress', empty short_summary, and category
                     article['status'] = ArticleStatus.PROGRESS.value
                     article['short_summary'] = ''
                     article['category'] = category
+
+                    # Add multi-tenant fields (customer_id, created_by, updated_by, timestamps)
+                    prepare_insert_document(article, customer_id=customer_id, user_id=user_id)
+
                     self.news_collection.insert_one(article)
                     saved_count += 1
                     self.logger.info(
                         f"✅ Saved new article with category '{category}': {article.get('title', 'N/A')[:50]}...")
                 else:
                     # Optionally update existing article with newer data and category
+                    update_data = {
+                        'status': ArticleStatus.PROGRESS.value,
+                        'short_summary': '',
+                        'category': category
+                    }
+
+                    # Add audit fields for update
+                    prepare_update_document(update_data, user_id=user_id)
+
                     self.news_collection.update_one(
-                        {'id': article['id']},
-                        {'$set': {
-                            'updated_at': datetime.utcnow(),
-                            'status': ArticleStatus.PROGRESS.value,
-                            'short_summary': '',
-                            'category': category
-                        }}
+                        query,
+                        {'$set': update_data}
                     )
                     self.logger.info(
                         f"🔄 Updated existing article with category '{category}': {article.get('title', 'N/A')[:50]}...")
@@ -351,23 +401,30 @@ class NewsFetcherService:
 
         return saved_count
 
-    def _update_seed_url_last_fetched(self, seed_url_id):
+    def _update_seed_url_last_fetched(self, seed_url_id, user_id: Optional[str] = None):
         """
         Update the last_fetched_at and last_run timestamps for a seed URL
 
         Args:
             seed_url_id: MongoDB ObjectId of the seed URL to update
+            user_id: User ID for audit tracking
         """
         try:
             now = datetime.utcnow()
+            update_data = {
+                'last_fetched_at': now,
+                'last_run': now,
+                'updated_at': now
+            }
+
+            # Add updated_by if user_id is provided
+            if user_id:
+                update_data['updated_by'] = user_id
+
             self.seed_urls_collection.update_one(
                 {'_id': seed_url_id},
                 {
-                    '$set': {
-                        'last_fetched_at': now,
-                        'last_run': now,
-                        'updated_at': now
-                    },
+                    '$set': update_data,
                     '$inc': {'fetch_count': 1}
                 }
             )
@@ -436,15 +493,20 @@ class NewsFetcherService:
             self.logger.error(traceback.format_exc())
             return None
 
-    def get_seed_url_status(self) -> List[Dict[str, Any]]:
+    def get_seed_url_status(self, customer_id: str = None) -> List[Dict[str, Any]]:
         """
         Get status of all seed URLs including when they were last run
-        
+
+        Args:
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+
         Returns:
             List of seed URL status information
         """
         try:
-            seed_urls = list(self.seed_urls_collection.find())
+            # Build query with multi-tenant filter
+            query = build_multi_tenant_query({}, customer_id=customer_id)
+            seed_urls = list(self.seed_urls_collection.find(query))
             status_list = []
 
             for seed_url in seed_urls:

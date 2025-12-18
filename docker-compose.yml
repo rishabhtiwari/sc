@@ -112,6 +112,10 @@ services:
       - LLM_SERVICE_PORT=8083
       - LLM_SERVICE_URL=http://ichat-llm-service:8083
       - LOG_LEVEL=DEBUG
+      # JWT Configuration (must match auth-service)
+      - JWT_SECRET_KEY=your-super-secret-jwt-key-change-in-production-2024
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_HOURS=24
       # MongoDB Configuration
       - MONGODB_HOST=ichat-mongodb
       - MONGODB_PORT=27017
@@ -800,8 +804,8 @@ services:
   # IOPaint Logo/Watermark Removal Service with MongoDB Integration
   iopaint:
     build:
-      context: ./jobs/watermark-remover
-      dockerfile: Dockerfile
+      context: ./jobs
+      dockerfile: ./watermark-remover/Dockerfile
     container_name: ichat-iopaint
     ports:
       - "8096:8096"
@@ -833,8 +837,8 @@ services:
   # YouTube Uploader Service
   youtube-uploader:
     build:
-      context: ./youtube-uploader
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./youtube-uploader/Dockerfile
     container_name: ichat-youtube-uploader
     ports:
       - "8097:8097"

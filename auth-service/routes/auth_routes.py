@@ -87,12 +87,10 @@ def login():
 def verify():
     """
     Verify token endpoint - check if token is valid
-    
-    Request body:
-        {
-            "token": "eyJ0eXAiOiJKV1QiLCJhbGc..."
-        }
-    
+
+    Request headers:
+        Authorization: Bearer <token>
+
     Response:
         {
             "valid": true,
@@ -106,24 +104,26 @@ def verify():
         }
     """
     try:
-        data = request.get_json()
-        
-        if not data or 'token' not in data:
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+
+        if not auth_header or not auth_header.startswith('Bearer '):
             return jsonify({
                 'valid': False,
-                'error': 'Token is required'
+                'error': 'Authorization header with Bearer token is required'
             }), 400
-        
-        token = data['token']
-        
+
+        # Extract token from "Bearer <token>"
+        token = auth_header.split(' ')[1]
+
         # Verify token
         result = auth_service.verify_token(token)
-        
+
         if result.get('valid'):
             return jsonify(result), 200
         else:
             return jsonify(result), 401
-            
+
     except Exception as e:
         logger.error(f"Token verification error: {str(e)}")
         return jsonify({

@@ -12,11 +12,28 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Add any auth tokens here if needed
-    // const token = localStorage.getItem('token');
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`;
-    // }
+    // Add auth token
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    // Add customer and user context headers
+    const userInfo = localStorage.getItem('user_info');
+    if (userInfo) {
+      try {
+        const user = JSON.parse(userInfo);
+        if (user.customer_id) {
+          config.headers['X-Customer-ID'] = user.customer_id;
+        }
+        if (user.user_id) {
+          config.headers['X-User-ID'] = user.user_id;
+        }
+      } catch (e) {
+        console.error('Failed to parse user info:', e);
+      }
+    }
+
     return config;
   },
   (error) => {
@@ -33,7 +50,20 @@ api.interceptors.response.use(
     // Handle errors globally
     if (error.response) {
       // Server responded with error status
-      console.error('API Error:', error.response.status, error.response.data);
+      const status = error.response.status;
+
+      if (status === 401) {
+        // Unauthorized - redirect to login
+        console.error('Unauthorized - redirecting to login');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_info');
+        window.location.href = '/login';
+      } else if (status === 403) {
+        // Forbidden - permission denied
+        console.error('Permission denied:', error.response.data);
+      } else {
+        console.error('API Error:', status, error.response.data);
+      }
     } else if (error.request) {
       // Request made but no response
       console.error('Network Error:', error.message);

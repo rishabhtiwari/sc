@@ -20,7 +20,80 @@ audit_service = AuditService()
 logger = logging.getLogger(__name__)
 
 
-@customer_bp.route('/customers', methods=['POST'])
+@customer_bp.route('/auth/customers/register', methods=['POST'])
+def register_customer():
+    """Public endpoint for customer self-registration"""
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        required_fields = ['company_name', 'contact_email', 'admin_user']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+
+        # Validate admin_user fields
+        admin_required_fields = ['first_name', 'last_name', 'email', 'password']
+        for field in admin_required_fields:
+            if field not in data['admin_user']:
+                return jsonify({'success': False, 'error': f'Missing required admin field: {field}'}), 400
+
+        # Auto-generate slug from company name if not provided
+        if 'slug' not in data:
+            import re
+            # Convert company name to slug: lowercase, replace spaces/special chars with hyphens
+            slug = re.sub(r'[^a-z0-9]+', '-', data['company_name'].lower()).strip('-')
+            data['slug'] = slug
+
+        # Create customer (created_by is None for self-registration)
+        customer_result = customer_service.create_customer(data, created_by=None)
+
+        if not customer_result['success']:
+            return jsonify(customer_result), 400
+
+        # Create admin user for the customer
+        from services.user_service import UserService
+        user_service = UserService()
+
+        admin_data = {
+            'first_name': data['admin_user']['first_name'],
+            'last_name': data['admin_user']['last_name'],
+            'email': data['admin_user']['email'],
+            'password': data['admin_user']['password'],
+            'role_id': 'role_customer_admin',  # Assign customer admin role
+            'customer_id': customer_result['customer']['customer_id']
+        }
+
+        user_result = user_service.create_user(admin_data, created_by=None, creator_customer_id=customer_result['customer']['customer_id'])
+
+        if not user_result['success']:
+            # Rollback: delete the customer if user creation fails
+            customer_service.delete_customer(customer_result['customer']['customer_id'])
+            return jsonify({'success': False, 'error': f"Failed to create admin user: {user_result.get('error', 'Unknown error')}"}), 400
+
+        # Log audit action
+        audit_service.log_action(
+            customer_id=customer_result['customer']['customer_id'],
+            user_id=user_result['user']['user_id'],
+            action='create',
+            resource_type='customer',
+            resource_id=customer_result['customer']['customer_id'],
+            changes={'action': 'self_registration'},
+            metadata={'ip_address': request.remote_addr}
+        )
+
+        return jsonify({
+            'success': True,
+            'customer': customer_result['customer'],
+            'admin_user': user_result['user']
+        }), 201
+
+    except Exception as e:
+        logger.error(f"Customer registration error: {str(e)}")
+        return jsonify({'success': False, 'error': 'Failed to register customer'}), 500
+
+
+@customer_bp.route('/auth/customers', methods=['POST'])
 @token_required
 @super_admin_required
 def create_customer():
@@ -49,7 +122,7 @@ def create_customer():
         return jsonify({'success': False, 'error': 'Failed to create customer'}), 500
 
 
-@customer_bp.route('/customers', methods=['GET'])
+@customer_bp.route('/auth/customers', methods=['GET'])
 @token_required
 @super_admin_required
 def get_customers():
@@ -73,7 +146,7 @@ def get_customers():
         return jsonify({'success': False, 'error': 'Failed to get customers'}), 500
 
 
-@customer_bp.route('/customers/<customer_id>', methods=['GET'])
+@customer_bp.route('/auth/customers/<customer_id>', methods=['GET'])
 @token_required
 def get_customer(customer_id):
     """Get customer details"""
@@ -94,7 +167,7 @@ def get_customer(customer_id):
         return jsonify({'success': False, 'error': 'Failed to get customer'}), 500
 
 
-@customer_bp.route('/customers/<customer_id>', methods=['PUT'])
+@customer_bp.route('/auth/customers/<customer_id>', methods=['PUT'])
 @token_required
 @super_admin_required
 def update_customer(customer_id):
@@ -124,7 +197,7 @@ def update_customer(customer_id):
         return jsonify({'success': False, 'error': 'Failed to update customer'}), 500
 
 
-@customer_bp.route('/customers/<customer_id>', methods=['DELETE'])
+@customer_bp.route('/auth/customers/<customer_id>', methods=['DELETE'])
 @token_required
 @super_admin_required
 def delete_customer(customer_id):

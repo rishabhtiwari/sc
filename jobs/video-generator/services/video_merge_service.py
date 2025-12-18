@@ -22,7 +22,7 @@ class VideoMergeService:
         self.effects_factory = EffectsFactory(logger=logger)
         self.thumbnail_service = ThumbnailService(config, logger)
         
-    def merge_latest_videos(self, news_list: List[Dict], title: str = None, config_id: str = None, background_audio_id: str = None) -> Dict:
+    def merge_latest_videos(self, news_list: List[Dict], title: str = None, config_id: str = None, background_audio_id: str = None, customer_id: str = None) -> Dict:
         """
         Merge latest news videos into a single compilation video
 
@@ -31,6 +31,7 @@ class VideoMergeService:
             title: Optional title for the video thumbnail
             config_id: Optional config ID to save video in config-specific folder
             background_audio_id: Optional custom background audio filename from assets directory
+            customer_id: Customer ID for multi-tenant isolation (required for background music)
 
         Returns:
             Dict with merge result
@@ -357,7 +358,7 @@ class VideoMergeService:
             background_audio_id = "background_music.wav"
             self.logger.info(f"🎵 Adding default background music: {background_audio_id}")
 
-        output_with_music = self._add_background_music(output_path, background_audio_id, total_duration)
+        output_with_music = self._add_background_music(output_path, background_audio_id, total_duration, customer_id=customer_id)
         if output_with_music:
             self.logger.info("✅ Background music added successfully!")
         else:
@@ -563,7 +564,7 @@ class VideoMergeService:
             self.logger.error(f"❌ Thumbnail generation failed: {str(e)}")
             return None
 
-    def _add_background_music(self, video_path: str, background_audio_id: str, video_duration: float) -> bool:
+    def _add_background_music(self, video_path: str, background_audio_id: str, video_duration: float, customer_id: str = None) -> bool:
         """
         Add background music to the merged video using FFmpeg
 
@@ -571,14 +572,24 @@ class VideoMergeService:
             video_path: Path to the merged video file (will be replaced with version that has background music)
             background_audio_id: Filename of custom background audio from assets directory
             video_duration: Duration of the video in seconds
+            customer_id: Customer ID for multi-tenant isolation (required)
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            # Get path to custom background music
+            # Get path to customer-specific background music
             assets_dir = os.path.join(os.path.dirname(__file__), '..', 'assets')
-            music_path = os.path.join(assets_dir, background_audio_id)
+
+            # Use customer-specific directory if customer_id is provided
+            if customer_id:
+                customer_assets_dir = os.path.join(assets_dir, customer_id)
+                music_path = os.path.join(customer_assets_dir, background_audio_id)
+                self.logger.info(f"🎵 Looking for background music in customer directory: {customer_assets_dir}")
+            else:
+                # Fallback to root assets directory (for backward compatibility)
+                music_path = os.path.join(assets_dir, background_audio_id)
+                self.logger.warning(f"⚠️ No customer_id provided, using root assets directory")
 
             if not os.path.exists(music_path):
                 self.logger.error(f"❌ Background audio file not found: {music_path}")

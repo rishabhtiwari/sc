@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
+import LoginPage from './pages/LoginPage';
+import CustomerRegistrationPage from './pages/CustomerRegistrationPage';
 import Dashboard from './pages/Dashboard';
 import NewsFetcherPage from './pages/NewsFetcherPage';
 import ImageProcessingPage from './pages/ImageProcessingPage';
@@ -9,6 +11,8 @@ import AudioProcessingPage from './pages/AudioProcessingPage';
 import YouTubePage from './pages/YouTubePage';
 import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
+import SettingsPage from './pages/SettingsPage';
+import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
 function App() {
@@ -18,19 +22,16 @@ function App() {
 
   // Check authentication on mount
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuthStatus = async () => {
       const token = localStorage.getItem('auth_token');
-      const storedUser = localStorage.getItem('user');
+      const storedUser = localStorage.getItem('user_info');
 
       if (token && storedUser) {
         try {
-          // Set authorization header
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-
           // Verify token with server
-          const response = await api.get('/auth/verify');
+          const response = await verifyToken();
 
-          if (response.data.valid) {
+          if (response.valid) {
             setIsAuthenticated(true);
             setUser(JSON.parse(storedUser));
           } else {
@@ -46,7 +47,7 @@ function App() {
       setLoading(false);
     };
 
-    checkAuth();
+    checkAuthStatus();
   }, []);
 
   const handleLoginSuccess = (userData) => {
@@ -58,8 +59,7 @@ function App() {
     setIsAuthenticated(false);
     setUser(null);
     localStorage.removeItem('auth_token');
-    localStorage.removeItem('user');
-    delete api.defaults.headers.common['Authorization'];
+    localStorage.removeItem('user_info');
   };
 
   // Show loading spinner while checking auth
@@ -84,7 +84,19 @@ function App() {
             isAuthenticated ? (
               <Navigate to="/" replace />
             ) : (
-              <Login onLoginSuccess={handleLoginSuccess} />
+              <LoginPage />
+            )
+          }
+        />
+
+        {/* Registration Route - accessible without authentication */}
+        <Route
+          path="/register"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/" replace />
+            ) : (
+              <CustomerRegistrationPage />
             )
           }
         />
@@ -97,12 +109,14 @@ function App() {
               <Layout user={user} onLogout={handleLogout}>
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/news-fetcher" element={<NewsFetcherPage />} />
                   <Route path="/image-processing" element={<ImageProcessingPage />} />
                   <Route path="/voice-llm" element={<AudioProcessingPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />
+                  <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </Layout>
             ) : (

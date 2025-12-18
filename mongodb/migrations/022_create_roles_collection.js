@@ -18,8 +18,8 @@ print('✓ Created index: role_id (unique)');
 db.roles.createIndex({ "customer_id": 1, "slug": 1 }, { unique: true, name: "idx_customer_slug" });
 print('✓ Created index: customer_id + slug (compound unique)');
 
-db.roles.createIndex({ "is_system_role": 1 }, { name: "idx_is_system_role" });
-print('✓ Created index: is_system_role');
+db.roles.createIndex({ "role_type": 1 }, { name: "idx_role_type" });
+print('✓ Created index: role_type');
 
 db.roles.createIndex({ "customer_id": 1 }, { name: "idx_customer_id" });
 print('✓ Created index: customer_id');
@@ -30,7 +30,7 @@ db.runCommand({
     validator: {
         $jsonSchema: {
             bsonType: 'object',
-            required: ['role_id', 'role_name', 'slug', 'is_system_role', 'created_at'],
+            required: ['role_id', 'role_name', 'slug', 'role_type', 'created_at'],
             properties: {
                 role_id: {
                     bsonType: 'string',
@@ -65,9 +65,10 @@ db.runCommand({
                     },
                     description: 'Array of permission keys'
                 },
-                is_system_role: {
-                    bsonType: 'bool',
-                    description: 'Whether this is a system-defined role - required'
+                role_type: {
+                    bsonType: 'string',
+                    enum: ['system', 'custom'],
+                    description: 'Role type: system or custom - required'
                 },
                 is_default: {
                     bsonType: 'bool',
