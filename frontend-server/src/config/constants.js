@@ -42,9 +42,9 @@ export const NAV_ITEMS = [
     label: 'Audio Processing',
     description: 'Voice configuration and audio gallery'
   },
-  { 
-    path: ROUTES.YOUTUBE, 
-    icon: '📺', 
+  {
+    path: ROUTES.YOUTUBE,
+    icon: '📺',
     label: 'YouTube Uploader',
     description: 'Upload videos to YouTube'
   },

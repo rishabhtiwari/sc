@@ -10,6 +10,8 @@ import PlusCard from '../components/YouTubeUploader/PlusCard';
  */
 const YouTubePage = () => {
   const [activeTab, setActiveTab] = useState('overview'); // overview, shorts, long, credentials, audio
+  const [longVideoPlatform, setLongVideoPlatform] = useState('youtube'); // youtube, instagram, tiktok
+  const [shortVideoPlatform, setShortVideoPlatform] = useState('youtube'); // youtube, instagram, tiktok
   const [stats, setStats] = useState({
     ready_to_upload: 0,
     already_uploaded: 0,
@@ -45,10 +47,10 @@ const YouTubePage = () => {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'shorts', label: 'Shorts', icon: '📱' },
+    { id: 'shorts', label: 'Short Videos', icon: '📱' },
     { id: 'long', label: 'Long Videos', icon: '🎬' },
     { id: 'audio', label: 'Audio Library', icon: '🎵' },
-    { id: 'credentials', label: 'Credentials', icon: '🔑' },
+    { id: 'credentials', label: 'Platform Credentials', icon: '🔑' },
   ];
 
   // Load statistics
@@ -453,9 +455,9 @@ const YouTubePage = () => {
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2 flex items-center gap-3">
             <span>📺</span>
-            YouTube Uploader
+            Video Processing
           </h1>
-          <p className="text-gray-600">Upload news videos to YouTube channel</p>
+          <p className="text-gray-600">Configure and upload videos to platforms (YouTube, etc.)</p>
         </div>
 
         {/* Tabs */}
@@ -531,35 +533,123 @@ const YouTubePage = () => {
           {/* Shorts Tab */}
           {activeTab === 'shorts' && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-1">YouTube Shorts</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Upload short-form vertical videos to YouTube
-                </p>
+              {/* Platform Sub-Tabs */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-lg font-semibold text-gray-900">Select Platform:</span>
+                </div>
+                <div className="flex gap-2 border-b border-gray-200">
+                  <button
+                    onClick={() => setShortVideoPlatform('youtube')}
+                    className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 ${
+                      shortVideoPlatform === 'youtube'
+                        ? 'border-red-600 text-red-600 bg-red-50'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-lg">📺</span>
+                    YouTube Shorts
+                  </button>
+                  <button
+                    onClick={() => setShortVideoPlatform('instagram')}
+                    disabled
+                    className="px-4 py-3 font-medium text-sm border-b-2 border-transparent text-gray-400 flex items-center gap-2 cursor-not-allowed opacity-50"
+                  >
+                    <span className="text-lg">📸</span>
+                    Instagram Reels
+                    <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Coming Soon</span>
+                  </button>
+                  <button
+                    onClick={() => setShortVideoPlatform('tiktok')}
+                    disabled
+                    className="px-4 py-3 font-medium text-sm border-b-2 border-transparent text-gray-400 flex items-center gap-2 cursor-not-allowed opacity-50"
+                  >
+                    <span className="text-lg">🎵</span>
+                    TikTok
+                    <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Coming Soon</span>
+                  </button>
+                </div>
               </div>
 
-              <Card title="📱 Shorts Ready to Upload">
-                <ShortsGrid
-                  shorts={shorts}
-                  onUpload={handleUploadShort}
-                  loading={shortsLoading}
-                  pagination={shortsPagination}
-                  onPageChange={handleShortsPageChange}
-                />
-              </Card>
+              {/* YouTube Shorts Content */}
+              {shortVideoPlatform === 'youtube' && (
+                <Card title="📱 YouTube Shorts Ready to Upload">
+                  <ShortsGrid
+                    shorts={shorts}
+                    onUpload={handleUploadShort}
+                    loading={shortsLoading}
+                    pagination={shortsPagination}
+                    onPageChange={handleShortsPageChange}
+                  />
+                </Card>
+              )}
+
+              {/* Instagram Reels Content (Future) */}
+              {shortVideoPlatform === 'instagram' && (
+                <Card title="📸 Instagram Reels">
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">📸</div>
+                    <p className="text-gray-600 text-lg">Instagram Reels integration coming soon!</p>
+                  </div>
+                </Card>
+              )}
+
+              {/* TikTok Content (Future) */}
+              {shortVideoPlatform === 'tiktok' && (
+                <Card title="🎵 TikTok Videos">
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">🎵</div>
+                    <p className="text-gray-600 text-lg">TikTok integration coming soon!</p>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
 
           {/* Long Videos Tab */}
           {activeTab === 'long' && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-1">Long Videos</h2>
-                <p className="text-sm text-gray-600 mb-4">
-                  Create and upload compilation videos to YouTube with custom configuration
-                </p>
+              {/* Platform Sub-Tabs */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-lg font-semibold text-gray-900">Select Platform:</span>
+                </div>
+                <div className="flex gap-2 border-b border-gray-200">
+                  <button
+                    onClick={() => setLongVideoPlatform('youtube')}
+                    className={`px-4 py-3 font-medium text-sm transition-colors border-b-2 flex items-center gap-2 ${
+                      longVideoPlatform === 'youtube'
+                        ? 'border-red-600 text-red-600 bg-red-50'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-lg">📺</span>
+                    YouTube
+                  </button>
+                  <button
+                    onClick={() => setLongVideoPlatform('instagram')}
+                    disabled
+                    className="px-4 py-3 font-medium text-sm border-b-2 border-transparent text-gray-400 flex items-center gap-2 cursor-not-allowed opacity-50"
+                  >
+                    <span className="text-lg">📸</span>
+                    Instagram
+                    <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Coming Soon</span>
+                  </button>
+                  <button
+                    onClick={() => setLongVideoPlatform('facebook')}
+                    disabled
+                    className="px-4 py-3 font-medium text-sm border-b-2 border-transparent text-gray-400 flex items-center gap-2 cursor-not-allowed opacity-50"
+                  >
+                    <span className="text-lg">👥</span>
+                    Facebook
+                    <span className="text-xs bg-gray-200 px-2 py-0.5 rounded">Coming Soon</span>
+                  </button>
+                </div>
               </div>
 
+              {/* YouTube Long Videos Content */}
+              {longVideoPlatform === 'youtube' && (
+                <>
               {/* Video Configurations Grid */}
               <div>
                 {configsLoading ? (
@@ -625,6 +715,30 @@ const YouTubePage = () => {
                   />
                 </Card>
               )}
+                </>
+              )}
+
+              {/* Instagram Long Videos Content (Future) */}
+              {longVideoPlatform === 'instagram' && (
+                <Card title="📸 Instagram Videos">
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">📸</div>
+                    <p className="text-gray-600 text-lg mb-2">Instagram video integration coming soon!</p>
+                    <p className="text-sm text-gray-500">Upload long-form videos to Instagram</p>
+                  </div>
+                </Card>
+              )}
+
+              {/* Facebook Long Videos Content (Future) */}
+              {longVideoPlatform === 'facebook' && (
+                <Card title="👥 Facebook Videos">
+                  <div className="text-center py-16">
+                    <div className="text-6xl mb-4">👥</div>
+                    <p className="text-gray-600 text-lg mb-2">Facebook video integration coming soon!</p>
+                    <p className="text-sm text-gray-500">Upload videos to Facebook pages</p>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
 
@@ -638,6 +752,19 @@ const YouTubePage = () => {
           {/* Credentials Tab */}
           {activeTab === 'credentials' && (
             <div className="space-y-6">
+              {/* Platform Info */}
+              <div className="bg-gradient-to-r from-red-50 to-yellow-50 border-l-4 border-red-500 p-4 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">📺</span>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">YouTube Platform Credentials</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Manage OAuth credentials for uploading videos to YouTube. Future platforms (TikTok, Instagram, etc.) will be added here.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <CredentialsManager />
             </div>
           )}

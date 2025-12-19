@@ -273,14 +273,22 @@ const LongVideoConfig = ({ initialConfig, onSave, onCancel, loading }) => {
           </p>
         </div>
 
-        {/* YouTube Metadata Section */}
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">📺</span>
-            <h3 className="text-sm font-semibold text-gray-900">YouTube Metadata (Optional)</h3>
+        {/* Platform Configuration - YouTube */}
+        <div className="bg-gradient-to-r from-red-50 to-yellow-50 border-2 border-red-200 rounded-lg p-5 space-y-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">📺</span>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Platform: YouTube</h3>
+                <p className="text-xs text-gray-600">Configure YouTube-specific upload settings</p>
+              </div>
+            </div>
+            <span className="px-3 py-1 bg-red-600 text-white text-xs font-semibold rounded-full">
+              YouTube
+            </span>
           </div>
-          <p className="text-xs text-gray-600 mb-3">
-            Custom metadata for YouTube upload. Leave empty to auto-generate.
+          <p className="text-xs text-gray-600 mb-3 bg-white/50 p-2 rounded border border-red-100">
+            💡 <strong>Tip:</strong> Leave fields empty to auto-generate metadata based on video content. Custom values will override auto-generation.
           </p>
 
           {/* YouTube Title */}
