@@ -1080,11 +1080,20 @@ def get_news_stats():
         }, customer_id=customer_id)
         with_video = news_collection.count_documents(video_query)
 
-        # Count uploaded articles (have youtube_video_id)
-        uploaded_query = build_multi_tenant_query({
+        # Count uploaded long videos (have youtube_video_id)
+        uploaded_long_query = build_multi_tenant_query({
             'youtube_video_id': {'$exists': True, '$ne': None, '$ne': ''}
         }, customer_id=customer_id)
-        uploaded = news_collection.count_documents(uploaded_query)
+        uploaded_long = news_collection.count_documents(uploaded_long_query)
+
+        # Count uploaded shorts (have youtube_shorts_id)
+        uploaded_shorts_query = build_multi_tenant_query({
+            'youtube_shorts_id': {'$exists': True, '$ne': None, '$ne': ''}
+        }, customer_id=customer_id)
+        uploaded_shorts = news_collection.count_documents(uploaded_shorts_query)
+
+        # Total uploaded (long videos + shorts)
+        uploaded = uploaded_long + uploaded_shorts
 
         # Count processing articles
         processing_query = build_multi_tenant_query({
@@ -1103,6 +1112,8 @@ def get_news_stats():
             'with_audio': with_audio,
             'with_video': with_video,
             'uploaded': uploaded,
+            'uploaded_long': uploaded_long,
+            'uploaded_shorts': uploaded_shorts,
             'processing': processing,
             'failed': failed
         })

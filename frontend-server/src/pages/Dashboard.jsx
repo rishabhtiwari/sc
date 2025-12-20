@@ -9,6 +9,8 @@ const Dashboard = () => {
     withAudio: 0,
     withVideo: 0,
     uploaded: 0,
+    uploadedLong: 0,
+    uploadedShorts: 0,
     processing: 0,
     failed: 0,
     totalImages: 0,
@@ -251,6 +253,68 @@ const Dashboard = () => {
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Pending Uploads</span>
               <span className="text-lg font-bold text-indigo-600">{stats.withVideo - stats.uploaded}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Platform-wise Upload Stats */}
+      <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-bold text-gray-800">Platform Upload Statistics</h2>
+          <span className="text-2xl">🚀</span>
+        </div>
+
+        {/* YouTube Platform Card */}
+        <div className="border-2 border-red-200 rounded-lg p-6 bg-gradient-to-br from-red-50 to-white">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+              <span className="text-2xl">📺</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">YouTube</h3>
+              <p className="text-sm text-gray-500">Video uploads to YouTube platform</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+            {/* Total Uploads */}
+            <div className="bg-white rounded-lg p-4 shadow-sm border border-red-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Total Uploads</p>
+                  <p className="text-2xl font-bold text-red-600 mt-1">{stats.uploaded}</p>
+                </div>
+                <span className="text-3xl opacity-30">📊</span>
+              </div>
+            </div>
+
+            {/* Long Videos */}
+            <div className="bg-white rounded-lg p-4 shadow-sm border border-red-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Long Videos</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{stats.uploadedLong || 0}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {stats.uploaded > 0 ? Math.round((stats.uploadedLong / stats.uploaded) * 100) : 0}% of total
+                  </p>
+                </div>
+                <span className="text-3xl opacity-30">🎬</span>
+              </div>
+            </div>
+
+            {/* Shorts */}
+            <div className="bg-white rounded-lg p-4 shadow-sm border border-red-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium">Shorts</p>
+                  <p className="text-2xl font-bold text-purple-600 mt-1">{stats.uploadedShorts || 0}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {stats.uploaded > 0 ? Math.round((stats.uploadedShorts / stats.uploaded) * 100) : 0}% of total
+                  </p>
+                </div>
+                <span className="text-3xl opacity-30">📱</span>
+              </div>
             </div>
           </div>
         </div>

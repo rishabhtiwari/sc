@@ -33,6 +33,7 @@ const YouTubePage = () => {
     has_prev: false,
   });
   const [uploading, setUploading] = useState(false);
+  const [uploadingShortId, setUploadingShortId] = useState(null); // Track which short is being uploaded
   const [merging, setMerging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadLogs, setUploadLogs] = useState([]);
@@ -107,7 +108,8 @@ const YouTubePage = () => {
 
   // Handle page change for shorts
   const handleShortsPageChange = (newPage) => {
-    loadPendingShorts(newPage, shortsPagination.limit);
+    console.log('Shorts page change requested:', newPage, 'Current page:', shortsPagination.page);
+    loadPendingShorts(newPage, 5); // Use fixed limit of 5
   };
 
   // Poll for config status updates using the merge-status endpoint
@@ -393,12 +395,8 @@ const YouTubePage = () => {
 
   // Upload single short
   const handleUploadShort = async (articleId) => {
-    if (!window.confirm('Upload this short to YouTube?')) {
-      return;
-    }
-
-    // Set uploading state to disable buttons and show progress
-    setUploading(true);
+    // Set uploading state for this specific short
+    setUploadingShortId(articleId);
     setShowProgress(true);
     setUploadProgress(0);
     setUploadLogs([]);
@@ -438,7 +436,7 @@ const YouTubePage = () => {
       ]);
       showToast(error.response?.data?.error || 'Upload failed', 'error');
     } finally {
-      setUploading(false);
+      setUploadingShortId(null);
     }
   };
 
@@ -600,7 +598,7 @@ const YouTubePage = () => {
                     shorts={shorts}
                     onUpload={handleUploadShort}
                     loading={shortsLoading}
-                    uploading={uploading}
+                    uploadingShortId={uploadingShortId}
                     pagination={shortsPagination}
                     onPageChange={handleShortsPageChange}
                   />

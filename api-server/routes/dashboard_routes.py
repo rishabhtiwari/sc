@@ -102,6 +102,8 @@ def get_dashboard_stats():
             'withAudio': 0,
             'withVideo': 0,
             'uploaded': 0,
+            'uploadedLong': 0,
+            'uploadedShorts': 0,
             'processing': 0,
             'failed': 0,
             'totalImages': 0,
@@ -117,6 +119,8 @@ def get_dashboard_stats():
                 stats['totalNews'] = news_stats.get('total', 0)
                 stats['withVideo'] = news_stats.get('with_video', 0)
                 stats['uploaded'] = news_stats.get('uploaded', 0)
+                stats['uploadedLong'] = news_stats.get('uploaded_long', 0)
+                stats['uploadedShorts'] = news_stats.get('uploaded_shorts', 0)
                 stats['processing'] = news_stats.get('processing', 0)
                 stats['failed'] = news_stats.get('failed', 0)
         except Exception as e:
@@ -127,6 +131,8 @@ def get_dashboard_stats():
                 'withAudio': 0,
                 'withVideo': 165,
                 'uploaded': 142,
+                'uploadedLong': 100,
+                'uploadedShorts': 42,
                 'processing': 12,
                 'failed': 5,
                 'totalImages': 0,

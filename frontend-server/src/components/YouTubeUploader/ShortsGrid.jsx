@@ -8,7 +8,7 @@ const ShortsGrid = ({
   shorts,
   onUpload,
   loading,
-  uploading,
+  uploadingShortId,
   pagination,
   onPageChange
 }) => {
@@ -170,13 +170,13 @@ const ShortsGrid = ({
                 {/* Upload Button */}
                 <Button
                   variant="danger"
-                  icon={uploading ? "⏳" : "⬆️"}
+                  icon={uploadingShortId === short.id ? "⏳" : "⬆️"}
                   onClick={() => onUpload(short.id)}
-                  disabled={uploading}
+                  disabled={uploadingShortId === short.id}
                   fullWidth
                   size="sm"
                 >
-                  {uploading ? 'Uploading...' : 'Upload to YouTube'}
+                  {uploadingShortId === short.id ? 'Uploading...' : 'Upload to YouTube'}
                 </Button>
               </div>
             </Card>

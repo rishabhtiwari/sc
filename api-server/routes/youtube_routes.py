@@ -96,10 +96,11 @@ def upload_config_video(config_id):
 
 @youtube_bp.route('/youtube/shorts/pending', methods=['GET'])
 def get_pending_shorts():
-    """Get pending YouTube shorts"""
+    """Get pending YouTube shorts with pagination"""
     try:
         headers = get_request_headers_with_context()
-        response = requests.get(f'{YOUTUBE_SERVICE_URL}/api/shorts/pending', headers=headers, timeout=30)
+        # Forward query parameters (page, limit) to the backend service
+        response = requests.get(f'{YOUTUBE_SERVICE_URL}/api/shorts/pending', headers=headers, params=request.args, timeout=30)
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to YouTube shorts/pending: {str(e)}")
