@@ -71,16 +71,25 @@ const TemplateWizard = ({ onClose, onSave }) => {
   }, [config, autoPreview]);
 
   // Update configuration and add to history
-  const updateConfig = (updates) => {
+  const updateConfig = (updates, autoRefreshPreview = false) => {
     const newConfig = { ...config, ...updates };
-    
+
     // Add to history
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newConfig);
     setHistory(newHistory);
     setHistoryIndex(newHistory.length - 1);
-    
+
     setConfig(newConfig);
+
+    // Auto-refresh preview for certain changes (like aspect ratio or effects)
+    if (autoRefreshPreview) {
+      // Use setTimeout to ensure state is updated first, and pass the new config
+      setTimeout(() => {
+        // Use is_initial=false to generate a new preview with effects applied
+        generatePreviewWithConfig(newConfig, false);
+      }, 100);
+    }
   };
 
   // Undo configuration change
@@ -99,23 +108,27 @@ const TemplateWizard = ({ onClose, onSave }) => {
     }
   };
 
-  // Generate preview video
-  const generatePreview = async (isInitial = false) => {
+  // Generate preview video with specific config
+  const generatePreviewWithConfig = async (templateConfig, isInitial = false) => {
+    console.log('generatePreviewWithConfig called:', { isInitial, background_music: templateConfig.background_music });
     setPreviewLoading(true);
     setPreviewError(null);
 
     try {
+      const requestBody = {
+        template: templateConfig,
+        sample_data: {},
+        is_initial: isInitial
+      };
+      console.log('Sending preview request:', requestBody);
+
       const response = await fetch('http://localhost:8080/api/templates/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
-        body: JSON.stringify({
-          template: config,
-          sample_data: {},
-          is_initial: isInitial
-        })
+        body: JSON.stringify(requestBody)
       });
 
       const data = await response.json();
@@ -144,6 +157,11 @@ const TemplateWizard = ({ onClose, onSave }) => {
     } finally {
       setPreviewLoading(false);
     }
+  };
+
+  // Generate preview video with current config
+  const generatePreview = async (isInitial = false) => {
+    return generatePreviewWithConfig(config, isInitial);
   };
 
   // Cleanup preview video
@@ -262,7 +280,10 @@ const TemplateWizard = ({ onClose, onSave }) => {
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">📹 Live Preview</h3>
                 <button
-                  onClick={generatePreview}
+                  onClick={() => {
+                    console.log('Refresh Preview clicked, config:', config);
+                    generatePreview(false);
+                  }}
                   disabled={previewLoading}
                   className={`px-4 py-2 rounded-lg font-medium text-white ${
                     previewLoading
@@ -377,7 +398,7 @@ const TemplateWizard = ({ onClose, onSave }) => {
                 <LogoSection config={config} updateConfig={updateConfig} />
               )}
               {activeSection === 'thumbnail' && (
-                <ThumbnailSection config={config} updateConfig={updateConfig} />
+                <ThumbnailSection config={config} updateConfig={updateConfig} previewUrl={previewUrl} />
               )}
               {activeSection === 'layers' && (
                 <LayersSection config={config} updateConfig={updateConfig} />
@@ -460,7 +481,7 @@ const BasicInfoSection = ({ config, updateConfig }) => (
         {['16:9', '9:16', '1:1', '4:5'].map((ratio) => (
           <button
             key={ratio}
-            onClick={() => updateConfig({ aspect_ratio: ratio })}
+            onClick={() => updateConfig({ aspect_ratio: ratio }, true)}
             className={`px-4 py-3 rounded-lg font-medium border-2 transition-all ${
               config.aspect_ratio === ratio
                 ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
@@ -476,24 +497,77 @@ const BasicInfoSection = ({ config, updateConfig }) => (
 );
 
 const EffectsSection = ({ config, updateConfig }) => {
-  const addEffect = () => {
-    const newEffect = {
+  // Available effects with their metadata
+  const availableEffects = [
+    {
       type: 'ken_burns',
-      target_layer_id: 'background',
-      params: { zoom_start: 1.0, zoom_end: 1.2, easing: 'ease_in_out' }
-    };
-    updateConfig({ effects: [...config.effects, newEffect] });
+      name: 'Ken Burns (Zoom & Pan)',
+      icon: '🎬',
+      description: 'Adds cinematic zoom and pan motion to images',
+      defaultParams: { zoom_start: 1.0, zoom_end: 1.2, pan_style: 'zoom_center', easing: 'ease_in_out' }
+    },
+    {
+      type: 'fade_text',
+      name: 'Fade Text',
+      icon: '✨',
+      description: 'Fade in/out transitions for text overlays',
+      defaultParams: { fade_in_duration: 0.5, fade_out_duration: 0.5, fade_type: 'both' }
+    },
+    {
+      type: 'transition',
+      name: 'Transition',
+      icon: '🔄',
+      description: 'Crossfade, slide, wipe transitions between clips',
+      defaultParams: { transition_type: 'crossfade', duration: 1.0 }
+    },
+    {
+      type: 'bottom_banner',
+      name: 'Bottom Banner',
+      icon: '📰',
+      description: 'Two-tier bottom banner with scrolling ticker',
+      defaultParams: { height: 120, background_color: '#1a1a1a', opacity: 0.9 }
+    }
+  ];
+
+  // Check if an effect is enabled
+  const isEffectEnabled = (effectType) => {
+    return config.effects.some(e => e.type === effectType);
   };
 
-  const removeEffect = (index) => {
-    const newEffects = config.effects.filter((_, i) => i !== index);
-    updateConfig({ effects: newEffects });
+  // Get effect configuration
+  const getEffectConfig = (effectType) => {
+    return config.effects.find(e => e.type === effectType);
   };
 
-  const updateEffect = (index, updates) => {
-    const newEffects = [...config.effects];
-    newEffects[index] = { ...newEffects[index], ...updates };
-    updateConfig({ effects: newEffects });
+  // Toggle effect on/off
+  const toggleEffect = (effectType, effectMetadata) => {
+    if (isEffectEnabled(effectType)) {
+      // Remove effect
+      const newEffects = config.effects.filter(e => e.type !== effectType);
+      updateConfig({ effects: newEffects }, true); // Auto-refresh preview
+    } else {
+      // Add effect with default params
+      const newEffect = {
+        type: effectType,
+        target_layer_id: '',
+        params: effectMetadata.defaultParams
+      };
+      updateConfig({ effects: [...config.effects, newEffect] }, true); // Auto-refresh preview
+    }
+  };
+
+  // Update effect parameters
+  const updateEffectParams = (effectType, paramUpdates) => {
+    const newEffects = config.effects.map(effect => {
+      if (effect.type === effectType) {
+        return {
+          ...effect,
+          params: { ...effect.params, ...paramUpdates }
+        };
+      }
+      return effect;
+    });
+    updateConfig({ effects: newEffects }, true); // Auto-refresh preview
   };
 
   return (
@@ -501,64 +575,262 @@ const EffectsSection = ({ config, updateConfig }) => {
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h4 className="font-medium text-purple-900 mb-2">✨ Video Effects</h4>
         <p className="text-sm text-purple-800">
-          Add visual effects like Ken Burns (zoom & pan), transitions, and more.
+          Select effects to apply to your video. Changes will update the preview automatically.
         </p>
       </div>
 
-      <button
-        onClick={addEffect}
-        className="w-full px-4 py-3 border-2 border-dashed border-indigo-300 rounded-lg text-indigo-600 font-medium hover:bg-indigo-50"
-      >
-        + Add Effect
-      </button>
+      {availableEffects.map((effectMeta) => {
+        const enabled = isEffectEnabled(effectMeta.type);
+        const effectConfig = getEffectConfig(effectMeta.type);
 
-      {config.effects.map((effect, index) => (
-        <div key={index} className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-          <div className="flex items-center justify-between mb-3">
-            <h5 className="font-medium text-gray-900">Effect #{index + 1}</h5>
-            <button
-              onClick={() => removeEffect(index)}
-              className="text-red-600 hover:text-red-800 font-medium"
-            >
-              🗑️ Remove
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Effect Type</label>
-              <select
-                value={effect.type}
-                onChange={(e) => updateEffect(index, { type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              >
-                <option value="ken_burns">Ken Burns (Zoom & Pan)</option>
-                <option value="fade_text">Fade Text</option>
-                <option value="transition">Transition</option>
-                <option value="bottom_banner">Bottom Banner</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Target Layer ID</label>
+        return (
+          <div key={effectMeta.type} className="border border-gray-300 rounded-lg p-4 bg-white">
+            {/* Effect Header with Checkbox */}
+            <div className="flex items-start gap-3 mb-3">
               <input
-                type="text"
-                value={effect.target_layer_id}
-                onChange={(e) => updateEffect(index, { target_layer_id: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                placeholder="e.g., background"
+                type="checkbox"
+                id={`effect-${effectMeta.type}`}
+                checked={enabled}
+                onChange={() => toggleEffect(effectMeta.type, effectMeta)}
+                className="w-5 h-5 text-indigo-600 rounded mt-1"
               />
+              <div className="flex-1">
+                <label htmlFor={`effect-${effectMeta.type}`} className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-2xl">{effectMeta.icon}</span>
+                  <div>
+                    <div className="font-semibold text-gray-900">{effectMeta.name}</div>
+                    <div className="text-sm text-gray-600">{effectMeta.description}</div>
+                  </div>
+                </label>
+              </div>
             </div>
+
+            {/* Effect Configuration (shown when enabled) */}
+            {enabled && effectConfig && (
+              <div className="ml-8 mt-4 space-y-3 border-t border-gray-200 pt-4">
+                {/* Ken Burns Parameters */}
+                {effectMeta.type === 'ken_burns' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Zoom Start</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.5"
+                          max="2.0"
+                          value={effectConfig.params.zoom_start || 1.0}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { zoom_start: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Zoom End</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0.5"
+                          max="2.0"
+                          value={effectConfig.params.zoom_end || 1.2}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { zoom_end: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Fade Text Parameters */}
+                {effectMeta.type === 'fade_text' && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fade In (seconds)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="5"
+                          value={effectConfig.params.fade_in_duration || 0.5}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { fade_in_duration: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Fade Out (seconds)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="5"
+                          value={effectConfig.params.fade_out_duration || 0.5}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { fade_out_duration: parseFloat(e.target.value) })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Transition Parameters */}
+                {effectMeta.type === 'transition' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Transition Type</label>
+                      <select
+                        value={effectConfig.params.transition_type || 'crossfade'}
+                        onChange={(e) => updateEffectParams(effectMeta.type, { transition_type: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      >
+                        <option value="crossfade">Crossfade</option>
+                        <option value="fade_black">Fade to Black</option>
+                        <option value="slide_left">Slide Left</option>
+                        <option value="slide_right">Slide Right</option>
+                        <option value="slide_up">Slide Up</option>
+                        <option value="slide_down">Slide Down</option>
+                        <option value="wipe_horizontal">Wipe Horizontal</option>
+                        <option value="wipe_vertical">Wipe Vertical</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Duration (seconds)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        max="3"
+                        value={effectConfig.params.duration || 1.0}
+                        onChange={(e) => updateEffectParams(effectMeta.type, { duration: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Bottom Banner Parameters */}
+                {effectMeta.type === 'bottom_banner' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Banner Height (px)</label>
+                      <input
+                        type="number"
+                        step="10"
+                        min="60"
+                        max="200"
+                        value={effectConfig.params.height || 120}
+                        onChange={(e) => updateEffectParams(effectMeta.type, { height: parseInt(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Background Color</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={effectConfig.params.background_color || '#1a1a1a'}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { background_color: e.target.value })}
+                          className="h-10 w-20 border border-gray-300 rounded-lg cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={effectConfig.params.background_color || '#1a1a1a'}
+                          onChange={(e) => updateEffectParams(effectMeta.type, { background_color: e.target.value })}
+                          placeholder="#1a1a1a"
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Opacity</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="1"
+                        value={effectConfig.params.opacity || 0.9}
+                        onChange={(e) => updateEffectParams(effectMeta.type, { opacity: parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
 
 const MusicSection = ({ config, updateConfig }) => {
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState('');
+  const fileInputRef = React.useRef(null);
+
   const updateMusic = (updates) => {
-    updateConfig({ background_music: { ...config.background_music, ...updates } });
+    console.log('updateMusic called with:', updates);
+    console.log('Current background_music config:', config.background_music);
+    const newMusicConfig = { ...config.background_music, ...updates };
+    console.log('New background_music config:', newMusicConfig);
+    updateConfig({ background_music: newMusicConfig });
+  };
+
+  const handleFileUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = ['audio/mpeg', 'audio/wav', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/flac'];
+    const allowedExtensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac'];
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase();
+
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(fileExt)) {
+      setUploadError('Invalid file type. Please upload an audio file (MP3, WAV, M4A, AAC, OGG, FLAC)');
+      return;
+    }
+
+    // Validate file size (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      setUploadError('File too large. Maximum size is 50MB');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8080/api/templates/upload/audio', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        console.log('Audio uploaded successfully:', data.filename);
+        updateMusic({ source: data.filename });
+        setUploadError('');
+        console.log('Background music config updated, source:', data.filename);
+      } else {
+        setUploadError(data.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      setUploadError('Upload failed: ' + error.message);
+    } finally {
+      setUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   return (
@@ -587,13 +859,44 @@ const MusicSection = ({ config, updateConfig }) => {
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Music File</label>
-            <input
-              type="text"
-              value={config.background_music.source}
-              onChange={(e) => updateMusic({ source: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              placeholder="music.mp3 or {{music_file}}"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={config.background_music.source}
+                onChange={(e) => updateMusic({ source: e.target.value })}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                placeholder="music.mp3 or {{music_file}}"
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {uploading ? (
+                  <>
+                    <span className="animate-spin">⏳</span>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    📁 Upload
+                  </>
+                )}
+              </button>
+            </div>
+            {uploadError && (
+              <p className="text-sm text-red-600 mt-1">{uploadError}</p>
+            )}
+            {config.background_music.source && !uploadError && (
+              <p className="text-sm text-green-600 mt-1">✓ {config.background_music.source}</p>
+            )}
           </div>
 
           <div>
@@ -613,7 +916,10 @@ const MusicSection = ({ config, updateConfig }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fade In (seconds)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fade In (seconds)
+                <span className="ml-2 text-xs text-gray-500" title="Audio gradually increases from 0% to full volume">ℹ️</span>
+              </label>
               <input
                 type="number"
                 min="0"
@@ -621,10 +927,15 @@ const MusicSection = ({ config, updateConfig }) => {
                 value={config.background_music.fade_in}
                 onChange={(e) => updateMusic({ fade_in: parseFloat(e.target.value) })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                placeholder="e.g., 2.0"
               />
+              <p className="text-xs text-gray-500 mt-1">Audio starts silent, gradually increases to full volume</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fade Out (seconds)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fade Out (seconds)
+                <span className="ml-2 text-xs text-gray-500" title="Audio gradually decreases from full volume to 0%">ℹ️</span>
+              </label>
               <input
                 type="number"
                 min="0"
@@ -632,7 +943,9 @@ const MusicSection = ({ config, updateConfig }) => {
                 value={config.background_music.fade_out}
                 onChange={(e) => updateMusic({ fade_out: parseFloat(e.target.value) })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                placeholder="e.g., 3.0"
               />
+              <p className="text-xs text-gray-500 mt-1">Audio gradually decreases to silent at the end</p>
             </div>
           </div>
         </>
@@ -642,19 +955,64 @@ const MusicSection = ({ config, updateConfig }) => {
 };
 
 const LogoSection = ({ config, updateConfig }) => {
+  const [logoUploading, setLogoUploading] = React.useState(false);
+  const [logoUploadError, setLogoUploadError] = React.useState('');
+  const logoFileInputRef = React.useRef(null);
+
   const updateLogo = (updates) => {
     updateConfig({ logo: { ...config.logo, ...updates } });
   };
 
+  const handleLogoUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/svg+xml'];
+    if (!validTypes.includes(file.type)) {
+      setLogoUploadError('Please upload a valid image file (PNG, JPG, GIF, or SVG)');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoUploadError('File size must be less than 5MB');
+      return;
+    }
+
+    setLogoUploading(true);
+    setLogoUploadError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('http://localhost:8080/api/templates/upload/logo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        updateLogo({ source: data.filename });
+        setLogoUploadError('');
+      } else {
+        setLogoUploadError(data.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Logo upload error:', error);
+      setLogoUploadError('Failed to upload logo');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <h4 className="font-medium text-yellow-900 mb-2">🏷️ Logo Watermark</h4>
-        <p className="text-sm text-yellow-800">
-          Add your logo as a watermark with customizable position and opacity.
-        </p>
-      </div>
-
       <div className="flex items-center gap-3">
         <input
           type="checkbox"
@@ -672,13 +1030,39 @@ const LogoSection = ({ config, updateConfig }) => {
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Logo Image</label>
-            <input
-              type="text"
-              value={config.logo.source}
-              onChange={(e) => updateLogo({ source: e.target.value })}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-              placeholder="logo.png or {{logo_path}}"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={config.logo.source}
+                onChange={(e) => updateLogo({ source: e.target.value })}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg"
+                placeholder="logo.png or {{logo_path}}"
+              />
+              <input
+                ref={logoFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/gif,image/svg+xml"
+                onChange={handleLogoUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => logoFileInputRef.current?.click()}
+                disabled={logoUploading}
+                className={`px-4 py-2 rounded-lg font-medium text-white ${
+                  logoUploading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-700'
+                }`}
+              >
+                {logoUploading ? '⏳ Uploading...' : '📁 Upload'}
+              </button>
+            </div>
+            {logoUploadError && (
+              <p className="text-sm text-red-600 mt-1">{logoUploadError}</p>
+            )}
+            {config.logo.source && !logoUploadError && (
+              <p className="text-sm text-green-600 mt-1">✓ {config.logo.source}</p>
+            )}
           </div>
 
           <div>
@@ -735,9 +1119,67 @@ const LogoSection = ({ config, updateConfig }) => {
   );
 };
 
-const ThumbnailSection = ({ config, updateConfig }) => {
+const ThumbnailSection = ({ config, updateConfig, previewUrl }) => {
+  const [thumbnailUrl, setThumbnailUrl] = React.useState(null);
+  const [thumbnailLoading, setThumbnailLoading] = React.useState(false);
+  const [thumbnailError, setThumbnailError] = React.useState('');
+
   const updateThumbnail = (updates) => {
     updateConfig({ thumbnail: { ...config.thumbnail, ...updates } });
+  };
+
+  const generateThumbnail = async () => {
+    if (!previewUrl) {
+      setThumbnailError('Please generate a video preview first');
+      return;
+    }
+
+    if (!config.thumbnail.auto_generate) {
+      setThumbnailError('Auto-generate must be enabled to preview thumbnail');
+      return;
+    }
+
+    setThumbnailLoading(true);
+    setThumbnailError('');
+
+    try {
+      // Extract path from full URL if needed
+      let videoPath = previewUrl;
+      if (videoPath.startsWith('http://')) {
+        const url = new URL(videoPath);
+        videoPath = url.pathname; // Extract just the path part
+      }
+
+      console.log('🖼️ Generating thumbnail from video:', videoPath);
+
+      const response = await fetch('http://localhost:8080/api/templates/preview/thumbnail', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          video_path: videoPath,
+          timestamp: config.thumbnail.timestamp || 2.0,
+          aspect_ratio: config.aspect_ratio || '16:9'
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        // Add cache buster to force reload
+        setThumbnailUrl(`http://localhost:8080${data.thumbnail_url}?t=${Date.now()}`);
+        setThumbnailError('');
+      } else {
+        setThumbnailError(data.error || 'Failed to generate thumbnail');
+      }
+    } catch (error) {
+      console.error('Thumbnail generation error:', error);
+      setThumbnailError('Failed to generate thumbnail');
+    } finally {
+      setThumbnailLoading(false);
+    }
   };
 
   return (
@@ -763,17 +1205,67 @@ const ThumbnailSection = ({ config, updateConfig }) => {
       </div>
 
       {config.thumbnail.auto_generate ? (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Timestamp (seconds)</label>
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            value={config.thumbnail.timestamp}
-            onChange={(e) => updateThumbnail({ timestamp: parseFloat(e.target.value) })}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-          />
-        </div>
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Timestamp (seconds)
+              <span className="ml-2 text-xs text-gray-500">
+                ℹ️ Frame to extract from video
+              </span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={config.thumbnail.timestamp}
+              onChange={(e) => updateThumbnail({ timestamp: parseFloat(e.target.value) })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              placeholder="e.g., 2.0"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The system will extract a frame at this timestamp to use as the video thumbnail
+            </p>
+          </div>
+
+          <div>
+            <button
+              onClick={generateThumbnail}
+              disabled={thumbnailLoading || !previewUrl}
+              className={`w-full px-4 py-2 rounded-lg font-medium text-white ${
+                thumbnailLoading || !previewUrl
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-pink-600 hover:bg-pink-700'
+              }`}
+            >
+              {thumbnailLoading ? '⏳ Generating Thumbnail...' : '🖼️ Generate Thumbnail Preview'}
+            </button>
+            {!previewUrl && (
+              <p className="text-xs text-amber-600 mt-1">
+                ⚠️ Generate a video preview first to see thumbnail
+              </p>
+            )}
+          </div>
+
+          {thumbnailError && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-sm text-red-800">{thumbnailError}</p>
+            </div>
+          )}
+
+          {thumbnailUrl && (
+            <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
+              <h5 className="text-sm font-medium text-gray-700 mb-2">Thumbnail Preview:</h5>
+              <img
+                src={thumbnailUrl}
+                alt="Thumbnail preview"
+                className="w-full rounded-lg shadow-md"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                ✓ Extracted at {config.thumbnail.timestamp}s
+              </p>
+            </div>
+          )}
+        </>
       ) : (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Custom Thumbnail</label>
@@ -784,6 +1276,9 @@ const ThumbnailSection = ({ config, updateConfig }) => {
             className="w-full px-4 py-2 border border-gray-300 rounded-lg"
             placeholder="thumbnail.jpg or {{thumbnail_image}}"
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Provide a custom thumbnail image path or use a variable
+          </p>
         </div>
       )}
     </div>

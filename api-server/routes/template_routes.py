@@ -223,3 +223,168 @@ def cleanup_preview():
         logger.error(f"Error proxying to template-service cleanup: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@template_bp.route('/templates/upload/audio', methods=['POST', 'OPTIONS'])
+def upload_audio():
+    """Upload audio file for background music"""
+    try:
+        # Handle preflight OPTIONS request
+        if request.method == 'OPTIONS':
+            response = Response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response, 200
+
+        logger.info("🎵 POST /templates/upload/audio - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        # Don't set Content-Type for multipart/form-data - let requests handle it
+        # Forward the file upload
+        files = {}
+        if 'file' in request.files:
+            file = request.files['file']
+            files['file'] = (file.filename, file.stream, file.content_type)
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/upload/audio',
+            files=files,
+            headers=headers,
+            timeout=60
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying audio upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@template_bp.route('/templates/upload/logo', methods=['POST', 'OPTIONS'])
+def upload_logo():
+    """Upload logo image file"""
+    try:
+        # Handle preflight OPTIONS request
+        if request.method == 'OPTIONS':
+            response = Response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response, 200
+
+        logger.info("🏷️ POST /templates/upload/logo - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        # Don't set Content-Type for multipart/form-data - let requests handle it
+        # Forward the file upload
+        files = {}
+        if 'file' in request.files:
+            file = request.files['file']
+            files['file'] = (file.filename, file.stream, file.content_type)
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/upload/logo',
+            files=files,
+            headers=headers,
+            timeout=60
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying logo upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@template_bp.route('/templates/preview/thumbnail', methods=['POST', 'OPTIONS'])
+def generate_thumbnail():
+    """Generate thumbnail from preview video"""
+    try:
+        # Handle preflight OPTIONS request
+        if request.method == 'OPTIONS':
+            response = Response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response, 200
+
+        logger.info("🖼️ POST /templates/preview/thumbnail - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/preview/thumbnail',
+            json=request.get_json(),
+            headers=headers,
+            timeout=60
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying thumbnail generation: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@template_bp.route('/templates/preview/thumbnail/<filename>', methods=['GET'])
+def serve_thumbnail(filename):
+    """Serve thumbnail image"""
+    try:
+        logger.info(f"📥 GET /templates/preview/thumbnail/{filename} - Proxying to template-service")
+
+        response = requests.get(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/preview/thumbnail/{filename}',
+            timeout=30
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type', 'image/jpeg')
+        )
+    except Exception as e:
+        logger.error(f"Error serving thumbnail: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@template_bp.route('/templates/assets/<filename>', methods=['GET'])
+def serve_asset(filename):
+    """Serve asset files (audio, images, etc.)"""
+    try:
+        logger.info(f"📁 GET /templates/assets/{filename} - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        response = requests.get(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/assets/{filename}',
+            headers=headers,
+            timeout=60,
+            stream=True
+        )
+
+        # Create response with proper headers
+        flask_response = Response(
+            response.iter_content(chunk_size=8192),
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type', 'application/octet-stream')
+        )
+
+        # Add CORS headers
+        flask_response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+        flask_response.headers['Access-Control-Allow-Credentials'] = 'true'
+
+        return flask_response
+    except Exception as e:
+        logger.error(f"Error serving asset {filename}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+

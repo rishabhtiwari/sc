@@ -35,6 +35,7 @@ PUBLIC_ENDPOINT_PATTERNS = [
     '/api/news/videos/',  # Config video/thumbnail downloads
     '/api/news/audio/serve/',  # Audio file downloads
     '/api/templates/preview/video/',  # Template preview video downloads
+    '/api/templates/preview/thumbnail/',  # Template preview thumbnail downloads
 ]
 
 
