@@ -46,10 +46,32 @@ const NewsFetcherPage = () => {
     loadFiltersData();
   }, []);
 
+  // Auto-refresh stats every 10 seconds when on overview tab
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      const intervalId = setInterval(() => {
+        fetchStats();
+      }, 10000); // Refresh every 10 seconds
+
+      return () => clearInterval(intervalId);
+    }
+  }, [activeTab]);
+
   // Load news when tab changes or filters change
   useEffect(() => {
     if (activeTab === 'news') {
       fetchNews(filters);
+    }
+  }, [activeTab, filters]);
+
+  // Auto-refresh news data every 10 seconds when on news tab
+  useEffect(() => {
+    if (activeTab === 'news') {
+      const intervalId = setInterval(() => {
+        fetchNews(filters);
+      }, 10000); // Refresh every 10 seconds
+
+      return () => clearInterval(intervalId);
     }
   }, [activeTab, filters]);
 

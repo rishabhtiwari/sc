@@ -124,7 +124,8 @@ class VideoMergeService:
                 temp_output_path,
                 transition_duration=self.config.TRANSITION_DURATION if self.config.ENABLE_TRANSITIONS else 0,
                 append_subscribe_video=True,  # Always append subscribe video
-                background_audio_id=background_audio_id  # Pass custom background audio
+                background_audio_id=background_audio_id,  # Pass custom background audio
+                customer_id=customer_id  # Pass customer_id for multi-tenant background music
             )
 
             # Atomic operation: Move temp file to final location
@@ -178,7 +179,7 @@ class VideoMergeService:
                 'error': str(e)
             }
 
-    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0, append_subscribe_video: bool = False, background_audio_id: str = None) -> float:
+    def _merge_videos_with_ffmpeg(self, video_paths: List[str], output_path: str, transition_duration: float = 1.0, append_subscribe_video: bool = False, background_audio_id: str = None, customer_id: str = None) -> float:
         """
         Merge videos using FFmpeg with xfade sliding transitions for maximum speed
 
@@ -188,6 +189,7 @@ class VideoMergeService:
             transition_duration: Duration of transition in seconds
             append_subscribe_video: Whether to append CNI News subscribe video at the end
             background_audio_id: Optional custom background audio filename from assets directory
+            customer_id: Customer ID for multi-tenant isolation (required for background music)
 
         Returns:
             Total duration of merged video in seconds
@@ -363,6 +365,14 @@ class VideoMergeService:
             self.logger.info("✅ Background music added successfully!")
         else:
             self.logger.warning("⚠️ Failed to add background music, using video without it")
+
+        # Apply logo watermark to merged video if enabled
+        if self.config.ENABLE_LOGO_WATERMARK:
+            logo_applied = self._add_logo_watermark(output_path)
+            if logo_applied:
+                self.logger.info("✅ Logo watermark added to merged video!")
+            else:
+                self.logger.warning("⚠️ Failed to add logo watermark to merged video")
 
         return total_duration
 
@@ -645,6 +655,103 @@ class VideoMergeService:
             # Clean up temp file if it exists
             try:
                 temp_output = video_path.replace('.mp4', '.music.tmp.mp4')
+                if os.path.exists(temp_output):
+                    os.remove(temp_output)
+            except Exception:
+                pass
+            return False
+
+    def _add_logo_watermark(self, video_path: str) -> bool:
+        """
+        Add logo watermark to the merged video using FFmpeg overlay filter
+
+        Args:
+            video_path: Path to the merged video file (will be replaced with version that has logo)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Get logo path from config
+            logo_path = self.config.LOGO_PATH
+
+            if not os.path.exists(logo_path):
+                self.logger.warning(f"⚠️ Logo not found at {logo_path}")
+                return False
+
+            self.logger.info(f"🎨 Adding logo watermark from: {logo_path}")
+
+            # Get video dimensions to calculate logo position
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=width,height',
+                 '-of', 'csv=s=x:p=0', video_path],
+                capture_output=True, text=True, check=True
+            )
+            video_resolution = result.stdout.strip()  # e.g., "1920x1080"
+            video_width, video_height = map(int, video_resolution.split('x'))
+
+            # Calculate logo dimensions based on scale (12% of video width)
+            logo_scale = self.config.LOGO_SCALE  # 0.12 = 12%
+            logo_width = int(video_width * logo_scale)
+
+            # Calculate logo position based on config
+            margin = self.config.LOGO_MARGIN  # 30px default
+            position = self.config.LOGO_POSITION  # 'top-right' default
+
+            # Calculate x, y position based on position setting
+            if 'right' in position:
+                x_pos = f'W-w-{margin}'  # W=video width, w=logo width
+            elif 'left' in position:
+                x_pos = str(margin)
+            else:  # center
+                x_pos = '(W-w)/2'
+
+            if 'top' in position:
+                y_pos = str(margin)
+            elif 'bottom' in position:
+                y_pos = f'H-h-{margin}'  # H=video height, h=logo height
+            else:  # center
+                y_pos = '(H-h)/2'
+
+            # Create temporary output path
+            temp_output = video_path.replace('.mp4', '.logo.tmp.mp4')
+
+            # Build FFmpeg command to overlay logo
+            # Use overlay filter with alpha channel support
+            cmd = [
+                'ffmpeg',
+                '-y',  # Overwrite output
+                '-i', video_path,  # Input video
+                '-i', logo_path,  # Logo image
+                '-filter_complex',
+                f'[1:v]scale={logo_width}:-1[logo];'  # Scale logo maintaining aspect ratio
+                f'[0:v][logo]overlay={x_pos}:{y_pos}:format=auto',  # Overlay logo
+                '-c:v', 'libx264',  # Video codec
+                '-preset', 'medium',  # Encoding preset
+                '-crf', '23',  # Quality
+                '-c:a', 'copy',  # Copy audio stream (no re-encoding)
+                temp_output
+            ]
+
+            self.logger.info(f"🚀 Running FFmpeg to add logo watermark (position: {position}, scale: {logo_scale})...")
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            if result.returncode != 0:
+                self.logger.error(f"❌ FFmpeg error adding logo: {result.stderr}")
+                return False
+
+            # Replace original video with the one that has logo
+            os.replace(temp_output, video_path)
+            self.logger.info(f"✅ Logo watermark added and video replaced: {video_path}")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"❌ Error adding logo watermark: {str(e)}")
+            # Clean up temp file if it exists
+            try:
+                temp_output = video_path.replace('.mp4', '.logo.tmp.mp4')
                 if os.path.exists(temp_output):
                     os.remove(temp_output)
             except Exception:

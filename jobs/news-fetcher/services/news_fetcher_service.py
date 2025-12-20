@@ -378,22 +378,33 @@ class NewsFetcherService:
                     self.logger.info(
                         f"✅ Saved new article with category '{category}': {article.get('title', 'N/A')[:50]}...")
                 else:
-                    # Optionally update existing article with newer data and category
-                    update_data = {
-                        'status': ArticleStatus.PROGRESS.value,
-                        'short_summary': '',
-                        'category': category
-                    }
-
-                    # Add audit fields for update
-                    prepare_update_document(update_data, user_id=user_id)
-
-                    self.news_collection.update_one(
-                        query,
-                        {'$set': update_data}
+                    # Check if article has been enriched (has video, audio, or completed status)
+                    is_enriched = (
+                        existing.get('status') == ArticleStatus.COMPLETED.value or
+                        existing.get('video_path') or
+                        existing.get('audio_paths') or
+                        existing.get('clean_image')
                     )
-                    self.logger.info(
-                        f"🔄 Updated existing article with category '{category}': {article.get('title', 'N/A')[:50]}...")
+
+                    if is_enriched:
+                        # Don't update enriched articles - they've already been processed
+                        self.logger.info(
+                            f"⏭️  Skipping enriched article: {article.get('title', 'N/A')[:50]}...")
+                    else:
+                        # Only update non-enriched articles (still in progress)
+                        update_data = {
+                            'category': category  # Only update category, preserve status and short_summary
+                        }
+
+                        # Add audit fields for update
+                        prepare_update_document(update_data, user_id=user_id)
+
+                        self.news_collection.update_one(
+                            query,
+                            {'$set': update_data}
+                        )
+                        self.logger.info(
+                            f"🔄 Updated existing article category to '{category}': {article.get('title', 'N/A')[:50]}...")
 
             except Exception as e:
                 self.logger.error(f"Error saving article {article.get('id', 'unknown')}: {str(e)}")

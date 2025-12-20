@@ -7,11 +7,11 @@ print('Starting migration: 030_create_default_customer_and_admin');
 // Switch to news database
 db = db.getSiblingDB('news');
 
-// Create default customer
+// Create system customer (for internal/system operations)
 const defaultCustomer = {
-    customer_id: 'customer_default',
-    company_name: 'Default Customer',
-    slug: 'default',
+    customer_id: 'customer_system',
+    company_name: 'System Customer',
+    slug: 'system',
     status: 'active',
     subscription: {
         plan_type: 'enterprise',
@@ -56,7 +56,7 @@ print('  - Status: ' + defaultCustomer.status);
 // Hash generated with Python: bcrypt.hashpw('admin123'.encode('utf-8'), bcrypt.gensalt(rounds=12))
 const superAdminUser = {
     user_id: 'user_super_admin',
-    customer_id: 'customer_default',
+    customer_id: 'customer_system',
     email: 'admin@newsautomation.com',
     password_hash: '$2b$12$qc62sgy/WnsXW8WPBe5YG.aM5TroVSJowo8hejli06gEXFvDPgul.',
     first_name: 'Super',

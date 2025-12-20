@@ -65,6 +65,21 @@ class YouTubeService:
                 query = build_multi_tenant_query(base_query, customer_id=customer_id)
                 credential_doc = credentials_collection.find_one(query)
 
+                # If specific credential not found, try to find any active authenticated credential for this customer
+                if not credential_doc or not credential_doc.get('is_authenticated'):
+                    self.logger.warning(f"⚠️ Credential '{credential_id}' not found, looking for any active credential for customer...")
+
+                    # Look for any authenticated credential for this customer
+                    fallback_query = {
+                        'is_authenticated': True,
+                        'is_deleted': {'$ne': True}
+                    }
+                    fallback_query = build_multi_tenant_query(fallback_query, customer_id=customer_id)
+                    credential_doc = credentials_collection.find_one(fallback_query)
+
+                    if credential_doc:
+                        self.logger.info(f"✅ Found active credential: {credential_doc.get('name')} (ID: {credential_doc.get('credential_id')})")
+
                 if credential_doc and credential_doc.get('is_authenticated'):
                     # Build credentials object from MongoDB data
                     creds_data = {
@@ -89,7 +104,7 @@ class YouTubeService:
                     credentials = Credentials.from_authorized_user_info(creds_data, self.config.YOUTUBE_SCOPES)
                     self.logger.info("✅ Loaded credentials from MongoDB")
                 else:
-                    self.logger.error(f"❌ No authenticated credential found in MongoDB with ID: {credential_id}")
+                    self.logger.error(f"❌ No authenticated credential found in MongoDB")
                     self.logger.error("Please authenticate using the UI: YouTube Uploader → Credentials → Authenticate")
                     return False
             else:

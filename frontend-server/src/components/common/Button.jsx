@@ -1,20 +1,20 @@
 import React from 'react';
 
 /**
- * Reusable Button Component
+ * Professional Button Component - Enterprise SaaS Style
+ * Follows modern design principles with consistent sizing and minimal color variants
+ *
  * @param {Object} props - Component props
- * @param {string} props.variant - Button variant (primary, secondary, success, danger, warning)
- * @param {string} props.size - Button size (sm, md, lg)
+ * @param {string} props.variant - Button variant (primary, secondary, ghost, text)
  * @param {boolean} props.disabled - Disabled state
  * @param {boolean} props.loading - Loading state
- * @param {string} props.icon - Icon emoji
+ * @param {string} props.icon - Icon emoji or SVG
  * @param {Function} props.onClick - Click handler
  * @param {string} props.className - Additional CSS classes
  * @param {React.ReactNode} props.children - Button content
  */
 const Button = ({
   variant = 'primary',
-  size = 'md',
   disabled = false,
   loading = false,
   icon,
@@ -23,31 +23,27 @@ const Button = ({
   children,
   ...props
 }) => {
-  const baseClasses = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-offset-2';
-  
+  // Base classes - consistent for all buttons
+  const baseClasses = 'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed';
+
+  // Minimal variant system - professional single-color approach
   const variantClasses = {
-    primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500',
-    secondary: 'bg-gray-200 hover:bg-gray-300 text-gray-800 focus:ring-gray-500',
-    success: 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500',
-    danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500',
-    warning: 'bg-orange-600 hover:bg-orange-700 text-white focus:ring-orange-500',
-    info: 'bg-cyan-600 hover:bg-cyan-700 text-white focus:ring-cyan-500',
-    outline: 'border-2 border-blue-600 text-blue-600 hover:bg-blue-50 focus:ring-blue-500',
+    // Primary - Main action button (blue)
+    primary: 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-sm hover:shadow focus:ring-blue-500',
+
+    // Secondary - Alternative action (outlined)
+    secondary: 'bg-white hover:bg-neutral-50 active:bg-neutral-100 text-neutral-700 border border-neutral-300 hover:border-neutral-400 focus:ring-blue-500',
+
+    // Ghost - Subtle action (transparent)
+    ghost: 'bg-transparent hover:bg-neutral-100 active:bg-neutral-200 text-neutral-700 hover:text-neutral-900 focus:ring-blue-500',
+
+    // Text - Minimal action (no background)
+    text: 'bg-transparent hover:bg-neutral-50 active:bg-neutral-100 text-blue-600 hover:text-blue-700 focus:ring-blue-500',
   };
-  
-  const sizeClasses = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
-  };
-  
-  const disabledClasses = 'opacity-50 cursor-not-allowed';
-  
+
   const classes = `
     ${baseClasses}
     ${variantClasses[variant] || variantClasses.primary}
-    ${sizeClasses[size] || sizeClasses.md}
-    ${(disabled || loading) ? disabledClasses : ''}
     ${className}
   `.trim();
 
@@ -59,10 +55,13 @@ const Button = ({
       {...props}
     >
       {loading && (
-        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
       )}
-      {!loading && icon && <span>{icon}</span>}
-      {children}
+      {!loading && icon && <span className="flex-shrink-0">{icon}</span>}
+      {children && <span>{children}</span>}
     </button>
   );
 };

@@ -944,7 +944,7 @@ services:
       - NEWS_MONGODB_DATABASE=news
       - NEWS_MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
       # Cleanup Configuration
-      - CLEANUP_RETENTION_HOURS=4
+      - CLEANUP_RETENTION_HOURS=24
       - CLEANUP_DRY_RUN=false
       - CLEANUP_BATCH_SIZE=100
       - CLEANUP_MAX_ARTICLES_PER_RUN=10000

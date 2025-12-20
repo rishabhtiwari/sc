@@ -624,7 +624,9 @@ class NewsAudioService:
     def process_news_audio_generation(self, job_id: str = None, is_on_demand: bool = False, customer_id: str = None) -> Dict[str, Any]:
         """
         Process audio generation for multiple news articles
-        Continues processing until all articles have audio generated
+
+        For scheduled jobs: Processes ONE batch per customer to ensure fair distribution
+        For on-demand jobs: Processes ALL batches until completion
 
         Args:
             job_id: Job ID for tracking
@@ -645,15 +647,30 @@ class NewsAudioService:
         }
 
         start_time = time.time()
+        customer_info = f" for customer {customer_id}" if customer_id else ""
 
         try:
-            # Continue processing until no more articles need audio
+            # For scheduled jobs: process only ONE batch per customer
+            # For on-demand jobs: process ALL batches until completion
+            max_batches = None if is_on_demand else 1
+
+            if is_on_demand:
+                self.logger.info(f"🎵 On-demand job{customer_info}: Processing ALL batches until completion")
+            else:
+                self.logger.info(f"🎵 Scheduled job{customer_info}: Processing ONE batch (max {self.config.AUDIO_BATCH_SIZE} articles)")
+
+            # Continue processing until no more articles need audio OR max_batches reached
             while True:
+                # Check if we've reached the batch limit for scheduled jobs
+                if max_batches is not None and results['batches_processed'] >= max_batches:
+                    self.logger.info(f"✅ Reached batch limit ({max_batches}) for scheduled job{customer_info}")
+                    break
+
                 # Get articles needing audio generation (batch processing) with customer filter
                 articles = self.get_articles_needing_audio(limit=self.config.AUDIO_BATCH_SIZE, customer_id=customer_id)
 
                 if not articles:
-                    self.logger.info(f"✅ No more articles found needing audio generation for job {job_id}")
+                    self.logger.info(f"✅ No more articles found needing audio generation{customer_info}")
                     break
 
                 results['batches_processed'] += 1
@@ -661,7 +678,7 @@ class NewsAudioService:
                 results['total_articles_found'] += batch_articles_found
 
                 self.logger.info(
-                    f"🎵 Processing batch {results['batches_processed']}: {batch_articles_found} articles for audio generation in job {job_id}")
+                    f"🎵 Processing batch {results['batches_processed']}: {batch_articles_found} articles for audio generation{customer_info}")
 
                 # Process each article in the current batch
                 for article in articles:
@@ -736,8 +753,9 @@ class NewsAudioService:
 
             results['processing_time_ms'] = int((time.time() - start_time) * 1000)
 
-            self.logger.info(f"✅ Audio generation completed for job {job_id}: "
-                             f"{results['batches_processed']} batches, "
+            job_type = "on-demand" if is_on_demand else "scheduled"
+            self.logger.info(f"✅ Audio generation completed ({job_type}){customer_info}: "
+                             f"{results['batches_processed']} batch(es), "
                              f"{results['total_articles_success']} success, "
                              f"{results['total_articles_failed']} failed")
 

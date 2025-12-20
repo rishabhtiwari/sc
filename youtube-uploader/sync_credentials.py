@@ -18,12 +18,12 @@ client = MongoClient(MONGO_URI)
 db = client['news']
 credentials_collection = db['youtube_credentials']
 
-def sync_credentials(customer_id='customer_default'):
+def sync_credentials(customer_id='customer_system'):
     """
     Sync credentials from file system to MongoDB
 
     Args:
-        customer_id: Customer ID to assign to the credential (default: 'customer_default')
+        customer_id: Customer ID to assign to the credential (default: 'customer_system')
     """
     
     # Load client secrets
@@ -111,7 +111,7 @@ def sync_credentials(customer_id='customer_default'):
 if __name__ == '__main__':
     # Get customer_id from command line argument or environment variable
     import sys
-    customer_id = sys.argv[1] if len(sys.argv) > 1 else os.getenv('CUSTOMER_ID', 'customer_default')
+    customer_id = sys.argv[1] if len(sys.argv) > 1 else os.getenv('CUSTOMER_ID', 'customer_system')
     print(f"Syncing credentials for customer: {customer_id}")
     sync_credentials(customer_id=customer_id)
 

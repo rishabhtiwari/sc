@@ -6,9 +6,9 @@ db = db.getSiblingDB('news');
 
 print('🎤 Migrating existing voice_config to multi-tenant structure...');
 
-// Get default customer ID
-const defaultCustomer = db.getSiblingDB('ichat').customers.findOne({ name: 'Default Customer' });
-const defaultCustomerId = defaultCustomer ? defaultCustomer.customer_id : 'customer_default';
+// Get system customer ID
+const defaultCustomer = db.getSiblingDB('ichat').customers.findOne({ name: 'System Customer' });
+const defaultCustomerId = defaultCustomer ? defaultCustomer.customer_id : 'customer_system';
 
 print(`ℹ️  Default customer ID: ${defaultCustomerId}`);
 

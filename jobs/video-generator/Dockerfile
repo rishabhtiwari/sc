@@ -37,18 +37,16 @@ COPY common/ /app/common/
 # Copy only the application code files (not data directories)
 # Data directories (logs, public, temp, subscribe) will be mounted as volumes
 COPY video-generator/*.py ./
+COPY video-generator/*.sh ./
 COPY video-generator/services/ ./services/
 COPY video-generator/config/ ./config/
 COPY video-generator/effects/ ./effects/
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/subscribe
+RUN mkdir -p /app/logs /app/data /app/public /app/temp /app/subscribe /app/assets
 
-# Create sample logo for watermark effect
-RUN python create_sample_logo.py
-
-# Generate royalty-free background music
-RUN python create_background_music.py
+# Make entrypoint script executable
+RUN chmod +x /app/entrypoint.sh
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -61,6 +59,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Expose port
 EXPOSE 8095
+
+# Set entrypoint to handle initialization
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Run the application
 CMD ["python", "app.py"]

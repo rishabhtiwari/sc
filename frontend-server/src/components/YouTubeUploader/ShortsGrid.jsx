@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../common';
 
 /**
@@ -8,9 +8,68 @@ const ShortsGrid = ({
   shorts,
   onUpload,
   loading,
+  uploading,
   pagination,
   onPageChange
 }) => {
+  const [videoUrls, setVideoUrls] = useState({}); // Store blob URLs for authenticated videos
+
+  // Get video URL for a short
+  const getVideoUrl = (short) => {
+    if (!short.shorts_video_path) return null;
+
+    // Extract article_id and filename from shorts_video_path
+    // Path format: /public/article_id/short.mp4 or article_id/short.mp4
+    const pathParts = short.shorts_video_path.replace('/public/', '').split('/');
+    if (pathParts.length >= 2) {
+      const articleId = pathParts[0];
+      const filename = pathParts[1];
+      // Route through API server instead of directly to video-generator
+      return `/api/news/videos/shorts/${articleId}/${filename}`;
+    }
+    return null;
+  };
+
+  // Fetch authenticated video URLs when shorts change
+  useEffect(() => {
+    const fetchVideoUrls = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token || !shorts || shorts.length === 0) return;
+
+      const newVideoUrls = {};
+      for (const short of shorts) {
+        const videoUrl = getVideoUrl(short);
+        if (videoUrl) {
+          try {
+            const response = await fetch(videoUrl, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            if (response.ok) {
+              const blob = await response.blob();
+              newVideoUrls[short.id] = URL.createObjectURL(blob);
+            } else {
+              console.error(`Failed to fetch video for ${short.id}:`, response.status);
+            }
+          } catch (err) {
+            console.error(`Error fetching video for ${short.id}:`, err);
+          }
+        }
+      }
+      setVideoUrls(newVideoUrls);
+    };
+
+    fetchVideoUrls();
+
+    // Cleanup blob URLs when component unmounts or when shorts change
+    return () => {
+      Object.values(videoUrls).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [shorts]);
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -46,22 +105,6 @@ const ShortsGrid = ({
     });
   };
 
-  // Get video URL for a short
-  const getVideoUrl = (short) => {
-    if (!short.shorts_video_path) return null;
-
-    // Extract article_id and filename from shorts_video_path
-    // Path format: /public/article_id/short.mp4 or article_id/short.mp4
-    const pathParts = short.shorts_video_path.replace('/public/', '').split('/');
-    if (pathParts.length >= 2) {
-      const articleId = pathParts[0];
-      const filename = pathParts[1];
-      // Route through API server instead of directly to video-generator
-      return `/api/news/videos/shorts/${articleId}/${filename}`;
-    }
-    return null;
-  };
-
   return (
     <div className="space-y-4">
       {/* Pagination Info */}
@@ -79,22 +122,29 @@ const ShortsGrid = ({
       {/* Shorts Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {shorts.map((short) => {
-          const videoUrl = getVideoUrl(short);
+          const blobUrl = videoUrls[short.id];
 
           return (
             <Card key={short.id} className="hover:shadow-lg transition-shadow duration-200">
               <div className="space-y-3">
                 {/* Video Preview */}
-                {videoUrl ? (
+                {blobUrl ? (
                   <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '9/16', maxHeight: '400px' }}>
                     <video
-                      src={videoUrl}
+                      src={blobUrl}
                       controls
                       className="w-full h-full object-contain"
                       preload="metadata"
                     >
                       Your browser does not support the video tag.
                     </video>
+                  </div>
+                ) : getVideoUrl(short) ? (
+                  <div className="relative bg-gray-100 rounded-lg flex items-center justify-center" style={{ aspectRatio: '9/16', maxHeight: '400px' }}>
+                    <div className="text-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-2"></div>
+                      <p className="text-gray-500 text-sm">Loading video...</p>
+                    </div>
                   </div>
                 ) : (
                   <div className="relative bg-gray-100 rounded-lg flex items-center justify-center" style={{ aspectRatio: '9/16', maxHeight: '400px' }}>
@@ -120,12 +170,13 @@ const ShortsGrid = ({
                 {/* Upload Button */}
                 <Button
                   variant="danger"
-                  icon="⬆️"
+                  icon={uploading ? "⏳" : "⬆️"}
                   onClick={() => onUpload(short.id)}
+                  disabled={uploading}
                   fullWidth
                   size="sm"
                 >
-                  Upload to YouTube
+                  {uploading ? 'Uploading...' : 'Upload to YouTube'}
                 </Button>
               </div>
             </Card>

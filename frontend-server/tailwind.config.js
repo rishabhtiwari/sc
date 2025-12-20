@@ -30,6 +30,12 @@ export default {
           700: '#b91c1c',
           800: '#991b1b',
           900: '#7f1d1d',
+        },
+        // Professional blue-tinted backgrounds (Rubrik style)
+        background: {
+          primary: '#f0f4f8',    // Light blue-gray background
+          secondary: '#f8fafc',  // Very light blue-white
+          tertiary: '#e8f0f7',   // Subtle blue tint
         }
       }
     },

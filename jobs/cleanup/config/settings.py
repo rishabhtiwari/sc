@@ -50,7 +50,7 @@ class Config:
     LOG_BACKUP_COUNT = int(os.getenv('LOG_BACKUP_COUNT', 5))
 
     # Cleanup Configuration
-    CLEANUP_RETENTION_HOURS = int(os.getenv('CLEANUP_RETENTION_HOURS', 36))  # Delete articles older than 36 hours
+    CLEANUP_RETENTION_HOURS = int(os.getenv('CLEANUP_RETENTION_HOURS', 24))  # Delete articles older than 24 hours (1 day)
     CLEANUP_DRY_RUN = os.getenv('CLEANUP_DRY_RUN', 'false').lower() == 'true'  # Dry-run mode (preview only)
     CLEANUP_BATCH_SIZE = int(os.getenv('CLEANUP_BATCH_SIZE', 100))  # Process 100 articles at a time
     CLEANUP_MAX_ARTICLES_PER_RUN = int(os.getenv('CLEANUP_MAX_ARTICLES_PER_RUN', 10000))  # Safety limit

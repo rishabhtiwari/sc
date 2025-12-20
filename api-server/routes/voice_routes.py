@@ -51,7 +51,7 @@ def list_audio():
     """List generated audio files"""
     try:
         headers = get_request_headers_with_context()
-        response = requests.get(f'{VOICE_SERVICE_URL}/api/news/audio/list', headers=headers, timeout=30)
+        response = requests.get(f'{VOICE_SERVICE_URL}/api/news/audio/list', headers=headers, params=request.args, timeout=30)
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to voice-generator list: {str(e)}")

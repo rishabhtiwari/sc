@@ -76,6 +76,24 @@ def update_upload_config():
         return jsonify({'error': str(e)}), 500
 
 
+@youtube_bp.route('/youtube/upload-config/<config_id>', methods=['POST'])
+def upload_config_video(config_id):
+    """Upload config-specific video to YouTube"""
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+        response = requests.post(
+            f'{YOUTUBE_SERVICE_URL}/api/upload-config/{config_id}',
+            json=request.get_json(),
+            headers=headers,
+            timeout=300  # 5 minutes timeout for video upload
+        )
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except Exception as e:
+        logger.error(f"Error proxying to YouTube upload-config/{config_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @youtube_bp.route('/youtube/shorts/pending', methods=['GET'])
 def get_pending_shorts():
     """Get pending YouTube shorts"""
@@ -103,6 +121,24 @@ def upload_short():
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to YouTube shorts/upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@youtube_bp.route('/youtube/shorts/upload/<article_id>', methods=['POST'])
+def upload_short_by_id(article_id):
+    """Upload a specific YouTube short by article ID"""
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+        response = requests.post(
+            f'{YOUTUBE_SERVICE_URL}/api/shorts/upload/{article_id}',
+            json=request.get_json(),
+            headers=headers,
+            timeout=300
+        )
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except Exception as e:
+        logger.error(f"Error proxying to YouTube shorts/upload/{article_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 

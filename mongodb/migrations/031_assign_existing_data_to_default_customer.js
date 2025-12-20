@@ -7,7 +7,7 @@ print('Starting migration: 031_assign_existing_data_to_default_customer');
 // Switch to news database
 db = db.getSiblingDB('news');
 
-const defaultCustomerId = 'customer_default';
+const defaultCustomerId = 'customer_system';
 
 print('Assigning existing data to customer: ' + defaultCustomerId);
 print('');

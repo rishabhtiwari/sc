@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, Button } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { youtubeService, videoService, videoConfigService } from '../services';
+import api from '../services/api';
 import { StatsCards, UploadProgress, ShortsGrid, LongVideoConfig, ConfigCard, CredentialsManager, BackgroundAudioManager } from '../components/YouTubeUploader';
 import PlusCard from '../components/YouTubeUploader/PlusCard';
 
@@ -225,15 +226,10 @@ const YouTubePage = () => {
     try {
       setUploadLogs(prev => [...prev, `📤 Uploading config video: ${configId}`]);
 
-      // Call the config-specific upload endpoint
-      const response = await fetch(`/api/youtube/upload-config/${configId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // Call the config-specific upload endpoint using api service (includes auth headers)
+      const response = await api.post(`/youtube/upload-config/${configId}`, {});
 
-      const data = await response.json();
+      const data = response.data;
 
       if (data.status === 'success') {
         setUploadProgress(100);
@@ -401,22 +397,48 @@ const YouTubePage = () => {
       return;
     }
 
+    // Set uploading state to disable buttons and show progress
+    setUploading(true);
+    setShowProgress(true);
+    setUploadProgress(0);
+    setUploadLogs([]);
+
     try {
+      // Add initial log
+      setUploadLogs([{ type: 'info', message: '🚀 Starting short upload...' }]);
+      setUploadProgress(10);
+
       const response = await youtubeService.uploadShort(articleId);
       const data = response.data;
 
       if (data.status === 'success') {
-        showToast(`Short uploaded successfully! ${data.video_url}`, 'success');
+        setUploadProgress(100);
+        setUploadLogs((prev) => [
+          ...prev,
+          { type: 'success', message: `✅ ${data.message || 'Short uploaded successfully!'}` },
+          { type: 'info', message: `📺 Video URL: ${data.video_url}` },
+        ]);
+        showToast(`Short uploaded successfully!`, 'success');
 
         // Reload data - preserve current page
         await loadStats();
         await loadPendingShorts(shortsPagination.page, shortsPagination.limit);
       } else {
+        setUploadLogs((prev) => [
+          ...prev,
+          { type: 'error', message: `❌ Upload failed: ${data.error}` },
+        ]);
         showToast(data.error || 'Upload failed', 'error');
       }
     } catch (error) {
       console.error('Upload error:', error);
+      setUploadLogs((prev) => [
+        ...prev,
+        { type: 'error', message: `❌ Upload error: ${error.response?.data?.error || error.message}` },
+      ]);
       showToast(error.response?.data?.error || 'Upload failed', 'error');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -578,6 +600,7 @@ const YouTubePage = () => {
                     shorts={shorts}
                     onUpload={handleUploadShort}
                     loading={shortsLoading}
+                    uploading={uploading}
                     pagination={shortsPagination}
                     onPageChange={handleShortsPageChange}
                   />

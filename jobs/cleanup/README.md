@@ -4,7 +4,7 @@ Automated service for cleaning up old news articles and their associated files (
 
 ## Overview
 
-The Cleanup Job Service automatically deletes news articles that are older than a configurable retention period (default: 36 hours) along with all their associated files:
+The Cleanup Job Service automatically deletes news articles that are older than a configurable retention period (default: 24 hours / 1 day) along with all their associated files:
 
 - Audio files (title, description, content, short_summary)
 - Video files (regular and shorts)

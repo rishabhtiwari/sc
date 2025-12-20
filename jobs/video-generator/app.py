@@ -630,13 +630,15 @@ class VideoGeneratorJob(BaseJob):
         def merge_latest_videos():
             """Merge latest news videos into a single video with configuration and alternating male/female anchors"""
             try:
+                # Import request first
+                from flask import request
+
                 # Extract user context from headers for multi-tenancy
                 user_context = extract_user_context_from_headers(request.headers)
                 customer_id = user_context.get('customer_id')
                 user_id = user_context.get('user_id')
 
                 # Get configuration from request body
-                from flask import request
                 config = request.get_json() or {}
 
                 # Extract configuration parameters
@@ -2811,11 +2813,14 @@ class VideoGeneratorJob(BaseJob):
 
                 # Call the existing merge_latest_videos function internally
                 # We'll make an internal call to reuse the logic
-                from flask import request as flask_request
+                # Store the original request headers to pass them through
+                original_headers = dict(request.headers)
+
                 with self.app.test_request_context(
                     '/merge-latest',
                     method='POST',
-                    json=merge_config_data
+                    json=merge_config_data,
+                    headers=original_headers
                 ):
                     response = merge_latest_videos()
 

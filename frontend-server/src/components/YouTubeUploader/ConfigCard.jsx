@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../common';
 import RecomputeWizard from './RecomputeWizard';
 
@@ -8,6 +8,8 @@ import RecomputeWizard from './RecomputeWizard';
 const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [videoBlobUrl, setVideoBlobUrl] = useState(null);
+  const [thumbnailBlobUrl, setThumbnailBlobUrl] = useState(null);
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -59,6 +61,54 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
     }
     return null;
   };
+
+  // Fetch authenticated video and thumbnail when showPreview changes
+  useEffect(() => {
+    const fetchAuthenticatedMedia = async () => {
+      const token = localStorage.getItem('auth_token');
+      if (!token || !showPreview) return;
+
+      // Fetch video
+      const videoUrl = getVideoUrl();
+      if (videoUrl) {
+        try {
+          const response = await fetch(videoUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const blob = await response.blob();
+            setVideoBlobUrl(URL.createObjectURL(blob));
+          }
+        } catch (err) {
+          console.error('Error fetching video:', err);
+        }
+      }
+
+      // Fetch thumbnail
+      const thumbnailUrl = getThumbnailUrl();
+      if (thumbnailUrl) {
+        try {
+          const response = await fetch(thumbnailUrl, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const blob = await response.blob();
+            setThumbnailBlobUrl(URL.createObjectURL(blob));
+          }
+        } catch (err) {
+          console.error('Error fetching thumbnail:', err);
+        }
+      }
+    };
+
+    fetchAuthenticatedMedia();
+
+    // Cleanup blob URLs when component unmounts or showPreview changes
+    return () => {
+      if (videoBlobUrl) URL.revokeObjectURL(videoBlobUrl);
+      if (thumbnailBlobUrl) URL.revokeObjectURL(thumbnailBlobUrl);
+    };
+  }, [showPreview, config]);
 
   const handleMerge = () => {
     // Open wizard instead of directly calling onMerge
@@ -189,23 +239,28 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
           {showPreview && (
             <div className="mt-3 space-y-3">
               {/* Thumbnail */}
-              {getThumbnailUrl() && (
+              {thumbnailBlobUrl ? (
                 <div>
                   <p className="text-xs font-medium text-gray-700 mb-1">Thumbnail:</p>
                   <img
-                    src={getThumbnailUrl()}
+                    src={thumbnailBlobUrl}
                     alt="Video Thumbnail"
                     className="w-full rounded border border-gray-300"
                   />
                 </div>
-              )}
-              
+              ) : getThumbnailUrl() ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-xs text-gray-500 mt-2">Loading thumbnail...</p>
+                </div>
+              ) : null}
+
               {/* Video Preview */}
-              {getVideoUrl() && (
+              {videoBlobUrl ? (
                 <div>
                   <p className="text-xs font-medium text-gray-700 mb-1">Video Preview:</p>
                   <video
-                    src={getVideoUrl()}
+                    src={videoBlobUrl}
                     controls
                     className="w-full rounded border border-gray-300"
                     preload="metadata"
@@ -213,7 +268,12 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
                     Your browser does not support the video tag.
                   </video>
                 </div>
-              )}
+              ) : getVideoUrl() ? (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-xs text-gray-500 mt-2">Loading video...</p>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
