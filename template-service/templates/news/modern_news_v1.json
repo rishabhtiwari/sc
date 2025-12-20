@@ -1,0 +1,193 @@
+{
+  "template_id": "modern_news_v1",
+  "name": "Modern News",
+  "version": "1.0.0",
+  "category": "news",
+  "description": "Professional news video with banner, ticker, and effects",
+  "aspect_ratio": "16:9",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "image",
+      "source": "{{background_image}}",
+      "duration": "auto",
+      "effects": [
+        {
+          "type": "ken_burns",
+          "params": {
+            "zoom_start": 1.0,
+            "zoom_end": 1.2,
+            "easing": "ease_in_out"
+          }
+        }
+      ],
+      "z_index": 0
+    },
+    {
+      "id": "bottom_banner",
+      "type": "rectangle",
+      "position": {
+        "x": 0,
+        "y": 960
+      },
+      "size": {
+        "width": 1920,
+        "height": 120
+      },
+      "fill": "{{brand_color}}",
+      "z_index": 10
+    },
+    {
+      "id": "bottom_ticker",
+      "type": "rectangle",
+      "position": {
+        "x": 0,
+        "y": 1020
+      },
+      "size": {
+        "width": 1920,
+        "height": 60
+      },
+      "fill": "{{ticker_color}}",
+      "z_index": 11
+    },
+    {
+      "id": "title_text",
+      "type": "text",
+      "content": "{{title}}",
+      "position": {
+        "x": 60,
+        "y": 980
+      },
+      "font": {
+        "family": "{{brand_font}}",
+        "size": 48,
+        "color": "#FFFFFF",
+        "weight": "bold"
+      },
+      "z_index": 12
+    },
+    {
+      "id": "ticker_text",
+      "type": "text",
+      "content": "{{summary}}",
+      "position": {
+        "x": 60,
+        "y": 1030
+      },
+      "font": {
+        "family": "{{brand_font}}",
+        "size": 24,
+        "color": "#FFFFFF"
+      },
+      "effects": [
+        {
+          "type": "scroll",
+          "params": {
+            "direction": "left",
+            "speed": 100
+          }
+        }
+      ],
+      "z_index": 13
+    },
+    {
+      "id": "logo",
+      "type": "image",
+      "source": "{{logo_path}}",
+      "position": "top-right",
+      "offset": {
+        "x": -30,
+        "y": 30
+      },
+      "scale": 0.12,
+      "opacity": 0.9,
+      "z_index": 20
+    }
+  ],
+  "audio": {
+    "tracks": [
+      {
+        "id": "voice",
+        "source": "{{audio_file}}",
+        "volume": 1.0
+      },
+      {
+        "id": "background_music",
+        "source": "{{music_file}}",
+        "volume": 0.15,
+        "effects": [
+          {
+            "type": "fade_in",
+            "duration": 3.0
+          },
+          {
+            "type": "fade_out",
+            "duration": 2.0
+          }
+        ]
+      }
+    ]
+  },
+  "variables": {
+    "background_image": {
+      "type": "image",
+      "required": true,
+      "description": "Main background image"
+    },
+    "title": {
+      "type": "text",
+      "required": true,
+      "max_length": 100,
+      "description": "News headline"
+    },
+    "summary": {
+      "type": "text",
+      "required": true,
+      "max_length": 200,
+      "description": "Scrolling ticker text"
+    },
+    "audio_file": {
+      "type": "audio",
+      "required": true,
+      "description": "Voice narration"
+    },
+    "brand_color": {
+      "type": "color",
+      "default": "#2980b9",
+      "description": "Banner background color"
+    },
+    "ticker_color": {
+      "type": "color",
+      "default": "#34495e",
+      "description": "Ticker background color"
+    },
+    "brand_font": {
+      "type": "font",
+      "default": "Arial-Bold",
+      "description": "Font family"
+    },
+    "logo_path": {
+      "type": "image",
+      "required": false,
+      "description": "Company logo"
+    },
+    "music_file": {
+      "type": "audio",
+      "required": false,
+      "description": "Background music"
+    }
+  },
+  "metadata": {
+    "author": "Template Service",
+    "created_at": "2024-01-15",
+    "updated_at": "2024-01-20",
+    "tags": ["news", "professional", "banner", "ticker"],
+    "thumbnail": "/thumbnails/modern_news.jpg"
+  }
+}
+

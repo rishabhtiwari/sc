@@ -65,7 +65,11 @@ def create_app():
              'http://localhost:3001',
              'http://127.0.0.1:3001',
              'http://[::1]:3001',  # IPv6 localhost
-             'http://0.0.0.0:3001'  # All interfaces
+             'http://0.0.0.0:3001',  # All interfaces
+             'http://localhost:3002',  # News automation frontend (Express)
+             'http://127.0.0.1:3002',
+             'http://localhost:3003',  # News automation frontend (Nginx)
+             'http://127.0.0.1:3003'
          ],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
          allow_headers=['Content-Type', 'Authorization', 'Origin', 'Accept', 'Accept-Encoding', 'Cache-Control', 'X-Customer-ID', 'X-User-ID'],
@@ -102,6 +106,7 @@ def create_app():
     from routes.youtube_routes import youtube_bp
     from routes.video_routes import video_bp
     from routes.voice_routes import voice_bp
+    from routes.template_routes import template_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -128,6 +133,7 @@ def create_app():
     app.register_blueprint(youtube_bp, url_prefix='/api')
     app.register_blueprint(video_bp, url_prefix='/api')
     app.register_blueprint(voice_bp, url_prefix='/api')
+    app.register_blueprint(template_bp, url_prefix='/api')
 
     # Initialize Socket.IO for real-time updates
     socketio = init_socketio(app)

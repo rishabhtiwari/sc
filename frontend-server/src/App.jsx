@@ -12,6 +12,7 @@ import YouTubePage from './pages/YouTubePage';
 import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
 import SettingsPage from './pages/SettingsPage';
+import TemplateManagementPage from './pages/TemplateManagementPage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
@@ -116,6 +117,7 @@ function App() {
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />
+                  <Route path="/templates" element={<TemplateManagementPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </Layout>

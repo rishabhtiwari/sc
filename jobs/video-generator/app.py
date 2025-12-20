@@ -2107,6 +2107,49 @@ class VideoGeneratorJob(BaseJob):
                     "status": "error"
                 }), 500
 
+        # Template Preview Endpoint
+        @self.app.route('/api/preview', methods=['POST'])
+        def generate_preview():
+            """Generate a preview video from template configuration"""
+            try:
+                from flask import request
+                import uuid
+
+                data = request.get_json()
+                if not data or 'template' not in data:
+                    return jsonify({
+                        'status': 'error',
+                        'error': 'Template data is required'
+                    }), 400
+
+                template = data['template']
+                preview_mode = data.get('preview_mode', True)
+
+                # Generate a unique preview ID
+                preview_id = str(uuid.uuid4())[:8]
+
+                # For now, return a simple response indicating preview generation would happen
+                # TODO: Implement actual video generation from template
+                self.logger.info(f"🎬 Preview generation requested for template: {template.get('name', 'unnamed')}")
+
+                # Create a dummy preview path (in production, this would be the actual generated video)
+                preview_path = f"/app/public/preview_{preview_id}.mp4"
+                preview_url = f"/download/preview_{preview_id}.mp4"
+
+                return jsonify({
+                    'status': 'success',
+                    'preview_url': preview_url,
+                    'video_path': preview_path,
+                    'message': 'Preview generation endpoint is available but not yet fully implemented'
+                }), 200
+
+            except Exception as e:
+                self.logger.error(f"Error generating preview: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
         # Background Audio Library Management Endpoints
 
         @self.app.route('/background-audio', methods=['GET'])

@@ -14,6 +14,7 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
     { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
+    { path: '/templates', icon: '🎨', label: 'Templates' },
     { path: '/workflow', icon: '🔄', label: 'Workflow Pipeline' },
     { path: '/monitoring', icon: '📈', label: 'Monitoring & Logs' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },

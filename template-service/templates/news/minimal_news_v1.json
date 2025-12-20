@@ -1,0 +1,99 @@
+{
+  "template_id": "minimal_news_v1",
+  "name": "Minimal News",
+  "version": "1.0.0",
+  "category": "news",
+  "description": "Clean, simple news video with minimal effects",
+  "aspect_ratio": "16:9",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "image",
+      "source": "{{background_image}}",
+      "duration": "auto",
+      "effects": [],
+      "z_index": 0
+    },
+    {
+      "id": "title_text",
+      "type": "text",
+      "content": "{{title}}",
+      "position": "center",
+      "font": {
+        "family": "{{brand_font}}",
+        "size": 60,
+        "color": "#FFFFFF",
+        "weight": "bold"
+      },
+      "effects": [
+        {
+          "type": "fade_in",
+          "duration": 0.5
+        }
+      ],
+      "z_index": 10
+    },
+    {
+      "id": "logo",
+      "type": "image",
+      "source": "{{logo_path}}",
+      "position": "bottom-right",
+      "offset": {
+        "x": -30,
+        "y": -30
+      },
+      "scale": 0.08,
+      "opacity": 0.5,
+      "z_index": 20
+    }
+  ],
+  "audio": {
+    "tracks": [
+      {
+        "id": "voice",
+        "source": "{{audio_file}}",
+        "volume": 1.0
+      }
+    ]
+  },
+  "variables": {
+    "background_image": {
+      "type": "image",
+      "required": true,
+      "description": "Main background image"
+    },
+    "title": {
+      "type": "text",
+      "required": true,
+      "max_length": 100,
+      "description": "News headline"
+    },
+    "audio_file": {
+      "type": "audio",
+      "required": true,
+      "description": "Voice narration"
+    },
+    "brand_font": {
+      "type": "font",
+      "default": "Arial-Bold",
+      "description": "Font family"
+    },
+    "logo_path": {
+      "type": "image",
+      "required": false,
+      "description": "Company logo"
+    }
+  },
+  "metadata": {
+    "author": "Template Service",
+    "created_at": "2024-01-15",
+    "updated_at": "2024-01-20",
+    "tags": ["news", "minimal", "clean", "simple"],
+    "thumbnail": "/thumbnails/minimal_news.jpg"
+  }
+}
+

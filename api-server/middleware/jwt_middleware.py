@@ -34,6 +34,7 @@ PUBLIC_ENDPOINT_PATTERNS = [
     '/api/news/videos/shorts/',  # Video file downloads
     '/api/news/videos/',  # Config video/thumbnail downloads
     '/api/news/audio/serve/',  # Audio file downloads
+    '/api/templates/preview/video/',  # Template preview video downloads
 ]
 
 
@@ -47,9 +48,19 @@ def extract_and_inject_jwt_context():
 
     This runs before every request automatically.
     """
+    # Skip authentication for OPTIONS requests (CORS preflight)
+    if request.method == 'OPTIONS':
+        return
+
     # Skip authentication for public endpoints
     if request.path in PUBLIC_ENDPOINTS:
         return
+
+    # Skip authentication for public endpoint patterns (prefix match)
+    for pattern in PUBLIC_ENDPOINT_PATTERNS:
+        if request.path.startswith(pattern):
+            logger.debug(f"🔓 Public endpoint pattern matched: {pattern} for path={request.path}")
+            return
 
     customer_id = None
     user_id = None

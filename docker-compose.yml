@@ -123,6 +123,8 @@ services:
       - MONGODB_USERNAME=ichat_app
       - MONGODB_PASSWORD=ichat_app_password_2024
       - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
+      # Template Service
+      - TEMPLATE_SERVICE_URL=http://ichat-template-service:5000
     volumes:
       - ./api-server/logs:/app/logs
       - ./api-server/data:/app/data
@@ -134,6 +136,58 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      - ichat-mongodb
+
+  # Template Service for video templates
+  template-service:
+    build:
+      context: ./template-service
+      dockerfile: Dockerfile
+    container_name: ichat-template-service
+    ports:
+      - "5010:5000"
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=5000
+      - ENVIRONMENT=production
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=news
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      # Template Configuration
+      - TEMPLATE_DIR=/app/templates
+      - TEMPLATE_CACHE_ENABLED=true
+      - TEMPLATE_CACHE_TTL=300
+      # Logging
+      - LOG_LEVEL=INFO
+      - LOG_FILE=/app/logs/template-service.log
+      # CORS
+      - CORS_ORIGINS=*
+      # Default Templates
+      - DEFAULT_LONG_VIDEO_TEMPLATE=modern_news_v1
+      - DEFAULT_SHORTS_TEMPLATE=vertical_overlay_v1
+      - DEFAULT_PRODUCT_TEMPLATE=product_showcase_v1
+      # Video Generator Service
+      - VIDEO_GENERATOR_URL=http://ichat-video-generator:8095
+    volumes:
+      - ./template-service/templates:/app/templates
+      - ./template-service/logs:/app/logs
+      - ./template-service/public:/app/public
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     depends_on:
       - ichat-mongodb
