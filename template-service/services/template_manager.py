@@ -180,16 +180,57 @@ class TemplateManager:
         try:
             from datetime import datetime
 
-            # Ensure required fields
+            # Ensure required fields from migration schema
             template['template_id'] = template_id
             template['category'] = category
             template['updated_at'] = datetime.utcnow()
 
+            # Set defaults for required fields if not present
             if 'created_at' not in template:
                 template['created_at'] = datetime.utcnow()
 
             if 'is_active' not in template:
                 template['is_active'] = True
+
+            if 'version' not in template:
+                template['version'] = '1.0.0'
+
+            if 'layers' not in template:
+                template['layers'] = []
+
+            if 'variables' not in template:
+                template['variables'] = {}
+
+            # Set defaults for optional fields if not present
+            if 'description' not in template:
+                template['description'] = ''
+
+            if 'aspect_ratio' not in template:
+                template['aspect_ratio'] = '16:9'
+
+            if 'resolution' not in template:
+                # Set resolution based on aspect ratio
+                aspect_ratio = template['aspect_ratio']
+                if aspect_ratio == '16:9':
+                    template['resolution'] = {'width': 1920, 'height': 1080}
+                elif aspect_ratio == '9:16':
+                    template['resolution'] = {'width': 1080, 'height': 1920}
+                elif aspect_ratio == '1:1':
+                    template['resolution'] = {'width': 1080, 'height': 1080}
+                elif aspect_ratio == '4:5':
+                    template['resolution'] = {'width': 1080, 'height': 1350}
+                else:
+                    template['resolution'] = {'width': 1920, 'height': 1080}
+
+            if 'effects' not in template:
+                template['effects'] = []
+
+            if 'metadata' not in template:
+                template['metadata'] = {
+                    'author': 'user',
+                    'tags': [],
+                    'thumbnail': ''
+                }
 
             # Upsert template
             result = self.templates_collection.update_one(

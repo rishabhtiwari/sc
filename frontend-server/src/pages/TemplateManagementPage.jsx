@@ -40,9 +40,31 @@ const TemplateManagementPage = () => {
     setShowWizard(true);
   };
 
-  const handleEditTemplate = (template) => {
-    setSelectedTemplate(template);
-    setShowWizard(true);
+  const handleEditTemplate = async (template) => {
+    try {
+      // Fetch full template details from API
+      console.log('📥 Fetching template details for:', template.template_id);
+      const fullTemplate = await templateService.getTemplate(template.template_id);
+      console.log('✅ Loaded full template:', fullTemplate);
+      setSelectedTemplate(fullTemplate.template || fullTemplate);
+      setShowWizard(true);
+    } catch (err) {
+      console.error('❌ Failed to load template:', err);
+      alert(`Failed to load template: ${err.message}`);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId) => {
+    if (!window.confirm('Are you sure you want to delete this template?')) {
+      return;
+    }
+
+    try {
+      await templateService.deleteTemplate(templateId);
+      fetchTemplates();
+    } catch (err) {
+      alert(`Failed to delete template: ${err.message}`);
+    }
   };
 
   return (
@@ -128,6 +150,7 @@ const TemplateManagementPage = () => {
                 key={template.template_id}
                 template={template}
                 onEdit={() => handleEditTemplate(template)}
+                onDelete={() => handleDeleteTemplate(template.template_id)}
               />
             ))}
           </div>
@@ -139,14 +162,10 @@ const TemplateManagementPage = () => {
             template={selectedTemplate}
             onClose={() => setShowWizard(false)}
             onSave={async (templateData) => {
-              try {
-                await templateService.saveTemplate(templateData);
-                setShowWizard(false);
-                fetchTemplates();
-              } catch (error) {
-                console.error('Failed to save template:', error);
-                alert('Failed to save template: ' + error.message);
-              }
+              // Save template - errors will be handled by the wizard
+              await templateService.saveTemplate(templateData);
+              setShowWizard(false);
+              fetchTemplates();
             }}
           />
         )}
@@ -156,7 +175,12 @@ const TemplateManagementPage = () => {
 };
 
 // Template Card Component
-const TemplateCard = ({ template, onEdit }) => {
+const TemplateCard = ({ template, onEdit, onDelete }) => {
+  const [showPreview, setShowPreview] = React.useState(false);
+  const [previewUrl, setPreviewUrl] = React.useState(null);
+  const [loadingPreview, setLoadingPreview] = React.useState(false);
+  const videoRef = React.useRef(null);
+
   const categoryColors = {
     news: 'bg-blue-100 text-blue-800',
     shorts: 'bg-purple-100 text-purple-800',
@@ -169,51 +193,200 @@ const TemplateCard = ({ template, onEdit }) => {
     ecommerce: '🛍️'
   };
 
+  const handlePreviewClick = async () => {
+    if (showPreview) {
+      // Close preview
+      setShowPreview(false);
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      return;
+    }
+
+    // Generate preview if not already loaded
+    if (!previewUrl) {
+      try {
+        setLoadingPreview(true);
+        const token = localStorage.getItem('auth_token');
+
+        console.log('🎬 Generating preview for template:', template.template_id);
+
+        // Fetch full template details first (list only returns basic fields)
+        console.log('📥 Fetching full template details...');
+        const fullTemplate = await templateService.getTemplate(template.template_id);
+        const templateData = fullTemplate.template || fullTemplate;
+
+        console.log('✅ Full template loaded:', {
+          layers: templateData.layers?.length || 0,
+          effects: templateData.effects?.length || 0,
+          background_music: templateData.background_music?.enabled || false,
+          logo: templateData.logo?.enabled || false
+        });
+
+        const response = await fetch('http://localhost:8080/api/templates/preview', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+          },
+          body: JSON.stringify({
+            template: templateData,
+            is_initial: false  // Generate with all template settings applied
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to generate preview');
+        }
+
+        const data = await response.json();
+        console.log('✅ Preview generated:', data);
+        const fullPreviewUrl = `http://localhost:8080${data.preview_url}`;
+        setPreviewUrl(fullPreviewUrl);
+        setShowPreview(true);
+      } catch (err) {
+        console.error('❌ Failed to load preview:', err);
+        alert(`Failed to load preview video: ${err.message}`);
+      } finally {
+        setLoadingPreview(false);
+      }
+    } else {
+      setShowPreview(true);
+    }
+  };
+
+  // Auto-play when preview is shown
+  React.useEffect(() => {
+    if (showPreview && videoRef.current) {
+      videoRef.current.play();
+    }
+  }, [showPreview]);
+
   return (
-    <div className="bg-white rounded-lg border-2 border-gray-200 hover:border-indigo-300 transition-all hover:shadow-lg">
-      {/* Thumbnail */}
-      <div className="h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-t-lg flex items-center justify-center">
-        {template.thumbnail ? (
-          <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover rounded-t-lg" />
+    <div className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-indigo-400">
+      {/* Thumbnail/Preview */}
+      <div className="relative h-56 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center overflow-hidden">
+        {showPreview && previewUrl ? (
+          <video
+            ref={videoRef}
+            src={previewUrl}
+            className="w-full h-full object-contain bg-black"
+            controls
+            loop
+          />
+        ) : template.thumbnail?.source ? (
+          <img
+            src={`http://localhost:8080/api/templates/files/${template.thumbnail.source}`}
+            alt={template.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         ) : (
-          <div className="text-6xl">{categoryIcons[template.category] || '📋'}</div>
+          <div className="text-7xl opacity-40 group-hover:opacity-60 transition-opacity">
+            {categoryIcons[template.category] || '📋'}
+          </div>
+        )}
+
+        {/* Category badge - top left */}
+        <div className="absolute top-3 left-3">
+          <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold shadow-md backdrop-blur-sm ${categoryColors[template.category] || 'bg-gray-100 text-gray-800'}`}>
+            {categoryIcons[template.category]} {template.category.toUpperCase()}
+          </span>
+        </div>
+
+        {/* Play button overlay */}
+        {!showPreview && (
+          <button
+            onClick={handlePreviewClick}
+            disabled={loadingPreview}
+            className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300"
+          >
+            <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-2xl transform group-hover:scale-110">
+              {loadingPreview ? (
+                <svg className="animate-spin h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg className="w-10 h-10 text-indigo-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </div>
+          </button>
+        )}
+
+        {/* Close preview button */}
+        {showPreview && (
+          <button
+            onClick={handlePreviewClick}
+            className="absolute top-3 right-3 w-10 h-10 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-700 transition-colors shadow-lg z-10 hover:scale-110 transform"
+          >
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         )}
       </div>
 
       {/* Content */}
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-2">
-          <h3 className="text-lg font-semibold text-gray-900">{template.name}</h3>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColors[template.category] || 'bg-gray-100 text-gray-800'}`}>
-            {template.category}
-          </span>
-        </div>
+      <div className="p-5">
+        {/* Title */}
+        <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">
+          {template.name}
+        </h3>
 
-        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{template.description}</p>
+        {/* Description */}
+        <p className="text-sm text-gray-600 mb-4 line-clamp-2 leading-relaxed">
+          {template.description || 'No description available'}
+        </p>
 
         {/* Tags */}
         {template.tags && template.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
+          <div className="flex flex-wrap gap-2 mb-4">
             {template.tags.slice(0, 3).map((tag, index) => (
-              <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                {tag}
+              <span key={index} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-md border border-indigo-100">
+                #{tag}
               </span>
             ))}
+            {template.tags.length > 3 && (
+              <span className="px-2.5 py-1 bg-gray-50 text-gray-500 text-xs font-medium rounded-md">
+                +{template.tags.length - 3} more
+              </span>
+            )}
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-          <span className="text-xs text-gray-500">v{template.version}</span>
-          <button
-            onClick={onEdit}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            Edit
-          </button>
+        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs font-semibold rounded">
+              v{template.version}
+            </span>
+            <span className="text-xs text-gray-400">
+              ID: {template.template_id.split('_')[0]}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit
+            </button>
+            <button
+              onClick={onDelete}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-all border border-red-200 hover:border-red-300 transform hover:-translate-y-0.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Delete
+            </button>
+          </div>
         </div>
       </div>
     </div>

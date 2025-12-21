@@ -7,6 +7,7 @@ from pymongo import MongoClient
 from typing import Dict, Any
 import requests
 import os
+from utils.helpers import substitute_variables
 
 
 template_bp = Blueprint('template', __name__)
@@ -25,6 +26,68 @@ def init_routes(tm: TemplateManager, vr: VariableResolver, db: MongoClient, log)
     variable_resolver = vr
     db_client = db
     logger = log
+
+
+def _apply_effects_to_layer(layer_video, effects, duration, width, height):
+    """
+    Apply global effects to a video layer
+
+    Args:
+        layer_video: MoviePy VideoClip
+        effects: List of effect configurations
+        duration: Duration of the layer in seconds
+        width: Width of the layer in pixels
+        height: Height of the layer in pixels
+
+    Returns:
+        Modified VideoClip with effects applied
+    """
+    from PIL import Image as PILImage
+    import numpy as np
+
+    # Apply Ken Burns effect if requested
+    ken_burns_effect = next((e for e in effects if e.get('type') == 'ken_burns'), None)
+    if ken_burns_effect:
+        params = ken_burns_effect.get('params', {})
+        zoom_start = params.get('zoom_start', 1.0)
+        zoom_end = params.get('zoom_end', 1.2)
+
+        logger.info(f"Applying Ken Burns effect to layer: zoom {zoom_start} -> {zoom_end}")
+
+        # Apply zoom effect using resize
+        def zoom_effect(get_frame, t):
+            """Apply zoom effect to frame at time t"""
+            # Calculate zoom factor at time t (linear interpolation)
+            progress = t / duration if duration > 0 else 0
+            zoom = zoom_start + (zoom_end - zoom_start) * progress
+
+            # Get the original frame
+            frame = get_frame(t)
+            h, w = frame.shape[:2]
+
+            # Calculate new dimensions
+            new_w = int(w * zoom)
+            new_h = int(h * zoom)
+
+            # Resize frame
+            pil_frame = PILImage.fromarray(frame)
+            pil_frame = pil_frame.resize((new_w, new_h), PILImage.LANCZOS)
+
+            # Crop to original size (center crop)
+            left = (new_w - w) // 2
+            top = (new_h - h) // 2
+            pil_frame = pil_frame.crop((left, top, left + w, top + h))
+
+            return np.array(pil_frame)
+
+        # Apply the zoom effect
+        layer_video = layer_video.fl(zoom_effect)
+
+    # Note: Other effects like fade_text, transition, bottom_banner are typically
+    # applied to the final composited video, not individual layers
+    # If you want to apply them to layers, we can add that functionality
+
+    return layer_video
 
 
 @template_bp.route('/templates', methods=['GET'])
@@ -90,7 +153,7 @@ def create_template():
 
     Request body:
         {
-            "template_id": "my_custom_template_v1",
+            "template_id": "my_custom_template_v1" (optional - will be auto-generated if not provided),
             "name": "My Custom Template",
             "category": "news",
             "description": "...",
@@ -105,8 +168,8 @@ def create_template():
     try:
         data = request.get_json()
 
-        # Validate required fields
-        required_fields = ['template_id', 'name', 'category']
+        # Validate required fields (template_id is now optional)
+        required_fields = ['name', 'category']
         missing_fields = [field for field in required_fields if field not in data]
         if missing_fields:
             return jsonify({
@@ -114,8 +177,19 @@ def create_template():
                 'error': f'Missing required fields: {", ".join(missing_fields)}'
             }), 400
 
-        # Extract template data
-        template_id = data['template_id']
+        # Auto-generate template_id if not provided
+        if 'template_id' not in data or not data['template_id']:
+            import uuid
+            # Generate template_id from name and UUID
+            name_slug = data['name'].lower().replace(' ', '_').replace('-', '_')
+            # Remove special characters
+            name_slug = ''.join(c for c in name_slug if c.isalnum() or c == '_')
+            unique_id = str(uuid.uuid4())[:8]
+            template_id = f"{name_slug}_{unique_id}"
+            data['template_id'] = template_id
+        else:
+            template_id = data['template_id']
+
         category = data['category']
 
         # Save template
@@ -389,9 +463,9 @@ def _generate_video_with_generator(template: Dict[str, Any], output_path: str) -
         return output_path if os.path.exists(output_path) else None
 
 
-def _apply_effects_to_video(input_path: str, output_path: str, effects: list, aspect_ratio: str = '16:9', background_music: dict = None, logo: dict = None) -> None:
+def _apply_effects_to_video(input_path: str, output_path: str, effects: list, aspect_ratio: str = '16:9', background_music: dict = None, logo: dict = None, layers: list = None, resolved_sample_data: dict = None) -> None:
     """
-    Apply effects to an existing video file
+    Apply effects and layers to an existing video file
 
     Args:
         input_path: Path to the input video file
@@ -411,6 +485,7 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             - scale: float (0.05 to 0.5)
             - opacity: float (0.0 to 1.0)
             - margin: dict with x and y keys (pixels from edges)
+        layers: List of layer configurations to composite onto the video
     """
     try:
         from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
@@ -462,99 +537,6 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
 
             # Apply the zoom effect
             video = video.fl(zoom_effect)
-
-        # Apply Fade Text effect if requested
-        fade_text_effect = next((e for e in effects if e.get('type') == 'fade_text'), None)
-        if fade_text_effect:
-            params = fade_text_effect.get('params', {})
-            fade_in_duration = params.get('fade_in_duration', 0.5)
-            fade_out_duration = params.get('fade_out_duration', 0.5)
-            fade_type = params.get('fade_type', 'both')
-
-            logger.info(f"Applying Fade Text effect: fade_in={fade_in_duration}s, fade_out={fade_out_duration}s, type={fade_type}")
-
-            # Create text overlay using PIL (doesn't require ImageMagick)
-            try:
-                from PIL import Image as PILImage, ImageDraw, ImageFont
-                import numpy as np
-
-                # Calculate font size based on video height
-                font_size = int(h * 0.08)  # 8% of video height
-
-                # Create a function to draw text on each frame with fade effect
-                def add_text_with_fade(get_frame, t):
-                    """Add text overlay with fade effect to frame at time t"""
-                    frame = get_frame(t)
-
-                    # Calculate opacity based on time and fade settings
-                    opacity = 1.0
-
-                    if fade_type in ['in', 'both'] and t < fade_in_duration:
-                        # Fade in
-                        opacity = min(opacity, t / fade_in_duration)
-
-                    if fade_type in ['out', 'both'] and t > (duration - fade_out_duration):
-                        # Fade out
-                        time_until_end = duration - t
-                        opacity = min(opacity, time_until_end / fade_out_duration)
-
-                    # Skip drawing if fully transparent
-                    if opacity <= 0:
-                        return frame
-
-                    # Convert frame to PIL Image
-                    pil_frame = PILImage.fromarray(frame)
-
-                    # Create a transparent overlay for text
-                    overlay = PILImage.new('RGBA', pil_frame.size, (0, 0, 0, 0))
-                    draw = ImageDraw.Draw(overlay)
-
-                    # Try to load a font, fall back to default if not available
-                    try:
-                        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-                    except:
-                        try:
-                            font = ImageFont.truetype("/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf", font_size)
-                        except:
-                            font = ImageFont.load_default()
-
-                    # Text to display
-                    text = "Sample Text"
-
-                    # Get text bounding box for centering
-                    bbox = draw.textbbox((0, 0), text, font=font)
-                    text_width = bbox[2] - bbox[0]
-                    text_height = bbox[3] - bbox[1]
-
-                    # Calculate center position
-                    x = (w - text_width) // 2
-                    y = (h - text_height) // 2
-
-                    # Calculate alpha value (0-255)
-                    alpha = int(255 * opacity)
-
-                    # Draw text with stroke (outline)
-                    stroke_width = max(2, font_size // 20)
-                    draw.text((x, y), text, font=font, fill=(255, 255, 255, alpha),
-                             stroke_width=stroke_width, stroke_fill=(0, 0, 0, alpha))
-
-                    # Convert frame to RGBA for compositing
-                    pil_frame = pil_frame.convert('RGBA')
-
-                    # Composite the text overlay onto the frame
-                    pil_frame = PILImage.alpha_composite(pil_frame, overlay)
-
-                    # Convert back to RGB and return as numpy array
-                    pil_frame = pil_frame.convert('RGB')
-                    return np.array(pil_frame)
-
-                # Apply the text overlay with fade effect
-                video = video.fl(add_text_with_fade)
-
-                logger.info("Fade text effect applied successfully")
-
-            except Exception as text_error:
-                logger.warning(f"Failed to add text overlay: {text_error}, skipping fade_text effect", exc_info=True)
 
         # Apply Logo Watermark effect if requested
         logo_watermark_effect = next((e for e in effects if e.get('type') == 'logo_watermark'), None)
@@ -636,125 +618,347 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             except Exception as logo_error:
                 logger.warning(f"Failed to add logo watermark: {logo_error}, skipping logo_watermark effect", exc_info=True)
 
-        # Apply Transition effect if requested
-        # Note: Transitions are meant for multiple clips, but we'll demonstrate by creating
-        # a transition effect in the middle of the video (first half -> transition -> second half with different appearance)
-        transition_effect = next((e for e in effects if e.get('type') == 'transition'), None)
-        if transition_effect:
-            params = transition_effect.get('params', {})
-            transition_type = params.get('transition_type', 'crossfade')
-            transition_duration = params.get('duration', 1.0)
+        # Note: Transition effect is now handled in the layer composition section
+        # It adds a second dummy clip to demonstrate the transition between clips
 
-            logger.info(f"Applying Transition effect: type={transition_type}, duration={transition_duration}s")
+        # Note: Bottom Banner effect is now applied AFTER layer composition and transitions
+        # to ensure it appears on the final composited video
 
+        # Logo watermark will be applied AFTER layer composition and effects (moved below)
+
+        # Apply layers if provided
+        if layers and len(layers) > 0:
             try:
-                from PIL import Image as PILImage
+                from moviepy.editor import ImageClip, VideoFileClip as LayerVideoClip, CompositeVideoClip
+                from PIL import Image as PILImage, ImageDraw, ImageFont
                 import numpy as np
 
-                # Create a transition effect in the middle of the video
-                # We'll create two versions of the frame (normal and inverted colors) and transition between them
-                transition_start = duration / 2 - transition_duration / 2
-                transition_end = duration / 2 + transition_duration / 2
+                logger.info(f"Processing {len(layers)} layers")
 
-                def apply_transition(get_frame, t):
-                    """Apply transition effect to demonstrate different transition types"""
-                    frame = get_frame(t)
+                # Sort layers by z_index (lower z_index = bottom layer)
+                sorted_layers = sorted(layers, key=lambda l: l.get('z_index', 0))
 
-                    # If we're not in the transition period, return frame as-is (or inverted after transition)
-                    if t < transition_start:
-                        # Before transition - normal frame
-                        return frame
-                    elif t > transition_end:
-                        # After transition - inverted colors to show the transition happened
-                        return 255 - frame
+                # Check if there's a background video layer (full-screen video at z_index 0)
+                has_background_video = False
+                if sorted_layers:
+                    first_layer = sorted_layers[0]
+                    if (first_layer.get('type') == 'video' and
+                        first_layer.get('z_index', 0) == 0 and
+                        first_layer.get('size', {}).get('width', 0) >= 0.9 and
+                        first_layer.get('size', {}).get('height', 0) >= 0.9):
+                        has_background_video = True
+                        logger.info("Detected full-screen background video layer, will not include base sample video")
 
-                    # We're in the transition period
-                    progress = (t - transition_start) / transition_duration  # 0.0 to 1.0
+                # Create list of clips to composite
+                # Only include base video if there's no background video layer
+                layer_clips = [] if has_background_video else [video]
 
-                    # Get both frames (before and after)
-                    frame_before = frame
-                    frame_after = 255 - frame  # Inverted colors
+                for layer in sorted_layers:
+                    try:
+                        layer_type = layer.get('type')
+                        layer_id = layer.get('id', 'unknown')
+                        logger.info(f"Processing layer {layer_id} (type={layer_type})")
 
-                    if transition_type == 'crossfade':
-                        # Simple crossfade
-                        result = (frame_before * (1 - progress) + frame_after * progress).astype(np.uint8)
-                        return result
+                        # Get layer properties
+                        position = layer.get('position', {'x': 0.5, 'y': 0.5})
+                        size = layer.get('size', {'width': 1.0, 'height': 1.0})
+                        start_time = layer.get('start_time', 0)
+                        layer_duration = layer.get('duration', None) or duration
+                        opacity = layer.get('opacity', 1.0)
 
-                    elif transition_type == 'fade_black':
-                        # Fade to black then fade from black
-                        if progress < 0.5:
-                            # Fade to black
-                            fade_progress = progress * 2
-                            result = (frame_before * (1 - fade_progress)).astype(np.uint8)
+                        # Calculate pixel positions and sizes
+                        pos_x = int(position['x'] * w)
+                        pos_y = int(position['y'] * h)
+                        width = int(size['width'] * w)
+                        height = int(size['height'] * h)
+
+                        clip = None
+
+                        # Process different layer types
+                        if layer_type == 'video':
+                            source = layer.get('source', '')
+                            if source:
+                                # Resolve source path
+                                if not source.startswith('/'):
+                                    video_path = os.path.join('/app/public/assets', source)
+                                else:
+                                    video_path = source
+
+                                if os.path.exists(video_path):
+                                    layer_video = LayerVideoClip(video_path)
+                                    original_size = layer_video.size
+                                    logger.info(f"Video layer original size: {original_size}, target size: ({width}, {height})")
+
+                                    # Resize using MoviePy's resize method instead of cv2
+                                    # This properly updates the clip's size property
+                                    layer_video = layer_video.resize((width, height))
+                                    logger.info(f"Video layer resized, new size: {layer_video.size}")
+
+                                    # Set duration
+                                    if layer_duration:
+                                        layer_video = layer_video.set_duration(min(layer_duration, layer_video.duration))
+                                    else:
+                                        layer_duration = layer_video.duration
+
+                                    # Apply global effects to video layer
+                                    layer_video = _apply_effects_to_layer(layer_video, effects, layer_duration, width, height)
+
+                                    # Set position (centered at pos_x, pos_y)
+                                    final_pos = (pos_x - width//2, pos_y - height//2)
+                                    logger.info(f"Video layer position: {final_pos}, z_index: {layer.get('z_index', 0)}")
+                                    layer_video = layer_video.set_position(final_pos)
+
+                                    # Set start time
+                                    if start_time > 0:
+                                        layer_video = layer_video.set_start(start_time)
+                                    # Set opacity
+                                    if opacity < 1.0:
+                                        layer_video = layer_video.set_opacity(opacity)
+                                    clip = layer_video
+                                    logger.info(f"Added video layer from {source} with global effects applied")
+
+                        elif layer_type == 'image':
+                            source = layer.get('source', '')
+                            if source:
+                                # Resolve source path
+                                if not source.startswith('/'):
+                                    image_path = os.path.join('/app/public/assets', source)
+                                else:
+                                    image_path = source
+
+                                if os.path.exists(image_path):
+                                    # Load and resize image
+                                    img = PILImage.open(image_path)
+                                    img = img.resize((width, height), PILImage.LANCZOS)
+                                    # Convert to numpy array
+                                    img_array = np.array(img)
+                                    # Create ImageClip
+                                    image_clip = ImageClip(img_array)
+                                    image_clip = image_clip.set_duration(layer_duration)
+                                    # Set position (centered at pos_x, pos_y)
+                                    image_clip = image_clip.set_position((pos_x - width//2, pos_y - height//2))
+                                    # Set start time
+                                    if start_time > 0:
+                                        image_clip = image_clip.set_start(start_time)
+                                    # Set opacity
+                                    if opacity < 1.0:
+                                        image_clip = image_clip.set_opacity(opacity)
+                                    clip = image_clip
+                                    logger.info(f"Added image layer from {source}")
+
+                        elif layer_type == 'text':
+                            content = layer.get('content', 'Sample Text')
+                            font_config = layer.get('font', {})
+                            font_family = font_config.get('family', 'Arial')
+                            font_size = font_config.get('size', 48)
+                            font_color = font_config.get('color', '#FFFFFF')
+                            font_weight = font_config.get('weight', 'normal')
+
+                            # Get fade configuration
+                            fade_config = layer.get('fade', {})
+                            fade_enabled = fade_config.get('enabled', False)
+                            fade_in_duration = fade_config.get('fade_in_duration', 0.5)
+                            fade_out_duration = fade_config.get('fade_out_duration', 0.5)
+                            fade_type = fade_config.get('fade_type', 'both')
+
+                            # Convert hex color to RGB
+                            color = font_color.lstrip('#')
+                            r = int(color[0:2], 16)
+                            g = int(color[2:4], 16)
+                            b = int(color[4:6], 16)
+
+                            # Create text image using PIL
+                            text_img = PILImage.new('RGBA', (width, height), (0, 0, 0, 0))
+                            draw = ImageDraw.Draw(text_img)
+
+                            # Try to load font
+                            try:
+                                if font_weight == 'bold':
+                                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+                                else:
+                                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                            except:
+                                font = ImageFont.load_default()
+
+                            # Get text bounding box for centering
+                            bbox = draw.textbbox((0, 0), content, font=font)
+                            text_width = bbox[2] - bbox[0]
+                            text_height = bbox[3] - bbox[1]
+
+                            # Calculate center position within the text image
+                            text_x = (width - text_width) // 2
+                            text_y = (height - text_height) // 2
+
+                            # Draw text
+                            draw.text((text_x, text_y), content, font=font, fill=(r, g, b, 255))
+
+                            # Convert to numpy array
+                            text_array = np.array(text_img)
+
+                            # Create ImageClip
+                            text_clip = ImageClip(text_array)
+                            text_clip = text_clip.set_duration(layer_duration)
+
+                            # Apply base opacity first if needed
+                            if opacity < 1.0:
+                                text_clip = text_clip.set_opacity(opacity)
+
+                            # Apply fade animation if enabled
+                            if fade_enabled:
+                                logger.info(f"Applying fade animation to text layer: {content} (type={fade_type}, in={fade_in_duration}s, out={fade_out_duration}s, duration={layer_duration}s)")
+
+                                # Apply fade in
+                                if fade_type in ['in', 'both'] and fade_in_duration > 0:
+                                    text_clip = text_clip.fadein(fade_in_duration)
+                                    logger.info(f"Applied fade in: {fade_in_duration}s")
+
+                                # Apply fade out
+                                if fade_type in ['out', 'both'] and fade_out_duration > 0:
+                                    text_clip = text_clip.fadeout(fade_out_duration)
+                                    logger.info(f"Applied fade out: {fade_out_duration}s")
+
+                            # Set position (centered at pos_x, pos_y)
+                            text_clip = text_clip.set_position((pos_x - width//2, pos_y - height//2))
+                            # Set start time
+                            if start_time > 0:
+                                text_clip = text_clip.set_start(start_time)
+
+                            clip = text_clip
+                            logger.info(f"Added text layer: {content} (fade={'enabled' if fade_enabled else 'disabled'})")
+
+                        elif layer_type == 'shape':
+                            shape_type = layer.get('shape_type', 'rectangle')
+                            fill_color = layer.get('fill_color', '#3B82F6')
+                            stroke_color = layer.get('stroke_color', '#1E40AF')
+                            stroke_width = layer.get('stroke_width', 2)
+
+                            # Convert hex colors to RGB
+                            fill = fill_color.lstrip('#')
+                            fill_r = int(fill[0:2], 16)
+                            fill_g = int(fill[2:4], 16)
+                            fill_b = int(fill[4:6], 16)
+
+                            stroke = stroke_color.lstrip('#')
+                            stroke_r = int(stroke[0:2], 16)
+                            stroke_g = int(stroke[2:4], 16)
+                            stroke_b = int(stroke[4:6], 16)
+
+                            # Create shape image using PIL
+                            shape_img = PILImage.new('RGBA', (width, height), (0, 0, 0, 0))
+                            draw = ImageDraw.Draw(shape_img)
+
+                            if shape_type == 'rectangle':
+                                draw.rectangle([0, 0, width, height], fill=(fill_r, fill_g, fill_b, 255), outline=(stroke_r, stroke_g, stroke_b, 255), width=stroke_width)
+                            elif shape_type == 'circle':
+                                draw.ellipse([0, 0, width, height], fill=(fill_r, fill_g, fill_b, 255), outline=(stroke_r, stroke_g, stroke_b, 255), width=stroke_width)
+                            elif shape_type == 'line':
+                                draw.line([(0, height//2), (width, height//2)], fill=(stroke_r, stroke_g, stroke_b, 255), width=stroke_width)
+
+                            # Convert to numpy array
+                            shape_array = np.array(shape_img)
+
+                            # Create ImageClip
+                            shape_clip = ImageClip(shape_array)
+                            shape_clip = shape_clip.set_duration(layer_duration)
+                            # Set position (centered at pos_x, pos_y)
+                            shape_clip = shape_clip.set_position((pos_x - width//2, pos_y - height//2))
+                            # Set start time
+                            if start_time > 0:
+                                shape_clip = shape_clip.set_start(start_time)
+                            # Set opacity
+                            if opacity < 1.0:
+                                shape_clip = shape_clip.set_opacity(opacity)
+                            clip = shape_clip
+                            logger.info(f"Added shape layer: {shape_type}")
+
+                        # Add clip to layer_clips if it was created
+                        if clip:
+                            layer_clips.append(clip)
+
+                    except Exception as layer_error:
+                        logger.warning(f"Failed to process layer {layer.get('id', 'unknown')}: {layer_error}", exc_info=True)
+
+                # Composite all layers
+                if len(layer_clips) > 1:
+                    if has_background_video:
+                        logger.info(f"Compositing {len(layer_clips)} layers (background video + {len(layer_clips)-1} overlay layers)")
+                    else:
+                        logger.info(f"Compositing {len(layer_clips)} clips (base video + {len(layer_clips)-1} layers)")
+                    video = CompositeVideoClip(layer_clips, size=(w, h))
+                    video = video.set_duration(duration)
+                    logger.info(f"Layers composited successfully, video size: {video.size}")
+                elif len(layer_clips) == 1 and has_background_video:
+                    # If we have exactly one layer and it's a background video, use it directly
+                    logger.info("Using single background video layer as the video")
+                    video = layer_clips[0]
+                    video = video.set_duration(duration)
+                    logger.info(f"Background video layer applied successfully, video size: {video.size}")
+
+                # Check if transition effect is enabled
+                # If yes, we need to add a second dummy clip to demonstrate the transition
+                transition_effect = next((e for e in effects if e.get('type') == 'transition'), None)
+                if transition_effect and has_background_video:
+                    params = transition_effect.get('params', {})
+                    transition_type = params.get('transition_type', 'crossfade')
+                    transition_duration = params.get('duration', 1.0)
+
+                    logger.info(f"Transition effect enabled: type={transition_type}, duration={transition_duration}s")
+                    logger.info("Adding second dummy clip to demonstrate transition effect")
+
+                    try:
+                        # Create a second dummy clip (use the base sample video)
+                        # The first clip is the user's background video
+                        # The second clip is the dummy sample video to show the transition
+
+                        # Split the duration: first half for user's video, second half for dummy video
+                        clip1_duration = duration / 2
+                        clip2_duration = duration / 2
+
+                        # First clip: user's background video (already composited with layers)
+                        clip1 = video.subclip(0, min(clip1_duration, video.duration))
+
+                        # Second clip: load the sample video again as a dummy clip
+                        sample_video_path = f'/app/public/assets/sample_video_{aspect_ratio.replace(":", "_")}.mp4'
+                        if os.path.exists(sample_video_path):
+                            from moviepy.editor import VideoFileClip as MoviePyVideoFileClip
+                            clip2 = MoviePyVideoFileClip(sample_video_path)
+                            clip2 = clip2.subclip(0, min(clip2_duration, clip2.duration))
+                            clip2 = clip2.set_duration(clip2_duration)
+
+                            # Apply the transition between clip1 and clip2
+                            from moviepy.editor import concatenate_videoclips, CompositeVideoClip as MoviePyCompositeVideoClip
+
+                            if transition_type in ['crossfade', 'fade_black']:
+                                # Crossfade transition
+                                # Make clip2 start earlier by transition_duration to create overlap
+                                clip1 = clip1.set_end(clip1_duration)
+                                clip2 = clip2.set_start(clip1_duration - transition_duration)
+
+                                # Apply fade out to clip1 and fade in to clip2
+                                clip1 = clip1.fadeout(transition_duration)
+                                clip2 = clip2.fadein(transition_duration)
+
+                                # Composite the two clips
+                                video = MoviePyCompositeVideoClip([clip1, clip2], size=(w, h))
+                                video = video.set_duration(clip1_duration + clip2_duration - transition_duration)
+                                logger.info(f"Applied {transition_type} transition between clips")
+
+                            else:
+                                # For other transitions, just concatenate with a simple fade
+                                clip1 = clip1.fadeout(transition_duration)
+                                clip2 = clip2.fadein(transition_duration)
+                                video = concatenate_videoclips([clip1, clip2], method="compose")
+                                logger.info(f"Applied {transition_type} transition (using fade) between clips")
                         else:
-                            # Fade from black
-                            fade_progress = (progress - 0.5) * 2
-                            result = (frame_after * fade_progress).astype(np.uint8)
-                        return result
+                            logger.warning(f"Sample video not found at {sample_video_path}, skipping transition demo")
 
-                    elif transition_type in ['slide_left', 'slide_right', 'slide_up', 'slide_down']:
-                        # Slide transitions
-                        pil_before = PILImage.fromarray(frame_before)
-                        pil_after = PILImage.fromarray(frame_after)
-                        result = PILImage.new('RGB', (w, h))
+                    except Exception as transition_error:
+                        logger.warning(f"Failed to apply transition effect: {transition_error}, using original video", exc_info=True)
 
-                        if transition_type == 'slide_left':
-                            # Slide from right to left
-                            offset = int(w * progress)
-                            result.paste(pil_before, (-offset, 0))
-                            result.paste(pil_after, (w - offset, 0))
-                        elif transition_type == 'slide_right':
-                            # Slide from left to right
-                            offset = int(w * progress)
-                            result.paste(pil_before, (offset, 0))
-                            result.paste(pil_after, (offset - w, 0))
-                        elif transition_type == 'slide_up':
-                            # Slide from bottom to top
-                            offset = int(h * progress)
-                            result.paste(pil_before, (0, -offset))
-                            result.paste(pil_after, (0, h - offset))
-                        elif transition_type == 'slide_down':
-                            # Slide from top to bottom
-                            offset = int(h * progress)
-                            result.paste(pil_before, (0, offset))
-                            result.paste(pil_after, (0, offset - h))
+            except Exception as layers_error:
+                logger.warning(f"Failed to apply layers: {layers_error}", exc_info=True)
 
-                        return np.array(result)
-
-                    elif transition_type in ['wipe_horizontal', 'wipe_vertical']:
-                        # Wipe transitions
-                        pil_before = PILImage.fromarray(frame_before)
-                        pil_after = PILImage.fromarray(frame_after)
-                        result = pil_before.copy()
-
-                        if transition_type == 'wipe_horizontal':
-                            # Wipe from left to right
-                            wipe_x = int(w * progress)
-                            if wipe_x > 0:
-                                after_crop = pil_after.crop((0, 0, wipe_x, h))
-                                result.paste(after_crop, (0, 0))
-                        elif transition_type == 'wipe_vertical':
-                            # Wipe from top to bottom
-                            wipe_y = int(h * progress)
-                            if wipe_y > 0:
-                                after_crop = pil_after.crop((0, 0, w, wipe_y))
-                                result.paste(after_crop, (0, 0))
-
-                        return np.array(result)
-
-                    # Default: crossfade
-                    result = (frame_before * (1 - progress) + frame_after * progress).astype(np.uint8)
-                    return result
-
-                # Apply the transition effect
-                video = video.fl(apply_transition)
-
-                logger.info("Transition effect applied successfully")
-
-            except Exception as transition_error:
-                logger.warning(f"Failed to add transition effect: {transition_error}, skipping transition effect", exc_info=True)
-
-        # Apply Bottom Banner effect if requested
+        # Apply Bottom Banner effect if requested (AFTER layer composition and transitions)
         bottom_banner_effect = next((e for e in effects if e.get('type') == 'bottom_banner'), None)
         if bottom_banner_effect:
             params = bottom_banner_effect.get('params', {})
@@ -762,7 +966,26 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             background_color = params.get('background_color', '#1a1a1a')
             banner_opacity = params.get('opacity', 0.9)
 
+            # Get banner text from params first, then from resolved sample data, then use defaults
+            # This allows users to either use variables ({{banner_heading}}) or hardcoded text
+            banner_heading_raw = params.get('heading', '{{banner_heading}}')
+            banner_ticker_raw = params.get('ticker', '{{banner_ticker}}')
+
+            # Use resolved_sample_data if provided, otherwise use empty dict
+            sample_data = resolved_sample_data if resolved_sample_data is not None else {}
+
+            # Resolve variables in the banner text using the imported substitute_variables function
+            banner_heading = substitute_variables(banner_heading_raw, sample_data)
+            banner_ticker = substitute_variables(banner_ticker_raw, sample_data)
+
+            # If still contains placeholders (variable not defined), use defaults
+            if '{{' in banner_heading:
+                banner_heading = 'BREAKING NEWS'
+            if '{{' in banner_ticker:
+                banner_ticker = 'Sample News Ticker • Latest Updates • Breaking Stories • '
+
             logger.info(f"Applying Bottom Banner effect: height={banner_height}px, bg={background_color}, opacity={banner_opacity}")
+            logger.info(f"Banner text: heading='{banner_heading}', ticker='{banner_ticker}'")
 
             try:
                 from PIL import Image as PILImage, ImageDraw, ImageFont
@@ -807,8 +1030,8 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         heading_font = ImageFont.load_default()
                         ticker_font = ImageFont.load_default()
 
-                    # Draw heading in tier 1 (top part)
-                    heading_text = "BREAKING NEWS"
+                    # Draw heading in tier 1 (top part) - use variable
+                    heading_text = banner_heading
                     heading_bbox = draw.textbbox((0, 0), heading_text, font=heading_font)
                     heading_width = heading_bbox[2] - heading_bbox[0]
                     heading_x = (w - heading_width) // 2
@@ -818,8 +1041,8 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                     # Draw separator line
                     draw.line([(0, tier1_height), (w, tier1_height)], fill=(255, 255, 255, alpha), width=2)
 
-                    # Draw scrolling ticker in tier 2 (bottom part)
-                    ticker_text = "Sample News Ticker • Latest Updates • Breaking Stories • "
+                    # Draw scrolling ticker in tier 2 (bottom part) - use variable
+                    ticker_text = banner_ticker
                     ticker_bbox = draw.textbbox((0, 0), ticker_text, font=ticker_font)
                     ticker_text_width = ticker_bbox[2] - ticker_bbox[0]
 
@@ -855,98 +1078,6 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
 
             except Exception as banner_error:
                 logger.warning(f"Failed to add bottom banner: {banner_error}, skipping bottom_banner effect", exc_info=True)
-
-        # Apply Logo Watermark from separate logo configuration (not from effects)
-        if logo and logo.get('enabled', False):
-            try:
-                from PIL import Image as PILImage, ImageDraw
-                import numpy as np
-
-                logo_source = logo.get('source', '')
-                position = logo.get('position', 'top-right')
-                opacity = logo.get('opacity', 0.8)
-                scale = logo.get('scale', 0.15)
-                margin_config = logo.get('margin', {})
-
-                # Handle margin as dict or int
-                if isinstance(margin_config, dict):
-                    margin_x = margin_config.get('x', 20)
-                    margin_y = margin_config.get('y', 20)
-                else:
-                    margin_x = margin_y = margin_config
-
-                logger.info(f"Applying Logo Watermark: source={logo_source}, position={position}, opacity={opacity}, scale={scale}")
-
-                # Determine logo path
-                logo_path = None
-                if logo_source:
-                    # If it's just a filename, look in assets folder
-                    if not logo_source.startswith('/'):
-                        logo_path = os.path.join('/app/public/assets', logo_source)
-                    else:
-                        logo_path = logo_source
-
-                    if logo_path and os.path.exists(logo_path):
-                        # Create a function to draw logo on each frame
-                        def add_logo_overlay(get_frame, t):
-                            """Add logo overlay to frame at time t"""
-                            frame = get_frame(t)
-
-                            # Convert frame to PIL Image
-                            pil_frame = PILImage.fromarray(frame)
-
-                            # Load the logo image
-                            logo_img = PILImage.open(logo_path)
-
-                            # Convert logo to RGBA if not already
-                            if logo_img.mode != 'RGBA':
-                                logo_img = logo_img.convert('RGBA')
-
-                            # Calculate logo size based on scale
-                            logo_width = int(w * scale)
-                            aspect_ratio = logo_img.height / logo_img.width
-                            logo_height = int(logo_width * aspect_ratio)
-
-                            # Resize logo
-                            logo_img = logo_img.resize((logo_width, logo_height), PILImage.LANCZOS)
-
-                            # Apply opacity to logo
-                            if opacity < 1.0:
-                                # Split into channels
-                                r, g, b, a = logo_img.split()
-                                # Multiply alpha channel by opacity
-                                a = a.point(lambda p: int(p * opacity))
-                                # Merge back
-                                logo_img = PILImage.merge('RGBA', (r, g, b, a))
-
-                            # Calculate position
-                            if position == 'top-left':
-                                x, y = margin_x, margin_y
-                            elif position == 'top-right':
-                                x, y = w - logo_width - margin_x, margin_y
-                            elif position == 'bottom-left':
-                                x, y = margin_x, h - logo_height - margin_y
-                            else:  # bottom-right (default)
-                                x, y = w - logo_width - margin_x, h - logo_height - margin_y
-
-                            # Convert frame to RGBA for compositing
-                            pil_frame = pil_frame.convert('RGBA')
-
-                            # Paste logo onto frame
-                            pil_frame.paste(logo_img, (x, y), logo_img)
-
-                            # Convert back to RGB and return as numpy array
-                            pil_frame = pil_frame.convert('RGB')
-                            return np.array(pil_frame)
-
-                        # Apply the logo overlay
-                        video = video.fl(add_logo_overlay)
-
-                        logger.info("Logo watermark applied successfully from logo configuration")
-                    else:
-                        logger.warning(f"Logo file not found: {logo_path}")
-            except Exception as logo_error:
-                logger.warning(f"Failed to apply logo watermark: {logo_error}", exc_info=True)
 
         # Apply background music if enabled
         final_audio = None
@@ -1003,6 +1134,120 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
         # Set audio on video
         if final_audio:
             video = video.set_audio(final_audio)
+
+        # Apply Logo Watermark from separate logo configuration (AFTER layer composition and effects)
+        if logo and logo.get('enabled', False):
+            try:
+                from PIL import Image as PILImage, ImageDraw
+                import numpy as np
+
+                logo_source = logo.get('source', '')
+                position = logo.get('position', 'top-right')
+                opacity = logo.get('opacity', 0.8)
+                scale = logo.get('scale', 0.15)
+                margin_config = logo.get('margin', {})
+
+                # Handle margin as dict or int
+                if isinstance(margin_config, dict):
+                    margin_x = margin_config.get('x', 20)
+                    margin_y = margin_config.get('y', 20)
+                else:
+                    margin_x = margin_y = margin_config
+
+                logger.info(f"Applying Logo Watermark: source={logo_source}, position={position}, opacity={opacity}, scale={scale}")
+
+                # Determine logo path
+                logo_path = None
+                if logo_source:
+                    # If it's just a filename, look in assets folder
+                    if not logo_source.startswith('/'):
+                        logo_path = os.path.join('/app/public/assets', logo_source)
+                    else:
+                        logo_path = logo_source
+
+                    if logo_path and os.path.exists(logo_path):
+                        # Load and prepare logo image ONCE (not on every frame)
+                        logo_img_original = PILImage.open(logo_path)
+
+                        # Convert logo to RGBA if not already
+                        if logo_img_original.mode != 'RGBA':
+                            logo_img_original = logo_img_original.convert('RGBA')
+
+                        # Get video dimensions
+                        video_w, video_h = video.size
+                        logger.info(f"Video dimensions from video.size: {video_w}x{video_h}, Logo scale: {scale}")
+                        logger.info(f"Logo original dimensions: {logo_img_original.width}x{logo_img_original.height}")
+
+                        # Store logo preparation parameters (we'll calculate size and position per frame)
+                        logo_img_prepared = logo_img_original
+
+                        # Apply opacity to logo template
+                        if opacity < 1.0:
+                            # Split into channels
+                            r, g, b, a = logo_img_prepared.split()
+                            # Multiply alpha channel by opacity
+                            a = a.point(lambda p: int(p * opacity))
+                            # Merge back
+                            logo_img_prepared = PILImage.merge('RGBA', (r, g, b, a))
+
+                        # Track if we've logged frame info (only log once)
+                        logged_frame_info = {'done': False}
+
+                        # Create a function to draw logo on each frame
+                        def add_logo_overlay(get_frame, t):
+                            """Add logo overlay to frame at time t"""
+                            frame = get_frame(t)
+
+                            # Get frame dimensions (use actual frame dimensions, not video.size)
+                            frame_h, frame_w = frame.shape[:2]
+
+                            # Calculate logo size based on ACTUAL frame width
+                            logo_width = int(frame_w * scale)
+                            logo_aspect_ratio = logo_img_prepared.height / logo_img_prepared.width
+                            logo_height = int(logo_width * logo_aspect_ratio)
+
+                            # Resize logo based on actual frame dimensions
+                            logo_img_resized = logo_img_prepared.resize((logo_width, logo_height), PILImage.LANCZOS)
+
+                            # Calculate position based on ACTUAL frame dimensions
+                            if position == 'top-left':
+                                x, y = margin_x, margin_y
+                            elif position == 'top-right':
+                                x, y = frame_w - logo_width - margin_x, margin_y
+                            elif position == 'bottom-left':
+                                x, y = margin_x, frame_h - logo_height - margin_y
+                            else:  # bottom-right (default)
+                                x, y = frame_w - logo_width - margin_x, frame_h - logo_height - margin_y
+
+                            # Log frame info only once
+                            if not logged_frame_info['done']:
+                                logger.info(f"Frame dimensions: {frame_w}x{frame_h}, Logo size: {logo_width}x{logo_height}, Position: ({x}, {y}) for position={position}")
+                                logger.info(f"Logo will be pasted at pixel coordinates: x={x}, y={y}, width={logo_width}, height={logo_height}")
+                                logger.info(f"Logo bounds: top-left=({x},{y}), bottom-right=({x+logo_width},{y+logo_height})")
+                                logged_frame_info['done'] = True
+
+                            # Convert frame to PIL Image (RGB)
+                            pil_frame = PILImage.fromarray(frame)
+
+                            # Ensure logo has alpha channel
+                            if logo_img_resized.mode != 'RGBA':
+                                logo_img_resized = logo_img_resized.convert('RGBA')
+
+                            # Paste logo onto frame using alpha channel as mask
+                            # This ensures transparency is handled correctly
+                            pil_frame.paste(logo_img_resized, (x, y), logo_img_resized)
+
+                            # Return as numpy array
+                            return np.array(pil_frame)
+
+                        # Apply the logo overlay
+                        video = video.fl(add_logo_overlay)
+
+                        logger.info("Logo watermark applied successfully from logo configuration")
+                    else:
+                        logger.warning(f"Logo file not found: {logo_path}")
+            except Exception as logo_error:
+                logger.warning(f"Failed to apply logo watermark: {logo_error}", exc_info=True)
 
         # Write video file with optimized settings
         video.write_videofile(
@@ -1332,9 +1577,12 @@ def preview_template():
 
         # Generate sample data for template variables
         resolved_sample_data = _generate_sample_data(template, sample_data)
+        logger.info(f"Template variables config: {template.get('variables', {})}")
+        logger.info(f"Resolved sample data: {resolved_sample_data}")
 
         # Resolve template with sample data
         resolved_template = variable_resolver.resolve_template(template, resolved_sample_data)
+        logger.info(f"Resolved template layers: {resolved_template.get('layers', [])}")
 
         # Create directories if they don't exist
         assets_dir = '/app/public/assets'
@@ -1397,15 +1645,17 @@ def preview_template():
             logger.info(f"Base sample video not found, creating it first: {default_sample_filename}")
             _create_placeholder_video(default_sample_path, aspect_ratio, effects=[])
 
-        # Now apply effects and/or background music and/or logo to the base sample video
-        effects = template.get('effects', [])
-        background_music = template.get('background_music', {})
-        logo = template.get('logo', {})
+        # Now apply effects and/or background music and/or logo and/or layers to the base sample video
+        # Use resolved_template to get layers with variables substituted
+        effects = resolved_template.get('effects', [])
+        background_music = resolved_template.get('background_music', {})
+        logo = resolved_template.get('logo', {})
+        layers = resolved_template.get('layers', [])
 
-        # Apply effects and/or background music and/or logo if any is present
-        if effects or (background_music and background_music.get('enabled', False)) or (logo and logo.get('enabled', False)):
-            logger.info(f"Applying {len(effects)} effects, background music, and logo to base sample video")
-            _apply_effects_to_video(default_sample_path, preview_path, effects, aspect_ratio, background_music, logo)
+        # Apply effects and/or background music and/or logo and/or layers if any is present
+        if effects or (background_music and background_music.get('enabled', False)) or (logo and logo.get('enabled', False)) or layers:
+            logger.info(f"Applying {len(effects)} effects, background music, logo, and {len(layers)} layers to base sample video")
+            _apply_effects_to_video(default_sample_path, preview_path, effects, aspect_ratio, background_music, logo, layers, resolved_sample_data)
 
             if os.path.exists(preview_path):
                 return jsonify({
@@ -1413,16 +1663,16 @@ def preview_template():
                     'preview_url': f'/api/templates/preview/video/{preview_filename}',
                     'video_path': preview_path,
                     'is_temp': True,
-                    'message': 'Preview generated with effects'
+                    'message': 'Preview generated with effects and layers'
                 }), 200
             else:
                 return jsonify({
                     'status': 'error',
-                    'error': 'Failed to apply effects to video'
+                    'error': 'Failed to apply effects and layers to video'
                 }), 500
         else:
-            # No effects or background music, just use the base sample video
-            logger.info("No effects or background music to apply, using base sample video")
+            # No effects, background music, logo, or layers, just use the base sample video
+            logger.info("No effects, background music, logo, or layers to apply, using base sample video")
             return jsonify({
                 'status': 'success',
                 'preview_url': f'/api/templates/preview/video/{default_sample_filename}',
@@ -1481,6 +1731,11 @@ def _generate_sample_data(template: Dict[str, Any], override_data: Dict[str, Any
         # Check if override provided
         if override_data and var_name in override_data:
             sample_data[var_name] = override_data[var_name]
+            continue
+
+        # Check if variable has a default value defined in config
+        if 'default' in var_config and var_config['default']:
+            sample_data[var_name] = var_config['default']
             continue
 
         # Check specific defaults
@@ -1666,16 +1921,333 @@ def upload_logo():
         }), 500
 
 
+@template_bp.route('/templates/upload/image', methods=['POST'])
+def upload_image():
+    """
+    Upload image file for layers
+
+    Accepts multipart/form-data with 'file' field
+    Returns the path to the uploaded file
+    """
+    try:
+        from flask import request
+        from werkzeug.utils import secure_filename
+        import uuid
+
+        # Check if file is present
+        if 'file' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'error': 'No file provided'
+            }), 400
+
+        file = request.files['file']
+
+        # Check if filename is empty
+        if file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'error': 'No file selected'
+            }), 400
+
+        # Validate file extension
+        allowed_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'status': 'error',
+                'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
+            }), 400
+
+        # Generate unique filename
+        unique_id = str(uuid.uuid4())[:8]
+        safe_filename = secure_filename(file.filename)
+        filename = f"image_{unique_id}_{safe_filename}"
+
+        # Save to assets folder
+        assets_dir = '/app/public/assets'
+        os.makedirs(assets_dir, exist_ok=True)
+
+        file_path = os.path.join(assets_dir, filename)
+        file.save(file_path)
+
+        logger.info(f"Image file uploaded successfully: {filename}")
+
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'path': f'/api/templates/assets/{filename}'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error uploading image file: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@template_bp.route('/templates/upload/video', methods=['POST'])
+def upload_video():
+    """
+    Upload video file for layers
+
+    Accepts multipart/form-data with 'file' field
+    Returns the path to the uploaded file
+    """
+    try:
+        from flask import request
+        from werkzeug.utils import secure_filename
+        import uuid
+
+        # Check if file is present
+        if 'file' not in request.files:
+            return jsonify({
+                'status': 'error',
+                'error': 'No file provided'
+            }), 400
+
+        file = request.files['file']
+
+        # Check if filename is empty
+        if file.filename == '':
+            return jsonify({
+                'status': 'error',
+                'error': 'No file selected'
+            }), 400
+
+        # Validate file extension
+        allowed_extensions = {'.mp4', '.webm', '.ogg', '.mov', '.avi'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'status': 'error',
+                'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'
+            }), 400
+
+        # Generate unique filename
+        unique_id = str(uuid.uuid4())[:8]
+        safe_filename = secure_filename(file.filename)
+        filename = f"video_{unique_id}_{safe_filename}"
+
+        # Save to assets folder
+        assets_dir = '/app/public/assets'
+        os.makedirs(assets_dir, exist_ok=True)
+
+        file_path = os.path.join(assets_dir, filename)
+        file.save(file_path)
+
+        logger.info(f"Video file uploaded successfully: {filename}")
+
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'path': f'/api/templates/assets/{filename}'
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error uploading video file: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+def _add_text_overlay_to_thumbnail(thumbnail_img, text_config, logger):
+    """
+    Add text overlay to thumbnail image similar to video generation service
+
+    Args:
+        thumbnail_img: PIL Image object
+        text_config: Dictionary with text configuration
+        logger: Logger instance
+
+    Returns:
+        PIL Image with text overlay
+    """
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        # Get text configuration
+        title = text_config.get('title', '')
+        subtitle = text_config.get('subtitle', '')
+        position = text_config.get('position', 'top-left')
+        font_size = text_config.get('font_size', 88)
+        title_color = text_config.get('title_color', '#FFFFFF')
+        subtitle_color = text_config.get('subtitle_color', '#FFFFFF')
+        bg_color = text_config.get('background_color', '#003399')
+        bg_opacity = text_config.get('background_opacity', 0.9)
+
+        logger.info(f"Adding text overlay: title={title}, position={position}")
+
+        # Convert to RGBA for transparency support
+        img_rgba = thumbnail_img.convert('RGBA')
+        img_width, img_height = img_rgba.size
+
+        # Create overlay layer
+        overlay = Image.new('RGBA', img_rgba.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # Load fonts
+        try:
+            font_paths_bold = [
+                '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+                '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+                '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            ]
+
+            title_font = None
+            for font_path in font_paths_bold:
+                if os.path.exists(font_path):
+                    title_font = ImageFont.truetype(font_path, font_size)
+                    break
+
+            if not title_font:
+                title_font = ImageFont.load_default()
+
+            # Subtitle font is smaller
+            subtitle_font = None
+            for font_path in font_paths_bold:
+                if os.path.exists(font_path):
+                    subtitle_font = ImageFont.truetype(
+                        font_path, int(font_size * 0.6)
+                    )
+                    break
+
+            if not subtitle_font:
+                subtitle_font = ImageFont.load_default()
+
+        except Exception as e:
+            logger.warning(f"Font loading failed: {e}")
+            title_font = ImageFont.load_default()
+            subtitle_font = ImageFont.load_default()
+
+        # Convert hex colors to RGB
+        def hex_to_rgb(hex_color):
+            hex_color = hex_color.lstrip('#')
+            return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+        title_rgb = hex_to_rgb(title_color)
+        subtitle_rgb = hex_to_rgb(subtitle_color)
+        bg_rgb = hex_to_rgb(bg_color)
+
+        # Measure text dimensions
+        temp_draw = ImageDraw.Draw(img_rgba)
+
+        title_bbox = temp_draw.textbbox((0, 0), title, font=title_font)
+        title_width = title_bbox[2] - title_bbox[0]
+        title_height = title_bbox[3] - title_bbox[1]
+
+        subtitle_bbox = temp_draw.textbbox((0, 0), subtitle, font=subtitle_font)
+        subtitle_width = subtitle_bbox[2] - subtitle_bbox[0]
+        subtitle_height = subtitle_bbox[3] - subtitle_bbox[1]
+
+        # Calculate banner dimensions
+        padding_x = 40
+        padding_y = 30
+        line_spacing = 20
+
+        banner_width = max(title_width, subtitle_width) + (padding_x * 2)
+        banner_height = title_height + subtitle_height + line_spacing + (padding_y * 2)
+
+        # Calculate position based on configuration
+        if position == 'top-left':
+            banner_x = 0
+            banner_y = 0
+        elif position == 'top-right':
+            banner_x = img_width - banner_width
+            banner_y = 0
+        elif position == 'bottom-left':
+            banner_x = 0
+            banner_y = img_height - banner_height
+        elif position == 'bottom-right':
+            banner_x = img_width - banner_width
+            banner_y = img_height - banner_height
+        elif position == 'center':
+            banner_x = (img_width - banner_width) // 2
+            banner_y = (img_height - banner_height) // 2
+        else:
+            banner_x = 0
+            banner_y = 0
+
+        # Draw semi-transparent background banner
+        bg_alpha = int(255 * bg_opacity)
+        draw.rectangle(
+            [
+                (banner_x, banner_y),
+                (banner_x + banner_width, banner_y + banner_height)
+            ],
+            fill=(*bg_rgb, bg_alpha)
+        )
+
+        # Draw title text (centered in banner)
+        text_x = banner_x + (banner_width - title_width) // 2
+        text_y = banner_y + padding_y
+        draw.text(
+            (text_x, text_y),
+            title,
+            font=title_font,
+            fill=(*title_rgb, 255)
+        )
+
+        # Draw subtitle text if provided
+        if subtitle:
+            text_x = banner_x + (banner_width - subtitle_width) // 2
+            text_y = banner_y + padding_y + title_height + line_spacing
+            draw.text(
+                (text_x, text_y),
+                subtitle,
+                font=subtitle_font,
+                fill=(*subtitle_rgb, 255)
+            )
+
+        # Composite overlay onto image
+        img_rgba = Image.alpha_composite(img_rgba, overlay)
+
+        # Convert back to RGB
+        result = img_rgba.convert('RGB')
+
+        logger.info("Text overlay added successfully")
+        return result
+
+    except Exception as e:
+        logger.warning(f"Failed to add text overlay: {e}", exc_info=True)
+        return thumbnail_img
+
+
 @template_bp.route('/templates/preview/thumbnail', methods=['POST'])
 def generate_thumbnail():
     """
-    Generate thumbnail from preview video at configured timestamp
+    Generate thumbnail from preview video at configured timestamp with optional text overlay
 
     Request body:
         {
             "video_path": "/api/templates/preview/video/sample_video_16_9.mp4",
             "timestamp": 2.0,  // seconds
-            "aspect_ratio": "16:9"
+            "aspect_ratio": "16:9",
+            "text": {  // Optional text overlay
+                "enabled": true,
+                "title": "TOP 20 NEWS",
+                "subtitle": "27 November 2025",
+                "position": "top-left",
+                "font_size": 88,
+                "title_color": "#FFFFFF",
+                "subtitle_color": "#FFFFFF",
+                "background_color": "#003399",
+                "background_opacity": 0.9
+            },
+            "variables": {  // Optional variables config for resolving {{placeholders}}
+                "title": {
+                    "type": "text",
+                    "default": "Breaking News"
+                },
+                "date": {
+                    "type": "text",
+                    "default": "December 20, 2025"
+                }
+            }
         }
 
     Response:
@@ -1687,7 +2259,7 @@ def generate_thumbnail():
     """
     try:
         from moviepy.editor import VideoFileClip
-        from PIL import Image
+        from PIL import Image, ImageDraw, ImageFont
         import numpy as np
         import uuid
 
@@ -1702,6 +2274,7 @@ def generate_thumbnail():
         video_path = data.get('video_path', '')
         timestamp = data.get('timestamp', 2.0)
         aspect_ratio = data.get('aspect_ratio', '16:9')
+        variables_config = data.get('variables', {})
 
         # Convert URL path to file system path
         if video_path.startswith('/api/templates/preview/video/'):
@@ -1740,6 +2313,31 @@ def generate_thumbnail():
 
         # Convert frame to PIL Image
         thumbnail_img = Image.fromarray(frame)
+
+        # Apply text overlay if configured
+        text_config = data.get('text')
+        if text_config and text_config.get('enabled'):
+            # Resolve variables in text config if variables are provided
+            if variables_config:
+                from utils.helpers import substitute_variables
+
+                # Generate sample data from variables config
+                sample_data = {}
+                for var_name, var_config in variables_config.items():
+                    if 'default' in var_config and var_config['default']:
+                        sample_data[var_name] = var_config['default']
+
+                logger.info(f"Resolving thumbnail text with variables: {sample_data}")
+
+                # Resolve variables in text config
+                import json
+                text_config_str = json.dumps(text_config)
+                resolved_text_config_str = substitute_variables(text_config_str, sample_data)
+                text_config = json.loads(resolved_text_config_str)
+
+                logger.info(f"Resolved thumbnail text config: {text_config}")
+
+            thumbnail_img = _add_text_overlay_to_thumbnail(thumbnail_img, text_config, logger)
 
         # Generate unique filename for thumbnail
         unique_id = str(uuid.uuid4())[:8]

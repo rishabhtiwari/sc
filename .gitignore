@@ -48,6 +48,9 @@ jobs/video-generator/assets/
 jobs/watermark-remover/public/
 jobs/watermark-remover/models/
 
+### Template service directories ###
+template-service/public/
+
 ### macOS system files ###
 .DS_Store
 

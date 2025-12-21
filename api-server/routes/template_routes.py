@@ -304,6 +304,84 @@ def upload_logo():
         return jsonify({'error': str(e)}), 500
 
 
+@template_bp.route('/templates/upload/image', methods=['POST', 'OPTIONS'])
+def upload_image():
+    """Upload image file for layers"""
+    try:
+        # Handle preflight OPTIONS request
+        if request.method == 'OPTIONS':
+            response = Response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response, 200
+
+        logger.info("🖼️ POST /templates/upload/image - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        # Forward the file upload
+        files = {}
+        if 'file' in request.files:
+            file = request.files['file']
+            files['file'] = (file.filename, file.stream, file.content_type)
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/upload/image',
+            files=files,
+            headers=headers,
+            timeout=60
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying image upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@template_bp.route('/templates/upload/video', methods=['POST', 'OPTIONS'])
+def upload_video():
+    """Upload video file for layers"""
+    try:
+        # Handle preflight OPTIONS request
+        if request.method == 'OPTIONS':
+            response = Response()
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+            response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response, 200
+
+        logger.info("🎥 POST /templates/upload/video - Proxying to template-service")
+        headers = get_request_headers_with_context()
+
+        # Forward the file upload
+        files = {}
+        if 'file' in request.files:
+            file = request.files['file']
+            files['file'] = (file.filename, file.stream, file.content_type)
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/upload/video',
+            files=files,
+            headers=headers,
+            timeout=120  # Longer timeout for video uploads
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying video upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @template_bp.route('/templates/preview/thumbnail', methods=['POST', 'OPTIONS'])
 def generate_thumbnail():
     """Generate thumbnail from preview video"""
