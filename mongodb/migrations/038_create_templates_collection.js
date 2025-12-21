@@ -12,8 +12,12 @@ db.createCollection('templates', {
     validator: {
         $jsonSchema: {
             bsonType: 'object',
-            required: ['template_id', 'name', 'category', 'version', 'layers', 'variables'],
+            required: ['template_id', 'name', 'category', 'version', 'layers', 'variables', 'customer_id'],
             properties: {
+                customer_id: {
+                    bsonType: 'string',
+                    description: 'Customer ID for multi-tenancy (use "customer_system" for system templates)'
+                },
                 template_id: {
                     bsonType: 'string',
                     description: 'Unique template identifier'
@@ -59,10 +63,10 @@ db.createCollection('templates', {
                     description: 'Background music configuration',
                     properties: {
                         enabled: { bsonType: 'bool' },
-                        source: { bsonType: 'string' },
-                        volume: { bsonType: 'double' },
-                        fade_in: { bsonType: 'double' },
-                        fade_out: { bsonType: 'double' }
+                        source: { bsonType: ['string', 'null'] },
+                        volume: { bsonType: ['int', 'double'] },
+                        fade_in: { bsonType: ['int', 'double'] },
+                        fade_out: { bsonType: ['int', 'double'] }
                     }
                 },
                 logo: {
@@ -70,11 +74,11 @@ db.createCollection('templates', {
                     description: 'Logo watermark configuration',
                     properties: {
                         enabled: { bsonType: 'bool' },
-                        source: { bsonType: 'string' },
+                        source: { bsonType: ['string', 'null'] },
                         position: { bsonType: 'string' },
-                        scale: { bsonType: 'double' },
-                        opacity: { bsonType: 'double' },
-                        margin: { bsonType: 'int' }
+                        scale: { bsonType: ['int', 'double'] },
+                        opacity: { bsonType: ['int', 'double'] },
+                        margin: { bsonType: ['int', 'object'] }
                     }
                 },
                 thumbnail: {
@@ -83,7 +87,7 @@ db.createCollection('templates', {
                     properties: {
                         source: { bsonType: 'string' },
                         auto_generate: { bsonType: 'bool' },
-                        timestamp: { bsonType: 'double' }
+                        timestamp: { bsonType: ['int', 'double'] }
                     }
                 },
                 audio: {
@@ -122,28 +126,29 @@ print('✓ Created templates collection with schema validation');
 
 // Create indexes
 db.templates.createIndex(
-    { template_id: 1 },
-    { unique: true, name: 'idx_template_id' }
+    { template_id: 1, customer_id: 1 },
+    { unique: true, name: 'idx_template_id_customer' }
 );
-print('✓ Created unique index on template_id');
+print('✓ Created unique index on template_id + customer_id');
 
 db.templates.createIndex(
-    { category: 1, is_active: 1 },
-    { name: 'idx_category_active' }
+    { customer_id: 1, category: 1, is_active: 1 },
+    { name: 'idx_customer_category_active' }
 );
-print('✓ Created index on category + is_active');
+print('✓ Created index on customer_id + category + is_active');
 
 db.templates.createIndex(
-    { 'metadata.tags': 1 },
-    { name: 'idx_tags' }
+    { customer_id: 1, 'metadata.tags': 1 },
+    { name: 'idx_customer_tags' }
 );
-print('✓ Created index on metadata.tags');
+print('✓ Created index on customer_id + metadata.tags');
 
 // Insert default templates
 const now = new Date();
 
 // Modern News Template
 db.templates.insertOne({
+    customer_id: 'customer_system',
     template_id: 'modern_news_v1',
     name: 'Modern News',
     category: 'news',
@@ -257,6 +262,7 @@ print('✓ Inserted template: modern_news_v1');
 
 // Minimal News Template
 db.templates.insertOne({
+    customer_id: 'customer_system',
     template_id: 'minimal_news_v1',
     name: 'Minimal News',
     category: 'news',
@@ -337,6 +343,7 @@ print('✓ Inserted template: minimal_news_v1');
 
 // Vertical Overlay Shorts Template
 db.templates.insertOne({
+    customer_id: 'customer_system',
     template_id: 'vertical_overlay_v1',
     name: 'Vertical Overlay',
     category: 'shorts',

@@ -7,6 +7,12 @@ import os
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from pymongo import MongoClient
+from utils.multi_tenant_utils import (
+    get_customer_id,
+    build_multi_tenant_query,
+    prepare_insert_document,
+    add_audit_fields
+)
 
 
 class TemplateManager:
@@ -23,12 +29,14 @@ class TemplateManager:
             self.db = db_client['news']
             self.templates_collection = self.db['templates']
     
-    def list_templates(self, category: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_templates(self, category: Optional[str] = None, customer_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        List all available templates from MongoDB
+        List all available templates from MongoDB for a specific customer
+        Returns both customer-specific templates AND system templates
 
         Args:
             category: Filter by category (news, shorts, ecommerce)
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             List of template metadata
@@ -39,10 +47,23 @@ class TemplateManager:
             return []
 
         try:
-            # Build query
-            query = {'is_active': True}
+            from utils.multi_tenant_utils import SYSTEM_CUSTOMER_ID
+
+            # Build query to include both customer's templates AND system templates
+            resolved_customer_id = get_customer_id(customer_id)
+
+            base_query = {
+                'is_active': True,
+                '$or': [
+                    {'customer_id': resolved_customer_id},  # Customer's own templates
+                    {'customer_id': SYSTEM_CUSTOMER_ID}      # System templates (visible to all)
+                ]
+            }
+
             if category:
-                query['category'] = category
+                base_query['category'] = category
+
+            query = base_query
 
             # Fetch templates from MongoDB
             cursor = self.templates_collection.find(
@@ -71,7 +92,8 @@ class TemplateManager:
                 })
 
             if self.logger:
-                self.logger.info(f"Listed {len(templates)} templates (category={category})")
+                resolved_customer_id = get_customer_id(customer_id)
+                self.logger.info(f"Listed {len(templates)} templates (category={category}, customer={resolved_customer_id})")
 
             return templates
 
@@ -130,12 +152,13 @@ class TemplateManager:
                 self.logger.error(f"Error loading template {cache_key}: {e}")
             raise
     
-    def get_template_by_id(self, template_id: str) -> Optional[Dict[str, Any]]:
+    def get_template_by_id(self, template_id: str, customer_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Get template by ID from MongoDB
+        Get template by ID from MongoDB for a specific customer
 
         Args:
             template_id: Template identifier
+            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
             Template definition or None if not found
@@ -144,16 +167,18 @@ class TemplateManager:
             return None
 
         try:
-            template = self.templates_collection.find_one(
-                {
-                    'template_id': template_id,
-                    'is_active': True
-                },
-                {'_id': 0}
+            # Build multi-tenant query with customer_id filter
+            query = build_multi_tenant_query(
+                base_query={'template_id': template_id},
+                customer_id=customer_id,
+                include_deleted=False
             )
 
+            template = self.templates_collection.find_one(query, {'_id': 0})
+
             if template and self.logger:
-                self.logger.info(f"Found template: {template_id}")
+                resolved_customer_id = get_customer_id(customer_id)
+                self.logger.info(f"Found template: {template_id} (customer: {resolved_customer_id})")
 
             return template
 
@@ -162,14 +187,17 @@ class TemplateManager:
                 self.logger.error(f"Error getting template {template_id}: {e}")
             return None
     
-    def save_template(self, category: str, template_id: str, template: Dict[str, Any]) -> bool:
+    def save_template(self, category: str, template_id: str, template: Dict[str, Any],
+                      customer_id: Optional[str] = None, user_id: Optional[str] = None) -> bool:
         """
-        Save template to MongoDB
+        Save template to MongoDB with multi-tenant support
 
         Args:
             category: Template category
             template_id: Template identifier
             template: Template definition
+            customer_id: Customer ID for multi-tenancy (uses SYSTEM_CUSTOMER_ID if None)
+            user_id: User ID for audit tracking
 
         Returns:
             True if successful
@@ -183,12 +211,44 @@ class TemplateManager:
             # Ensure required fields from migration schema
             template['template_id'] = template_id
             template['category'] = category
-            template['updated_at'] = datetime.utcnow()
+
+            # Check if this is an update or create
+            resolved_customer_id = get_customer_id(customer_id)
+            existing = self.templates_collection.find_one({
+                'template_id': template_id,
+                'customer_id': resolved_customer_id
+            })
+            is_update = existing is not None
+
+            # Add audit fields (customer_id, created_at, updated_at, created_by, updated_by)
+            add_audit_fields(template, is_update=is_update, customer_id=customer_id, user_id=user_id)
+
+            # Fix: If created_at or updated_at are strings (from frontend), convert them to datetime
+            # This happens when editing an existing template - the frontend sends back the serialized dates as strings
+            from datetime import datetime
+            if 'created_at' in template and isinstance(template['created_at'], str):
+                try:
+                    # Try parsing ISO format or HTTP date format
+                    template['created_at'] = datetime.fromisoformat(template['created_at'].replace('Z', '+00:00'))
+                except:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        template['created_at'] = parsedate_to_datetime(template['created_at'])
+                    except:
+                        # If parsing fails, use current time
+                        template['created_at'] = datetime.utcnow()
+
+            if 'updated_at' in template and isinstance(template['updated_at'], str):
+                try:
+                    template['updated_at'] = datetime.fromisoformat(template['updated_at'].replace('Z', '+00:00'))
+                except:
+                    try:
+                        from email.utils import parsedate_to_datetime
+                        template['updated_at'] = parsedate_to_datetime(template['updated_at'])
+                    except:
+                        template['updated_at'] = datetime.utcnow()
 
             # Set defaults for required fields if not present
-            if 'created_at' not in template:
-                template['created_at'] = datetime.utcnow()
-
             if 'is_active' not in template:
                 template['is_active'] = True
 
@@ -232,9 +292,9 @@ class TemplateManager:
                     'thumbnail': ''
                 }
 
-            # Upsert template
+            # Upsert template with customer_id filter
             result = self.templates_collection.update_one(
-                {'template_id': template_id},
+                {'template_id': template_id, 'customer_id': resolved_customer_id},
                 {'$set': template},
                 upsert=True
             )
@@ -246,7 +306,7 @@ class TemplateManager:
 
             if self.logger:
                 action = "Updated" if result.matched_count > 0 else "Created"
-                self.logger.info(f"{action} template: {cache_key}")
+                self.logger.info(f"{action} template: {cache_key} (customer: {resolved_customer_id})")
 
             return True
 

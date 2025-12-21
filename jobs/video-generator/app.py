@@ -54,6 +54,9 @@ class VideoGeneratorJob(BaseJob):
             self.logger.error(f"❌ Configuration validation failed: {str(e)}")
             raise
 
+        # Cleanup stuck video processing on startup
+        self._cleanup_stuck_processing()
+
     def get_job_type(self) -> str:
         """Return the job type identifier"""
         return "video-generator"
@@ -66,6 +69,61 @@ class VideoGeneratorJob(BaseJob):
             True to enable per-customer job execution
         """
         return True
+
+    def _cleanup_stuck_processing(self):
+        """
+        Cleanup video configs that are stuck in 'processing' status on service startup.
+        This handles cases where the service was restarted while processing was ongoing,
+        or processes that exceeded the timeout before the timeout mechanism was implemented.
+        """
+        try:
+            from datetime import datetime, timedelta
+
+            configs_collection = self.news_db['long_video_configs']
+
+            # Find all configs stuck in processing status
+            # Consider stuck if processing for more than 15 minutes (timeout is 10 min + 5 min buffer)
+            timeout_threshold = datetime.utcnow() - timedelta(minutes=15)
+
+            stuck_configs = configs_collection.find({
+                'status': 'processing',
+                'mergeStartedAt': {'$lt': timeout_threshold}
+            })
+
+            stuck_count = 0
+            for config in stuck_configs:
+                config_id = str(config['_id'])
+                title = config.get('title', 'Unknown')
+                started_at = config.get('mergeStartedAt')
+
+                if started_at:
+                    elapsed_minutes = (datetime.utcnow() - started_at).total_seconds() / 60
+                    self.logger.warning(
+                        f"🧹 Found stuck config: {title} (ID: {config_id}) - "
+                        f"Processing for {elapsed_minutes:.1f} minutes"
+                    )
+
+                # Mark as failed
+                update_data = {
+                    'status': 'failed',
+                    'error': 'Process was terminated due to service restart or timeout. Please try again.',
+                    'updatedAt': datetime.utcnow()
+                }
+                prepare_update_document(update_data, user_id='system')
+
+                configs_collection.update_one(
+                    {'_id': config['_id']},
+                    {'$set': update_data}
+                )
+                stuck_count += 1
+
+            if stuck_count > 0:
+                self.logger.info(f"✅ Cleaned up {stuck_count} stuck video processing config(s)")
+            else:
+                self.logger.info("✅ No stuck video processing configs found")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error during stuck processing cleanup: {str(e)}")
 
     def get_service_info(self) -> dict:
         """Return service information"""
@@ -729,13 +787,17 @@ class VideoGeneratorJob(BaseJob):
                         self.logger.warning(f"⚠️ Could not delete old merged video: {e}")
 
                 # Return immediate response to user with processing status
-                from threading import Thread
+                from threading import Thread, Event
                 import time
+                import signal
 
                 def merge_videos_async():
                     try:
-                        self.logger.info("🎬 Starting async video merge process...")
+                        self.logger.info("🎬 Starting async video merge process with 10-minute timeout...")
                         start_time = time.time()
+
+                        # Timeout configuration: 10 minutes = 600 seconds
+                        TIMEOUT_SECONDS = 600
 
                         # Get background audio ID from config if config_id is provided
                         background_audio_id = None
@@ -749,14 +811,71 @@ class VideoGeneratorJob(BaseJob):
                             except Exception as e:
                                 self.logger.warning(f"Could not fetch background audio from config: {e}")
 
-                        # Merge videos with title parameter, config_id, background audio, and customer_id
-                        result = self.merge_service.merge_latest_videos(
-                            latest_news,
-                            title=title,
-                            config_id=config_id,
-                            background_audio_id=background_audio_id,
-                            customer_id=customer_id
-                        )
+                        # Create a result container to share between threads
+                        result_container = {'result': None, 'completed': False, 'error': None}
+
+                        def run_merge():
+                            """Run the actual merge in a separate thread"""
+                            try:
+                                merge_result = self.merge_service.merge_latest_videos(
+                                    latest_news,
+                                    title=title,
+                                    config_id=config_id,
+                                    background_audio_id=background_audio_id,
+                                    customer_id=customer_id
+                                )
+                                result_container['result'] = merge_result
+                                result_container['completed'] = True
+                            except Exception as e:
+                                result_container['error'] = str(e)
+                                result_container['completed'] = True
+
+                        # Start merge in a separate thread
+                        merge_thread = Thread(target=run_merge)
+                        merge_thread.daemon = True
+                        merge_thread.start()
+
+                        # Wait for completion or timeout
+                        merge_thread.join(timeout=TIMEOUT_SECONDS)
+
+                        # Check if thread is still alive (timeout occurred)
+                        if merge_thread.is_alive():
+                            elapsed_time = round(time.time() - start_time, 2)
+                            error_msg = f"Video merge timed out after {TIMEOUT_SECONDS} seconds ({elapsed_time}s elapsed). The process was taking too long and has been terminated."
+                            self.logger.error(f"⏱️ {error_msg}")
+
+                            # Update config with timeout error
+                            if config_id:
+                                try:
+                                    from bson import ObjectId
+                                    from datetime import datetime
+                                    configs_collection = self.news_db['long_video_configs']
+
+                                    update_data = {
+                                        'status': 'failed',
+                                        'error': error_msg,
+                                        'updatedAt': datetime.utcnow()
+                                    }
+                                    prepare_update_document(update_data, user_id=user_id or 'system')
+
+                                    configs_collection.update_one(
+                                        {'_id': ObjectId(config_id)},
+                                        {'$set': update_data}
+                                    )
+                                    self.logger.info(f"✅ Updated config {config_id} with timeout error")
+                                except Exception as e:
+                                    self.logger.error(f"⚠️ Failed to update config {config_id}: {str(e)}")
+
+                            return  # Exit the async function
+
+                        # Check if there was an error during merge
+                        if result_container['error']:
+                            raise Exception(result_container['error'])
+
+                        # Get the result
+                        result = result_container['result']
+                        if not result:
+                            raise Exception("Merge completed but no result was returned")
 
                         end_time = time.time()
                         processing_time = round(end_time - start_time, 2)
@@ -2984,6 +3103,69 @@ class VideoGeneratorJob(BaseJob):
 
             except Exception as e:
                 self.logger.error(f"❌ Error checking config merge status: {str(e)}")
+                return jsonify({
+                    'status': 'error',
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/configs/<config_id>/mark-failed', methods=['POST'])
+        def mark_config_failed(config_id):
+            """Mark a configuration as failed (called by frontend when polling times out)"""
+            try:
+                from bson import ObjectId
+                from datetime import datetime
+
+                # Extract user context from headers for multi-tenancy
+                user_context = extract_user_context_from_headers(request.headers)
+                customer_id = user_context.get('customer_id')
+                user_id = user_context.get('user_id', 'system')
+
+                configs_collection = self.news_db['long_video_configs']
+
+                # Build query with multi-tenant filter
+                base_query = {'_id': ObjectId(config_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                config = configs_collection.find_one(query)
+
+                if not config:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Configuration not found: {config_id}'
+                    }), 404
+
+                # Only mark as failed if currently in processing status
+                if config.get('status') != 'processing':
+                    return jsonify({
+                        'status': 'success',
+                        'message': f'Config is already in {config.get("status")} status',
+                        'current_status': config.get('status')
+                    })
+
+                # Mark as failed
+                update_data = {
+                    'status': 'failed',
+                    'error': 'Video processing timed out after 10 minutes. Please try again with fewer videos or shorter content.',
+                    'updatedAt': datetime.utcnow()
+                }
+                prepare_update_document(update_data, user_id=user_id)
+
+                configs_collection.update_one(
+                    {'_id': ObjectId(config_id)},
+                    {'$set': update_data}
+                )
+
+                self.logger.warning(
+                    f"⏱️ Config {config_id} marked as failed due to frontend timeout"
+                )
+
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Configuration marked as failed due to timeout',
+                    'config_id': config_id
+                })
+
+            except Exception as e:
+                self.logger.error(f"❌ Error marking config as failed: {str(e)}")
                 return jsonify({
                     'status': 'error',
                     'error': str(e)

@@ -1,13 +1,14 @@
 """
 Template API Routes
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from services import TemplateManager, VariableResolver
 from pymongo import MongoClient
 from typing import Dict, Any
 import requests
 import os
 from utils.helpers import substitute_variables
+from utils.multi_tenant_utils import get_customer_id
 
 
 template_bp = Blueprint('template', __name__)
@@ -93,21 +94,27 @@ def _apply_effects_to_layer(layer_video, effects, duration, width, height):
 @template_bp.route('/templates', methods=['GET'])
 def list_templates():
     """
-    List all available templates
-    
+    List all available templates for the current customer
+
     Query params:
         - category: Filter by category (news, shorts, ecommerce)
     """
     try:
+        # Get customer_id from request context (set by middleware)
+        customer_id = get_customer_id(getattr(g, 'customer_id', None))
+
         category = request.args.get('category')
-        templates = template_manager.list_templates(category=category)
-        
+        templates = template_manager.list_templates(
+            category=category,
+            customer_id=customer_id
+        )
+
         return jsonify({
             'status': 'success',
             'count': len(templates),
             'templates': templates
         }), 200
-    
+
     except Exception as e:
         logger.error(f"Error listing templates: {e}")
         return jsonify({
@@ -119,13 +126,19 @@ def list_templates():
 @template_bp.route('/templates/<template_id>', methods=['GET'])
 def get_template(template_id: str):
     """
-    Get template details by ID
+    Get template details by ID for the current customer
 
     Path params:
         - template_id: Template identifier
     """
     try:
-        template = template_manager.get_template_by_id(template_id)
+        # Get customer_id from request context (set by middleware)
+        customer_id = get_customer_id(getattr(g, 'customer_id', None))
+
+        template = template_manager.get_template_by_id(
+            template_id,
+            customer_id=customer_id
+        )
 
         if not template:
             return jsonify({
@@ -149,7 +162,7 @@ def get_template(template_id: str):
 @template_bp.route('/templates', methods=['POST'])
 def create_template():
     """
-    Create or update a template
+    Create or update a template for the current customer
 
     Request body:
         {
@@ -166,7 +179,84 @@ def create_template():
         }
     """
     try:
+        # Get customer_id and user_id from request context (set by middleware)
+        customer_id = get_customer_id(getattr(g, 'customer_id', None))
+        user_id = getattr(g, 'user_id', None)
+
         data = request.get_json()
+
+        # DEBUG: Log all settings received from UI
+        logger.info("=" * 80)
+        logger.info("📝 TEMPLATE SAVE REQUEST - ALL SETTINGS FROM UI")
+        logger.info("=" * 80)
+        logger.info(f"Customer ID: {customer_id}")
+        logger.info(f"User ID: {user_id}")
+        logger.info(f"\n📋 BASIC INFO:")
+        logger.info(f"  - Name: {data.get('name')}")
+        logger.info(f"  - Description: {data.get('description')}")
+        logger.info(f"  - Category: {data.get('category')}")
+        logger.info(f"  - Template ID: {data.get('template_id')}")
+        logger.info(f"  - Aspect Ratio: {data.get('aspect_ratio')}")
+        logger.info(f"  - Version: {data.get('version')}")
+
+        logger.info(f"\n🎨 LAYERS ({len(data.get('layers', []))} layers):")
+        for idx, layer in enumerate(data.get('layers', [])):
+            logger.info(f"  Layer {idx + 1}:")
+            logger.info(f"    - Type: {layer.get('type')}")
+            logger.info(f"    - ID: {layer.get('id')}")
+            logger.info(f"    - Source: {layer.get('source')}")
+            logger.info(f"    - Position: {layer.get('position')}")
+            logger.info(f"    - Size: {layer.get('size')}")
+            logger.info(f"    - Z-Index: {layer.get('z_index')}")
+            logger.info(f"    - Opacity: {layer.get('opacity')}")
+            logger.info(f"    - Start Time: {layer.get('start_time')}")
+            logger.info(f"    - Duration: {layer.get('duration')}")
+            if layer.get('type') == 'text':
+                logger.info(f"    - Content: {layer.get('content')}")
+                logger.info(f"    - Font: {layer.get('font')}")
+
+        logger.info(f"\n✨ EFFECTS ({len(data.get('effects', []))} effects):")
+        for idx, effect in enumerate(data.get('effects', [])):
+            logger.info(f"  Effect {idx + 1}:")
+            logger.info(f"    - Type: {effect.get('type')}")
+            logger.info(f"    - Target Layer: {effect.get('target_layer_id')}")
+            logger.info(f"    - Params: {effect.get('params')}")
+
+        logger.info(f"\n🎵 BACKGROUND MUSIC:")
+        bg_music = data.get('background_music', {})
+        logger.info(f"  - Enabled: {bg_music.get('enabled')}")
+        logger.info(f"  - Source: {bg_music.get('source')}")
+        logger.info(f"  - Volume: {bg_music.get('volume')}")
+        logger.info(f"  - Fade In: {bg_music.get('fade_in')}")
+        logger.info(f"  - Fade Out: {bg_music.get('fade_out')}")
+
+        logger.info(f"\n🏷️ LOGO:")
+        logo = data.get('logo', {})
+        logger.info(f"  - Enabled: {logo.get('enabled')}")
+        logger.info(f"  - Source: {logo.get('source')}")
+        logger.info(f"  - Position: {logo.get('position')}")
+        logger.info(f"  - Scale: {logo.get('scale')}")
+        logger.info(f"  - Opacity: {logo.get('opacity')}")
+        logger.info(f"  - Margin: {logo.get('margin')}")
+
+        logger.info(f"\n🖼️ THUMBNAIL:")
+        thumbnail = data.get('thumbnail', {})
+        logger.info(f"  - Auto Generate: {thumbnail.get('auto_generate')}")
+        logger.info(f"  - Timestamp: {thumbnail.get('timestamp')}")
+        logger.info(f"  - Source: {thumbnail.get('source')}")
+        logger.info(f"  - Text Config: {thumbnail.get('text')}")
+
+        logger.info(f"\n🔧 VARIABLES ({len(data.get('variables', {}))} variables):")
+        for var_name, var_config in data.get('variables', {}).items():
+            logger.info(f"  - {var_name}: {var_config}")
+
+        logger.info(f"\n📦 METADATA:")
+        metadata = data.get('metadata', {})
+        logger.info(f"  - Author: {metadata.get('author')}")
+        logger.info(f"  - Tags: {metadata.get('tags')}")
+        logger.info(f"  - Thumbnail: {metadata.get('thumbnail')}")
+
+        logger.info("=" * 80)
 
         # Validate required fields (template_id is now optional)
         required_fields = ['name', 'category']
@@ -192,10 +282,16 @@ def create_template():
 
         category = data['category']
 
-        # Save template
-        template_manager.save_template(category, template_id, data)
+        # Save template with customer_id and user_id
+        template_manager.save_template(
+            category,
+            template_id,
+            data,
+            customer_id=customer_id,
+            user_id=user_id
+        )
 
-        logger.info(f"Template saved: {template_id} (category: {category})")
+        logger.info(f"Template saved: {template_id} (category: {category}, customer: {customer_id})")
 
         return jsonify({
             'status': 'success',
@@ -215,13 +311,20 @@ def create_template():
 def delete_template(template_id: str):
     """
     Delete a template (soft delete by setting is_active=false)
+    Only allows deleting templates owned by the current customer
 
     Path params:
         - template_id: Template identifier
     """
     try:
-        # Get the template first to find its category
-        template = template_manager.get_template_by_id(template_id)
+        # Get customer_id from request context (set by middleware)
+        customer_id = get_customer_id(getattr(g, 'customer_id', None))
+
+        # Get the template first to verify ownership
+        template = template_manager.get_template_by_id(
+            template_id,
+            customer_id=customer_id
+        )
 
         if not template:
             return jsonify({
@@ -230,9 +333,10 @@ def delete_template(template_id: str):
             }), 404
 
         # Soft delete by setting is_active=false
+        # Include customer_id in the query to ensure we only delete our own templates
         db = db_client['news']
         result = db.templates.update_one(
-            {'template_id': template_id},
+            {'template_id': template_id, 'customer_id': customer_id},
             {'$set': {'is_active': False}}
         )
 
@@ -242,7 +346,7 @@ def delete_template(template_id: str):
                 'error': 'Failed to delete template'
             }), 500
 
-        logger.info(f"Template deleted: {template_id}")
+        logger.info(f"Template deleted: {template_id} (customer: {customer_id})")
 
         return jsonify({
             'status': 'success',

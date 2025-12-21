@@ -101,6 +101,13 @@ def get_config_merge_status(config_id):
     return proxy_to_video_generator(f'/configs/{config_id}/merge-status', method='GET')
 
 
+@video_config_bp.route('/videos/configs/<config_id>/mark-failed', methods=['POST'])
+def mark_config_failed(config_id):
+    """Proxy: Mark a configuration as failed (called when frontend polling times out)"""
+    logger.info(f"⏱️ POST /videos/configs/{config_id}/mark-failed - Proxying to video-generator")
+    return proxy_to_video_generator(f'/configs/{config_id}/mark-failed', method='POST', json_data=request.get_json())
+
+
 @video_config_bp.route('/videos/configs/due', methods=['GET'])
 def get_due_configs():
     """Proxy: Get configurations due for processing"""

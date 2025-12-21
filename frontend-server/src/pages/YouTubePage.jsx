@@ -113,7 +113,9 @@ const YouTubePage = () => {
   };
 
   // Poll for config status updates using the merge-status endpoint
-  const pollConfigStatus = async (configId, maxAttempts = 60, interval = 2000) => {
+  // Timeout: 10 minutes (600 seconds) to match backend processing timeout
+  // Poll every 3 seconds = 200 attempts max
+  const pollConfigStatus = async (configId, maxAttempts = 200, interval = 3000, showNotifications = true) => {
     let attempts = 0;
 
     const poll = async () => {
@@ -122,24 +124,38 @@ const YouTubePage = () => {
         const statusData = response.data;
 
         if (statusData.status === 'completed' || statusData.status === 'failed') {
-          // Status changed, reload all configs
-          await loadVideoConfigs();
+          // Status changed, reload all configs (don't resume polling to avoid infinite loop)
+          await loadVideoConfigs(false);
           setMerging(false);
 
-          if (statusData.status === 'completed') {
-            showToast('Video merge completed successfully!', 'success');
-          } else {
-            showToast(statusData.error || 'Video merge failed', 'error');
+          if (showNotifications) {
+            if (statusData.status === 'completed') {
+              showToast('Video merge completed successfully!', 'success');
+            } else {
+              showToast(statusData.error || 'Video merge failed', 'error');
+            }
           }
           return true; // Stop polling
         }
 
         attempts++;
         if (attempts >= maxAttempts) {
-          // Timeout - reload configs anyway
-          await loadVideoConfigs();
+          // Timeout after 10 minutes - mark as failed in backend
+          try {
+            await videoConfigService.markConfigFailed(configId);
+            if (showNotifications) {
+              showToast('Video processing timed out after 10 minutes. Please try again with fewer videos or shorter content.', 'error');
+            }
+          } catch (error) {
+            console.error('Error marking config as failed:', error);
+            if (showNotifications) {
+              showToast('Video processing timed out. Please refresh to check the status.', 'warning');
+            }
+          }
+
+          // Reload configs to show updated status (don't resume polling)
+          await loadVideoConfigs(false);
           setMerging(false);
-          showToast('Merge is taking longer than expected. Please check back later.', 'warning');
           return true; // Stop polling
         }
 
@@ -150,7 +166,7 @@ const YouTubePage = () => {
         console.error('Error polling config status:', error);
         attempts++;
         if (attempts >= maxAttempts) {
-          await loadVideoConfigs();
+          await loadVideoConfigs(false);
           setMerging(false);
           return true;
         }
@@ -187,8 +203,8 @@ const YouTubePage = () => {
       if (mergeData.status === 'success' || mergeData.status === 'processing') {
         showToast(mergeData.message || 'Video merging started successfully', 'success');
 
-        // Reload configurations to show the new one
-        await loadVideoConfigs();
+        // Reload configurations to show the new one (don't resume polling)
+        await loadVideoConfigs(false);
 
         // Start polling for status updates
         pollConfigStatus(configId);
@@ -241,7 +257,7 @@ const YouTubePage = () => {
 
         // Reload stats and configs (config is already updated by backend)
         await loadStats();
-        await loadVideoConfigs();
+        await loadVideoConfigs(false);
       } else {
         setUploadLogs(prev => [...prev, `❌ ${data.error || 'Upload failed'}`]);
         showToast(data.error || 'Upload failed', 'error');
@@ -441,7 +457,7 @@ const YouTubePage = () => {
   };
 
   // Load video configurations
-  const loadVideoConfigs = async () => {
+  const loadVideoConfigs = async (resumePolling = false) => {
     setConfigsLoading(true);
     try {
       const response = await videoConfigService.getConfigs();
@@ -449,6 +465,24 @@ const YouTubePage = () => {
 
       if (data.status === 'success') {
         setVideoConfigs(data.configs || []);
+
+        // If resumePolling is true, check for any configs in 'processing' status
+        // and automatically start polling for them
+        if (resumePolling) {
+          const processingConfigs = (data.configs || []).filter(
+            config => config.status === 'processing'
+          );
+
+          if (processingConfigs.length > 0) {
+            console.log(`Found ${processingConfigs.length} config(s) in processing status, resuming polling...`);
+            setMerging(true);
+
+            // Start polling for each processing config
+            processingConfigs.forEach(config => {
+              pollConfigStatus(config._id);
+            });
+          }
+        }
       } else {
         setVideoConfigs([]);
       }

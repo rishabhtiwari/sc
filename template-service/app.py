@@ -3,7 +3,7 @@ Template Service - Flask Application
 Video template management and resolution service
 """
 import os
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, g
 from flask_cors import CORS
 from pymongo import MongoClient
 
@@ -63,7 +63,24 @@ def create_app(config_class=Config):
     
     # Initialize routes with dependencies
     init_routes(template_manager, variable_resolver, mongo_client, logger)
-    
+
+    # Register middleware to extract customer_id from request headers
+    @app.before_request
+    def extract_customer_context():
+        """
+        Extract customer_id and user_id from request headers
+        These are injected by the API gateway's JWT middleware
+        """
+        # Skip for OPTIONS requests (CORS preflight)
+        if request.method == 'OPTIONS':
+            return
+
+        # Extract from headers (injected by API gateway)
+        g.customer_id = request.headers.get('X-Customer-ID')
+        g.user_id = request.headers.get('X-User-ID')
+
+        logger.debug(f"Request context: customer_id={g.customer_id}, user_id={g.user_id}, path={request.path}")
+
     # Register blueprints
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(template_bp, url_prefix='/api')

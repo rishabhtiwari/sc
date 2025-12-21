@@ -75,6 +75,15 @@ export const getMergeStatus = (configId) => {
   return api.get(`/videos/configs/${configId}/merge-status`);
 };
 
+/**
+ * Mark a configuration as failed (called when frontend polling times out)
+ * @param {string} configId - Configuration ID
+ * @returns {Promise} API response
+ */
+export const markConfigFailed = (configId) => {
+  return api.post(`/videos/configs/${configId}/mark-failed`);
+};
+
 export default {
   createConfig,
   getConfigs,
@@ -82,6 +91,7 @@ export default {
   updateConfig,
   deleteConfig,
   mergeConfig,
-  getMergeStatus
+  getMergeStatus,
+  markConfigFailed
 };
 
