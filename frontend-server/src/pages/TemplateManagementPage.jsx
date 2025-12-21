@@ -79,7 +79,7 @@ const TemplateManagementPage = () => {
             </div>
             <button
               onClick={handleCreateTemplate}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-lg"
             >
               <span className="text-xl">🎬</span>
               Create Template
@@ -97,7 +97,7 @@ const TemplateManagementPage = () => {
                 className={`
                   flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors
                   ${selectedCategory === category.id
-                    ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-300'
+                    ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
                     : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-gray-300'
                   }
                 `}
@@ -124,7 +124,7 @@ const TemplateManagementPage = () => {
         {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
           </div>
         )}
 
@@ -136,7 +136,7 @@ const TemplateManagementPage = () => {
             <p className="text-gray-600 mb-4">Get started by creating your first template</p>
             <button
               onClick={handleCreateTemplate}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Create Template
             </button>
@@ -264,9 +264,9 @@ const TemplateCard = ({ template, onEdit, onDelete }) => {
   }, [showPreview]);
 
   return (
-    <div className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-indigo-400">
+    <div className="group bg-white rounded-xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-200 hover:border-blue-400">
       {/* Thumbnail/Preview */}
-      <div className="relative h-56 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex items-center justify-center overflow-hidden">
+      <div className="relative h-56 bg-gradient-to-br from-blue-50 via-blue-100 to-blue-50 flex items-center justify-center overflow-hidden">
         {showPreview && previewUrl ? (
           <video
             ref={videoRef}
@@ -303,12 +303,12 @@ const TemplateCard = ({ template, onEdit, onDelete }) => {
           >
             <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 shadow-2xl transform group-hover:scale-110">
               {loadingPreview ? (
-                <svg className="animate-spin h-10 w-10 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-10 w-10 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
               ) : (
-                <svg className="w-10 h-10 text-indigo-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-10 h-10 text-blue-600 ml-1" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               )}
@@ -332,7 +332,7 @@ const TemplateCard = ({ template, onEdit, onDelete }) => {
       {/* Content */}
       <div className="p-5">
         {/* Title */}
-        <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors">
+        <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
           {template.name}
         </h3>
 
@@ -345,7 +345,7 @@ const TemplateCard = ({ template, onEdit, onDelete }) => {
         {template.tags && template.tags.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-4">
             {template.tags.slice(0, 3).map((tag, index) => (
-              <span key={index} className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-md border border-indigo-100">
+              <span key={index} className="px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-100">
                 #{tag}
               </span>
             ))}
@@ -370,7 +370,7 @@ const TemplateCard = ({ template, onEdit, onDelete }) => {
           <div className="flex gap-2">
             <button
               onClick={onEdit}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
+              className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-all shadow-sm hover:shadow-md transform hover:-translate-y-0.5"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

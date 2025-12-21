@@ -32,11 +32,11 @@ class TemplateManager:
     def list_templates(self, category: Optional[str] = None, customer_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         List all available templates from MongoDB for a specific customer
-        Returns both customer-specific templates AND system templates
+        Returns ONLY customer-specific templates (strict multi-tenancy isolation)
 
         Args:
             category: Filter by category (news, shorts, ecommerce)
-            customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
+            customer_id: Customer ID for multi-tenant filtering
 
         Returns:
             List of template metadata
@@ -47,17 +47,12 @@ class TemplateManager:
             return []
 
         try:
-            from utils.multi_tenant_utils import SYSTEM_CUSTOMER_ID
-
-            # Build query to include both customer's templates AND system templates
+            # Build query to include ONLY customer's own templates (strict isolation)
             resolved_customer_id = get_customer_id(customer_id)
 
             base_query = {
                 'is_active': True,
-                '$or': [
-                    {'customer_id': resolved_customer_id},  # Customer's own templates
-                    {'customer_id': SYSTEM_CUSTOMER_ID}      # System templates (visible to all)
-                ]
+                'customer_id': resolved_customer_id  # Only customer's own templates
             }
 
             if category:
@@ -75,6 +70,7 @@ class TemplateManager:
                     'description': 1,
                     'version': 1,
                     'metadata': 1,
+                    'customer_id': 1,  # Include customer_id to identify system vs customer templates
                     '_id': 0
                 }
             )
@@ -88,6 +84,7 @@ class TemplateManager:
                     'description': template.get('description', ''),
                     'version': template.get('version', '1.0.0'),
                     'thumbnail': template.get('metadata', {}).get('thumbnail', ''),
+                    'customer_id': template.get('customer_id'),  # Include to identify ownership
                     'tags': template.get('metadata', {}).get('tags', [])
                 })
 

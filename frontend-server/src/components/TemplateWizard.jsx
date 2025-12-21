@@ -349,7 +349,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
                   className={`px-4 py-2 rounded-lg font-medium text-white ${
                     previewLoading
                       ? 'bg-gray-400 cursor-not-allowed'
-                      : 'bg-indigo-600 hover:bg-indigo-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
                   }`}
                 >
                   {previewLoading ? '⏳ Generating...' : '🔄 Refresh Preview'}
@@ -360,7 +360,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
             <div className="flex-1 p-6 flex items-center justify-center overflow-auto">
               {previewLoading && (
                 <div className="text-center">
-                  <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-indigo-600 border-t-transparent mb-4"></div>
+                  <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-blue-600 border-t-transparent mb-4"></div>
                   <p className="text-gray-600 font-medium">Generating preview...</p>
                   <p className="text-sm text-gray-500 mt-2">This may take 1-2 minutes</p>
                 </div>
@@ -439,7 +439,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
                     onClick={() => setActiveSection(section.id)}
                     className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors ${
                       activeSection === section.id
-                        ? 'bg-indigo-600 text-white shadow-md'
+                        ? 'bg-blue-600 text-white shadow-md'
                         : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                     }`}
                   >
@@ -591,7 +591,7 @@ const BasicInfoSection = ({ config, updateConfig }) => (
             onClick={() => updateConfig({ aspect_ratio: ratio }, true)}
             className={`px-4 py-3 rounded-lg font-medium border-2 transition-all ${
               config.aspect_ratio === ratio
-                ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                ? 'border-blue-600 bg-blue-50 text-blue-900'
                 : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
             }`}
           >
@@ -692,7 +692,7 @@ const EffectsSection = ({ config, updateConfig }) => {
                 id={`effect-${effectMeta.type}`}
                 checked={enabled}
                 onChange={() => toggleEffect(effectMeta.type, effectMeta)}
-                className="w-5 h-5 text-indigo-600 rounded mt-1"
+                className="w-5 h-5 text-blue-600 rounded mt-1"
               />
               <div className="flex-1">
                 <label htmlFor={`effect-${effectMeta.type}`} className="flex items-center gap-2 cursor-pointer">
@@ -948,7 +948,7 @@ const MusicSection = ({ config, updateConfig }) => {
           id="music-enabled"
           checked={config.background_music.enabled}
           onChange={(e) => updateMusic({ enabled: e.target.checked })}
-          className="w-5 h-5 text-indigo-600 rounded"
+          className="w-5 h-5 text-blue-600 rounded"
         />
         <label htmlFor="music-enabled" className="text-lg font-semibold text-gray-900">
           Enable Background Music
@@ -977,7 +977,7 @@ const MusicSection = ({ config, updateConfig }) => {
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {uploading ? (
                   <>
@@ -1119,7 +1119,7 @@ const LogoSection = ({ config, updateConfig }) => {
           id="logo-enabled"
           checked={config.logo.enabled}
           onChange={(e) => updateLogo({ enabled: e.target.checked })}
-          className="w-5 h-5 text-indigo-600 rounded"
+          className="w-5 h-5 text-blue-600 rounded"
         />
         <label htmlFor="logo-enabled" className="text-lg font-semibold text-gray-900">
           Enable Logo Watermark
@@ -1151,7 +1151,7 @@ const LogoSection = ({ config, updateConfig }) => {
                 className={`px-4 py-2 rounded-lg font-medium text-white ${
                   logoUploading
                     ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-indigo-600 hover:bg-indigo-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
                 {logoUploading ? '⏳ Uploading...' : '📁 Upload'}
@@ -1174,7 +1174,7 @@ const LogoSection = ({ config, updateConfig }) => {
                   onClick={() => updateLogo({ position: pos })}
                   className={`px-4 py-2 rounded-lg font-medium border-2 ${
                     config.logo.position === pos
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
+                      ? 'border-blue-600 bg-blue-50 text-blue-900'
                       : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
                   }`}
                 >
@@ -1299,7 +1299,7 @@ const ThumbnailSection = ({ config, updateConfig, previewUrl }) => {
           id="auto-thumbnail"
           checked={config.thumbnail.auto_generate}
           onChange={(e) => updateThumbnail({ auto_generate: e.target.checked })}
-          className="w-5 h-5 text-indigo-600 rounded"
+          className="w-5 h-5 text-blue-600 rounded"
         />
         <label htmlFor="auto-thumbnail" className="text-lg font-semibold text-gray-900">
           Auto-Generate Thumbnail
@@ -1347,7 +1347,7 @@ const ThumbnailSection = ({ config, updateConfig, previewUrl }) => {
                     })
                   }
                 })}
-                className="w-5 h-5 text-indigo-600 rounded"
+                className="w-5 h-5 text-blue-600 rounded"
               />
               <label htmlFor="thumbnail-text-enabled" className="text-sm font-semibold text-gray-900">
                 📝 Add Text Overlay to Thumbnail
@@ -1640,9 +1640,9 @@ const LayersSection = ({ config, updateConfig }) => {
 
   return (
     <div className="space-y-6">
-      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-        <h4 className="font-medium text-indigo-900 mb-2">🎨 Layers</h4>
-        <p className="text-sm text-indigo-800">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h4 className="font-medium text-blue-900 mb-2">🎨 Layers</h4>
+        <p className="text-sm text-blue-800">
           Build your video by stacking layers. Each layer can be a background video, image, text, or shape.
         </p>
       </div>
@@ -1738,7 +1738,7 @@ const LayersSection = ({ config, updateConfig }) => {
                 onClick={() => setSelectedLayerId(layer.id)}
                 className={`p-3 border rounded-lg cursor-pointer transition-all ${
                   selectedLayerId === layer.id
-                    ? 'border-indigo-500 bg-indigo-50 shadow-md'
+                    ? 'border-blue-500 bg-blue-50 shadow-md'
                     : 'border-gray-300 bg-white hover:border-gray-400'
                 }`}
               >
@@ -2105,7 +2105,7 @@ const LayerEditor = ({ layer, updateLayer }) => {
                     fade_type: layer.fade?.fade_type || 'both'
                   }
                 })}
-                className="w-5 h-5 text-indigo-600 rounded"
+                className="w-5 h-5 text-blue-600 rounded"
               />
               <label htmlFor={`fade-${layer.id}`} className="text-sm font-semibold text-gray-900">
                 ✨ Enable Fade Animation
