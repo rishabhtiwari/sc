@@ -105,6 +105,7 @@ app.use('/api', async (req, res) => {
         // Check if this is an audio endpoint that returns binary data
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
                                 req.originalUrl.startsWith('/api/voice/preview/audio/') ||
+                                req.originalUrl.startsWith('/api/audio/proxy/') ||
                                 req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 
         // Check if this is a video endpoint that returns binary data
@@ -144,6 +145,7 @@ app.use('/api', async (req, res) => {
             url: targetUrl,
             headers: headers,
             params: req.query,
+            timeout: 600000, // 10 minutes for long-running operations (audio/video generation)
             validateStatus: () => true // Don't throw on any status code
         };
 

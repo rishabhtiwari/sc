@@ -3,7 +3,7 @@ import axios from 'axios';
 // Create axios instance with default config
 const api = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 600000, // 10 minutes for long-running operations like LLM generation
   headers: {
     'Content-Type': 'application/json',
   },

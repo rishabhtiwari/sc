@@ -11,5 +11,7 @@ export { default as youtubeService } from './youtubeService';
 export { default as llmService } from './llmService';
 export { default as imageService } from './imageService';
 export { default as backgroundAudioService } from './backgroundAudioService';
+export { default as productService } from './productService';
+export { templateService } from './templateService';
 export { default as api } from './api';
 

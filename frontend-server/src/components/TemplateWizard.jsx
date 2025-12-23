@@ -1566,13 +1566,19 @@ const LayersSection = ({ config, updateConfig }) => {
     const newLayer = {
       id: `layer_${Date.now()}`,
       type: type,
-      source: '',
       z_index: layers.length,
       position: { x: 0.5, y: 0.5 },
       size: { width: type === 'video' || type === 'image' ? 1.0 : 0.5, height: type === 'video' || type === 'image' ? 1.0 : 0.3 },
-      duration: null,
-      start_time: 0,
       opacity: 1.0,
+      // For image/video layers, use sources array instead of single source
+      ...(type === 'image' || type === 'video' ? {
+        sources: [], // Array of image/video files
+        duration_per_item: 5, // Duration for each image/video in seconds
+      } : {
+        source: '',
+        duration: null,
+        start_time: 0,
+      }),
       // Type-specific properties
       ...(type === 'text' && {
         content: '{{overlay_text}}',
@@ -1814,9 +1820,9 @@ const LayersSection = ({ config, updateConfig }) => {
 const LayerEditor = ({ layer, updateLayer }) => {
   const [uploadingFile, setUploadingFile] = React.useState(false);
 
-  const handleFileUpload = async (e, fieldName) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleFileUpload = async (e, isMultiple = false) => {
+    const files = isMultiple ? Array.from(e.target.files) : [e.target.files[0]];
+    if (files.length === 0) return;
 
     // Validate file type based on layer type
     const validTypes = {
@@ -1825,44 +1831,59 @@ const LayerEditor = ({ layer, updateLayer }) => {
     };
 
     if (layer.type === 'video' || layer.type === 'image') {
-      if (!validTypes[layer.type].includes(file.type)) {
-        alert(`Invalid file type. Please upload a ${layer.type} file.`);
-        return;
+      for (const file of files) {
+        if (!validTypes[layer.type].includes(file.type)) {
+          alert(`Invalid file type. Please upload ${layer.type} files only.`);
+          return;
+        }
       }
     }
 
     // Max file size: 50MB for videos, 5MB for images
     const maxSize = layer.type === 'video' ? 50 * 1024 * 1024 : 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert(`File too large. Maximum size is ${layer.type === 'video' ? '50MB' : '5MB'}.`);
-      return;
+    for (const file of files) {
+      if (file.size > maxSize) {
+        alert(`File too large. Maximum size is ${layer.type === 'video' ? '50MB' : '5MB'}.`);
+        return;
+      }
     }
 
     setUploadingFile(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
       const endpoint = layer.type === 'video'
         ? 'http://localhost:8080/api/templates/upload/video'
         : 'http://localhost:8080/api/templates/upload/image';
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: formData
-      });
+      const uploadedFilenames = [];
 
-      const data = await response.json();
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
 
-      if (data.status === 'success') {
-        updateLayer(layer.id, { [fieldName]: data.filename });
-      } else {
-        alert(`Upload failed: ${data.error || 'Unknown error'}`);
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+          uploadedFilenames.push(data.filename);
+        } else {
+          alert(`Upload failed for ${file.name}: ${data.error || 'Unknown error'}`);
+          setUploadingFile(false);
+          return;
+        }
       }
+
+      // Add uploaded files to sources array
+      const currentSources = layer.sources || [];
+      updateLayer(layer.id, { sources: [...currentSources, ...uploadedFilenames] });
+
     } catch (error) {
       console.error('Upload error:', error);
       alert('Upload failed. Please try again.');
@@ -1871,37 +1892,85 @@ const LayerEditor = ({ layer, updateLayer }) => {
     }
   };
 
+  const removeSource = (index) => {
+    const newSources = layer.sources.filter((_, i) => i !== index);
+    updateLayer(layer.id, { sources: newSources });
+  };
+
   return (
     <div className="space-y-4">
-      {/* Common Properties */}
-      <div className="grid grid-cols-2 gap-4">
-        {/* Source */}
-        {(layer.type === 'video' || layer.type === 'image') && (
-          <div className="col-span-2">
+      {/* Image/Video Sources Array */}
+      {(layer.type === 'video' || layer.type === 'image') && (
+        <div className="space-y-4">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {layer.type === 'video' ? 'Video File' : 'Image File'}
+              {layer.type === 'video' ? 'Video Files' : 'Image Files'}
+              <span className="ml-2 text-xs text-gray-500">
+                Add multiple {layer.type}s to play sequentially
+              </span>
             </label>
-            <div className="flex gap-2">
+
+            {/* Upload Button */}
+            <label className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-sm font-medium flex items-center justify-center gap-2">
+              {uploadingFile ? '⏳ Uploading...' : `📁 Upload ${layer.type === 'video' ? 'Videos' : 'Images'}`}
               <input
-                type="text"
-                value={layer.source}
-                onChange={(e) => updateLayer(layer.id, { source: e.target.value })}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                placeholder={`filename.${layer.type === 'video' ? 'mp4' : 'png'} or {{variable}}`}
+                type="file"
+                accept={layer.type === 'video' ? 'video/*' : 'image/*'}
+                multiple
+                onChange={(e) => handleFileUpload(e, true)}
+                className="hidden"
+                disabled={uploadingFile}
               />
-              <label className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-sm font-medium">
-                {uploadingFile ? '⏳' : '📁'} Upload
-                <input
-                  type="file"
-                  accept={layer.type === 'video' ? 'video/*' : 'image/*'}
-                  onChange={(e) => handleFileUpload(e, 'source')}
-                  className="hidden"
-                  disabled={uploadingFile}
-                />
-              </label>
-            </div>
+            </label>
           </div>
-        )}
+
+          {/* List of uploaded sources */}
+          {layer.sources && layer.sources.length > 0 && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Uploaded Files ({layer.sources.length})
+              </label>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {layer.sources.map((source, index) => (
+                  <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded border border-gray-200">
+                    <span className="text-lg">{layer.type === 'video' ? '🎥' : '🖼️'}</span>
+                    <span className="flex-1 text-sm text-gray-700 truncate">{source}</span>
+                    <span className="text-xs text-gray-500">#{index + 1}</span>
+                    <button
+                      onClick={() => removeSource(index)}
+                      className="px-2 py-1 text-red-600 hover:text-red-900 text-sm"
+                      title="Remove"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Duration per item */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Duration per {layer.type} (seconds)
+              <span className="ml-2 text-xs text-gray-500">
+                How long each {layer.type} should display
+              </span>
+            </label>
+            <input
+              type="number"
+              min="0.5"
+              step="0.5"
+              value={layer.duration_per_item || 5}
+              onChange={(e) => updateLayer(layer.id, { duration_per_item: parseFloat(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Common Properties for non-image/video layers */}
+      <div className="grid grid-cols-2 gap-4">
 
         {/* Text Content */}
         {layer.type === 'text' && (

@@ -19,15 +19,16 @@ os.environ['PYTHONWARNINGS'] = 'ignore'
 import logging
 logging.getLogger().setLevel(logging.ERROR)
 
-def generate_speech(text, voice="af_heart", output_path=None):
+def generate_speech(text, voice="af_heart", speed=1.0, output_path=None):
     """
     Generate speech using Kokoro TTS
-    
+
     Args:
         text (str): Text to convert to speech
         voice (str): Voice to use (default: af_heart)
+        speed (float): Speech speed (0.5 to 2.0, default: 1.0)
         output_path (str): Path to save the audio file
-    
+
     Returns:
         dict: Result with success status and file path
     """
@@ -36,9 +37,9 @@ def generate_speech(text, voice="af_heart", output_path=None):
         from kokoro import KPipeline
         import soundfile as sf
         import torch
-        
-        print(f"🔄 Initializing Kokoro pipeline with voice: {voice}", file=sys.stderr)
-        
+
+        print(f"🔄 Initializing Kokoro pipeline with voice: {voice}, speed: {speed}", file=sys.stderr)
+
         # Initialize pipeline based on voice
         if voice.startswith('af_') or voice.startswith('am_'):
             lang_code = 'a'  # American English
@@ -46,13 +47,13 @@ def generate_speech(text, voice="af_heart", output_path=None):
             lang_code = 'b'  # British English
         else:
             lang_code = 'a'  # Default to American English
-            
+
         pipeline = KPipeline(lang_code=lang_code)
-        
+
         print(f"🎤 Generating speech for text: {text[:50]}...", file=sys.stderr)
-        
-        # Generate audio
-        generator = pipeline(text, voice=voice, speed=1, split_pattern=r'\n+')
+
+        # Generate audio with custom speed
+        generator = pipeline(text, voice=voice, speed=speed, split_pattern=r'\n+')
         
         # Collect all audio segments
         audio_segments = []
@@ -123,6 +124,7 @@ def main():
     parser = argparse.ArgumentParser(description='Kokoro TTS Bridge')
     parser.add_argument('--text', required=True, help='Text to convert to speech')
     parser.add_argument('--voice', default='af_heart', help='Voice to use')
+    parser.add_argument('--speed', type=float, default=1.0, help='Speech speed (0.5 to 2.0)')
     parser.add_argument('--output', required=True, help='Output file path')
 
     args = parser.parse_args()
@@ -145,7 +147,7 @@ def main():
         os.environ['PIP_QUIET'] = '1'
         os.environ['PYTHONWARNINGS'] = 'ignore'
 
-        result = generate_speech(args.text, args.voice, args.output)
+        result = generate_speech(args.text, args.voice, args.speed, args.output)
 
         # Restore stdout and output clean JSON
         sys.stdout = original_stdout

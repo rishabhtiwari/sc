@@ -1,0 +1,164 @@
+{
+  "template_id": "multi_product_showcase_v1",
+  "name": "Multi-Product Showcase",
+  "version": "1.0.0",
+  "category": "ecommerce",
+  "description": "Showcase multiple product images or videos in sequence",
+  "aspect_ratio": "16:9",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "duration": 15,
+  "layers": [
+    {
+      "id": "background",
+      "type": "color",
+      "color": "{{background_color}}",
+      "duration": 15,
+      "z_index": 0
+    },
+    {
+      "id": "product_media",
+      "type": "image",
+      "source": "{{product_images}}",
+      "position": {
+        "x": "center",
+        "y": "center"
+      },
+      "scale": 0.8,
+      "duration": 5,
+      "z_index": 1,
+      "effects": [
+        {
+          "type": "fade_in",
+          "start_time": 0,
+          "duration": 0.5
+        },
+        {
+          "type": "fade_out",
+          "start_time": 4.5,
+          "duration": 0.5
+        }
+      ]
+    },
+    {
+      "id": "title_text",
+      "type": "text",
+      "text": "{{product_title}}",
+      "position": {
+        "x": "center",
+        "y": 100
+      },
+      "font": "{{title_font}}",
+      "font_size": "{{title_font_size}}",
+      "color": "{{title_color}}",
+      "duration": 15,
+      "z_index": 2,
+      "effects": [
+        {
+          "type": "fade_in",
+          "start_time": 0,
+          "duration": 1.0
+        }
+      ]
+    },
+    {
+      "id": "brand_text",
+      "type": "text",
+      "text": "{{brand_name}}",
+      "position": {
+        "x": "center",
+        "y": 950
+      },
+      "font": "Arial-Bold",
+      "font_size": 48,
+      "color": "{{accent_color}}",
+      "duration": 15,
+      "z_index": 2
+    }
+  ],
+  "effects": [
+    {
+      "type": "fade_in",
+      "duration": 0.5
+    },
+    {
+      "type": "fade_out",
+      "duration": 0.5
+    }
+  ],
+  "background_music": {
+    "enabled": true,
+    "source": "{{background_music_file}}",
+    "volume": 0.15,
+    "fade_in": 2.0,
+    "fade_out": 2.0
+  },
+  "logo": {
+    "enabled": true,
+    "source": "{{logo_path}}",
+    "position": "top-right",
+    "scale": 0.12,
+    "opacity": 0.9,
+    "margin": 30
+  },
+  "thumbnail": {
+    "auto_generate": true,
+    "timestamp": 2.0
+  },
+  "variables": {
+    "product_images": {
+      "type": "image",
+      "required": true,
+      "description": "Product images (can be single image or array of images)"
+    },
+    "product_title": {
+      "type": "text",
+      "required": true,
+      "max_length": 50,
+      "description": "Product title/name"
+    },
+    "brand_name": {
+      "type": "text",
+      "required": true,
+      "default": "Your Brand",
+      "description": "Brand name"
+    },
+    "background_color": {
+      "type": "color",
+      "default": "#FFFFFF",
+      "description": "Background color"
+    },
+    "title_color": {
+      "type": "color",
+      "default": "#000000",
+      "description": "Title text color"
+    },
+    "accent_color": {
+      "type": "color",
+      "default": "#FF6B35",
+      "description": "Accent color for highlights"
+    },
+    "title_font": {
+      "type": "font",
+      "default": "Arial-Bold",
+      "description": "Font for product title"
+    },
+    "title_font_size": {
+      "type": "number",
+      "default": 88,
+      "min": 40,
+      "max": 150,
+      "description": "Title font size in pixels"
+    }
+  },
+  "metadata": {
+    "author": "Template Service",
+    "created_at": "2024-12-23",
+    "updated_at": "2024-12-23",
+    "tags": ["ecommerce", "product", "multi-image", "showcase"],
+    "thumbnail": "/thumbnails/multi_product_showcase.jpg"
+  }
+}
+

@@ -1,0 +1,178 @@
+{
+  "template_id": "custom_product_showcase_v1",
+  "name": "Custom Product Showcase",
+  "version": "1.0.0",
+  "category": "ecommerce",
+  "description": "Customizable product showcase with brand colors and fonts",
+  "aspect_ratio": "16:9",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "duration": 15,
+  "layers": [
+    {
+      "id": "background",
+      "type": "color",
+      "color": "{{background_color}}",
+      "duration": 15,
+      "z_index": 0
+    },
+    {
+      "id": "product_image",
+      "type": "image",
+      "source": "{{product_image}}",
+      "position": {
+        "x": "center",
+        "y": "center"
+      },
+      "scale": 0.8,
+      "duration": 15,
+      "z_index": 1,
+      "effects": [
+        {
+          "type": "ken_burns",
+          "zoom_start": 1.0,
+          "zoom_end": 1.1,
+          "duration": 15
+        }
+      ]
+    },
+    {
+      "id": "title_text",
+      "type": "text",
+      "text": "{{product_title}}",
+      "position": {
+        "x": "center",
+        "y": 100
+      },
+      "font": "{{title_font}}",
+      "font_size": "{{title_font_size}}",
+      "color": "{{title_color}}",
+      "duration": 15,
+      "z_index": 2,
+      "effects": [
+        {
+          "type": "fade_in",
+          "start_time": 0,
+          "duration": 1.0
+        }
+      ]
+    },
+    {
+      "id": "price_text",
+      "type": "text",
+      "text": "{{price_display}}",
+      "position": {
+        "x": "center",
+        "y": 950
+      },
+      "font": "Arial-Bold",
+      "font_size": 72,
+      "color": "{{accent_color}}",
+      "duration": 15,
+      "z_index": 2,
+      "effects": [
+        {
+          "type": "fade_in",
+          "start_time": 0.5,
+          "duration": 1.0
+        }
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "type": "fade_in",
+      "duration": 0.5
+    },
+    {
+      "type": "fade_out",
+      "duration": 0.5
+    }
+  ],
+  "background_music": {
+    "enabled": true,
+    "source": "{{background_music_file}}",
+    "volume": 0.15,
+    "fade_in": 2.0,
+    "fade_out": 2.0
+  },
+  "logo": {
+    "enabled": true,
+    "source": "{{logo_path}}",
+    "position": "top-right",
+    "scale": 0.12,
+    "opacity": 0.9,
+    "margin": 30
+  },
+  "thumbnail": {
+    "auto_generate": true,
+    "timestamp": 2.0
+  },
+  "variables": {
+    "product_image": {
+      "type": "image",
+      "required": true,
+      "description": "Main product image"
+    },
+    "product_title": {
+      "type": "text",
+      "required": true,
+      "max_length": 50,
+      "description": "Product title/name"
+    },
+    "price_display": {
+      "type": "text",
+      "required": true,
+      "default": "$99.99",
+      "description": "Price to display (e.g., $99.99)"
+    },
+    "background_color": {
+      "type": "color",
+      "default": "#FFFFFF",
+      "description": "Background color"
+    },
+    "title_color": {
+      "type": "color",
+      "default": "#000000",
+      "description": "Title text color"
+    },
+    "accent_color": {
+      "type": "color",
+      "default": "#FF6B35",
+      "description": "Accent color for price and highlights"
+    },
+    "title_font": {
+      "type": "font",
+      "default": "Arial-Bold",
+      "description": "Font for product title"
+    },
+    "title_font_size": {
+      "type": "number",
+      "default": 88,
+      "min": 40,
+      "max": 150,
+      "description": "Title font size in pixels"
+    },
+    "background_music_file": {
+      "type": "audio",
+      "required": false,
+      "default": "upbeat_product.mp3",
+      "description": "Background music file"
+    },
+    "logo_path": {
+      "type": "image",
+      "required": false,
+      "description": "Company logo (optional)"
+    }
+  },
+  "metadata": {
+    "author": "Template Service",
+    "created_at": "2024-12-23",
+    "updated_at": "2024-12-23",
+    "tags": ["ecommerce", "product", "customizable", "showcase"],
+    "thumbnail": "/thumbnails/custom_product_showcase.jpg"
+  }
+}
+

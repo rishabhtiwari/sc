@@ -40,9 +40,10 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
             // Test Python bridge availability with a simple test
             const testText = 'Hello test';
             const testVoice = 'af_heart';
+            const testSpeed = 1.0;
             const testOutput = '/tmp/kokoro_test.wav';
-            
-            const testResult = await this.runPythonBridge(testText, testVoice, testOutput);
+
+            const testResult = await this.runPythonBridge(testText, testVoice, testSpeed, testOutput);
             
             if (testResult.success) {
                 // Clean up test file
@@ -67,12 +68,13 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
     /**
      * Run the Python bridge script
      */
-    async runPythonBridge(text, voice, outputPath) {
+    async runPythonBridge(text, voice, speed, outputPath) {
         return new Promise((resolve, reject) => {
             const args = [
                 this.pythonBridgePath,
                 '--text', text,
                 '--voice', voice,
+                '--speed', speed.toString(),
                 '--output', outputPath
             ];
 
@@ -132,6 +134,7 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
         }
 
         const voice = options.voice || this.defaultVoice;
+        const speed = options.speed || 1.0;
 
         if (!this.voices.includes(voice)) {
             throw new Error(`Voice '${voice}' not supported. Available voices: ${this.voices.join(', ')}`);
@@ -140,6 +143,7 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
         console.log(`🎤 Generating speech with Kokoro-82M Python bridge`);
         console.log(`📝 Text: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
         console.log(`🎭 Voice: ${voice}`);
+        console.log(`⚡ Speed: ${speed}`);
 
         try {
             // Determine output directory and filename based on options
@@ -149,6 +153,16 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
                 // For news records, use public folder structure: /app/public/{news_id}/
                 outputDir = path.join('/app/public', options.news_id);
                 filename = options.filename || 'content.wav'; // Default to content.wav for news
+                outputPath = path.join(outputDir, filename);
+            } else if (options.product_id) {
+                // For product audio, use public/product/{product_id}/ directory
+                outputDir = path.join('/app/public/product', options.product_id);
+                filename = options.filename || 'audio.wav';
+                outputPath = path.join(outputDir, filename);
+            } else if (options.filename) {
+                // For preview audio with custom filename, use public temp directory
+                outputDir = '/app/public/temp';
+                filename = options.filename;
                 outputPath = path.join(outputDir, filename);
             } else {
                 // For regular TTS requests, use public temp directory (shared with voice generator)
@@ -166,8 +180,8 @@ export class KokoroVoiceModelPython extends BaseVoiceModel {
 
             console.log(`💾 Output path: ${outputPath}`);
 
-            // Call Python bridge
-            const result = await this.runPythonBridge(text, voice, outputPath);
+            // Call Python bridge with speed parameter
+            const result = await this.runPythonBridge(text, voice, speed, outputPath);
 
             if (result.success) {
                 // Verify that the audio file was actually created

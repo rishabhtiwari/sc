@@ -132,7 +132,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
 
       // Fetch the audio file with authentication headers
       // The audioUrl is a relative path like /api/voice/preview/audio/kokoro_123.wav
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
       console.log('🔑 Token exists:', !!token);
 
       console.log('📥 Fetching audio from:', audioUrl);

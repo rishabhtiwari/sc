@@ -3,6 +3,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 import { VoiceService } from './services/VoiceService.js';
 
 // ES module equivalent of __dirname
@@ -14,9 +15,40 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increase limit for large text content
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(express.static('public'));
 app.use('/temp', express.static('public/temp')); // Serve temp files for preview and temporary audio
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        // Check if product_id is provided in the request body or query
+        const productId = req.body.product_id || req.query.product_id;
+
+        let uploadDir;
+        if (productId) {
+            // For product audio, use public/product/{product_id}/ directory
+            uploadDir = path.join(__dirname, 'public', 'product', productId);
+        } else {
+            // For other uploads, use temp directory
+            uploadDir = path.join(__dirname, 'public', 'temp');
+        }
+
+        // Ensure directory exists
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        // Use original filename or generate unique name
+        const uniqueName = file.originalname || `upload_${Date.now()}.wav`;
+        cb(null, uniqueName);
+    }
+});
+
+const upload = multer({ storage: storage });
 
 // Voice service instance with cache directory
 const cacheDir = path.join(__dirname, 'data', 'models');
@@ -49,7 +81,7 @@ app.get('/health', (req, res) => {
 // TTS endpoint - unified endpoint for all TTS models
 app.post('/tts', async (req, res) => {
     try {
-        const { text, model, voice, format = 'wav', news_id, filename } = req.body;
+        const { text, model, voice, speed, format = 'wav', news_id, filename } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
@@ -58,12 +90,14 @@ app.post('/tts', async (req, res) => {
         console.log(`🎤 Generating speech for: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
         console.log(`🤖 Model: ${model || 'default'}`);
         if (voice) console.log(`🎭 Voice: ${voice}`);
+        if (speed) console.log(`⚡ Speed: ${speed}`);
         if (news_id) console.log(`📰 News ID: ${news_id}`);
         if (filename) console.log(`📁 Filename: ${filename}`);
 
         // Build options object
         const options = { model, format };
         if (voice) options.voice = voice;
+        if (speed) options.speed = speed;
         if (news_id) options.news_id = news_id;
         if (filename) options.filename = filename;
 
@@ -72,6 +106,7 @@ app.post('/tts', async (req, res) => {
         // Add voice information to response if available
         const response = { ...result };
         if (voice) response.voice_used = voice;
+        if (speed) response.speed_used = speed;
         if (news_id) response.news_id = news_id;
         if (filename) response.filename = filename;
 
@@ -81,6 +116,49 @@ app.post('/tts', async (req, res) => {
         console.error('TTS generation error:', error);
         res.status(500).json({
             error: 'Failed to generate speech',
+            details: error.message
+        });
+    }
+});
+
+// Upload audio file endpoint (for combined audio files)
+app.post('/upload', upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file uploaded' });
+        }
+
+        console.log(`📤 File uploaded: ${req.file.filename}`);
+
+        // Get file info
+        const stats = fs.statSync(req.file.path);
+        const fileSizeInBytes = stats.size;
+        const fileSizeInMB = (fileSizeInBytes / (1024 * 1024)).toFixed(2);
+
+        // Determine the correct URL based on product_id
+        const productId = req.body.product_id || req.query.product_id;
+        let audioUrl;
+        if (productId) {
+            audioUrl = `/product/${productId}/${req.file.filename}`;
+        } else {
+            audioUrl = `/temp/${req.file.filename}`;
+        }
+
+        console.log(`✅ File saved to: ${audioUrl}`);
+
+        res.json({
+            success: true,
+            message: 'File uploaded successfully',
+            audio_url: audioUrl,
+            filename: req.file.filename,
+            size_mb: fileSizeInMB,
+            path: req.file.path
+        });
+
+    } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+            error: 'Failed to upload file',
             details: error.message
         });
     }

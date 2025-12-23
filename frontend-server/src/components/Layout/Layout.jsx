@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 const Layout = ({ children, user, onLogout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState({ ecommerce: true }); // Track expanded menus
   const location = useLocation();
   const navigate = useNavigate();
   const userMenuRef = useRef(null);
@@ -14,11 +15,19 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
     { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
+    { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
     { path: '/templates', icon: '🎨', label: 'Templates' },
     { path: '/workflow', icon: '🔄', label: 'Workflow Pipeline' },
     { path: '/monitoring', icon: '📈', label: 'Monitoring & Logs' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
   ];
+
+  const toggleMenu = (menuId) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuId]: !prev[menuId]
+    }));
+  };
 
   // Close user menu when clicking outside
   useEffect(() => {
@@ -42,6 +51,16 @@ const Layout = ({ children, user, onLogout }) => {
       return location.pathname === '/';
     }
     return location.pathname.startsWith(path);
+  };
+
+  const isMenuActive = (item) => {
+    if (item.path) {
+      return isActive(item.path);
+    }
+    if (item.subItems) {
+      return item.subItems.some(subItem => isActive(subItem.path));
+    }
+    return false;
   };
 
   return (

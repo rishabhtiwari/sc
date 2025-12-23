@@ -83,19 +83,36 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 def substitute_variables(template_str: str, variables: Dict[str, Any]) -> str:
     """
     Substitute {{variable}} placeholders in string
-    
+    Supports both simple variables {{var}} and indexed arrays {{var[0]}}
+
     Args:
         template_str: String with {{placeholders}}
         variables: Dictionary of variable values
-    
+
     Returns:
         String with substituted values
     """
     def replace_var(match):
         var_name = match.group(1)
+        index_str = match.group(2)
+
+        # Handle indexed array access: {{var_name[0]}}
+        if index_str:
+            try:
+                index = int(index_str)
+                var_value = variables.get(var_name)
+                if isinstance(var_value, list) and 0 <= index < len(var_value):
+                    return str(var_value[index])
+            except (ValueError, IndexError):
+                pass
+            return match.group(0)  # Return original if index invalid
+
+        # Handle simple variable: {{var_name}}
         return str(variables.get(var_name, match.group(0)))
-    
-    return re.sub(r'\{\{(\w+)\}\}', replace_var, template_str)
+
+    # Match both {{var}} and {{var[0]}} patterns
+    # Pattern: {{word}} or {{word[number]}}
+    return re.sub(r'\{\{(\w+)(?:\[(\d+)\])?\}\}', replace_var, template_str)
 
 
 def validate_color(color: str) -> bool:

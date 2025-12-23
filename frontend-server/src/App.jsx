@@ -13,6 +13,8 @@ import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
 import SettingsPage from './pages/SettingsPage';
 import TemplateManagementPage from './pages/TemplateManagementPage';
+import ProductVideoPage from './pages/ProductVideoPage';
+import EcommercePage from './pages/EcommercePage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
@@ -115,6 +117,7 @@ function App() {
                   <Route path="/image-processing" element={<ImageProcessingPage />} />
                   <Route path="/voice-llm" element={<AudioProcessingPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
+                  <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />
                   <Route path="/templates" element={<TemplateManagementPage />} />

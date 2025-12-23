@@ -107,6 +107,7 @@ def create_app():
     from routes.video_routes import video_bp
     from routes.voice_routes import voice_bp
     from routes.template_routes import template_bp
+    from routes.product_routes import product_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -134,6 +135,7 @@ def create_app():
     app.register_blueprint(video_bp, url_prefix='/api')
     app.register_blueprint(voice_bp, url_prefix='/api')
     app.register_blueprint(template_bp, url_prefix='/api')
+    app.register_blueprint(product_bp, url_prefix='/api')
 
     # Initialize Socket.IO for real-time updates
     socketio = init_socketio(app)

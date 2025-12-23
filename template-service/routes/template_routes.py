@@ -739,8 +739,51 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
 
                 logger.info(f"Processing {len(layers)} layers")
 
+                # Expand layers with sources array into multiple sequential layers
+                expanded_layers = []
+                max_end_time = 0  # Track the maximum end time of all layers
+
+                for layer in layers:
+                    sources = layer.get('sources', [])
+                    if sources and len(sources) > 0 and layer.get('type') in ['image', 'video']:
+                        # Expand this layer into multiple layers, one for each source
+                        duration_per_item = layer.get('duration_per_item', 5)
+                        for idx, source in enumerate(sources):
+                            expanded_layer = layer.copy()
+                            expanded_layer['source'] = source
+                            expanded_layer['start_time'] = idx * duration_per_item
+                            expanded_layer['duration'] = duration_per_item
+                            # Remove sources array from expanded layer
+                            if 'sources' in expanded_layer:
+                                del expanded_layer['sources']
+                            expanded_layers.append(expanded_layer)
+
+                            # Track max end time
+                            end_time = (idx + 1) * duration_per_item
+                            max_end_time = max(max_end_time, end_time)
+
+                            logger.info(f"Expanded layer {layer.get('id')} source #{idx+1}: {source} (start: {idx * duration_per_item}s, duration: {duration_per_item}s)")
+                    else:
+                        # No sources array, keep layer as-is
+                        expanded_layers.append(layer)
+
+                        # Track max end time for non-expanded layers too
+                        layer_start = layer.get('start_time', 0)
+                        layer_dur = layer.get('duration', duration)
+                        max_end_time = max(max_end_time, layer_start + layer_dur)
+
+                # If we have sequential layers that extend beyond the base video duration,
+                # we need to extend the base video
+                if max_end_time > duration:
+                    logger.info(f"Extending base video from {duration}s to {max_end_time}s to accommodate sequential layers")
+                    # Loop the base video to extend its duration
+                    from moviepy.editor import concatenate_videoclips
+                    num_loops = int(max_end_time / duration) + 1
+                    video = concatenate_videoclips([video] * num_loops).subclip(0, max_end_time)
+                    duration = max_end_time
+
                 # Sort layers by z_index (lower z_index = bottom layer)
-                sorted_layers = sorted(layers, key=lambda l: l.get('z_index', 0))
+                sorted_layers = sorted(expanded_layers, key=lambda l: l.get('z_index', 0))
 
                 # Check if there's a background video layer (full-screen video at z_index 0)
                 has_background_video = False
@@ -812,9 +855,10 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                                     logger.info(f"Video layer position: {final_pos}, z_index: {layer.get('z_index', 0)}")
                                     layer_video = layer_video.set_position(final_pos)
 
-                                    # Set start time
+                                    # Set start and end time
                                     if start_time > 0:
                                         layer_video = layer_video.set_start(start_time)
+                                        layer_video = layer_video.set_end(start_time + layer_duration)
                                     # Set opacity
                                     if opacity < 1.0:
                                         layer_video = layer_video.set_opacity(opacity)
@@ -841,9 +885,10 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                                     image_clip = image_clip.set_duration(layer_duration)
                                     # Set position (centered at pos_x, pos_y)
                                     image_clip = image_clip.set_position((pos_x - width//2, pos_y - height//2))
-                                    # Set start time
+                                    # Set start and end time
                                     if start_time > 0:
                                         image_clip = image_clip.set_start(start_time)
+                                        image_clip = image_clip.set_end(start_time + layer_duration)
                                     # Set opacity
                                     if opacity < 1.0:
                                         image_clip = image_clip.set_opacity(opacity)
@@ -923,9 +968,10 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
 
                             # Set position (centered at pos_x, pos_y)
                             text_clip = text_clip.set_position((pos_x - width//2, pos_y - height//2))
-                            # Set start time
+                            # Set start and end time
                             if start_time > 0:
                                 text_clip = text_clip.set_start(start_time)
+                                text_clip = text_clip.set_end(start_time + layer_duration)
 
                             clip = text_clip
                             logger.info(f"Added text layer: {content} (fade={'enabled' if fade_enabled else 'disabled'})")
@@ -966,9 +1012,10 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                             shape_clip = shape_clip.set_duration(layer_duration)
                             # Set position (centered at pos_x, pos_y)
                             shape_clip = shape_clip.set_position((pos_x - width//2, pos_y - height//2))
-                            # Set start time
+                            # Set start and end time
                             if start_time > 0:
                                 shape_clip = shape_clip.set_start(start_time)
+                                shape_clip = shape_clip.set_end(start_time + layer_duration)
                             # Set opacity
                             if opacity < 1.0:
                                 shape_clip = shape_clip.set_opacity(opacity)
@@ -988,6 +1035,12 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         logger.info(f"Compositing {len(layer_clips)} layers (background video + {len(layer_clips)-1} overlay layers)")
                     else:
                         logger.info(f"Compositing {len(layer_clips)} clips (base video + {len(layer_clips)-1} layers)")
+
+                    # Log start times for debugging
+                    for i, clip in enumerate(layer_clips):
+                        start = getattr(clip, 'start', 0)
+                        logger.info(f"Layer {i}: start={start}s, duration={clip.duration}s")
+
                     video = CompositeVideoClip(layer_clips, size=(w, h))
                     video = video.set_duration(duration)
                     logger.info(f"Layers composited successfully, video size: {video.size}")
