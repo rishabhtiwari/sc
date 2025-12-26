@@ -996,10 +996,17 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                     source_field = layer.get('source')
 
                     # If source is a list, use it as sources
-                    if isinstance(source_field, list) and len(source_field) > 0:
-                        sources = source_field
+                    if isinstance(source_field, list):
+                        if len(source_field) > 0:
+                            sources = source_field
+                        else:
+                            # Skip layers with empty source lists
+                            logger.warning(f"⏭️  Skipping layer with empty source list: {layer.get('id', 'unknown')}")
+                            continue
 
-                    if sources and len(sources) > 0 and layer.get('type') in ['image', 'video', 'mixed']:
+                    # Ensure we expand if sources exist, regardless of layer type
+                    # This prevents source from remaining as a list
+                    if sources and len(sources) > 0:
                         # Get timing metadata from resolved_sample_data (sent by ecommerce service)
                         # Timings contain: url, start_time, duration, section, type (image/video)
                         timing_metadata = []
@@ -1108,7 +1115,6 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                     logger.info(f"🎬 Processing {len(video_layers_list)} sequential video layers")
 
                     from moviepy.editor import VideoFileClip as SimpleVideoClip, concatenate_videoclips
-                    import requests
 
                     video_clips = []
 
@@ -1122,6 +1128,20 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         try:
                             video_path = None
                             temp_video_path = None
+
+                            # Handle case where source is a list (take first item)
+                            if isinstance(source, list):
+                                if len(source) > 0:
+                                    logger.warning(f"    Source is a list with {len(source)} items, using first item")
+                                    source = source[0]
+                                else:
+                                    logger.error(f"    Source is an empty list, skipping")
+                                    raise ValueError("Source is an empty list")
+
+                            # Ensure source is a string
+                            if not isinstance(source, str):
+                                logger.error(f"    Source is not a string: {type(source)}, skipping")
+                                raise ValueError(f"Source must be a string, got {type(source)}")
 
                             # Download or locate video file
                             if source.startswith('http://') or source.startswith('https://'):

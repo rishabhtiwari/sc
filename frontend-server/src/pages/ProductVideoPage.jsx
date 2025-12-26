@@ -154,9 +154,8 @@ const ProductVideoPage = ({ embedded = false }) => {
       showToast('Starting video regeneration...', 'info');
 
       // Call the generate video API
-      const response = await productService.generateVideo(product._id, {
-        template_id: product.template_id || 'modern_product_v1'
-      });
+      // Don't send any data - backend will fetch everything from the database
+      const response = await productService.generateVideo(product._id, {});
 
       if (response.data.status === 'success') {
         showToast('Video regeneration started successfully', 'success');

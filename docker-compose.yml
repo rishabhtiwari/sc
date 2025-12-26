@@ -125,8 +125,8 @@ services:
       - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db
       # Template Service
       - TEMPLATE_SERVICE_URL=http://ichat-template-service:5000
-      # E-commerce Service
-      - ECOMMERCE_SERVICE_URL=http://ichat-ecommerce-service:8099
+      # Inventory Creation Service
+      - INVENTORY_CREATION_SERVICE_URL=http://ichat-inventory-creation-service:5001
       # Audio Generation Service
       - AUDIO_GENERATION_URL=http://audio-generation-factory:3000
       # External API Server URL (for generating browser-accessible URLs)
@@ -784,18 +784,17 @@ services:
           memory: 2G
           cpus: '1.0'
 
-  # E-commerce Service - E-commerce product management
-  ecommerce-service:
+  # Inventory Creation Service - Generic content generation for products, blogs, social media
+  inventory-creation-service:
     build:
-      context: ./jobs
-      dockerfile: ecommerce-service/Dockerfile
-    container_name: ichat-ecommerce-service
+      context: .
+      dockerfile: inventory-creation-service/Dockerfile
+    container_name: ichat-inventory-creation-service
     ports:
-      - "8099:8099"
+      - "5001:5001"
     environment:
       # Flask Configuration
-      - FLASK_HOST=0.0.0.0
-      - FLASK_PORT=8099
+      - PORT=5001
       - FLASK_DEBUG=false
       - FLASK_ENV=production
       # MongoDB Configuration
@@ -815,14 +814,14 @@ services:
       # Internal API Server URL (for container-to-container communication)
       - API_SERVER_INTERNAL_URL=http://ichat-api-server:8080
     volumes:
-      - ./jobs/ecommerce-service/logs:/app/logs
-      - ./jobs/ecommerce-service/public:/app/public
+      - ./inventory-creation-service/logs:/app/logs
+      - ./inventory-creation-service/public:/app/public
     networks:
       - ichat-network
     depends_on:
       - ichat-mongodb
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
       interval: 30s
       timeout: 10s
       retries: 3

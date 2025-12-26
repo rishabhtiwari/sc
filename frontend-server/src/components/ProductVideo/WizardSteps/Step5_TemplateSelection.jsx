@@ -601,48 +601,33 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
         console.log('🗑️ [STEP 7-SERVER] API delete response:', deleteResponse);
         console.log('🗑️ [STEP 7.1-SERVER] API delete response.data:', deleteResponse.data);
 
-        // Use the updated template_variables from the backend response
+        // Use the updated data from the backend response
         const responseData = deleteResponse.data || deleteResponse;
+        const updatedMediaFiles = responseData.media_files || updatedMediaImmediate;
         const updatedTemplateVars = responseData.template_variables || templateVariables;
-        console.log('🗑️ [STEP 8-SERVER] Updated template_variables after removal:', updatedTemplateVars);
+        const updatedSectionMapping = responseData.section_mapping || sectionMapping;
 
-        console.log('🗑️ [STEP 9-SERVER] Updating state...');
+        console.log('🗑️ [STEP 8-SERVER] Backend response data:');
+        console.log('  - media_files:', updatedMediaFiles);
+        console.log('  - template_variables:', updatedTemplateVars);
+        console.log('  - section_mapping:', updatedSectionMapping);
+
+        console.log('🗑️ [STEP 9-SERVER] Updating state with backend data...');
+
+        // Update all states with the backend response
+        setMediaFiles(updatedMediaFiles);
         setTemplateVariables(updatedTemplateVars);
-        console.log('🗑️ [STEP 9.1-SERVER] setTemplateVariables called');
-        onUpdate({
-          template_variables: updatedTemplateVars
-        });
-        console.log('🗑️ [STEP 9.2-SERVER] onUpdate called with template_variables');
+        setSectionMapping(updatedSectionMapping);
 
-        // Reconstruct mediaFiles from updated template_variables
-        const reconstructedMedia = [];
-        if (updatedTemplateVars.dynamic_images && Array.isArray(updatedTemplateVars.dynamic_images)) {
-          updatedTemplateVars.dynamic_images.forEach((url, idx) => {
-            if (url && !url.startsWith('blob:')) {
-              reconstructedMedia.push({
-                url: url,
-                type: 'image',
-                name: `Image ${idx + 1}`,
-              });
-            }
-          });
-        }
-        if (updatedTemplateVars.dynamic_videos && Array.isArray(updatedTemplateVars.dynamic_videos)) {
-          const timings = updatedTemplateVars.dynamic_videos_timings || [];
-          updatedTemplateVars.dynamic_videos.forEach((url, idx) => {
-            if (url && !url.startsWith('blob:')) {
-              const timing = timings[idx] || {};
-              reconstructedMedia.push({
-                url: url,
-                type: 'video',
-                name: `Video ${idx + 1}`,
-                duration: timing.duration || 5
-              });
-            }
-          });
-        }
-        setMediaFiles(reconstructedMedia);
-        console.log('🗑️ [STEP 9.3-SERVER] Reconstructed mediaFiles from template_variables:', reconstructedMedia);
+        console.log('🗑️ [STEP 9.1-SERVER] All states updated with backend data');
+
+        // Update parent component with all updated data from backend
+        onUpdate({
+          media_files: updatedMediaFiles,
+          template_variables: updatedTemplateVars,
+          section_mapping: updatedSectionMapping
+        });
+        console.log('🗑️ [STEP 9.2-SERVER] onUpdate called with backend data');
 
         console.log('🗑️ [STEP 10-SERVER] ✅ Server deletion complete');
         showToast(`${fileToRemove?.type || 'Media'} removed successfully`, 'success');
@@ -771,11 +756,17 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
     // Validate required variables
     if (selectedTemplateDetails?.variables) {
       const missingVars = [];
+      const mediaArrayVars = []; // Track media array variables (images/videos)
+
       Object.entries(selectedTemplateDetails.variables).forEach(([key, config]) => {
         console.log(`🔍 Checking variable: ${key}`, { config, value: templateVariables[key] });
-        if (config.required) {
+
+        // Track media array variables separately
+        if (config.type === 'array' && (config.item_type === 'image' || config.item_type === 'video')) {
+          mediaArrayVars.push({ key, config, value: templateVariables[key] });
+        } else if (config.required) {
+          // For non-media variables, check normally
           const value = templateVariables[key];
-          // Check if value is missing or empty array
           if (value === undefined || value === null || value === '' ||
               (Array.isArray(value) && value.length === 0)) {
             console.log(`❌ Missing required variable: ${key}`);
@@ -783,6 +774,20 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
           }
         }
       });
+
+      // For media arrays: require at least ONE type (images OR videos), not both
+      if (mediaArrayVars.length > 0) {
+        const hasAnyMedia = mediaArrayVars.some(({ value }) =>
+          Array.isArray(value) && value.length > 0
+        );
+
+        if (!hasAnyMedia) {
+          console.log('❌ No media files uploaded (images or videos)');
+          showToast('Please upload at least one image or video', 'error');
+          return;
+        }
+        console.log('✅ Media validation passed - at least one media type has files');
+      }
 
       if (missingVars.length > 0) {
         console.log('❌ Validation failed. Missing variables:', missingVars);
@@ -1649,9 +1654,31 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
       </div>
 
       <div className="flex justify-end">
-        <Button variant="primary" onClick={handleNext} disabled={uploadingMedia}>
-          {uploadingMedia ? 'Saving media...' : 'Next: Preview & Generate →'}
-        </Button>
+        {/* Show tooltip when no media is uploaded */}
+        {mediaFiles.length === 0 ? (
+          <div className="relative group">
+            <Button variant="primary" disabled={true}>
+              Next: Preview & Generate →
+            </Button>
+            <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 bg-gray-900 text-white text-sm rounded-lg px-4 py-2 shadow-lg z-10">
+              <div className="flex items-start gap-2">
+                <span className="text-yellow-400">⚠️</span>
+                <div>
+                  <div className="font-semibold mb-1">No media uploaded</div>
+                  <div className="text-gray-300">Please upload at least one image or video to continue</div>
+                </div>
+              </div>
+              {/* Arrow pointing down */}
+              <div className="absolute top-full right-4 -mt-1">
+                <div className="border-8 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <Button variant="primary" onClick={handleNext} disabled={uploadingMedia}>
+            {uploadingMedia ? 'Saving media...' : 'Next: Preview & Generate →'}
+          </Button>
+        )}
       </div>
     </div>
   );

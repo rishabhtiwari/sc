@@ -1,6 +1,6 @@
 """
-Product Routes - API Proxy for e-commerce product video management
-Acts as a proxy to forward requests to the ecommerce-service backend
+Product Routes - API Proxy for product video management
+Acts as a proxy to forward requests to the inventory-creation-service backend
 """
 
 import logging
@@ -14,17 +14,57 @@ product_bp = Blueprint('product', __name__)
 logger = logging.getLogger(__name__)
 
 # Service URLs
-ECOMMERCE_SERVICE_URL = os.getenv(
-    'ECOMMERCE_SERVICE_URL',
-    'http://ichat-ecommerce-service:8099'
+INVENTORY_CREATION_SERVICE_URL = os.getenv(
+    'INVENTORY_CREATION_SERVICE_URL',
+    'http://ichat-inventory-creation-service:5001'
+)
+
+AUDIO_GENERATION_URL = os.getenv(
+    'AUDIO_GENERATION_URL',
+    'http://audio-generation-factory:3000'
 )
 
 
-def proxy_to_ecommerce_service(path, method='GET', json_data=None, files=None):
-    """Proxy request to ecommerce service"""
+def _convert_to_proxy_url(audio_url):
+    """Convert internal audio-generation-factory URL to API proxy URL for browser access
+
+    Examples:
+        http://audio-generation-factory:3000/product/123/audio.wav
+        -> /api/audio/proxy/product/123/audio.wav
+
+        http://audio-generation-factory:3000/temp/audio.wav
+        -> /api/audio/proxy/temp/audio.wav
+    """
+    if not audio_url:
+        return audio_url
+
+    # If it's already a proxy URL, return as-is
+    if audio_url.startswith('/api/audio/proxy/'):
+        return audio_url
+
+    # Extract the path after the audio service URL
+    if audio_url.startswith(AUDIO_GENERATION_URL):
+        # Remove the base URL to get the relative path
+        relative_path = audio_url[len(AUDIO_GENERATION_URL):]
+        # Remove leading slash if present
+        if relative_path.startswith('/'):
+            relative_path = relative_path[1:]
+        # Return proxy URL
+        return f"/api/audio/proxy/{relative_path}"
+
+    # If it's already a relative path, convert to proxy URL
+    if audio_url.startswith('/'):
+        return f"/api/audio/proxy{audio_url}"
+
+    # Otherwise return as-is
+    return audio_url
+
+
+def proxy_to_inventory_service(path, method='GET', json_data=None, files=None):
+    """Proxy request to inventory creation service"""
     try:
         headers = get_request_headers_with_context()
-        url = f"{ECOMMERCE_SERVICE_URL}{path}"
+        url = f"{INVENTORY_CREATION_SERVICE_URL}{path}"
 
         logger.info(f"🔄 Proxying {method} {url}")
 
@@ -57,20 +97,20 @@ def proxy_to_ecommerce_service(path, method='GET', json_data=None, files=None):
             return {'status': 'error', 'message': response.text}, response.status_code
 
     except requests.exceptions.Timeout:
-        logger.error(f"❌ Timeout calling ecommerce service: {url}")
+        logger.error(f"❌ Timeout calling inventory creation service: {url}")
         return {'status': 'error', 'message': 'Service timeout'}, 504
     except requests.exceptions.ConnectionError:
-        logger.error(f"❌ Connection error to ecommerce service: {url}")
+        logger.error(f"❌ Connection error to inventory creation service: {url}")
         return {'status': 'error', 'message': 'Service unavailable'}, 503
     except Exception as e:
-        logger.error(f"❌ Error proxying to ecommerce service: {str(e)}")
+        logger.error(f"❌ Error proxying to inventory creation service: {str(e)}")
         return {'status': 'error', 'message': str(e)}, 500
 
 
 @product_bp.route('/products', methods=['POST'])
 def create_product():
     """Proxy: Create a new product"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         '/api/products', method='POST', json_data=request.get_json()
     )
     return jsonify(response_data), status_code
@@ -79,23 +119,61 @@ def create_product():
 @product_bp.route('/products', methods=['GET'])
 def get_products():
     """Proxy: Get all products"""
-    response_data, status_code = proxy_to_ecommerce_service('/api/products', method='GET')
+    response_data, status_code = proxy_to_inventory_service('/api/products', method='GET')
+
+    # Convert internal audio URLs to proxy URLs for browser access
+    if status_code == 200 and response_data.get('status') == 'success':
+        products = response_data.get('products', [])
+        for product in products:
+            # Convert main audio_url
+            if 'audio_url' in product:
+                product['audio_url'] = _convert_to_proxy_url(product['audio_url'])
+
+            # Convert section_audio_urls array if present
+            if 'section_audio_urls' in product:
+                product['section_audio_urls'] = [
+                    _convert_to_proxy_url(url) for url in product['section_audio_urls']
+                ]
+
     return jsonify(response_data), status_code
 
 
 @product_bp.route('/products/<product_id>', methods=['GET'])
 def get_product(product_id):
     """Proxy: Get a specific product by ID"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}', method='GET'
     )
+
+    # Convert internal audio URLs to proxy URLs for browser access
+    if status_code == 200 and response_data.get('status') == 'success':
+        product = response_data.get('product', {})
+
+        # Convert main audio_url
+        if 'audio_url' in product:
+            product['audio_url'] = _convert_to_proxy_url(product['audio_url'])
+
+        # Convert section_audio_urls array if present
+        if 'section_audio_urls' in product:
+            product['section_audio_urls'] = [
+                _convert_to_proxy_url(url) for url in product['section_audio_urls']
+            ]
+
+        # Convert audio URLs in AI summary sections if present
+        ai_summary = product.get('ai_summary', {})
+        if isinstance(ai_summary, dict):
+            sections = ai_summary.get('sections', [])
+            for section in sections:
+                if 'audio_path' in section:
+                    section['audio_path'] = _convert_to_proxy_url(section['audio_path'])
+
     return jsonify(response_data), status_code
 
 
 @product_bp.route('/products/<product_id>', methods=['PUT'])
 def update_product(product_id):
     """Proxy: Update a product"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}', method='PUT', json_data=request.get_json()
     )
     return jsonify(response_data), status_code
@@ -104,7 +182,7 @@ def update_product(product_id):
 @product_bp.route('/products/<product_id>', methods=['DELETE'])
 def delete_product(product_id):
     """Proxy: Delete a product"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}', method='DELETE'
     )
     return jsonify(response_data), status_code
@@ -113,14 +191,14 @@ def delete_product(product_id):
 @product_bp.route('/products/stats', methods=['GET'])
 def get_product_stats():
     """Proxy: Get product statistics"""
-    response_data, status_code = proxy_to_ecommerce_service('/api/products/stats', method='GET')
+    response_data, status_code = proxy_to_inventory_service('/api/products/stats', method='GET')
     return jsonify(response_data), status_code
 
 
 @product_bp.route('/products/<product_id>/generate-summary', methods=['POST'])
 def generate_summary(product_id):
     """Proxy: Generate AI summary for product"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}/generate-summary',
         method='POST',
         json_data=request.get_json()
@@ -134,14 +212,14 @@ def upload_media(product_id):
     # Check if this is a file upload or JSON data
     if request.content_type and 'multipart/form-data' in request.content_type:
         # Handle file upload
-        response_data, status_code = proxy_to_ecommerce_service(
+        response_data, status_code = proxy_to_inventory_service(
             f'/api/products/{product_id}/upload-media',
             method='POST',
             files=request.files
         )
     else:
         # Handle JSON data (URLs)
-        response_data, status_code = proxy_to_ecommerce_service(
+        response_data, status_code = proxy_to_inventory_service(
             f'/api/products/{product_id}/upload-media',
             method='POST',
             json_data=request.get_json()
@@ -152,7 +230,7 @@ def upload_media(product_id):
 @product_bp.route('/products/<product_id>/media', methods=['POST'])
 def upload_media_alt(product_id):
     """Proxy: Upload media files for product (alternative endpoint)"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}/upload-media',
         method='POST',
         files=request.files
@@ -160,21 +238,44 @@ def upload_media_alt(product_id):
     return jsonify(response_data), status_code
 
 
+@product_bp.route('/products/<product_id>/audio-sections', methods=['GET'])
+def get_audio_sections(product_id):
+    """Proxy: Get parsed sections from AI summary with smart audio defaults"""
+    response_data, status_code = proxy_to_inventory_service(
+        f'/api/products/{product_id}/audio-sections',
+        method='GET'
+    )
+    return jsonify(response_data), status_code
+
+
 @product_bp.route('/products/<product_id>/generate-audio', methods=['POST'])
 def generate_audio(product_id):
     """Proxy: Generate audio from AI summary"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}/generate-audio',
         method='POST',
         json_data=request.get_json()
     )
+
+    # Convert internal audio URLs to proxy URLs for browser access
+    if status_code == 200 and response_data.get('status') == 'success':
+        # Convert main audio_url
+        if 'audio_url' in response_data:
+            response_data['audio_url'] = _convert_to_proxy_url(response_data['audio_url'])
+
+        # Convert section_audio_urls array
+        if 'section_audio_urls' in response_data:
+            response_data['section_audio_urls'] = [
+                _convert_to_proxy_url(url) for url in response_data['section_audio_urls']
+            ]
+
     return jsonify(response_data), status_code
 
 
 @product_bp.route('/products/<product_id>/generate-video', methods=['POST'])
 def generate_video(product_id):
     """Proxy: Generate final product video"""
-    response_data, status_code = proxy_to_ecommerce_service(
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/products/{product_id}/generate-video',
         method='POST',
         json_data=request.get_json()
@@ -330,9 +431,9 @@ def proxy_audio(audio_path):
 
 @product_bp.route('/ecommerce/public/product/<product_id>/images/<filename>', methods=['GET'])
 def serve_product_images(product_id, filename):
-    """Proxy product image files from ecommerce service"""
+    """Proxy product image files from inventory creation service"""
     try:
-        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/images/{filename}"
+        url = f"{INVENTORY_CREATION_SERVICE_URL}/api/ecommerce/public/product/{product_id}/images/{filename}"
         logger.info(f"🖼️ Proxying product image: {product_id}/{filename}")
 
         # Get headers with authentication context
@@ -379,13 +480,13 @@ def delete_product_image(product_id, filename):
     logger.info(f'  - Filename: {filename}')
     logger.info(f'  - Full path: /api/ecommerce/public/product/{product_id}/images/{filename}')
 
-    logger.info('🗑️ [API-SERVER] Proxying to ecommerce service...')
-    response_data, status_code = proxy_to_ecommerce_service(
+    logger.info('🗑️ [API-SERVER] Proxying to inventory creation service...')
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/ecommerce/public/product/{product_id}/images/{filename}',
         method='DELETE'
     )
 
-    logger.info('🗑️ [API-SERVER] Ecommerce service response:')
+    logger.info('🗑️ [API-SERVER] Inventory creation service response:')
     logger.info(f'  - Status code: {status_code}')
     logger.info(f'  - Response data: {response_data}')
     logger.info('═══════════════════════════════════════════════════════')
@@ -395,9 +496,9 @@ def delete_product_image(product_id, filename):
 
 @product_bp.route('/ecommerce/public/product/<product_id>/videos/<filename>', methods=['GET'])
 def serve_product_videos(product_id, filename):
-    """Proxy product video files from ecommerce service"""
+    """Proxy product video files from inventory creation service"""
     try:
-        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/videos/{filename}"
+        url = f"{INVENTORY_CREATION_SERVICE_URL}/api/ecommerce/public/product/{product_id}/videos/{filename}"
         logger.info(f"🎥 Proxying product video: {product_id}/{filename}")
 
         # Get headers with authentication context
@@ -445,13 +546,13 @@ def delete_product_video(product_id, filename):
     logger.info(f'  - Filename: {filename}')
     logger.info(f'  - Full path: /api/ecommerce/public/product/{product_id}/videos/{filename}')
 
-    logger.info(f'🗑️ [API-SERVER] Proxying to ecommerce service...')
-    response_data, status_code = proxy_to_ecommerce_service(
+    logger.info(f'🗑️ [API-SERVER] Proxying to inventory creation service...')
+    response_data, status_code = proxy_to_inventory_service(
         f'/api/ecommerce/public/product/{product_id}/videos/{filename}',
         method='DELETE'
     )
 
-    logger.info(f'🗑️ [API-SERVER] Ecommerce service response:')
+    logger.info(f'🗑️ [API-SERVER] Inventory creation service response:')
     logger.info(f'  - Status code: {status_code}')
     logger.info(f'  - Response data: {response_data}')
     logger.info('═══════════════════════════════════════════════════════')
@@ -461,9 +562,9 @@ def delete_product_video(product_id, filename):
 
 @product_bp.route('/ecommerce/public/product/<product_id>/<filename>', methods=['GET'])
 def serve_product_files(product_id, filename):
-    """Proxy product audio/video files from ecommerce service"""
+    """Proxy product audio/video files from inventory creation service"""
     try:
-        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/{filename}"
+        url = f"{INVENTORY_CREATION_SERVICE_URL}/api/ecommerce/public/product/{product_id}/{filename}"
         logger.info(f"🔊 Proxying product file: {product_id}/{filename}")
 
         # Get headers with authentication context

@@ -3,35 +3,18 @@ import { Button } from '../../common';
 import { productService } from '../../../services';
 import { useToast } from '../../../hooks/useToast';
 import api from '../../../services/api';
+import {
+  AUDIO_MODELS,
+  LANGUAGES,
+  getAvailableVoices,
+  detectLanguage,
+  getDefaultVoice,
+  getDefaultModel
+} from '../../../constants/audioModels';
 
 /**
  * Step 4: Audio Selection
  */
-/**
- * Auto-detect language from text
- * Simple heuristic: Check for common non-English characters
- */
-const detectLanguage = (text) => {
-  if (!text) return 'en';
-
-  // Check for Chinese characters
-  if (/[\u4e00-\u9fa5]/.test(text)) return 'zh';
-
-  // Check for Japanese characters (Hiragana, Katakana, Kanji)
-  if (/[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/.test(text)) return 'ja';
-
-  // Check for Korean characters
-  if (/[\uac00-\ud7af]/.test(text)) return 'ko';
-
-  // Check for Arabic characters
-  if (/[\u0600-\u06ff]/.test(text)) return 'ar';
-
-  // Check for Hindi/Devanagari characters
-  if (/[\u0900-\u097f]/.test(text)) return 'hi';
-
-  // Default to English
-  return 'en';
-};
 
 const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
   // Auto-detect language from product description
@@ -48,9 +31,36 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
   const [sectionSpeeds, setSectionSpeeds] = useState(formData.audio?.sectionPitches || {}); // Keep backend key name for compatibility
   const [playingProductAudio, setPlayingProductAudio] = useState(false);
   const [productAudioRef, setProductAudioRef] = useState(null); // Reference to playing audio element
+  const [sections, setSections] = useState([]); // Sections from backend
+  const [loadingSections, setLoadingSections] = useState(false);
   const [loadingExistingAudio, setLoadingExistingAudio] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false); // Toggle for advanced speed controls
   const { showToast } = useToast();
+
+  // Load sections from backend on component mount
+  useEffect(() => {
+    const loadSections = async () => {
+      if (!formData.product_id) return;
+
+      setLoadingSections(true);
+      try {
+        const response = await productService.getAudioSections(formData.product_id);
+        if (response.data.status === 'success') {
+          setSections(response.data.sections);
+          console.log('✅ Loaded sections from backend:', response.data.sections);
+        }
+      } catch (error) {
+        console.error('Error loading sections:', error);
+        // Fallback to empty sections - component will still work
+        setSections([]);
+      } finally {
+        setLoadingSections(false);
+      }
+    };
+
+    loadSections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.product_id]);
 
   // Load existing audio on component mount
   useEffect(() => {
@@ -98,71 +108,16 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
   // Check if audio needs to be generated
   const needsGeneration = !audioUrl || hasVoiceConfigChanged();
 
-  // Available models with their configurations
-  const audioModels = {
-    'kokoro-82m': {
-      id: 'kokoro-82m',
-      name: 'Kokoro TTS',
-      description: 'High-quality English text-to-speech',
-      languages: ['en'],
-      voices: {
-        male: [
-          { id: 'am_adam', name: 'Adam', description: 'American Male - Deep, authoritative' },
-          { id: 'am_michael', name: 'Michael', description: 'American Male - Energetic, friendly' },
-          { id: 'bm_george', name: 'George', description: 'British Male - Professional, clear' },
-          { id: 'bm_lewis', name: 'Lewis', description: 'British Male - Warm, engaging' },
-        ],
-        female: [
-          { id: 'af_heart', name: 'Heart', description: 'American Female - Soft, gentle' },
-          { id: 'af_bella', name: 'Bella', description: 'American Female - Warm, friendly' },
-          { id: 'af_nicole', name: 'Nicole', description: 'American Female - Professional, clear' },
-          { id: 'af_sarah', name: 'Sarah', description: 'American Female - Energetic, upbeat' },
-          { id: 'af_sky', name: 'Sky', description: 'American Female - Clear, professional' },
-          { id: 'bf_emma', name: 'Emma', description: 'British Female - Elegant, refined' },
-          { id: 'bf_isabella', name: 'Isabella', description: 'British Female - Sophisticated' },
-        ]
-      }
-    },
-    'mms-tts-hin': {
-      id: 'mms-tts-hin',
-      name: 'MMS Hindi TTS',
-      description: 'Hindi text-to-speech',
-      languages: ['hi'],
-      voices: {
-        default: [
-          { id: 'hi_default', name: 'Default Hindi Voice', description: 'Standard Hindi voice' }
-        ]
-      }
-    }
-  };
-
-  const languages = [
-    { id: 'en', name: 'English', flag: '🇺🇸' },
-    { id: 'hi', name: 'Hindi', flag: '🇮🇳' }
-  ];
-
-  // Get available voices for selected model
-  const getAvailableVoices = () => {
-    const model = audioModels[selectedModel];
-    if (!model) return [];
-
-    const voices = [];
-    Object.entries(model.voices).forEach(([category, voiceList]) => {
-      voices.push(...voiceList.map(v => ({ ...v, category })));
-    });
-    return voices;
-  };
-
   // Handle language change - update model accordingly
   useEffect(() => {
-    if (selectedLanguage === 'en' && selectedModel !== 'kokoro-82m') {
-      setSelectedModel('kokoro-82m');
-      setSelectedVoice('am_adam');
-    } else if (selectedLanguage === 'hi' && selectedModel !== 'mms-tts-hin') {
-      setSelectedModel('mms-tts-hin');
-      setSelectedVoice('hi_default');
+    const defaultModel = getDefaultModel(selectedLanguage);
+    const defaultVoice = getDefaultVoice(selectedLanguage);
+
+    if (selectedModel !== defaultModel) {
+      setSelectedModel(defaultModel);
+      setSelectedVoice(defaultVoice);
     }
-  }, [selectedLanguage]);
+  }, [selectedLanguage, selectedModel]);
 
   // Preview voice with sample text (lightweight)
   const handlePreviewVoice = async (voiceId) => {
@@ -301,10 +256,9 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
       setGenerating(true);
 
       // Merge smart defaults with user overrides
-      const sections = getSummarySections();
       const finalSpeeds = {};
       sections.forEach(section => {
-        // Use user override if exists, otherwise use smart default
+        // Use user override if exists, otherwise use smart default from backend
         finalSpeeds[section.title] = sectionSpeeds[section.title] !== undefined
           ? sectionSpeeds[section.title]
           : section.defaultSpeed;
@@ -318,17 +272,27 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
       });
 
       if (response.data.status === 'success') {
-        setAudioUrl(response.data.audio_url);
-        showToast('Audio generated successfully! Click "Play Product Audio" to listen.', 'success');
+        // Backend returns section_audio_urls array - use first one or combined URL
+        const generatedAudioUrl = response.data.audio_url || response.data.section_audio_urls?.[0];
 
-        // Update formData with new audio config
-        onUpdate({
-          audio_config: {
-            voice: selectedVoice,
-            model: selectedModel,
-            language: selectedLanguage
-          }
-        });
+        if (generatedAudioUrl) {
+          setAudioUrl(generatedAudioUrl);
+          showToast('Audio generated successfully! Click "Play Product Audio" to listen.', 'success');
+
+          // Update formData with new audio config and URL
+          onUpdate({
+            audio_url: generatedAudioUrl,
+            section_audio_urls: response.data.section_audio_urls,
+            audio_config: {
+              voice: selectedVoice,
+              model: selectedModel,
+              language: selectedLanguage,
+              sectionPitches: finalSpeeds
+            }
+          });
+        } else {
+          showToast('Audio generated but no URL returned', 'warning');
+        }
       }
     } catch (error) {
       console.error('Error generating audio:', error);
@@ -363,79 +327,7 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
     });
   };
 
-  // Get smart default speed based on section type (matches backend logic)
-  const getDefaultSpeedForSection = (sectionTitle) => {
-    const title = sectionTitle.toLowerCase();
-
-    // 1. OPENING HOOK - Fast, energetic, attention-grabbing
-    if (title.includes('hook') || title.includes('opening')) {
-      return 1.1;
-    }
-
-    // 2. PRODUCT INTRODUCTION - Warm, welcoming, clear
-    if (title.includes('introduction') || title.includes('intro')) {
-      return 1.0;
-    }
-
-    // 3. KEY FEATURES & BENEFITS - Slower, clear, informative
-    if (title.includes('feature') || title.includes('benefit')) {
-      return 0.95;
-    }
-
-    // 4. SOCIAL PROOF & TRUST - Confident, steady
-    if (title.includes('proof') || title.includes('trust') || title.includes('testimonial')) {
-      return 1.0;
-    }
-
-    // 5. CALL-TO-ACTION - Energetic, urgent, motivating
-    if (title.includes('action') || title.includes('cta') || title.includes('call')) {
-      return 1.05;
-    }
-
-    // Default for any other section
-    return 1.0;
-  };
-
-  // Get description for each section type
-  const getSectionDescription = (sectionTitle) => {
-    const title = sectionTitle.toLowerCase();
-
-    if (title.includes('hook') || title.includes('opening')) {
-      return '⚡ Energetic to grab attention';
-    }
-    if (title.includes('introduction') || title.includes('intro')) {
-      return '👋 Warm and welcoming';
-    }
-    if (title.includes('feature') || title.includes('benefit')) {
-      return '📋 Clear and informative';
-    }
-    if (title.includes('proof') || title.includes('trust') || title.includes('testimonial')) {
-      return '✅ Confident and trustworthy';
-    }
-    if (title.includes('action') || title.includes('cta') || title.includes('call')) {
-      return '🎯 Motivating and urgent';
-    }
-    return '📝 Standard narration';
-  };
-
-  // Parse AI summary sections for speed configuration
-  const getSummarySections = () => {
-    if (!formData.ai_summary) return [];
-
-    const sections = [];
-    const lines = formData.ai_summary.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('## ')) {
-        const title = line.substring(3).trim();
-        const defaultSpeed = getDefaultSpeedForSection(title);
-        const description = getSectionDescription(title);
-        sections.push({ title, defaultSpeed, description });
-      }
-    }
-
-    return sections;
-  };
+  // No longer needed - sections come from backend with smart defaults already applied
 
   const handleSpeedChange = (sectionTitle, speed) => {
     setSectionSpeeds(prev => ({
@@ -501,7 +393,7 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
             <div className="flex items-center gap-2 text-sm text-blue-800">
               <span className="text-lg">🌍</span>
               <span>
-                <strong>Language Auto-detected:</strong> {languages.find(l => l.id === selectedLanguage)?.name || 'English'}
+                <strong>Language Auto-detected:</strong> {LANGUAGES.find(l => l.id === selectedLanguage)?.name || 'English'}
               </span>
             </div>
           </div>
@@ -512,7 +404,7 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
               1️⃣ Select Speaker & Preview
             </label>
             <div className="space-y-4">
-              {Object.entries(audioModels[selectedModel]?.voices || {}).map(([category, voiceList]) => (
+              {Object.entries(AUDIO_MODELS[selectedModel]?.voices || {}).map(([category, voiceList]) => (
                 <div key={category}>
                   <h6 className="text-xs font-semibold text-gray-500 uppercase mb-2">
                     {category === 'male' ? '👨 Male Voices' : category === 'female' ? '👩 Female Voices' : '🎤 Voices'}
@@ -559,7 +451,7 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
 
 
           {/* Step 2: Section-based Speed Configuration (Collapsible Advanced Options) */}
-          {getSummarySections().length > 0 && (
+          {sections.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <label className="block text-sm font-semibold text-gray-900 mb-3">
                 2️⃣ Customize Narration Speed (Optional)
@@ -616,7 +508,7 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
                     💡 Adjust the narration speed for each section below. Smart defaults create a natural narrative arc.
                   </p>
 
-                  {getSummarySections().map((section, index) => {
+                  {sections.map((section, index) => {
                     const currentSpeed = sectionSpeeds[section.title] !== undefined
                       ? sectionSpeeds[section.title]
                       : section.defaultSpeed;
@@ -736,17 +628,17 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
               <div className="flex items-center gap-3 text-xs text-gray-700">
                 <div className="flex items-center gap-1">
                   <span>🎤</span>
-                  <span className="font-medium">{audioModels[selectedModel]?.name}</span>
+                  <span className="font-medium">{AUDIO_MODELS[selectedModel]?.name}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span>🗣️</span>
                   <span className="font-medium">
-                    {getAvailableVoices().find(v => v.id === selectedVoice)?.name || selectedVoice}
+                    {getAvailableVoices(selectedModel).find(v => v.id === selectedVoice)?.name || selectedVoice}
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span>{languages.find(l => l.id === selectedLanguage)?.flag}</span>
-                  <span className="font-medium">{languages.find(l => l.id === selectedLanguage)?.name}</span>
+                  <span>{LANGUAGES.find(l => l.id === selectedLanguage)?.flag}</span>
+                  <span className="font-medium">{LANGUAGES.find(l => l.id === selectedLanguage)?.name}</span>
                 </div>
               </div>
             </div>

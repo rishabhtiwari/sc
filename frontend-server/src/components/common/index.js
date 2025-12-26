@@ -14,3 +14,10 @@ export { default as AuthenticatedImage } from './AuthenticatedImage';
 export { default as AuthenticatedVideo } from './AuthenticatedVideo';
 export { default as ConfirmDialog } from './ConfirmDialog';
 
+// Content Generation Components
+export {
+  AIContentGenerator,
+  AudioSelector,
+  TemplateSelector,
+  MediaUploader
+} from './ContentGeneration';

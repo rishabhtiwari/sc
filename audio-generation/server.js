@@ -81,7 +81,7 @@ app.get('/health', (req, res) => {
 // TTS endpoint - unified endpoint for all TTS models
 app.post('/tts', async (req, res) => {
     try {
-        const { text, model, voice, speed, format = 'wav', news_id, filename } = req.body;
+        const { text, model, voice, speed, format = 'wav', news_id, product_id, filename } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
@@ -92,6 +92,7 @@ app.post('/tts', async (req, res) => {
         if (voice) console.log(`🎭 Voice: ${voice}`);
         if (speed) console.log(`⚡ Speed: ${speed}`);
         if (news_id) console.log(`📰 News ID: ${news_id}`);
+        if (product_id) console.log(`🛍️ Product ID: ${product_id}`);
         if (filename) console.log(`📁 Filename: ${filename}`);
 
         // Build options object
@@ -99,6 +100,7 @@ app.post('/tts', async (req, res) => {
         if (voice) options.voice = voice;
         if (speed) options.speed = speed;
         if (news_id) options.news_id = news_id;
+        if (product_id) options.product_id = product_id;
         if (filename) options.filename = filename;
 
         const result = await voiceService.generateAudioFile(text, options);
@@ -108,6 +110,7 @@ app.post('/tts', async (req, res) => {
         if (voice) response.voice_used = voice;
         if (speed) response.speed_used = speed;
         if (news_id) response.news_id = news_id;
+        if (product_id) response.product_id = product_id;
         if (filename) response.filename = filename;
 
         res.json(response);

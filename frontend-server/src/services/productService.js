@@ -140,6 +140,15 @@ export const uploadMedia = (productId, mediaUrls) => {
 };
 
 /**
+ * Get parsed audio sections with smart defaults from AI summary
+ * @param {string} productId - Product ID
+ * @returns {Promise} API response with sections array
+ */
+export const getAudioSections = (productId) => {
+  return api.get(`/products/${productId}/audio-sections`);
+};
+
+/**
  * Generate audio from AI summary
  * @param {string} productId - Product ID
  * @param {Object} options - Audio generation options
@@ -190,6 +199,7 @@ export default {
   generateSummary,
   uploadMedia,
   deleteMedia,
+  getAudioSections,
   generateAudio,
   generateVideo,
   getProductStats,

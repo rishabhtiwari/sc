@@ -53,7 +53,7 @@ SERVICES=(
     "job-video-generator"
     "youtube-uploader"
     "job-cleanup"
-    "ecommerce-service"
+    "inventory-creation-service"
     "ichat-api"
     "news-automation-frontend"
 )
@@ -302,10 +302,10 @@ deploy_all_services() {
     deploy_service "job-cleanup" "$build_flag"
     # wait_for_health "ichat-cleanup" 60
 
-    # 12. E-commerce Service
-    print_header "Step 12/14: E-commerce Service (Product Management)"
-    deploy_service "ecommerce-service" "$build_flag"
-    # wait_for_health "ichat-ecommerce-service" 60
+    # 12. Inventory Creation Service
+    print_header "Step 12/14: Inventory Creation Service (Generic Content Generation)"
+    deploy_service "inventory-creation-service" "$build_flag"
+    # wait_for_health "ichat-inventory-creation-service" 60
 
     # 13. API Server
     print_header "Step 13/14: API Server"

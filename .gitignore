@@ -51,8 +51,8 @@ jobs/watermark-remover/models/
 ### Template service directories ###
 template-service/public/
 
-### Ecommerce service directories ###
-jobs/ecommerce-service/public/
+### Inventory creation service directories ###
+inventory-creation-service/public/
 
 ### macOS system files ###
 .DS_Store
