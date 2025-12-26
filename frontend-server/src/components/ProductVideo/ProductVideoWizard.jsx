@@ -5,12 +5,18 @@ import Step2_AISummaryGeneration from './WizardSteps/Step2_AISummaryGeneration';
 import Step4_AudioSelection from './WizardSteps/Step4_AudioSelection';
 import Step5_TemplateSelection from './WizardSteps/Step5_TemplateSelection';
 import Step6_PreviewGenerate from './WizardSteps/Step6_PreviewGenerate';
+import productService from '../../services/productService';
 
 /**
  * Product Video Creation Wizard - Multi-step modal
  */
 const ProductVideoWizard = ({ product, onClose, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(1);
+
+  console.log('🎬 ProductVideoWizard - Product data:', product);
+  console.log('🎬 Product template_variables:', product?.template_variables);
+  console.log('🎬 Product distribution_mode:', product?.distribution_mode);
+
   const [formData, setFormData] = useState({
     product_name: product?.product_name || '',
     description: product?.description || '',
@@ -18,14 +24,18 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
     price: product?.price || '',
     currency: product?.currency || 'USD',
     ai_summary: product?.ai_summary || '',
-    media_files: product?.media_files || [],
+    media_files: [],  // Will be reconstructed from template_variables in Step5
     audio: product?.audio || null,
     audio_url: product?.audio_url || null,  // Include existing audio URL
     audio_config: product?.audio_config || null,  // Include existing audio config
-    template_id: product?.template_id || 'modern_product_v1',
-    template_variables: product?.template_variables || {},  // Template variables
+    template_id: product?.template_id || null,  // Will be set when templates load in Step5
+    template_variables: product?.template_variables || {},  // Template variables (contains media)
+    distribution_mode: product?.distribution_mode || 'auto',  // Media distribution mode
+    section_mapping: product?.section_mapping || {},  // Manual media-to-section mapping
     product_id: product?._id || null
   });
+
+  console.log('🎬 Initial formData.template_variables:', formData.template_variables);
 
   const steps = [
     { id: 1, name: 'Description', icon: '📝', component: Step1_ProductDescription },
@@ -48,8 +58,13 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
   };
 
   const handleStepComplete = (stepData) => {
+    console.log('🎯 handleStepComplete called in ProductVideoWizard');
+    console.log('📦 stepData received:', stepData);
+    console.log('📦 current formData:', formData);
+    console.log('📦 currentStep:', currentStep);
     setFormData({ ...formData, ...stepData });
     handleNext();
+    console.log('✅ Moving to next step');
   };
 
   const handleFinish = () => {
@@ -130,7 +145,10 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
           <CurrentStepComponent
             formData={formData}
             onComplete={handleStepComplete}
-            onUpdate={(data) => setFormData({ ...formData, ...data })}
+            onUpdate={(data) => {
+              console.log('🔄 onUpdate called with:', data);
+              setFormData({ ...formData, ...data });
+            }}
           />
         </div>
 

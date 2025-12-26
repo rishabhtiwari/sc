@@ -9,6 +9,7 @@ import { useToast } from '../../../hooks/useToast';
 const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
   const [generating, setGenerating] = useState(false);
   const [videoStatus, setVideoStatus] = useState(formData.generated_video?.status || 'pending');
+  const [videoUrl, setVideoUrl] = useState(formData.video_url || null);
   const { showToast } = useToast();
 
   const handleGenerate = async () => {
@@ -21,17 +22,49 @@ const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
       setGenerating(true);
       setVideoStatus('processing');
 
+      console.log('🎬 Starting video generation for product:', formData.product_id);
+      console.log('📋 Template ID:', formData.template_id);
+      console.log('🔧 Template variables:', formData.template_variables);
+      console.log('🎯 Distribution mode:', formData.distribution_mode);
+      console.log('🗂️ Section mapping:', formData.section_mapping);
+
       const response = await productService.generateVideo(formData.product_id, {
-        template_id: formData.template_id
+        template_id: formData.template_id,
+        template_variables: formData.template_variables || {},
+        distribution_mode: formData.distribution_mode || 'auto',
+        section_mapping: formData.section_mapping || {}
       });
 
+      console.log('✅ Video generation response:', response.data);
+
       if (response.data.status === 'success') {
-        showToast('Video generation started successfully', 'success');
-        setVideoStatus('processing');
+        showToast('Video generated successfully!', 'success');
+        setVideoStatus('completed');
+
+        // Get video URL from response
+        const generatedVideoUrl = response.data.video_url;
+        console.log('🎥 Video URL from response:', generatedVideoUrl);
+
+        if (generatedVideoUrl) {
+          // Convert relative URL to absolute if needed
+          const fullUrl = generatedVideoUrl.startsWith('http')
+            ? generatedVideoUrl
+            : `http://localhost:8080${generatedVideoUrl}`;
+          console.log('🌐 Full video URL:', fullUrl);
+          setVideoUrl(fullUrl);
+          onUpdate({ video_url: fullUrl });
+        } else {
+          console.warn('⚠️ No video URL in response');
+        }
+      } else {
+        console.error('❌ Video generation failed:', response.data);
+        showToast('Video generation failed', 'error');
+        setVideoStatus('failed');
       }
     } catch (error) {
-      console.error('Error generating video:', error);
-      showToast('Failed to start video generation', 'error');
+      console.error('❌ Error generating video:', error);
+      console.error('Error details:', error.response?.data);
+      showToast('Failed to generate video', 'error');
       setVideoStatus('failed');
     } finally {
       setGenerating(false);
@@ -114,22 +147,41 @@ const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
         </div>
       </div>
 
-      {/* Video Preview Placeholder */}
-      <div className="bg-black rounded-lg aspect-video flex items-center justify-center">
-        {videoStatus === 'processing' ? (
+      {/* Video Preview */}
+      <div className="bg-black rounded-lg aspect-video flex items-center justify-center overflow-hidden">
+        {generating || videoStatus === 'processing' ? (
           <div className="text-center text-white">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-            <p>Generating video...</p>
+            <p className="text-lg font-semibold">Generating video...</p>
+            <p className="text-sm text-gray-300 mt-2">This may take 1-2 minutes</p>
           </div>
-        ) : videoStatus === 'completed' ? (
+        ) : videoStatus === 'completed' && videoUrl ? (
+          <video
+            src={videoUrl}
+            controls
+            autoPlay
+            className="w-full h-full"
+            onLoadStart={() => console.log('🎥 Video loading started:', videoUrl)}
+            onLoadedData={() => console.log('✅ Video loaded successfully')}
+            onError={(e) => {
+              console.error('❌ Video load error:', e);
+              console.error('Video URL:', videoUrl);
+              showToast('Failed to load video', 'error');
+            }}
+          >
+            Your browser does not support the video tag.
+          </video>
+        ) : videoStatus === 'failed' ? (
           <div className="text-center text-white">
-            <div className="text-6xl mb-4">✅</div>
-            <p>Video generated successfully!</p>
+            <div className="text-6xl mb-4">❌</div>
+            <p>Video generation failed</p>
+            <p className="text-sm text-gray-300 mt-2">Check console for details</p>
           </div>
         ) : (
           <div className="text-center text-white">
             <div className="text-6xl mb-4">🎬</div>
             <p>Video preview will appear here</p>
+            <p className="text-sm text-gray-300 mt-2">Click "Generate Video" to start</p>
           </div>
         )}
       </div>

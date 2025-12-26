@@ -73,22 +73,70 @@ export const generateSummary = (productId, options = {}) => {
 /**
  * Upload media files for a product
  * @param {string} productId - Product ID
- * @param {FileList|Array} files - Files to upload
+ * @param {Array} mediaUrls - Array of media URLs or file objects
  * @returns {Promise} API response
  */
-export const uploadMedia = (productId, files) => {
-  const formData = new FormData();
-  
-  // Add all files to form data
-  Array.from(files).forEach((file) => {
-    formData.append('files', file);
-  });
-  
-  return api.post(`/products/${productId}/media`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+export const uploadMedia = (productId, mediaUrls) => {
+  console.log('🔧 uploadMedia called with:', { productId, mediaUrls });
+  console.log('🔧 mediaUrls type:', typeof mediaUrls);
+  console.log('🔧 mediaUrls is array:', Array.isArray(mediaUrls));
+
+  // Priority 1: If mediaUrls is an array of File objects (actual files to upload)
+  if (Array.isArray(mediaUrls) && mediaUrls.length > 0 && mediaUrls.every(item => item instanceof File)) {
+    console.log('🔧 Detected array of File objects, using FormData');
+    const formData = new FormData();
+
+    mediaUrls.forEach((file, index) => {
+      console.log(`🔧 Appending file ${index}:`, file.name, file.type, file.size);
+      formData.append('files', file);
+    });
+
+    return api.post(`/products/${productId}/upload-media`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
+
+  // Priority 2: If mediaUrls is an array of URL strings, send directly
+  if (Array.isArray(mediaUrls) && mediaUrls.every(item => typeof item === 'string')) {
+    console.log('🔧 Detected URL strings, sending as JSON');
+    return api.post(`/products/${productId}/upload-media`, {
+      media_urls: mediaUrls
+    });
+  }
+
+  // Priority 3: If mediaUrls is an array of objects with url property (URL-only entries)
+  if (Array.isArray(mediaUrls) && mediaUrls.every(item => item && typeof item === 'object' && item.url && !item.file)) {
+    console.log('🔧 Detected objects with url property (no file), sending as JSON');
+    return api.post(`/products/${productId}/upload-media`, {
+      media_urls: mediaUrls.map(item => item.url)
+    });
+  }
+
+  // Priority 4: If mediaUrls is an array of objects with file property (File instances)
+  if (Array.isArray(mediaUrls) && mediaUrls.length > 0 && mediaUrls.every(item => item && item.file instanceof File)) {
+    console.log('🔧 Detected objects with File instances, extracting files and using FormData');
+    const formData = new FormData();
+
+    mediaUrls.forEach((item, index) => {
+      console.log(`🔧 Appending file ${index}:`, item.file.name, item.file.type, item.file.size);
+      formData.append('files', item.file);
+    });
+
+    return api.post(`/products/${productId}/upload-media`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  }
+
+  // If we get here, something unexpected happened
+  console.error('🔧 Unexpected mediaUrls format:', mediaUrls);
+  console.error('🔧 First item:', mediaUrls[0]);
+  console.error('🔧 First item has file?:', mediaUrls[0]?.file);
+  console.error('🔧 First item file is File?:', mediaUrls[0]?.file instanceof File);
+  throw new Error('Invalid media format. Expected File objects, URL strings, or URL objects.');
 };
 
 /**
@@ -115,6 +163,17 @@ export const generateVideo = (productId, options = {}) => {
 };
 
 /**
+ * Delete a media file (image or video) from a product
+ * @param {string} productId - Product ID
+ * @param {string} filename - Filename to delete
+ * @param {string} type - Media type ('images' or 'videos')
+ * @returns {Promise} API response
+ */
+export const deleteMedia = (productId, filename, type = 'videos') => {
+  return api.delete(`/ecommerce/public/product/${productId}/${type}/${filename}`);
+};
+
+/**
  * Get product statistics
  * @returns {Promise} API response
  */
@@ -130,6 +189,7 @@ export default {
   deleteProduct,
   generateSummary,
   uploadMedia,
+  deleteMedia,
   generateAudio,
   generateVideo,
   getProductStats,

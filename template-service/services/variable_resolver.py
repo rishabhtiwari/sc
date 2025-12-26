@@ -7,6 +7,7 @@ import re
 import copy
 from typing import Dict, Any, Optional, List
 from utils.helpers import deep_merge, substitute_variables
+from utils.url_converter import URLConverter
 
 
 class VariableResolver:
@@ -14,6 +15,7 @@ class VariableResolver:
 
     def __init__(self, logger=None):
         self.logger = logger
+        self.url_converter = URLConverter(logger=logger)
 
     def resolve_template(
         self,
@@ -32,6 +34,9 @@ class VariableResolver:
         Returns:
             Resolved template with all variables substituted
         """
+        # Step 0: Convert external URLs to internal service URLs in variables
+        variables = self.url_converter.convert_variables(variables)
+
         # Step 1: Merge customer overrides into template
         if customer_overrides:
             template = deep_merge(template, customer_overrides)
@@ -39,21 +44,51 @@ class VariableResolver:
         # Step 2: Expand layers for array variables (multiple images/videos)
         template = self._expand_layers_for_arrays(template, variables)
 
-        # Step 3: Convert template to JSON string for substitution
-        template_str = json.dumps(template)
-
-        # Step 4: Substitute all {{variable}} placeholders
-        resolved_str = substitute_variables(template_str, variables)
-
-        # Step 5: Parse back to dictionary
-        try:
-            resolved_template = json.loads(resolved_str)
-        except json.JSONDecodeError as e:
-            if self.logger:
-                self.logger.error(f"Error parsing resolved template: {e}")
-            raise ValueError(f"Failed to parse resolved template: {e}")
+        # Step 3: Recursively substitute variables in the template
+        resolved_template = self._substitute_in_object(template, variables)
 
         return resolved_template
+
+    def _substitute_in_object(
+        self,
+        obj: Any,
+        variables: Dict[str, Any]
+    ) -> Any:
+        """
+        Recursively substitute variables in an object (dict, list, or string)
+
+        Args:
+            obj: Object to process (can be dict, list, string, or primitive)
+            variables: Variable values to substitute
+
+        Returns:
+            Object with variables substituted
+        """
+        if isinstance(obj, dict):
+            # Process dictionary recursively
+            result = {}
+            for key, value in obj.items():
+                result[key] = self._substitute_in_object(value, variables)
+            return result
+        elif isinstance(obj, list):
+            # Process list recursively
+            return [self._substitute_in_object(item, variables) for item in obj]
+        elif isinstance(obj, str):
+            # Check if this string is ONLY a variable placeholder (e.g., "{{var_name}}")
+            # If so, and the variable is an array, return the array directly
+            import re
+            match = re.match(r'^\{\{(\w+)\}\}$', obj)
+            if match:
+                var_name = match.group(1)
+                if var_name in variables:
+                    # Return the variable value directly (preserving type)
+                    return variables[var_name]
+
+            # Otherwise, do string substitution
+            return substitute_variables(obj, variables)
+        else:
+            # Return primitives (int, float, bool, None) as-is
+            return obj
 
     def validate_required_variables(
         self,
@@ -218,6 +253,10 @@ class VariableResolver:
                     layer_expanded = True
                     duration_per_item = layer.get('duration', 5)
 
+                    # Check if we have timing metadata for this variable
+                    timing_var_name = f"{var_name}_timings"
+                    image_timings = variables.get(timing_var_name, [])
+
                     # Calculate duration for each item
                     # If original template duration exists, divide it among items
                     if 'duration' in template:
@@ -233,8 +272,16 @@ class VariableResolver:
                         new_layer['id'] = f"{original_id}_{idx}"
 
                         # Set timing for this segment
-                        new_layer['start_time'] = idx * duration_per_item
-                        new_layer['duration'] = duration_per_item
+                        # Use custom timing if available, otherwise use equal distribution
+                        if image_timings and idx < len(image_timings):
+                            timing = image_timings[idx]
+                            new_layer['start_time'] = timing.get('start_time', idx * duration_per_item)
+                            new_layer['duration'] = timing.get('duration', duration_per_item)
+                            if self.logger:
+                                self.logger.info(f"Using custom timing for {var_name}[{idx}]: start={new_layer['start_time']:.2f}s, duration={new_layer['duration']:.2f}s")
+                        else:
+                            new_layer['start_time'] = idx * duration_per_item
+                            new_layer['duration'] = duration_per_item
 
                         # Replace the placeholder with indexed variable
                         # We'll use a special syntax: {{var_name[0]}}, {{var_name[1]}}, etc.

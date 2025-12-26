@@ -9,6 +9,7 @@ import requests
 import os
 from utils.helpers import substitute_variables
 from utils.multi_tenant_utils import get_customer_id
+from utils.url_converter import URLConverter
 
 
 template_bp = Blueprint('template', __name__)
@@ -18,15 +19,17 @@ template_manager: TemplateManager = None
 variable_resolver: VariableResolver = None
 db_client: MongoClient = None
 logger = None
+url_converter = None
 
 
 def init_routes(tm: TemplateManager, vr: VariableResolver, db: MongoClient, log):
     """Initialize route dependencies"""
-    global template_manager, variable_resolver, db_client, logger
+    global template_manager, variable_resolver, db_client, logger, url_converter
     template_manager = tm
     variable_resolver = vr
     db_client = db
     logger = log
+    url_converter = URLConverter(logger=log)
 
 
 def _apply_effects_to_layer(layer_video, effects, duration, width, height):
@@ -70,6 +73,10 @@ def _apply_effects_to_layer(layer_video, effects, duration, width, height):
             new_w = int(w * zoom)
             new_h = int(h * zoom)
 
+            # Ensure frame is uint8
+            if frame.dtype != np.uint8:
+                frame = np.clip(frame, 0, 255).astype(np.uint8)
+
             # Resize frame
             pil_frame = PILImage.fromarray(frame)
             pil_frame = pil_frame.resize((new_w, new_h), PILImage.LANCZOS)
@@ -79,14 +86,10 @@ def _apply_effects_to_layer(layer_video, effects, duration, width, height):
             top = (new_h - h) // 2
             pil_frame = pil_frame.crop((left, top, left + w, top + h))
 
-            return np.array(pil_frame)
+            return np.array(pil_frame, dtype=np.uint8)
 
         # Apply the zoom effect
         layer_video = layer_video.fl(zoom_effect)
-
-    # Note: Other effects like fade_text, transition, bottom_banner are typically
-    # applied to the final composited video, not individual layers
-    # If you want to apply them to layers, we can add that functionality
 
     return layer_video
 
@@ -332,9 +335,22 @@ def delete_template(template_id: str):
                 'error': f'Template not found: {template_id}'
             }), 404
 
+        # Check if any products are using this template
+        db = db_client['news']
+        products_using_template = db.ecommerce_products.count_documents({
+            'template_id': template_id,
+            'customer_id': customer_id
+        })
+
+        if products_using_template > 0:
+            return jsonify({
+                'status': 'error',
+                'error': f'Cannot delete template. {products_using_template} product(s) are currently using this template.',
+                'products_count': products_using_template
+            }), 400
+
         # Soft delete by setting is_active=false
         # Include customer_id in the query to ensure we only delete our own templates
-        db = db_client['news']
         result = db.templates.update_one(
             {'template_id': template_id, 'customer_id': customer_id},
             {'$set': {'is_active': False}}
@@ -361,11 +377,118 @@ def delete_template(template_id: str):
         }), 500
 
 
+@template_bp.route('/templates/<template_id>/generate', methods=['POST'])
+def generate_video_from_template(template_id: str):
+    """
+    Generate video from template with variables
+
+    Request body:
+        {
+            "variables": {
+                "product_images": ["url1", "url2", ...],
+                "product_name": "Product Name",
+                ...
+            },
+            "audio_url": "http://...",
+            "output_path": "videos/product_123.mp4"
+        }
+
+    Response:
+        {
+            "status": "success",
+            "video_url": "http://..."
+        }
+    """
+    try:
+        customer_id = get_customer_id(getattr(g, 'customer_id', None))
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'error': 'Request body is required'
+            }), 400
+
+        variables = data.get('variables', {})
+        audio_url = data.get('audio_url')
+        output_path = data.get('output_path', f'videos/{template_id}.mp4')
+
+        logger.info(f"🎬 Generating video from template {template_id}")
+
+        # Load template
+        template = template_manager.get_template_by_id(template_id, customer_id=customer_id)
+        if not template:
+            return jsonify({
+                'status': 'error',
+                'error': f'Template {template_id} not found'
+            }), 404
+
+        # Clean template for JSON serialization (remove MongoDB-specific fields)
+        template_clean = template.copy()
+        # Remove _id if present
+        if '_id' in template_clean:
+            del template_clean['_id']
+        # Remove datetime fields
+        for field in ['created_at', 'updated_at', 'deleted_at']:
+            if field in template_clean:
+                del template_clean[field]
+        # Remove audit fields
+        for field in ['created_by', 'updated_by', 'deleted_by', 'customer_id', 'user_id']:
+            if field in template_clean:
+                del template_clean[field]
+
+        # Resolve variables in template
+        resolved_template = variable_resolver.resolve_template(template_clean, variables)
+
+        # Add audio URL if provided (convert to internal URL)
+        if audio_url:
+            resolved_template['audio_url'] = url_converter.convert_url(audio_url)
+
+        # Call preview endpoint to generate video (call our own service)
+        preview_response = requests.post(
+            'http://localhost:5000/api/templates/preview',
+            json={
+                'template': resolved_template,
+                'is_initial': False
+            },
+            headers={'X-Customer-ID': customer_id},
+            timeout=300
+        )
+
+        if preview_response.status_code != 200:
+            logger.error(f"Failed to generate video: {preview_response.text}")
+            return jsonify({
+                'status': 'error',
+                'error': 'Failed to generate video',
+                'details': preview_response.text
+            }), 500
+
+        result = preview_response.json()
+        video_url = result.get('preview_url', '')
+
+        # Keep the relative URL - it will be accessed through API server proxy
+        # The API server has a proxy endpoint at /api/templates/preview/video/<filename>
+        # that forwards requests to the template service
+        # Frontend will access it as: http://localhost:8080/api/templates/preview/video/<filename>
+
+        return jsonify({
+            'status': 'success',
+            'video_url': video_url  # Return relative URL like /api/templates/preview/video/preview_xxx.mp4
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error generating video from template: {e}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @template_bp.route('/templates/resolve', methods=['POST'])
 def resolve_template():
     """
     Resolve template with variables and customer config
-    
+
     Request body:
         {
             "customer_id": "customer_123",
@@ -377,7 +500,7 @@ def resolve_template():
                 ...
             }
         }
-    
+
     Response:
         {
             "status": "success",
@@ -567,7 +690,124 @@ def _generate_video_with_generator(template: Dict[str, Any], output_path: str) -
         return output_path if os.path.exists(output_path) else None
 
 
-def _apply_effects_to_video(input_path: str, output_path: str, effects: list, aspect_ratio: str = '16:9', background_music: dict = None, logo: dict = None, layers: list = None, resolved_sample_data: dict = None) -> None:
+def _create_concatenated_video_from_media(media_list, aspect_ratio, temp_dir, effects=None):
+    """
+    Create a concatenated video from a list of media assets.
+    Each asset has {url, duration, type}.
+
+    For images: Create a video clip showing the image for the duration
+    For videos: Loop or trim the video to match the duration
+
+    Effects are applied to each individual clip before concatenation.
+
+    Args:
+        media_list: List of media items with {url, duration, type}
+        aspect_ratio: Aspect ratio string like '16:9'
+        temp_dir: Temporary directory for intermediate files
+        effects: List of effects to apply to each clip (e.g., ken_burns)
+
+    Returns: Path to the concatenated video file
+    """
+    from moviepy.editor import (
+        ImageClip, VideoFileClip, concatenate_videoclips
+    )
+    import requests
+    import os
+    import uuid
+
+    logger.info(f"🎬 Creating concatenated video from {len(media_list)} assets")
+    if effects:
+        logger.info(f"   Will apply {len(effects)} effects to each clip")
+
+    # Parse aspect ratio
+    width, height = map(int, aspect_ratio.split(':'))
+    video_width = 1920
+    video_height = int(video_width * height / width)
+
+    clips = []
+
+    for i, item in enumerate(media_list):
+        url = item.get('url')
+        duration = item.get('duration', 5.0)
+        media_type = item.get('type', 'image')
+
+        logger.info(f"  Processing item {i+1}: {media_type} ({duration:.2f}s)")
+
+        try:
+            # Download the asset
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+
+            # Save to temp file
+            ext = 'jpg' if media_type == 'image' else 'mp4'
+            temp_file = os.path.join(temp_dir, f"asset_{uuid.uuid4()}.{ext}")
+            with open(temp_file, 'wb') as f:
+                f.write(response.content)
+
+            if media_type == 'image':
+                # Create video clip from image
+                clip = ImageClip(temp_file, duration=duration)
+                clip = clip.resize((video_width, video_height))
+            else:
+                # Load video and loop/trim to match duration
+                video_clip = VideoFileClip(temp_file)
+                video_duration = video_clip.duration
+
+                if video_duration < duration:
+                    # Loop the video to fill the duration
+                    loops_needed = int(duration / video_duration) + 1
+                    looped = concatenate_videoclips([video_clip] * loops_needed)
+                    clip = looped.subclip(0, duration)
+                else:
+                    # Trim the video to the duration
+                    clip = video_clip.subclip(0, duration)
+
+                # Resize to match aspect ratio
+                clip = clip.resize((video_width, video_height))
+
+            # Apply effects to this individual clip
+            if effects:
+                logger.info(f"    🎨 Applying effects to clip {i+1}")
+                clip = _apply_effects_to_layer(clip, effects, duration, video_width, video_height)
+
+            clips.append(clip)
+            logger.info(f"    ✅ Created clip {i+1}")
+
+        except Exception as e:
+            logger.error(f"    ❌ Error processing item {i+1}: {e}")
+            # Create a placeholder black clip
+            from moviepy.editor import ColorClip
+            clip = ColorClip(
+                size=(video_width, video_height),
+                color=(0, 0, 0),
+                duration=duration
+            )
+            clips.append(clip)
+
+    # Concatenate all clips
+    logger.info(f"🔗 Concatenating {len(clips)} clips")
+    final_video = concatenate_videoclips(clips, method="compose")
+
+    # Save the concatenated video
+    output_path = os.path.join(temp_dir, f"concatenated_{uuid.uuid4()}.mp4")
+    final_video.write_videofile(
+        output_path,
+        codec='libx264',
+        audio_codec='aac',
+        fps=30,
+        preset='medium'
+    )
+
+    # Clean up clips
+    for clip in clips:
+        clip.close()
+    final_video.close()
+
+    logger.info(f"✅ Concatenated video saved to {output_path}")
+    return output_path
+
+
+def _apply_effects_to_video(input_path: str, output_path: str, effects: list, aspect_ratio: str = '16:9', background_music: dict = None, logo: dict = None, layers: list = None, resolved_sample_data: dict = None, custom_audio_url: str = None) -> None:
     """
     Apply effects and layers to an existing video file
 
@@ -590,6 +830,7 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             - opacity: float (0.0 to 1.0)
             - margin: dict with x and y keys (pixels from edges)
         layers: List of layer configurations to composite onto the video
+        custom_audio_url: Optional custom audio URL to replace video audio
     """
     try:
         from moviepy.editor import VideoFileClip, TextClip, CompositeVideoClip, AudioFileClip
@@ -602,45 +843,7 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
         fps = video.fps
         w, h = video.size
 
-        # Apply Ken Burns effect if requested
-        ken_burns_effect = next((e for e in effects if e.get('type') == 'ken_burns'), None)
-        if ken_burns_effect:
-            params = ken_burns_effect.get('params', {})
-            zoom_start = params.get('zoom_start', 1.0)
-            zoom_end = params.get('zoom_end', 1.2)
-
-            logger.info(f"Applying Ken Burns effect: zoom {zoom_start} -> {zoom_end}")
-
-            # Apply zoom effect using resize
-            def zoom_effect(get_frame, t):
-                """Apply zoom effect to frame at time t"""
-                # Calculate zoom factor at time t (linear interpolation)
-                progress = t / duration
-                zoom = zoom_start + (zoom_end - zoom_start) * progress
-
-                # Get the original frame
-                frame = get_frame(t)
-                h, w = frame.shape[:2]
-
-                # Calculate new dimensions
-                new_w = int(w * zoom)
-                new_h = int(h * zoom)
-
-                # Resize frame
-                from PIL import Image as PILImage
-                import numpy as np
-                pil_frame = PILImage.fromarray(frame)
-                pil_frame = pil_frame.resize((new_w, new_h), PILImage.LANCZOS)
-
-                # Crop to original size (center crop)
-                left = (new_w - w) // 2
-                top = (new_h - h) // 2
-                pil_frame = pil_frame.crop((left, top, left + w, top + h))
-
-                return np.array(pil_frame)
-
-            # Apply the zoom effect
-            video = video.fl(zoom_effect)
+        # Ken Burns effect will be applied after layer composition
 
         # Apply Logo Watermark effect if requested
         logo_watermark_effect = next((e for e in effects if e.get('type') == 'logo_watermark'), None)
@@ -730,6 +933,34 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
 
         # Logo watermark will be applied AFTER layer composition and effects (moved below)
 
+        # PRE-LOAD AUDIO to get the target duration for video layers
+        # This allows us to divide the audio duration equally among videos in auto mode
+        target_audio_duration = None
+        voice_audio_preload = None
+
+        if custom_audio_url:
+            try:
+                import tempfile
+                logger.info(f"🎵 Pre-loading custom audio to determine target duration: {custom_audio_url}")
+
+                # Download audio file
+                response = requests.get(custom_audio_url, timeout=30)
+                if response.status_code == 200:
+                    # Save to temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+                        temp_audio.write(response.content)
+                        temp_audio_path = temp_audio.name
+
+                    # Load audio file to get duration
+                    audio = AudioFileClip(temp_audio_path)
+                    voice_audio_preload = audio
+                    target_audio_duration = audio.duration
+                    logger.info(f"✅ Custom audio duration: {target_audio_duration:.2f}s")
+                else:
+                    logger.warning(f"Failed to download custom audio: HTTP {response.status_code}")
+            except Exception as audio_error:
+                logger.warning(f"Failed to pre-load custom audio: {audio_error}", exc_info=True)
+
         # Apply layers if provided
         if layers and len(layers) > 0:
             try:
@@ -744,67 +975,244 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                 max_end_time = 0  # Track the maximum end time of all layers
 
                 for layer in layers:
+                    # Skip dynamic_images and dynamic_videos layers if we have dynamic_media
+                    # These layers are already processed into the base video
+                    var_name = layer.get('variable_name')
+                    if var_name in ['dynamic_images', 'dynamic_videos']:
+                        # Check if we have dynamic_media in resolved_sample_data
+                        has_dynamic_media = False
+                        if resolved_sample_data:
+                            dynamic_media = resolved_sample_data.get('dynamic_media', [])
+                            has_dynamic_media = bool(dynamic_media and len(dynamic_media) > 0)
+
+                        if has_dynamic_media:
+                            logger.info(f"⏭️  Skipping layer '{var_name}' (already in base video from dynamic_media)")
+                            continue
+
+                    # Check for sources in multiple places:
+                    # 1. 'sources' field (legacy)
+                    # 2. 'source' field as a list (from variable substitution)
                     sources = layer.get('sources', [])
-                    if sources and len(sources) > 0 and layer.get('type') in ['image', 'video']:
-                        # Expand this layer into multiple layers, one for each source
-                        duration_per_item = layer.get('duration_per_item', 5)
+                    source_field = layer.get('source')
+
+                    # If source is a list, use it as sources
+                    if isinstance(source_field, list) and len(source_field) > 0:
+                        sources = source_field
+
+                    if sources and len(sources) > 0 and layer.get('type') in ['image', 'video', 'mixed']:
+                        # Get timing metadata from resolved_sample_data (sent by ecommerce service)
+                        # Timings contain: url, start_time, duration, section, type (image/video)
+                        timing_metadata = []
+                        if resolved_sample_data and layer.get('variable_name'):
+                            var_name = layer.get('variable_name')
+                            timing_var_name = f"{var_name}_timings"
+                            timing_metadata = resolved_sample_data.get(timing_var_name, [])
+                            if timing_metadata:
+                                logger.info(f"📊 Found {len(timing_metadata)} timings for '{var_name}'")
+
+                        # Create URL-to-timing mapping
+                        timing_by_url = {}
+                        if timing_metadata:
+                            for timing in timing_metadata:
+                                url = timing.get('url')
+                                if url:
+                                    timing_by_url[url] = timing
+
+                        # Expand each source into a separate layer with timing info
+                        # Use duration_per_item from layer if provided, otherwise calculate from audio
+                        duration_per_item = layer.get('duration_per_item')
+                        if duration_per_item:
+                            default_duration = duration_per_item
+                            logger.info(f"Using duration_per_item: {duration_per_item}s for each video")
+                        else:
+                            default_duration = target_audio_duration / len(sources) if target_audio_duration else 5.0
+                            logger.info(f"Calculated default_duration: {default_duration}s per video")
+
                         for idx, source in enumerate(sources):
                             expanded_layer = layer.copy()
                             expanded_layer['source'] = source
-                            expanded_layer['start_time'] = idx * duration_per_item
-                            expanded_layer['duration'] = duration_per_item
-                            # Remove sources array from expanded layer
+
+                            # Get timing for this source
+                            timing = timing_by_url.get(source)
+
+                            if timing:
+                                # Use ecommerce service timing (for sorting and duration)
+                                expanded_layer['start_time'] = timing.get('start_time', idx * default_duration)
+                                expanded_layer['duration'] = timing.get('duration', default_duration)
+
+                                # For mixed layers, set the actual type (image or video) from timing metadata
+                                if layer.get('type') == 'mixed':
+                                    expanded_layer['type'] = timing.get('type', 'image')
+                                    logger.info(f"  📦 Item {idx+1}: {timing.get('type')} at {expanded_layer['start_time']:.2f}s for {expanded_layer['duration']:.2f}s")
+                            else:
+                                # Fallback: sequential with equal duration
+                                expanded_layer['start_time'] = idx * default_duration
+                                expanded_layer['duration'] = default_duration
+
+                                # For mixed layers without timing, infer type from URL extension
+                                if layer.get('type') == 'mixed':
+                                    if source.lower().endswith(('.mp4', '.mov', '.avi', '.webm')):
+                                        expanded_layer['type'] = 'video'
+                                    else:
+                                        expanded_layer['type'] = 'image'
+
+                            # Clean up
                             if 'sources' in expanded_layer:
                                 del expanded_layer['sources']
+                            if 'image_timings' in expanded_layer:
+                                del expanded_layer['image_timings']
+
                             expanded_layers.append(expanded_layer)
 
                             # Track max end time
-                            end_time = (idx + 1) * duration_per_item
+                            end_time = expanded_layer['start_time'] + expanded_layer['duration']
                             max_end_time = max(max_end_time, end_time)
-
-                            logger.info(f"Expanded layer {layer.get('id')} source #{idx+1}: {source} (start: {idx * duration_per_item}s, duration: {duration_per_item}s)")
                     else:
                         # No sources array, keep layer as-is
                         expanded_layers.append(layer)
 
                         # Track max end time for non-expanded layers too
                         layer_start = layer.get('start_time', 0)
-                        layer_dur = layer.get('duration', duration)
+                        layer_dur = layer.get('duration')
+                        # If duration is None, use the video duration as fallback
+                        if layer_dur is None:
+                            layer_dur = duration
                         max_end_time = max(max_end_time, layer_start + layer_dur)
 
-                # If we have sequential layers that extend beyond the base video duration,
-                # we need to extend the base video
-                if max_end_time > duration:
-                    logger.info(f"Extending base video from {duration}s to {max_end_time}s to accommodate sequential layers")
-                    # Loop the base video to extend its duration
-                    from moviepy.editor import concatenate_videoclips
-                    num_loops = int(max_end_time / duration) + 1
-                    video = concatenate_videoclips([video] * num_loops).subclip(0, max_end_time)
-                    duration = max_end_time
+                # Check if there are ANY video layers - if so, don't include base sample video
+                # The uploaded videos should be the only content, not overlays on a base video
+                has_video_layers = any(layer.get('type') == 'video' for layer in expanded_layers)
 
-                # Sort layers by z_index (lower z_index = bottom layer)
-                sorted_layers = sorted(expanded_layers, key=lambda l: l.get('z_index', 0))
+                # Separate video layers from overlay layers (image, text, shape)
+                # Video layers will be concatenated sequentially
+                # Overlay layers will be composited on top based on z_index
+                video_layers_list = [l for l in expanded_layers if l.get('type') == 'video']
+                overlay_layers_list = [l for l in expanded_layers if l.get('type') != 'video']
 
-                # Check if there's a background video layer (full-screen video at z_index 0)
-                has_background_video = False
-                if sorted_layers:
-                    first_layer = sorted_layers[0]
-                    if (first_layer.get('type') == 'video' and
-                        first_layer.get('z_index', 0) == 0 and
-                        first_layer.get('size', {}).get('width', 0) >= 0.9 and
-                        first_layer.get('size', {}).get('height', 0) >= 0.9):
-                        has_background_video = True
-                        logger.info("Detected full-screen background video layer, will not include base sample video")
+                # Sort video layers by start_time for sequential playback
+                if video_layers_list:
+                    video_layers_list = sorted(video_layers_list, key=lambda l: l.get('start_time', 0))
+                    logger.info(f"Found {len(video_layers_list)} video layer(s) for sequential processing")
 
-                # Create list of clips to composite
-                # Only include base video if there's no background video layer
-                layer_clips = [] if has_background_video else [video]
+                # Sort overlay layers by z_index for proper layering
+                if overlay_layers_list:
+                    overlay_layers_list = sorted(overlay_layers_list, key=lambda l: l.get('z_index', 0))
+                    logger.info(f"Found {len(overlay_layers_list)} overlay layer(s) for composition")
 
-                for layer in sorted_layers:
+                # Track temp files for cleanup
+                temp_files_to_cleanup = []
+
+                # Process video layers first (if any) - concatenate them sequentially
+                if has_video_layers and len(video_layers_list) > 0:
+                    # Use the same logic as create_concatenated_video_from_media
+                    logger.info(f"🎬 Processing {len(video_layers_list)} sequential video layers")
+
+                    from moviepy.editor import VideoFileClip as SimpleVideoClip, concatenate_videoclips
+                    import requests
+
+                    video_clips = []
+
+                    for idx, layer in enumerate(video_layers_list):
+                        source = layer.get('source', '')
+                        layer_duration = layer.get('duration', 5.0)
+                        layer_id = layer.get('id', f'video_{idx}')
+
+                        logger.info(f"  Processing video {idx+1}/{len(video_layers_list)}: {layer_id} (duration={layer_duration:.2f}s)")
+
+                        try:
+                            video_path = None
+                            temp_video_path = None
+
+                            # Download or locate video file
+                            if source.startswith('http://') or source.startswith('https://'):
+                                import tempfile
+                                logger.info(f"    Downloading from URL: {source}")
+                                response = requests.get(source, timeout=60)
+                                response.raise_for_status()
+
+                                file_ext = os.path.splitext(source.split('?')[0])[1] or '.mp4'
+                                temp_video_path = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext).name
+                                with open(temp_video_path, 'wb') as f:
+                                    f.write(response.content)
+                                video_path = temp_video_path
+                                temp_files_to_cleanup.append(temp_video_path)
+                                logger.info(f"    ✅ Downloaded to {video_path}")
+                            else:
+                                # Local file
+                                if not source.startswith('/'):
+                                    video_path = os.path.join('/app/public/assets', source)
+                                else:
+                                    video_path = source
+
+                            if video_path and os.path.exists(video_path):
+                                # Load video
+                                video_clip = SimpleVideoClip(video_path)
+                                original_duration = video_clip.duration
+
+                                logger.info(f"    Video duration: {original_duration:.2f}s, target: {layer_duration:.2f}s")
+
+                                # Loop or trim to match target duration
+                                if original_duration < layer_duration:
+                                    # Loop the video to fill the duration
+                                    loops_needed = int(layer_duration / original_duration) + 1
+                                    logger.info(f"    🔁 Looping {loops_needed} times to reach {layer_duration:.2f}s")
+                                    looped = concatenate_videoclips([video_clip] * loops_needed)
+                                    clip = looped.subclip(0, layer_duration)
+                                else:
+                                    # Trim the video to the duration
+                                    logger.info(f"    ✂️ Trimming from {original_duration:.2f}s to {layer_duration:.2f}s")
+                                    clip = video_clip.subclip(0, layer_duration)
+
+                                # Resize to match video dimensions
+                                clip = clip.resize((w, h))
+
+                                # Apply effects to this individual clip
+                                if effects:
+                                    logger.info(f"    🎨 Applying effects to video {idx+1}")
+                                    clip = _apply_effects_to_layer(clip, effects, layer_duration, w, h)
+
+                                video_clips.append(clip)
+                                logger.info(f"    ✅ Video clip {idx+1} ready")
+                            else:
+                                logger.warning(f"    ❌ Video file not found: {video_path}")
+                                # Create black placeholder
+                                from moviepy.editor import ColorClip
+                                clip = ColorClip(size=(w, h), color=(0, 0, 0), duration=layer_duration)
+                                video_clips.append(clip)
+
+                        except Exception as video_error:
+                            logger.error(f"    ❌ Error processing video {idx+1}: {video_error}", exc_info=True)
+                            # Create black placeholder
+                            from moviepy.editor import ColorClip
+                            clip = ColorClip(size=(w, h), color=(0, 0, 0), duration=layer_duration)
+                            video_clips.append(clip)
+
+                    # Concatenate all video clips
+                    if len(video_clips) > 0:
+                        logger.info(f"🔗 Concatenating {len(video_clips)} video clips")
+                        video = concatenate_videoclips(video_clips, method="compose")
+                        duration = video.duration  # Update duration to match concatenated video
+                        logger.info(f"✅ Final video duration: {video.duration:.2f}s")
+
+                        # Mark that we have a concatenated video base
+                        has_concatenated_video = True
+
+                # Now process overlay layers (image, text, shape) to composite on top of video
+                logger.info(f"Processing {len(overlay_layers_list)} overlay layers")
+
+                # Create list to hold overlay clips
+                overlay_clips = []
+
+                for layer in overlay_layers_list:
                     try:
                         layer_type = layer.get('type')
                         layer_id = layer.get('id', 'unknown')
-                        logger.info(f"Processing layer {layer_id} (type={layer_type})")
+                        logger.info(f"Processing overlay layer {layer_id} (type={layer_type})")
+
+                        # Skip video layers - they're already processed above
+                        if layer_type == 'video':
+                            logger.info(f"  Skipping video layer (already processed)")
+                            continue
 
                         # Get layer properties
                         position = layer.get('position', {'x': 0.5, 'y': 0.5})
@@ -822,67 +1230,50 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         clip = None
 
                         # Process different layer types
-                        if layer_type == 'video':
+                        if layer_type == 'image':
                             source = layer.get('source', '')
+                            # Skip if source is a list (should have been expanded earlier)
+                            if isinstance(source, list):
+                                logger.warning(f"Skipping image layer {layer_id} with list source (should have been expanded)")
+                                continue
                             if source:
-                                # Resolve source path
-                                if not source.startswith('/'):
-                                    video_path = os.path.join('/app/public/assets', source)
+                                img = None
+
+                                # Check if source is a URL
+                                if source.startswith('http://') or source.startswith('https://'):
+                                    try:
+                                        logger.info(f"Downloading image from URL: {source}")
+                                        response = requests.get(source, timeout=30)
+                                        if response.status_code == 200:
+                                            from io import BytesIO
+                                            img = PILImage.open(BytesIO(response.content))
+                                            logger.info(f"✅ Downloaded image from {source}")
+                                        else:
+                                            logger.warning(f"Failed to download image: HTTP {response.status_code}")
+                                    except Exception as download_error:
+                                        logger.warning(f"Failed to download image from {source}: {download_error}")
                                 else:
-                                    video_path = source
-
-                                if os.path.exists(video_path):
-                                    layer_video = LayerVideoClip(video_path)
-                                    original_size = layer_video.size
-                                    logger.info(f"Video layer original size: {original_size}, target size: ({width}, {height})")
-
-                                    # Resize using MoviePy's resize method instead of cv2
-                                    # This properly updates the clip's size property
-                                    layer_video = layer_video.resize((width, height))
-                                    logger.info(f"Video layer resized, new size: {layer_video.size}")
-
-                                    # Set duration
-                                    if layer_duration:
-                                        layer_video = layer_video.set_duration(min(layer_duration, layer_video.duration))
+                                    # Resolve source path for local files
+                                    if not source.startswith('/'):
+                                        image_path = os.path.join('/app/public/assets', source)
                                     else:
-                                        layer_duration = layer_video.duration
+                                        image_path = source
 
-                                    # Apply global effects to video layer
-                                    layer_video = _apply_effects_to_layer(layer_video, effects, layer_duration, width, height)
+                                    if os.path.exists(image_path):
+                                        img = PILImage.open(image_path)
 
-                                    # Set position (centered at pos_x, pos_y)
-                                    final_pos = (pos_x - width//2, pos_y - height//2)
-                                    logger.info(f"Video layer position: {final_pos}, z_index: {layer.get('z_index', 0)}")
-                                    layer_video = layer_video.set_position(final_pos)
-
-                                    # Set start and end time
-                                    if start_time > 0:
-                                        layer_video = layer_video.set_start(start_time)
-                                        layer_video = layer_video.set_end(start_time + layer_duration)
-                                    # Set opacity
-                                    if opacity < 1.0:
-                                        layer_video = layer_video.set_opacity(opacity)
-                                    clip = layer_video
-                                    logger.info(f"Added video layer from {source} with global effects applied")
-
-                        elif layer_type == 'image':
-                            source = layer.get('source', '')
-                            if source:
-                                # Resolve source path
-                                if not source.startswith('/'):
-                                    image_path = os.path.join('/app/public/assets', source)
-                                else:
-                                    image_path = source
-
-                                if os.path.exists(image_path):
-                                    # Load and resize image
-                                    img = PILImage.open(image_path)
+                                if img:
+                                    # Resize image
                                     img = img.resize((width, height), PILImage.LANCZOS)
                                     # Convert to numpy array
                                     img_array = np.array(img)
                                     # Create ImageClip
                                     image_clip = ImageClip(img_array)
                                     image_clip = image_clip.set_duration(layer_duration)
+
+                                    # Apply global effects to image layer (e.g., Ken Burns)
+                                    image_clip = _apply_effects_to_layer(image_clip, effects, layer_duration, width, height)
+
                                     # Set position (centered at pos_x, pos_y)
                                     image_clip = image_clip.set_position((pos_x - width//2, pos_y - height//2))
                                     # Set start and end time
@@ -893,7 +1284,7 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                                     if opacity < 1.0:
                                         image_clip = image_clip.set_opacity(opacity)
                                     clip = image_clip
-                                    logger.info(f"Added image layer from {source}")
+                                    logger.info(f"Added image layer from {source} with global effects applied")
 
                         elif layer_type == 'text':
                             content = layer.get('content', 'Sample Text')
@@ -1022,39 +1413,35 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                             clip = shape_clip
                             logger.info(f"Added shape layer: {shape_type}")
 
-                        # Add clip to layer_clips if it was created
+                        # Add clip to overlay_clips if it was created
                         if clip:
-                            layer_clips.append(clip)
+                            overlay_clips.append(clip)
 
                     except Exception as layer_error:
                         logger.warning(f"Failed to process layer {layer.get('id', 'unknown')}: {layer_error}", exc_info=True)
 
-                # Composite all layers
-                if len(layer_clips) > 1:
-                    if has_background_video:
-                        logger.info(f"Compositing {len(layer_clips)} layers (background video + {len(layer_clips)-1} overlay layers)")
-                    else:
-                        logger.info(f"Compositing {len(layer_clips)} clips (base video + {len(layer_clips)-1} layers)")
+                # Composite overlay layers on top of the video (if any)
+                if len(overlay_clips) > 0:
+                    # We have overlay layers (text, shapes, images) to composite on top of the video
+                    logger.info(f"Compositing {len(overlay_clips)} overlay layer(s) on top of video")
 
-                    # Log start times for debugging
-                    for i, clip in enumerate(layer_clips):
-                        start = getattr(clip, 'start', 0)
-                        logger.info(f"Layer {i}: start={start}s, duration={clip.duration}s")
+                    # Add the base video as the first layer
+                    all_clips = [video] + overlay_clips
 
-                    video = CompositeVideoClip(layer_clips, size=(w, h))
+                    # Composite all layers
+                    video = CompositeVideoClip(all_clips, size=(w, h))
                     video = video.set_duration(duration)
-                    logger.info(f"Layers composited successfully, video size: {video.size}")
-                elif len(layer_clips) == 1 and has_background_video:
-                    # If we have exactly one layer and it's a background video, use it directly
-                    logger.info("Using single background video layer as the video")
-                    video = layer_clips[0]
-                    video = video.set_duration(duration)
-                    logger.info(f"Background video layer applied successfully, video size: {video.size}")
+                    logger.info(f"Overlays composited successfully, video size: {video.size}, duration: {duration}s")
+                elif not has_video_layers and len(overlay_clips) == 0:
+                    # No video layers and no overlay layers - just use the base sample video
+                    logger.info("Using base sample video (no layers)")
+                # else: video is already set to the concatenated video, no overlays needed
 
                 # Check if transition effect is enabled
-                # If yes, we need to add a second dummy clip to demonstrate the transition
+                # DISABLED: Don't add dummy clip when user has uploaded videos
+                # The transition will be applied between the user's videos when they loop
                 transition_effect = next((e for e in effects if e.get('type') == 'transition'), None)
-                if transition_effect and has_background_video:
+                if False and transition_effect and has_video_layers:  # Disabled
                     params = transition_effect.get('params', {})
                     transition_type = params.get('transition_type', 'crossfade')
                     transition_duration = params.get('duration', 1.0)
@@ -1115,6 +1502,57 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             except Exception as layers_error:
                 logger.warning(f"Failed to apply layers: {layers_error}", exc_info=True)
 
+        # Apply Ken Burns effect if requested (AFTER layer composition and transitions)
+        # ENABLED when we have dynamic_media (base video from concatenated clips)
+        # DISABLED when we have individual layers (Ken Burns applied to each layer)
+        ken_burns_effect = next((e for e in effects if e.get('type') == 'ken_burns'), None)
+
+        # Check if we have dynamic_media (all layers were skipped)
+        has_dynamic_media_base = False
+        if resolved_sample_data:
+            dynamic_media = resolved_sample_data.get('dynamic_media', [])
+            has_dynamic_media_base = bool(dynamic_media and len(dynamic_media) > 0)
+
+        # Apply Ken Burns to final video only if we have dynamic_media base
+        if ken_burns_effect and has_dynamic_media_base:
+            params = ken_burns_effect.get('params', {})
+            zoom_start = params.get('zoom_start', 1.0)
+            zoom_end = params.get('zoom_end', 1.2)
+
+            logger.info(f"Applying Ken Burns effect to final video: zoom {zoom_start} -> {zoom_end}")
+
+            # Apply zoom effect using resize
+            def zoom_effect(get_frame, t):
+                """Apply zoom effect to frame at time t"""
+                # Calculate zoom factor at time t (linear interpolation)
+                progress = t / duration
+                zoom = zoom_start + (zoom_end - zoom_start) * progress
+
+                # Get the original frame
+                frame = get_frame(t)
+                h, w = frame.shape[:2]
+
+                # Calculate new dimensions
+                new_w = int(w * zoom)
+                new_h = int(h * zoom)
+
+                # Resize frame
+                from PIL import Image as PILImage
+                import numpy as np
+                pil_frame = PILImage.fromarray(frame)
+                pil_frame = pil_frame.resize((new_w, new_h), PILImage.LANCZOS)
+
+                # Crop to original size (center crop)
+                left = (new_w - w) // 2
+                top = (new_h - h) // 2
+                pil_frame = pil_frame.crop((left, top, left + w, top + h))
+
+                return np.array(pil_frame)
+
+            # Apply the zoom effect
+            video = video.fl(zoom_effect)
+            logger.info("Ken Burns effect applied successfully to final video")
+
         # Apply Bottom Banner effect if requested (AFTER layer composition and transitions)
         bottom_banner_effect = next((e for e in effects if e.get('type') == 'bottom_banner'), None)
         if bottom_banner_effect:
@@ -1158,6 +1596,11 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                 def add_bottom_banner(get_frame, t):
                     """Add bottom banner with scrolling ticker to frame at time t"""
                     frame = get_frame(t)
+
+                    # Ensure frame is in uint8 format (0-255 range)
+                    if frame.dtype != np.uint8:
+                        # Convert from float (0.0-1.0) to uint8 (0-255)
+                        frame = (frame * 255).astype(np.uint8)
 
                     # Convert frame to PIL Image
                     pil_frame = PILImage.fromarray(frame)
@@ -1236,8 +1679,38 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
             except Exception as banner_error:
                 logger.warning(f"Failed to add bottom banner: {banner_error}, skipping bottom_banner effect", exc_info=True)
 
-        # Apply background music if enabled
-        final_audio = None
+        # Handle custom audio URL if provided (takes precedence over background music)
+        # Reuse the preloaded audio if available
+        voice_audio = voice_audio_preload
+        background_music_audio = None
+
+        # If we didn't preload (shouldn't happen), load it now
+        if custom_audio_url and not voice_audio:
+            try:
+                import tempfile
+
+                logger.info(f"🎵 Using custom audio from: {custom_audio_url}")
+
+                # Download audio file
+                response = requests.get(custom_audio_url, timeout=30)
+                if response.status_code == 200:
+                    # Save to temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_audio:
+                        temp_audio.write(response.content)
+                        temp_audio_path = temp_audio.name
+
+                    # Load audio file
+                    audio = AudioFileClip(temp_audio_path)
+                    voice_audio = audio
+                    logger.info("✅ Custom audio loaded successfully")
+                else:
+                    logger.warning(f"Failed to download custom audio: HTTP {response.status_code}")
+            except Exception as audio_error:
+                logger.warning(f"Failed to apply custom audio: {audio_error}", exc_info=True)
+        elif voice_audio:
+            logger.info(f"✅ Using pre-loaded custom audio (duration: {voice_audio.duration:.2f}s)")
+
+        # Load background music if enabled
         if background_music and background_music.get('enabled', False):
             try:
                 music_source = background_music.get('source', '')
@@ -1254,7 +1727,7 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         music_path = music_source
 
                     if os.path.exists(music_path):
-                        logger.info(f"Applying background music: {music_source} (volume={volume}, fade_in={fade_in}s, fade_out={fade_out}s)")
+                        logger.info(f"Loading background music: {music_source} (volume={volume}, fade_in={fade_in}s, fade_out={fade_out}s)")
 
                         # Load audio file
                         audio = AudioFileClip(music_path)
@@ -1281,15 +1754,54 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         if fade_out > 0:
                             audio = audio.audio_fadeout(fade_out)
 
-                        final_audio = audio
-                        logger.info("Background music applied successfully")
+                        background_music_audio = audio
+                        logger.info("✅ Background music loaded successfully")
                     else:
                         logger.warning(f"Background music file not found: {music_path}")
             except Exception as music_error:
-                logger.warning(f"Failed to apply background music: {music_error}", exc_info=True)
+                logger.warning(f"Failed to load background music: {music_error}", exc_info=True)
 
-        # Set audio on video
+        # Mix audio tracks: voice + background music
+        final_audio = None
+        if voice_audio and background_music_audio:
+            try:
+                from moviepy.editor import CompositeAudioClip
+                logger.info("🎵 Mixing voice audio with background music")
+                final_audio = CompositeAudioClip([voice_audio, background_music_audio])
+                logger.info("✅ Audio tracks mixed successfully")
+            except Exception as mix_error:
+                logger.warning(f"Failed to mix audio tracks: {mix_error}", exc_info=True)
+                # Fallback to voice only
+                final_audio = voice_audio
+        elif voice_audio:
+            logger.info("Using voice audio only (no background music)")
+            final_audio = voice_audio
+        elif background_music_audio:
+            logger.info("Using background music only (no voice)")
+            final_audio = background_music_audio
+
+        # Set audio on video and loop video if audio is longer
         if final_audio:
+            audio_duration = final_audio.duration
+            video_duration = video.duration
+
+            # If audio is longer than video, loop the video to match audio duration
+            if audio_duration > video_duration:
+                logger.info(f"🔁 Audio duration ({audio_duration:.2f}s) > Video duration ({video_duration:.2f}s), looping video")
+                from moviepy.editor import concatenate_videoclips
+
+                # Calculate how many times to loop the video
+                loops_needed = int(audio_duration / video_duration) + 1
+                logger.info(f"Looping video {loops_needed} times to match audio duration")
+
+                # Loop the video
+                video = concatenate_videoclips([video] * loops_needed)
+
+                # Trim to exact audio duration
+                video = video.subclip(0, audio_duration)
+                logger.info(f"✅ Video looped and trimmed to {audio_duration:.2f}s")
+
+            # Set the audio on the video
             video = video.set_audio(final_audio)
 
         # Apply Logo Watermark from separate logo configuration (AFTER layer composition and effects)
@@ -1353,49 +1865,92 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
                         # Create a function to draw logo on each frame
                         def add_logo_overlay(get_frame, t):
                             """Add logo overlay to frame at time t"""
-                            frame = get_frame(t)
+                            try:
+                                frame = get_frame(t)
 
-                            # Get frame dimensions (use actual frame dimensions, not video.size)
-                            frame_h, frame_w = frame.shape[:2]
+                                # Validate frame shape early
+                                if len(frame.shape) < 2:
+                                    logger.warning(f"Frame has invalid shape: {frame.shape}, skipping logo overlay")
+                                    return frame
 
-                            # Calculate logo size based on ACTUAL frame width
-                            logo_width = int(frame_w * scale)
-                            logo_aspect_ratio = logo_img_prepared.height / logo_img_prepared.width
-                            logo_height = int(logo_width * logo_aspect_ratio)
+                                # Get frame dimensions (use actual frame dimensions, not video.size)
+                                frame_h, frame_w = frame.shape[:2]
 
-                            # Resize logo based on actual frame dimensions
-                            logo_img_resized = logo_img_prepared.resize((logo_width, logo_height), PILImage.LANCZOS)
+                                # Skip invalid frames (too small)
+                                if frame_h < 2 or frame_w < 2:
+                                    logger.warning(f"Frame has invalid dimensions: {frame_w}x{frame_h}, skipping logo overlay")
+                                    return frame
 
-                            # Calculate position based on ACTUAL frame dimensions
-                            if position == 'top-left':
-                                x, y = margin_x, margin_y
-                            elif position == 'top-right':
-                                x, y = frame_w - logo_width - margin_x, margin_y
-                            elif position == 'bottom-left':
-                                x, y = margin_x, frame_h - logo_height - margin_y
-                            else:  # bottom-right (default)
-                                x, y = frame_w - logo_width - margin_x, frame_h - logo_height - margin_y
+                                # Ensure frame is uint8 before any PIL operations
+                                if frame.dtype != np.uint8:
+                                    # Handle different dtypes
+                                    if frame.dtype in [np.int8, np.int16, np.int32, np.int64]:
+                                        # For signed integers, clip to valid range
+                                        frame = np.clip(frame, 0, 255).astype(np.uint8)
+                                    elif frame.dtype in [np.float32, np.float64]:
+                                        # For floats, assume 0-1 range and scale to 0-255
+                                        frame = (np.clip(frame, 0, 1) * 255).astype(np.uint8)
+                                    else:
+                                        # For other types, try direct conversion
+                                        frame = frame.astype(np.uint8)
 
-                            # Log frame info only once
-                            if not logged_frame_info['done']:
-                                logger.info(f"Frame dimensions: {frame_w}x{frame_h}, Logo size: {logo_width}x{logo_height}, Position: ({x}, {y}) for position={position}")
-                                logger.info(f"Logo will be pasted at pixel coordinates: x={x}, y={y}, width={logo_width}, height={logo_height}")
-                                logger.info(f"Logo bounds: top-left=({x},{y}), bottom-right=({x+logo_width},{y+logo_height})")
-                                logged_frame_info['done'] = True
+                                # Calculate logo size based on ACTUAL frame width
+                                logo_width = int(frame_w * scale)
+                                logo_aspect_ratio = logo_img_prepared.height / logo_img_prepared.width
+                                logo_height = int(logo_width * logo_aspect_ratio)
 
-                            # Convert frame to PIL Image (RGB)
-                            pil_frame = PILImage.fromarray(frame)
+                                # Ensure logo size is valid
+                                if logo_width < 1 or logo_height < 1:
+                                    logger.warning(f"Calculated logo size is invalid: {logo_width}x{logo_height}, skipping logo overlay")
+                                    return frame
 
-                            # Ensure logo has alpha channel
-                            if logo_img_resized.mode != 'RGBA':
-                                logo_img_resized = logo_img_resized.convert('RGBA')
+                                # Resize logo based on actual frame dimensions
+                                logo_img_resized = logo_img_prepared.resize((logo_width, logo_height), PILImage.LANCZOS)
 
-                            # Paste logo onto frame using alpha channel as mask
-                            # This ensures transparency is handled correctly
-                            pil_frame.paste(logo_img_resized, (x, y), logo_img_resized)
+                                # Calculate position based on ACTUAL frame dimensions
+                                if position == 'top-left':
+                                    x, y = margin_x, margin_y
+                                elif position == 'top-right':
+                                    x, y = frame_w - logo_width - margin_x, margin_y
+                                elif position == 'bottom-left':
+                                    x, y = margin_x, frame_h - logo_height - margin_y
+                                else:  # bottom-right (default)
+                                    x, y = frame_w - logo_width - margin_x, frame_h - logo_height - margin_y
 
-                            # Return as numpy array
-                            return np.array(pil_frame)
+                                # Log frame info only once
+                                if not logged_frame_info['done']:
+                                    logger.info(f"Frame dimensions: {frame_w}x{frame_h}, Logo size: {logo_width}x{logo_height}, Position: ({x}, {y}) for position={position}")
+                                    logger.info(f"Logo will be pasted at pixel coordinates: x={x}, y={y}, width={logo_width}, height={logo_height}")
+                                    logger.info(f"Logo bounds: top-left=({x},{y}), bottom-right=({x+logo_width},{y+logo_height})")
+                                    logged_frame_info['done'] = True
+
+                                # Convert frame to PIL Image (RGB)
+                                try:
+                                    pil_frame = PILImage.fromarray(frame)
+                                except (TypeError, ValueError) as e:
+                                    logger.warning(f"Failed to convert frame to PIL Image: {e}, frame shape: {frame.shape}, dtype: {frame.dtype}, skipping logo overlay")
+                                    return frame
+
+                                # Ensure logo has alpha channel
+                                if logo_img_resized.mode != 'RGBA':
+                                    logo_img_resized = logo_img_resized.convert('RGBA')
+
+                                # Paste logo onto frame using alpha channel as mask
+                                # This ensures transparency is handled correctly
+                                pil_frame.paste(logo_img_resized, (x, y), logo_img_resized)
+
+                                # Return as numpy array
+                                return np.array(pil_frame, dtype=np.uint8)
+
+                            except Exception as e:
+                                # Silently skip logo for frames with data type issues
+                                # This is expected for some frame types and doesn't need logging
+                                # Return original frame on any error
+                                try:
+                                    return get_frame(t)
+                                except:
+                                    # If we can't even get the frame, return a black frame
+                                    return np.zeros((video.h, video.w, 3), dtype=np.uint8)
 
                         # Apply the logo overlay
                         video = video.fl(add_logo_overlay)
@@ -1421,6 +1976,26 @@ def _apply_effects_to_video(input_path: str, output_path: str, effects: list, as
         video.close()
         if final_audio:
             final_audio.close()
+
+        # Cleanup temp files created during video processing
+        # Check if video has temp files attached (from concatenation or processing)
+        if hasattr(video, 'temp_concat_file') and video.temp_concat_file:
+            try:
+                if os.path.exists(video.temp_concat_file):
+                    os.unlink(video.temp_concat_file)
+                    logger.debug(f"Cleaned up concatenated temp file: {video.temp_concat_file}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp concat file: {e}")
+
+        # Cleanup individual layer temp files
+        if temp_files_to_cleanup:
+            for temp_file in temp_files_to_cleanup:
+                try:
+                    if temp_file and os.path.exists(temp_file):
+                        os.unlink(temp_file)
+                        logger.debug(f"Cleaned up layer temp file: {temp_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup temp file {temp_file}: {e}")
 
         logger.info(f"Effects applied successfully to {output_path}")
 
@@ -1694,7 +2269,8 @@ def preview_template():
                 "background_music": {...},
                 "logo": {...},
                 "thumbnail": {...},
-                "variables": {...}
+                "variables": {...},
+                "audio_url": "http://..."  // Optional: custom audio URL
             },
             "sample_data": {  // Optional: override default sample data
                 "title": "Sample News Title",
@@ -1727,15 +2303,61 @@ def preview_template():
         sample_data = data.get('sample_data', {})
         is_initial = data.get('is_initial', True)
 
+        logger.info(f"📥 Incoming sample_data keys: {list(sample_data.keys()) if sample_data else 'None'}")
+
+        # Extract custom audio URL if provided and convert to internal URL
+        # Check both top-level audio_url and template.audio_url
+        custom_audio_url = data.get('audio_url') or template.get('audio_url')
+        if custom_audio_url:
+            logger.info(f"🎵 Found custom audio URL: {custom_audio_url}")
+            custom_audio_url = url_converter.convert_url(custom_audio_url)
+            template['audio_url'] = custom_audio_url
+            logger.info(f"🎵 Converted audio URL: {custom_audio_url}")
+        else:
+            logger.info("ℹ️ No custom audio URL provided")
+
         # Log the request details
         effects = template.get('effects', [])
         background_music = template.get('background_music', {})
-        logger.info(f"Preview request: is_initial={is_initial}, effects={len(effects)}, background_music_enabled={background_music.get('enabled', False)}")
+        logger.info(f"Preview request: is_initial={is_initial}, effects={len(effects)}, background_music_enabled={background_music.get('enabled', False)}, custom_audio={bool(custom_audio_url)}")
 
         # Generate sample data for template variables
         resolved_sample_data = _generate_sample_data(template, sample_data)
+
+        # Add any additional metadata from sample_data that's not in template variables
+        # (e.g., {var_name}_timings metadata)
+        if sample_data:
+            for key, value in sample_data.items():
+                if key not in resolved_sample_data:
+                    resolved_sample_data[key] = value
+
         logger.info(f"Template variables config: {template.get('variables', {})}")
-        logger.info(f"Resolved sample data: {resolved_sample_data}")
+        logger.info(f"Resolved sample data (before URL conversion): {resolved_sample_data}")
+
+        # Convert external URLs to internal service URLs for inter-service communication
+        resolved_sample_data = url_converter.convert_variables(resolved_sample_data)
+        logger.info(f"Resolved sample data (after URL conversion): {resolved_sample_data}")
+
+        # IMPORTANT: Merge dynamic_images and dynamic_videos data BEFORE template resolution
+        # Check if we have dynamic_media (new simplified format)
+        # Format: [{url, duration, type}, ...]
+        has_dynamic_media = 'dynamic_media' in resolved_sample_data and resolved_sample_data['dynamic_media']
+
+        if has_dynamic_media:
+            media_list = resolved_sample_data['dynamic_media']
+            logger.info(f"📦 Detected dynamic_media with {len(media_list)} items")
+
+            # Log each item
+            for i, item in enumerate(media_list):
+                media_type = item.get('type', 'unknown')
+                duration = item.get('duration', 0)
+                logger.info(f"   - Item {i+1}: {media_type} ({duration:.2f}s)")
+
+        # If we have dynamic_media, we'll create the base video differently
+        # But keep the template layers intact for the user
+        if has_dynamic_media:
+            logger.info("🎬 Using simplified dynamic_media approach")
+            logger.info("   Will create base video from concatenated clips")
 
         # Resolve template with sample data
         resolved_template = variable_resolver.resolve_template(template, resolved_sample_data)
@@ -1802,17 +2424,46 @@ def preview_template():
             logger.info(f"Base sample video not found, creating it first: {default_sample_filename}")
             _create_placeholder_video(default_sample_path, aspect_ratio, effects=[])
 
-        # Now apply effects and/or background music and/or logo and/or layers to the base sample video
+        # NEW APPROACH: If we have dynamic_media, create clips and concatenate
+        if has_dynamic_media:
+            logger.info("🎬 Creating video from dynamic_media assets")
+            media_list = resolved_sample_data['dynamic_media']
+
+            # Get effects from template to apply to each clip
+            template_effects = template.get('effects', [])
+
+            # Create individual clips for each asset with effects applied
+            base_video_path = _create_concatenated_video_from_media(
+                media_list,
+                aspect_ratio,
+                temp_dir,
+                effects=template_effects
+            )
+
+            logger.info(f"✅ Created base video from {len(media_list)} assets with effects")
+        else:
+            # Use default sample video as base
+            base_video_path = default_sample_path
+
+        # Now apply effects and/or background music and/or logo and/or layers to the base video
         # Use resolved_template to get layers with variables substituted
         effects = resolved_template.get('effects', [])
         background_music = resolved_template.get('background_music', {})
         logo = resolved_template.get('logo', {})
         layers = resolved_template.get('layers', [])
 
+        # If we have dynamic_media, effects were already applied to individual clips
+        # So we skip effects here (but still apply background music, logo, layers)
+        if has_dynamic_media:
+            logger.info("⚠️ Skipping effects (already applied to individual clips)")
+            effects_to_apply = []  # Don't re-apply effects
+        else:
+            effects_to_apply = effects
+
         # Apply effects and/or background music and/or logo and/or layers if any is present
-        if effects or (background_music and background_music.get('enabled', False)) or (logo and logo.get('enabled', False)) or layers:
-            logger.info(f"Applying {len(effects)} effects, background music, logo, and {len(layers)} layers to base sample video")
-            _apply_effects_to_video(default_sample_path, preview_path, effects, aspect_ratio, background_music, logo, layers, resolved_sample_data)
+        if effects_to_apply or (background_music and background_music.get('enabled', False)) or (logo and logo.get('enabled', False)) or layers or custom_audio_url:
+            logger.info(f"Applying {len(effects_to_apply)} effects, background music, logo, and {len(layers)} layers to base video")
+            _apply_effects_to_video(base_video_path, preview_path, effects_to_apply, aspect_ratio, background_music, logo, layers, resolved_sample_data, custom_audio_url)
 
             if os.path.exists(preview_path):
                 return jsonify({

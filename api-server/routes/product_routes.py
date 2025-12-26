@@ -6,7 +6,7 @@ Acts as a proxy to forward requests to the ecommerce-service backend
 import logging
 import requests
 import os
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from middleware.jwt_middleware import get_request_headers_with_context
 
 # Create blueprint
@@ -35,14 +35,14 @@ def proxy_to_ecommerce_service(path, method='GET', json_data=None, files=None):
 
         if files:
             # Handle file uploads - forward files to backend
-            files_dict = {}
+            # For multiple files with the same key, we need to use a list of tuples
+            files_list = []
             for key in files:
                 file_list = files.getlist(key)
-                if len(file_list) == 1:
-                    files_dict[key] = (file_list[0].filename, file_list[0].stream, file_list[0].content_type)
-                else:
-                    files_dict[key] = [(f.filename, f.stream, f.content_type) for f in file_list]
-            kwargs['files'] = files_dict
+                for f in file_list:
+                    # Each file is a tuple: (field_name, (filename, file_object, content_type))
+                    files_list.append((key, (f.filename, f.stream, f.content_type)))
+            kwargs['files'] = files_list
             # Remove Content-Type header to let requests set it with boundary
             if 'Content-Type' in headers:
                 del headers['Content-Type']
@@ -131,11 +131,21 @@ def generate_summary(product_id):
 @product_bp.route('/products/<product_id>/upload-media', methods=['POST'])
 def upload_media(product_id):
     """Proxy: Upload media files for product"""
-    response_data, status_code = proxy_to_ecommerce_service(
-        f'/api/products/{product_id}/upload-media',
-        method='POST',
-        json_data=request.get_json()
-    )
+    # Check if this is a file upload or JSON data
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        # Handle file upload
+        response_data, status_code = proxy_to_ecommerce_service(
+            f'/api/products/{product_id}/upload-media',
+            method='POST',
+            files=request.files
+        )
+    else:
+        # Handle JSON data (URLs)
+        response_data, status_code = proxy_to_ecommerce_service(
+            f'/api/products/{product_id}/upload-media',
+            method='POST',
+            json_data=request.get_json()
+        )
     return jsonify(response_data), status_code
 
 
@@ -316,3 +326,181 @@ def proxy_audio(audio_path):
             'status': 'error',
             'message': str(e)
         }), 500
+
+
+@product_bp.route('/ecommerce/public/product/<product_id>/images/<filename>', methods=['GET'])
+def serve_product_images(product_id, filename):
+    """Proxy product image files from ecommerce service"""
+    try:
+        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/images/{filename}"
+        logger.info(f"🖼️ Proxying product image: {product_id}/{filename}")
+
+        # Get headers with authentication context
+        headers = get_request_headers_with_context()
+
+        response = requests.get(url, headers=headers, stream=True, timeout=30)
+
+        if response.status_code != 200:
+            logger.error(f"❌ Failed to fetch image: {filename} (status: {response.status_code})")
+            return jsonify({'status': 'error', 'message': 'Image not found'}), 404
+
+        def generate():
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+        # Determine content type
+        content_type = 'image/jpeg'
+        if filename.endswith('.png'):
+            content_type = 'image/png'
+        elif filename.endswith('.gif'):
+            content_type = 'image/gif'
+        elif filename.endswith('.webp'):
+            content_type = 'image/webp'
+
+        return Response(
+            generate(),
+            status=200,
+            content_type=content_type,
+            headers={'Cache-Control': 'public, max-age=3600'}
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Error proxying image {filename}: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@product_bp.route('/ecommerce/public/product/<product_id>/images/<filename>', methods=['DELETE'])
+def delete_product_image(product_id, filename):
+    """Proxy: Delete a product image file"""
+    logger.info('═══════════════════════════════════════════════════════')
+    logger.info('🗑️ [API-SERVER] DELETE image endpoint called')
+    logger.info(f'  - Product ID: {product_id}')
+    logger.info(f'  - Filename: {filename}')
+    logger.info(f'  - Full path: /api/ecommerce/public/product/{product_id}/images/{filename}')
+
+    logger.info('🗑️ [API-SERVER] Proxying to ecommerce service...')
+    response_data, status_code = proxy_to_ecommerce_service(
+        f'/api/ecommerce/public/product/{product_id}/images/{filename}',
+        method='DELETE'
+    )
+
+    logger.info('🗑️ [API-SERVER] Ecommerce service response:')
+    logger.info(f'  - Status code: {status_code}')
+    logger.info(f'  - Response data: {response_data}')
+    logger.info('═══════════════════════════════════════════════════════')
+
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/ecommerce/public/product/<product_id>/videos/<filename>', methods=['GET'])
+def serve_product_videos(product_id, filename):
+    """Proxy product video files from ecommerce service"""
+    try:
+        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/videos/{filename}"
+        logger.info(f"🎥 Proxying product video: {product_id}/{filename}")
+
+        # Get headers with authentication context
+        headers = get_request_headers_with_context()
+
+        response = requests.get(url, headers=headers, stream=True, timeout=60)
+
+        if response.status_code != 200:
+            logger.error(f"❌ Failed to fetch video: {filename} (status: {response.status_code})")
+            return jsonify({'status': 'error', 'message': 'Video not found'}), 404
+
+        def generate():
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+        # Determine content type
+        content_type = 'video/mp4'
+        if filename.endswith('.webm'):
+            content_type = 'video/webm'
+        elif filename.endswith('.mov'):
+            content_type = 'video/quicktime'
+
+        return Response(
+            generate(),
+            status=200,
+            content_type=content_type,
+            headers={
+                'Cache-Control': 'public, max-age=3600',
+                'Accept-Ranges': 'bytes'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Error proxying video {filename}: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@product_bp.route('/ecommerce/public/product/<product_id>/videos/<filename>', methods=['DELETE'])
+def delete_product_video(product_id, filename):
+    """Proxy: Delete a product video file"""
+    logger.info('═══════════════════════════════════════════════════════')
+    logger.info(f'🗑️ [API-SERVER] DELETE video endpoint called')
+    logger.info(f'  - Product ID: {product_id}')
+    logger.info(f'  - Filename: {filename}')
+    logger.info(f'  - Full path: /api/ecommerce/public/product/{product_id}/videos/{filename}')
+
+    logger.info(f'🗑️ [API-SERVER] Proxying to ecommerce service...')
+    response_data, status_code = proxy_to_ecommerce_service(
+        f'/api/ecommerce/public/product/{product_id}/videos/{filename}',
+        method='DELETE'
+    )
+
+    logger.info(f'🗑️ [API-SERVER] Ecommerce service response:')
+    logger.info(f'  - Status code: {status_code}')
+    logger.info(f'  - Response data: {response_data}')
+    logger.info('═══════════════════════════════════════════════════════')
+
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/ecommerce/public/product/<product_id>/<filename>', methods=['GET'])
+def serve_product_files(product_id, filename):
+    """Proxy product audio/video files from ecommerce service"""
+    try:
+        url = f"{ECOMMERCE_SERVICE_URL}/api/ecommerce/public/product/{product_id}/{filename}"
+        logger.info(f"🔊 Proxying product file: {product_id}/{filename}")
+
+        # Get headers with authentication context
+        headers = get_request_headers_with_context()
+
+        response = requests.get(url, headers=headers, stream=True, timeout=60)
+
+        if response.status_code != 200:
+            logger.error(f"❌ Failed to fetch file: {filename} (status: {response.status_code})")
+            return jsonify({'status': 'error', 'message': 'File not found'}), 404
+
+        def generate():
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    yield chunk
+
+        # Determine content type
+        content_type = 'application/octet-stream'
+        if filename.endswith('.wav'):
+            content_type = 'audio/wav'
+        elif filename.endswith('.mp3'):
+            content_type = 'audio/mpeg'
+        elif filename.endswith('.mp4'):
+            content_type = 'video/mp4'
+        elif filename.endswith('.webm'):
+            content_type = 'video/webm'
+
+        return Response(
+            generate(),
+            status=200,
+            content_type=content_type,
+            headers={
+                'Cache-Control': 'public, max-age=3600',
+                'Accept-Ranges': 'bytes'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Error proxying file {filename}: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500

@@ -83,7 +83,6 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState(null);
-  const [autoPreview, setAutoPreview] = useState(false);
   const [isInitialPreview, setIsInitialPreview] = useState(true);
 
   // Save state
@@ -92,11 +91,6 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
 
   // Active configuration section
   const [activeSection, setActiveSection] = useState('basic');
-
-  // Initialize with default sample video
-  useEffect(() => {
-    generatePreview(true);
-  }, []);
 
   // Cleanup temp videos on unmount
   useEffect(() => {
@@ -108,18 +102,8 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
     };
   }, [previewUrl, isInitialPreview]);
 
-  // Auto-preview when config changes (if enabled)
-  useEffect(() => {
-    if (autoPreview && historyIndex >= 0) {
-      const timeoutId = setTimeout(() => {
-        generatePreview();
-      }, 1000); // Debounce 1 second
-      return () => clearTimeout(timeoutId);
-    }
-  }, [config, autoPreview]);
-
   // Update configuration and add to history
-  const updateConfig = (updates, autoRefreshPreview = false) => {
+  const updateConfig = (updates) => {
     const newConfig = { ...config, ...updates };
 
     // Add to history
@@ -129,15 +113,6 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
     setHistoryIndex(newHistory.length - 1);
 
     setConfig(newConfig);
-
-    // Auto-refresh preview for certain changes (like aspect ratio or effects)
-    if (autoRefreshPreview) {
-      // Use setTimeout to ensure state is updated first, and pass the new config
-      setTimeout(() => {
-        // Use is_initial=false to generate a new preview with effects applied
-        generatePreviewWithConfig(newConfig, false);
-      }, 100);
-    }
   };
 
   // Undo configuration change
@@ -312,17 +287,6 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
             >
               ↷ Redo
             </button>
-
-            {/* Auto-preview toggle */}
-            <label className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoPreview}
-                onChange={(e) => setAutoPreview(e.target.checked)}
-                className="w-4 h-4 text-purple-600 rounded"
-              />
-              <span className="text-sm font-medium text-purple-900">Auto Preview</span>
-            </label>
 
             <button
               onClick={handleClose}
@@ -588,7 +552,7 @@ const BasicInfoSection = ({ config, updateConfig }) => (
         {['16:9', '9:16', '1:1', '4:5'].map((ratio) => (
           <button
             key={ratio}
-            onClick={() => updateConfig({ aspect_ratio: ratio }, true)}
+            onClick={() => updateConfig({ aspect_ratio: ratio })}
             className={`px-4 py-3 rounded-lg font-medium border-2 transition-all ${
               config.aspect_ratio === ratio
                 ? 'border-blue-600 bg-blue-50 text-blue-900'
@@ -644,7 +608,7 @@ const EffectsSection = ({ config, updateConfig }) => {
     if (isEffectEnabled(effectType)) {
       // Remove effect
       const newEffects = config.effects.filter(e => e.type !== effectType);
-      updateConfig({ effects: newEffects }, true); // Auto-refresh preview
+      updateConfig({ effects: newEffects });
     } else {
       // Add effect with default params
       const newEffect = {
@@ -652,7 +616,7 @@ const EffectsSection = ({ config, updateConfig }) => {
         target_layer_id: '',
         params: effectMetadata.defaultParams
       };
-      updateConfig({ effects: [...config.effects, newEffect] }, true); // Auto-refresh preview
+      updateConfig({ effects: [...config.effects, newEffect] });
     }
   };
 
@@ -667,7 +631,7 @@ const EffectsSection = ({ config, updateConfig }) => {
       }
       return effect;
     });
-    updateConfig({ effects: newEffects }, true); // Auto-refresh preview
+    updateConfig({ effects: newEffects });
   };
 
   return (
@@ -1543,7 +1507,12 @@ const LayersSection = ({ config, updateConfig }) => {
   const [layerError, setLayerError] = React.useState(null);
   const layers = config.layers || [];
 
-  // Check if video or image layer already exists
+  // Dynamic layer dialog state
+  const [showDynamicLayerDialog, setShowDynamicLayerDialog] = React.useState(false);
+  const [dynamicLayerType, setDynamicLayerType] = React.useState(null);
+  const [dynamicLayerVariableName, setDynamicLayerVariableName] = React.useState('');
+
+  // Check if video or image layer already exists (for UI display only, no longer restricting)
   const hasVideoLayer = layers.some(layer => layer.type === 'video');
   const hasImageLayer = layers.some(layer => layer.type === 'image');
 
@@ -1551,16 +1520,21 @@ const LayersSection = ({ config, updateConfig }) => {
     // Clear previous errors
     setLayerError(null);
 
-    // Prevent adding image layer if video layer exists
-    if (type === 'image' && hasVideoLayer) {
-      setLayerError('Cannot add image overlay when a video layer exists. Video and image overlays cannot be used together.');
-      return;
-    }
+    // Restriction: Don't allow mixing video and image layers
+    // Users should use dynamic layers for mixed content
+    if (type === 'video' || type === 'image') {
+      const hasVideoLayers = layers.some(l => l.type === 'video' && !l.is_dynamic);
+      const hasImageLayers = layers.some(l => l.type === 'image' && !l.is_dynamic);
 
-    // Prevent adding video layer if image layer exists
-    if (type === 'video' && hasImageLayer) {
-      setLayerError('Cannot add video layer when an image overlay exists. Video and image overlays cannot be used together.');
-      return;
+      if (type === 'video' && hasImageLayers) {
+        setLayerError('Cannot add video layer when image layers exist. Please remove image layers first or use Dynamic Videos instead.');
+        return;
+      }
+
+      if (type === 'image' && hasVideoLayers) {
+        setLayerError('Cannot add image layer when video layers exist. Please remove video layers first or use Dynamic Images instead.');
+        return;
+      }
     }
 
     const newLayer = {
@@ -1603,20 +1577,109 @@ const LayersSection = ({ config, updateConfig }) => {
       })
     };
 
-    updateConfig({ layers: [...layers, newLayer] }, true);
+    updateConfig({ layers: [...layers, newLayer] });
     setSelectedLayerId(newLayer.id);
+  };
+
+  const openDynamicLayerDialog = (type) => {
+    // Clear previous errors
+    setLayerError(null);
+
+    // Restriction: Don't allow mixing dynamic video and image layers
+    if (type === 'video' || type === 'image') {
+      const hasDynamicVideoLayers = layers.some(l => l.type === 'video' && l.is_dynamic);
+      const hasDynamicImageLayers = layers.some(l => l.type === 'image' && l.is_dynamic);
+
+      if (type === 'video' && hasDynamicImageLayers) {
+        setLayerError('Cannot add dynamic video layer when dynamic image layers exist. Please remove dynamic image layers first.');
+        return;
+      }
+
+      if (type === 'image' && hasDynamicVideoLayers) {
+        setLayerError('Cannot add dynamic image layer when dynamic video layers exist. Please remove dynamic video layers first.');
+        return;
+      }
+    }
+
+    // Open dialog
+    setDynamicLayerType(type);
+    setDynamicLayerVariableName(`dynamic_${type}s`);
+    setShowDynamicLayerDialog(true);
+  };
+
+  const confirmAddDynamicLayer = () => {
+    const type = dynamicLayerType;
+    const variableName = dynamicLayerVariableName.trim();
+
+    // Validate variable name (alphanumeric and underscores only)
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(variableName)) {
+      alert('Invalid variable name. Use only letters, numbers, and underscores. Must start with a letter or underscore.');
+      return;
+    }
+
+    // Check if variable already exists
+    if (config.variables && config.variables[variableName]) {
+      const overwrite = confirm(`Variable "${variableName}" already exists. Overwrite it?`);
+      if (!overwrite) {
+        return;
+      }
+    }
+
+    const newLayer = {
+      id: `layer_${Date.now()}`,
+      type: type,
+      z_index: layers.length,
+      position: { x: 0.5, y: 0.5 },
+      size: { width: 1.0, height: 1.0 },
+      opacity: 1.0,
+      // Use variable reference instead of sources array
+      source: `{{${variableName}}}`,
+      duration_per_item: 5,
+      is_dynamic: true, // Mark as dynamic layer
+      variable_name: variableName // Store variable name for reference
+    };
+
+    // Add variable to config.variables
+    const newVariables = {
+      ...config.variables,
+      [variableName]: {
+        type: 'array',
+        item_type: type,
+        required: true,
+        description: `Array of ${type} URLs for dynamic layer`,
+        default: []
+      }
+    };
+
+    updateConfig({
+      layers: [...layers, newLayer],
+      variables: newVariables
+    }, true);
+
+    setSelectedLayerId(newLayer.id);
+
+    // Close dialog
+    setShowDynamicLayerDialog(false);
+    setDynamicLayerType(null);
+    setDynamicLayerVariableName('');
+  };
+
+  const cancelDynamicLayerDialog = () => {
+    setShowDynamicLayerDialog(false);
+    setDynamicLayerType(null);
+    setDynamicLayerVariableName('');
   };
 
   const updateLayer = (layerId, updates) => {
     const updatedLayers = layers.map(layer =>
       layer.id === layerId ? { ...layer, ...updates } : layer
     );
-    updateConfig({ layers: updatedLayers }, true);
+    updateConfig({ layers: updatedLayers });
   };
 
   const deleteLayer = (layerId) => {
     const updatedLayers = layers.filter(layer => layer.id !== layerId);
-    updateConfig({ layers: updatedLayers }, true);
+    updateConfig({ layers: updatedLayers });
     if (selectedLayerId === layerId) {
       setSelectedLayerId(null);
     }
@@ -1639,7 +1702,7 @@ const LayersSection = ({ config, updateConfig }) => {
       layer.z_index = idx;
     });
 
-    updateConfig({ layers: newLayers }, true);
+    updateConfig({ layers: newLayers });
   };
 
   const selectedLayer = layers.find(l => l.id === selectedLayerId);
@@ -1674,46 +1737,20 @@ const LayersSection = ({ config, updateConfig }) => {
         <h5 className="text-sm font-medium text-gray-700 mb-3">Add New Layer:</h5>
         <div className="grid grid-cols-2 gap-3">
           {/* Background Video Button */}
-          <div className="relative group">
-            <button
-              onClick={() => addLayer('video')}
-              disabled={hasImageLayer}
-              className={`w-full px-4 py-3 rounded-lg font-medium text-sm ${
-                hasImageLayer
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-purple-600 text-white hover:bg-purple-700'
-              }`}
-            >
-              🎥 Background Video
-            </button>
-            {hasImageLayer && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                Cannot add video layer when image overlay exists
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => addLayer('video')}
+            className="w-full px-4 py-3 rounded-lg font-medium text-sm bg-purple-600 text-white hover:bg-purple-700"
+          >
+            🎥 Background Video
+          </button>
 
           {/* Image Overlay Button */}
-          <div className="relative group">
-            <button
-              onClick={() => addLayer('image')}
-              disabled={hasVideoLayer}
-              className={`w-full px-4 py-3 rounded-lg font-medium text-sm ${
-                hasVideoLayer
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-600 text-white hover:bg-blue-700'
-              }`}
-            >
-              🖼️ Image Overlay
-            </button>
-            {hasVideoLayer && (
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                Cannot add image overlay when video layer exists
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => addLayer('image')}
+            className="w-full px-4 py-3 rounded-lg font-medium text-sm bg-blue-600 text-white hover:bg-blue-700"
+          >
+            🖼️ Image Overlay
+          </button>
 
           {/* Text Overlay Button */}
           <button
@@ -1730,6 +1767,35 @@ const LayersSection = ({ config, updateConfig }) => {
           >
             ⬛ Shape/Graphics
           </button>
+        </div>
+
+        {/* Dynamic Layers Section */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <h5 className="text-sm font-medium text-gray-700 mb-2">Dynamic Layers (for variable arrays):</h5>
+          <p className="text-xs text-gray-500 mb-3">
+            Use these for content that changes per video (e.g., product images, slideshow videos)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Dynamic Image Button */}
+            <div className="relative group">
+              <button
+                onClick={() => openDynamicLayerDialog('image')}
+                className="w-full px-4 py-3 rounded-lg font-medium text-sm border-2 bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 hover:border-blue-400"
+              >
+                🖼️✨ Dynamic Images
+              </button>
+            </div>
+
+            {/* Dynamic Video Button */}
+            <div className="relative group">
+              <button
+                onClick={() => openDynamicLayerDialog('video')}
+                className="w-full px-4 py-3 rounded-lg font-medium text-sm border-2 bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100 hover:border-purple-400"
+              >
+                🎥✨ Dynamic Videos
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1751,16 +1817,22 @@ const LayersSection = ({ config, updateConfig }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">
-                      {layer.type === 'video' && '🎥'}
-                      {layer.type === 'image' && '🖼️'}
+                      {layer.type === 'video' && (layer.is_dynamic ? '🎥✨' : '🎥')}
+                      {layer.type === 'image' && (layer.is_dynamic ? '🖼️✨' : '🖼️')}
                       {layer.type === 'text' && '📝'}
                       {layer.type === 'shape' && '⬛'}
                     </span>
                     <div>
                       <div className="font-medium text-gray-900">
+                        {layer.is_dynamic && 'Dynamic '}
                         {layer.type.charAt(0).toUpperCase() + layer.type.slice(1)} Layer
                       </div>
                       <div className="text-xs text-gray-500">
+                        {layer.is_dynamic && (
+                          <span className="text-blue-600 font-medium">
+                            Variable: {layer.variable_name} |
+                          </span>
+                        )}
                         z-index: {layer.z_index} | opacity: {(layer.opacity * 100).toFixed(0)}%
                       </div>
                     </div>
@@ -1811,6 +1883,76 @@ const LayersSection = ({ config, updateConfig }) => {
         <div className="text-center py-8 text-gray-500">
           <div className="text-4xl mb-2">🎨</div>
           <p>No layers yet. Add your first layer above!</p>
+        </div>
+      )}
+
+      {/* Dynamic Layer Dialog */}
+      {showDynamicLayerDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+            {/* Dialog Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-xl font-bold text-gray-900">
+                {dynamicLayerType === 'image' ? '🖼️✨' : '🎥✨'} Add Dynamic {dynamicLayerType === 'image' ? 'Image' : 'Video'} Layer
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Create a layer that accepts an array of {dynamicLayerType}s
+              </p>
+            </div>
+
+            {/* Dialog Body */}
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Variable Name *
+                </label>
+                <input
+                  type="text"
+                  value={dynamicLayerVariableName}
+                  onChange={(e) => setDynamicLayerVariableName(e.target.value)}
+                  placeholder={`e.g., product_${dynamicLayerType}s or slideshow_${dynamicLayerType}s`}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      confirmAddDynamicLayer();
+                    } else if (e.key === 'Escape') {
+                      cancelDynamicLayerDialog();
+                    }
+                  }}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use letters, numbers, and underscores only. Must start with a letter or underscore.
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <h6 className="text-sm font-semibold text-blue-900 mb-1">How it works:</h6>
+                <ul className="text-xs text-blue-800 space-y-1">
+                  <li>• This creates a variable that accepts an array of {dynamicLayerType} URLs</li>
+                  <li>• When generating videos, pass the {dynamicLayerType}s as: <code className="bg-blue-100 px-1 rounded">"{dynamicLayerVariableName}": ["url1.jpg", "url2.jpg", ...]</code></li>
+                  <li>• Each {dynamicLayerType} will be shown sequentially in the video</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Dialog Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={cancelDynamicLayerDialog}
+                className="px-4 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAddDynamicLayer}
+                disabled={!dynamicLayerVariableName.trim()}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Layer
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1899,8 +2041,55 @@ const LayerEditor = ({ layer, updateLayer }) => {
 
   return (
     <div className="space-y-4">
-      {/* Image/Video Sources Array */}
-      {(layer.type === 'video' || layer.type === 'image') && (
+      {/* Dynamic Layer Info */}
+      {layer.is_dynamic && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">✨</span>
+              <div className="flex-1">
+                <h6 className="font-semibold text-blue-900 mb-1">Dynamic Layer</h6>
+                <p className="text-sm text-blue-700 mb-2">
+                  This layer uses a variable array. The actual {layer.type}s will be provided when generating videos.
+                </p>
+                <div className="bg-white rounded border border-blue-200 p-3">
+                  <div className="text-xs font-mono text-gray-600 mb-1">Variable Name:</div>
+                  <div className="text-sm font-mono font-semibold text-blue-900">
+                    {'{{'}{layer.variable_name}{'}}'}
+                  </div>
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  💡 When calling the API, pass: <code className="bg-blue-100 px-1 rounded">"{layer.variable_name}": ["url1.jpg", "url2.jpg", ...]</code>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Duration per item for dynamic layers */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Duration per {layer.type} (seconds)
+              <span className="ml-2 text-xs text-gray-500">
+                How long each {layer.type} in the array should display
+              </span>
+            </label>
+            <input
+              type="number"
+              min="0.5"
+              step="0.5"
+              value={layer.duration_per_item || 5}
+              onChange={(e) => updateLayer(layer.id, { duration_per_item: parseFloat(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              This can be overridden when generating the video based on audio duration
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Image/Video Sources Array (only for non-dynamic layers) */}
+      {(layer.type === 'video' || layer.type === 'image') && !layer.is_dynamic && (
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">

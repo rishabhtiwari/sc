@@ -86,6 +86,101 @@ app.post('/api/videos/background-audio', upload.single('file'), async (req, res)
     }
 });
 
+// Special route for product media file uploads (must come before general API proxy)
+// This proxies to API server to maintain API Gateway pattern
+app.post('/api/products/:productId/upload-media', upload.array('files', 20), async (req, res) => {
+    try {
+        const productId = req.params.productId;
+
+        // Check if files were uploaded
+        if (!req.files || req.files.length === 0) {
+            // No files - this might be JSON data with URLs
+            // Check if there's JSON body data
+            if (req.body && Object.keys(req.body).length > 0) {
+                console.log(`🔄 Proxying product media URL upload (JSON) for product ${productId}`);
+                console.log(`📎 JSON data:`, req.body);
+
+                const targetUrl = `${API_SERVER_URL}/api/products/${productId}/upload-media`;
+
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                // Forward Authorization header (CRITICAL for multi-tenant isolation)
+                if (req.headers['authorization']) {
+                    headers['Authorization'] = req.headers['authorization'];
+                }
+
+                // Forward multi-tenant headers
+                if (req.headers['x-customer-id']) {
+                    headers['X-Customer-ID'] = req.headers['x-customer-id'];
+                }
+                if (req.headers['x-user-id']) {
+                    headers['X-User-ID'] = req.headers['x-user-id'];
+                }
+
+                const response = await axios.post(targetUrl, req.body, {
+                    headers: headers,
+                    validateStatus: () => true
+                });
+
+                return res.status(response.status).json(response.data);
+            }
+
+            // No files and no JSON data
+            return res.status(400).json({ status: 'error', error: 'No files or media URLs provided' });
+        }
+
+        const formData = new FormData();
+
+        // Append all files
+        req.files.forEach((file, index) => {
+            console.log(`📎 File ${index}: name=${file.originalname}, size=${file.size}, type=${file.mimetype}`);
+            formData.append('files', file.buffer, {
+                filename: file.originalname,
+                contentType: file.mimetype,
+                knownLength: file.size
+            });
+        });
+
+        const targetUrl = `${API_SERVER_URL}/api/products/${productId}/upload-media`;
+        console.log(`🔄 Proxying product media upload ${req.method} ${req.originalUrl} -> ${targetUrl} (api-server)`);
+        console.log(`📎 Uploading ${req.files.length} files for product ${productId}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward Authorization header (CRITICAL for multi-tenant isolation)
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
+        // Forward multi-tenant headers
+        if (req.headers['x-customer-id']) {
+            headers['X-Customer-ID'] = req.headers['x-customer-id'];
+        }
+        if (req.headers['x-user-id']) {
+            headers['X-User-ID'] = req.headers['x-user-id'];
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Product media upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'Product media upload proxy error',
+            message: error.message
+        });
+    }
+});
+
 // API Proxy Routes - Forward ALL /api/* requests to API server (API Gateway pattern)
 // IMPORTANT: This must come BEFORE static file middleware to prevent /api routes from being caught by static handler
 // The API server will handle routing to appropriate backend services with proper JWT middleware
@@ -109,11 +204,18 @@ app.use('/api', async (req, res) => {
                                 req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 
         // Check if this is a video endpoint that returns binary data
+        const isVideoEndpoint = req.originalUrl.startsWith('/api/templates/preview/video/') ||
+                                req.originalUrl.startsWith('/api/ecommerce/public/product/') ||
+                                req.originalUrl.match(/\.mp4$/) ||
+                                req.originalUrl.match(/\.webm$/) ||
+                                req.originalUrl.match(/\.mov$/);
+
+        // Check if this is a video endpoint that returns binary data
         const isVideoBinaryEndpoint = req.originalUrl.startsWith('/api/news/videos/shorts/') ||
                                       req.originalUrl.match(/\/api\/news\/videos\/[^\/]+\/(latest\.mp4|latest-thumbnail\.jpg)$/);
 
         // Check if this is a binary endpoint (image, audio, or video)
-        const isBinaryEndpoint = isImageEndpoint || isAudioEndpoint || isVideoBinaryEndpoint;
+        const isBinaryEndpoint = isImageEndpoint || isAudioEndpoint || isVideoBinaryEndpoint || isVideoEndpoint;
 
         // Prepare headers
         const headers = {};
@@ -169,10 +271,14 @@ app.use('/api', async (req, res) => {
                 contentType = 'image/jpeg';
             } else if (isAudioEndpoint && !contentType) {
                 contentType = 'audio/wav';
-            } else if (isVideoBinaryEndpoint && !contentType) {
+            } else if ((isVideoBinaryEndpoint || isVideoEndpoint) && !contentType) {
                 // Determine content type based on file extension
                 if (req.originalUrl.endsWith('.mp4')) {
                     contentType = 'video/mp4';
+                } else if (req.originalUrl.endsWith('.webm')) {
+                    contentType = 'video/webm';
+                } else if (req.originalUrl.endsWith('.mov')) {
+                    contentType = 'video/quicktime';
                 } else if (req.originalUrl.endsWith('.jpg')) {
                     contentType = 'image/jpeg';
                 }

@@ -71,6 +71,7 @@ class TemplateManager:
                     'version': 1,
                     'metadata': 1,
                     'customer_id': 1,  # Include customer_id to identify system vs customer templates
+                    'variables': 1,  # Include variables for frontend to display variable inputs
                     '_id': 0
                 }
             )
@@ -85,7 +86,8 @@ class TemplateManager:
                     'version': template.get('version', '1.0.0'),
                     'thumbnail': template.get('metadata', {}).get('thumbnail', ''),
                     'customer_id': template.get('customer_id'),  # Include to identify ownership
-                    'tags': template.get('metadata', {}).get('tags', [])
+                    'tags': template.get('metadata', {}).get('tags', []),
+                    'variables': template.get('variables', {})  # Include variables for frontend
                 })
 
             if self.logger:

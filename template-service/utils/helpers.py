@@ -85,6 +85,10 @@ def substitute_variables(template_str: str, variables: Dict[str, Any]) -> str:
     Substitute {{variable}} placeholders in string
     Supports both simple variables {{var}} and indexed arrays {{var[0]}}
 
+    Note: This function is designed to work on individual strings, not entire
+    JSON structures. For complex objects with arrays, use the object-based
+    substitution in VariableResolver._substitute_in_object instead.
+
     Args:
         template_str: String with {{placeholders}}
         variables: Dictionary of variable values
@@ -108,7 +112,11 @@ def substitute_variables(template_str: str, variables: Dict[str, Any]) -> str:
             return match.group(0)  # Return original if index invalid
 
         # Handle simple variable: {{var_name}}
-        return str(variables.get(var_name, match.group(0)))
+        var_value = variables.get(var_name, match.group(0))
+
+        # Convert value to string
+        # Note: Arrays should not appear here if using object-based substitution
+        return str(var_value)
 
     # Match both {{var}} and {{var[0]}} patterns
     # Pattern: {{word}} or {{word[number]}}

@@ -352,6 +352,13 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
         model: selectedModel,
         language: selectedLanguage,
         sectionPitches: sectionSpeeds  // Backend expects 'sectionPitches' key
+      },
+      audio_url: audioUrl,  // Also pass audio_url at top level for video generation
+      audio_config: {
+        voice: selectedVoice,
+        model: selectedModel,
+        language: selectedLanguage,
+        sectionPitches: sectionSpeeds
       }
     });
   };
@@ -499,35 +506,10 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
             </div>
           </div>
 
-          {/* Step 1: Model Selection */}
+          {/* Step 1: Voice/Speaker Selection with Preview */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <label className="block text-sm font-semibold text-gray-900 mb-3">
-              1️⃣ Select Audio Model
-            </label>
-            <div className="space-y-2">
-              {Object.values(audioModels)
-                .filter(model => model.languages.includes(selectedLanguage))
-                .map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => setSelectedModel(model.id)}
-                    className={`w-full p-3 border-2 rounded-lg text-left transition-all ${
-                      selectedModel === model.id
-                        ? 'border-indigo-500 bg-indigo-50'
-                        : 'border-gray-300 hover:border-indigo-300'
-                    }`}
-                  >
-                    <h5 className="font-medium text-gray-900">{model.name}</h5>
-                    <p className="text-sm text-gray-600">{model.description}</p>
-                  </button>
-                ))}
-            </div>
-          </div>
-
-          {/* Step 2: Voice/Speaker Selection with Preview */}
-          <div className="bg-white border border-gray-200 rounded-lg p-4">
-            <label className="block text-sm font-semibold text-gray-900 mb-3">
-              2️⃣ Select Speaker & Preview
+              1️⃣ Select Speaker & Preview
             </label>
             <div className="space-y-4">
               {Object.entries(audioModels[selectedModel]?.voices || {}).map(([category, voiceList]) => (
@@ -576,9 +558,12 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
 
 
 
-          {/* Step 4: Section-based Speed Configuration (Collapsible Advanced Options) */}
+          {/* Step 2: Section-based Speed Configuration (Collapsible Advanced Options) */}
           {getSummarySections().length > 0 && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <label className="block text-sm font-semibold text-gray-900 mb-3">
+                2️⃣ Customize Narration Speed (Optional)
+              </label>
               {/* Collapsible Header */}
               <button
                 onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
@@ -705,39 +690,20 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
             </div>
           )}
 
-          <Button
-            variant="primary"
-            onClick={handleGenerateAudio}
-            loading={generating}
-            disabled={generating}
-            className="w-full"
-          >
-            {generating ? 'Generating Audio...' : needsGeneration ? '🎙️ Generate Audio with Selected Voice' : '🔄 Regenerate Audio'}
-          </Button>
-        </div>
-      )}
+          {/* Generate/Regenerate and Play Audio Buttons - Side by Side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Regenerate Audio Button */}
+            <Button
+              variant="primary"
+              onClick={handleGenerateAudio}
+              loading={generating}
+              disabled={generating}
+              className="w-full"
+            >
+              {generating ? 'Generating Audio...' : needsGeneration ? '🎙️ Generate Audio' : '🔄 Regenerate Audio'}
+            </Button>
 
-      {/* Upload Audio Option */}
-      {audioType === 'uploaded' && (
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-          <div className="text-6xl mb-4">🎵</div>
-          <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Audio File</h4>
-          <p className="text-gray-600 mb-4">MP3, WAV, or M4A format</p>
-          <Button variant="primary">Browse Files</Button>
-          <p className="text-sm text-gray-500 mt-4">Coming soon...</p>
-        </div>
-      )}
-
-      {/* Audio Preview */}
-      {audioUrl && !hasVoiceConfigChanged() && (
-        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 rounded-lg p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-2xl">✅</span>
-            <h4 className="font-semibold text-green-900">Audio Generated Successfully!</h4>
-          </div>
-
-          {/* Play/Stop Product Audio Button */}
-          <div className="mb-3">
+            {/* Play/Stop Product Audio Button */}
             {playingProductAudio ? (
               <Button
                 variant="danger"
@@ -750,29 +716,52 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
               <Button
                 variant="secondary"
                 onClick={handlePlayProductAudio}
+                disabled={!audioUrl || hasVoiceConfigChanged()}
                 className="w-full"
+                title={!audioUrl ? 'Generate audio first to enable playback' : hasVoiceConfigChanged() ? 'Regenerate audio with new settings to enable playback' : 'Play generated audio'}
               >
-                ▶️ Play Product Audio
+                ▶️ Play Audio
               </Button>
             )}
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-gray-700">
-            <div className="flex items-center gap-1">
-              <span>🎤</span>
-              <span className="font-medium">{audioModels[selectedModel]?.name}</span>
+          {/* Audio Preview - Success Message - Below Play Button */}
+          {audioUrl && !hasVoiceConfigChanged() && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">✅</span>
+                <h4 className="text-sm font-semibold text-green-900">Audio Generated Successfully!</h4>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-gray-700">
+                <div className="flex items-center gap-1">
+                  <span>🎤</span>
+                  <span className="font-medium">{audioModels[selectedModel]?.name}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>🗣️</span>
+                  <span className="font-medium">
+                    {getAvailableVoices().find(v => v.id === selectedVoice)?.name || selectedVoice}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span>{languages.find(l => l.id === selectedLanguage)?.flag}</span>
+                  <span className="font-medium">{languages.find(l => l.id === selectedLanguage)?.name}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1">
-              <span>🗣️</span>
-              <span className="font-medium">
-                {getAvailableVoices().find(v => v.id === selectedVoice)?.name || selectedVoice}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <span>{languages.find(l => l.id === selectedLanguage)?.flag}</span>
-              <span className="font-medium">{languages.find(l => l.id === selectedLanguage)?.name}</span>
-            </div>
-          </div>
+          )}
+        </div>
+      )}
+
+      {/* Upload Audio Option */}
+      {audioType === 'uploaded' && (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+          <div className="text-6xl mb-4">🎵</div>
+          <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Audio File</h4>
+          <p className="text-gray-600 mb-4">MP3, WAV, or M4A format</p>
+          <Button variant="primary">Browse Files</Button>
+          <p className="text-sm text-gray-500 mt-4">Coming soon...</p>
         </div>
       )}
 

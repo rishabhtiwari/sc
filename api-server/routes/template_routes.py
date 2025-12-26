@@ -116,6 +116,31 @@ def delete_template(template_id):
         return jsonify({'error': str(e)}), 500
 
 
+@template_bp.route('/templates/<template_id>/generate', methods=['POST'])
+def generate_video_from_template(template_id):
+    """Generate video from template with variables"""
+    try:
+        logger.info(f"🎬 POST /templates/{template_id}/generate - Proxying to template-service")
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+
+        response = requests.post(
+            f'{TEMPLATE_SERVICE_URL}/api/templates/{template_id}/generate',
+            json=request.get_json(),
+            headers=headers,
+            timeout=300  # 5 minutes timeout for video generation
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error proxying to template-service generate: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @template_bp.route('/templates/resolve', methods=['POST'])
 def resolve_template():
     """Resolve template with variables"""

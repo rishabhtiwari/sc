@@ -176,6 +176,8 @@ services:
       - LOG_FILE=/app/logs/template-service.log
       # CORS
       - CORS_ORIGINS=*
+      # API Server URL (for calling preview endpoint)
+      - API_SERVER_URL=http://ichat-api-server:8080
       # Default Templates
       - DEFAULT_LONG_VIDEO_TEMPLATE=modern_news_v1
       - DEFAULT_SHORTS_TEMPLATE=vertical_overlay_v1
@@ -807,11 +809,14 @@ services:
       - LLM_SERVICE_URL=http://ichat-llm-service:8083
       - VIDEO_GENERATOR_URL=http://ichat-video-generator:8095
       - AUDIO_GENERATION_URL=http://audio-generation-factory:3000
-      - TEMPLATE_SERVICE_URL=http://ichat-template-service:5010
+      - TEMPLATE_SERVICE_URL=http://ichat-template-service:5000
       # External API Server URL (for generating browser-accessible URLs)
       - API_SERVER_EXTERNAL_URL=http://localhost:8080
+      # Internal API Server URL (for container-to-container communication)
+      - API_SERVER_INTERNAL_URL=http://ichat-api-server:8080
     volumes:
       - ./jobs/ecommerce-service/logs:/app/logs
+      - ./jobs/ecommerce-service/public:/app/public
     networks:
       - ichat-network
     depends_on:
