@@ -121,6 +121,69 @@ const defaultParseContent = (text) => {
 };
 
 /**
+ * Convert JSON object to sections array
+ * Dynamically handles any JSON structure from LLM output
+ *
+ * @param {Object} jsonContent - JSON object from LLM
+ * @returns {Array} Array of section objects with title and content
+ */
+const convertJsonToSections = (jsonContent) => {
+  if (!jsonContent || typeof jsonContent !== 'object') {
+    return [];
+  }
+
+  const sections = [];
+
+  // Helper to format field name as title
+  const formatTitle = (fieldName) => {
+    return fieldName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  // Helper to format content based on type
+  const formatContent = (value) => {
+    if (Array.isArray(value)) {
+      // Handle array of objects (like key_features)
+      if (value.length > 0 && typeof value[0] === 'object') {
+        return value.map((item, index) => {
+          // Extract feature_name/title and description
+          const name = item.feature_name || item.title || item.name || `Item ${index + 1}`;
+          const desc = item.description || item.content || item.text || '';
+          return `**${name}:** ${desc}`;
+        }).join('\n\n');
+      }
+      // Handle array of strings
+      return value.map((item, index) => `${index + 1}. ${item}`).join('\n');
+    } else if (typeof value === 'object') {
+      // Handle nested objects
+      return Object.entries(value)
+        .map(([key, val]) => `**${formatTitle(key)}:** ${val}`)
+        .join('\n\n');
+    } else {
+      // Handle primitive values (string, number, boolean)
+      return String(value);
+    }
+  };
+
+  // Convert each field to a section
+  Object.entries(jsonContent).forEach(([key, value]) => {
+    // Skip metadata fields
+    if (key === 'sections' || key === 'full_text' || key === 'metadata') {
+      return;
+    }
+
+    sections.push({
+      title: formatTitle(key),
+      content: formatContent(value)
+    });
+  });
+
+  return sections;
+};
+
+/**
  * Generic AI Content Generator Component
  * Can be used for product summaries, news articles, social posts, etc.
  *
@@ -128,8 +191,11 @@ const defaultParseContent = (text) => {
  * @param {string} props.endpoint - API endpoint for content generation
  * @param {Object} props.inputData - Data to send to the endpoint
  * @param {string} props.initialContent - Initial content value
+ * @param {string} props.initialTemplateId - Initial template ID (for editing)
+ * @param {Object} props.initialTemplateVariables - Initial template variables (for editing)
  * @param {Function} props.onContentGenerated - Callback when content is generated
  * @param {Function} props.onContentChange - Callback when content is edited
+ * @param {Function} props.onTemplateSelect - Callback when template is selected
  * @param {string} props.label - Label for the content area
  * @param {string} props.placeholder - Placeholder text
  * @param {boolean} props.showEditMode - Show edit/preview toggle
@@ -137,14 +203,18 @@ const defaultParseContent = (text) => {
  * @param {Function} props.parseContent - Custom parser for content sections (uses default markdown parser if not provided)
  * @param {boolean} props.showPromptTemplates - Show prompt template selector
  * @param {string} props.templateCategory - Template category for filtering (e.g., 'product_summary', 'article_summary')
+ * @param {Object} props.contextData - Context data for auto-populating template variables (e.g., product_name, description, price)
  * @param {string} props.className - Additional CSS classes
  */
 const AIContentGenerator = ({
   endpoint,
   inputData = {},
   initialContent = '',
+  initialTemplateId = null,
+  initialTemplateVariables = {},
   onContentGenerated,
   onContentChange,
+  onTemplateSelect,
   label = 'AI Generated Content',
   placeholder = 'Generated content will appear here...',
   showEditMode = true,
@@ -152,13 +222,15 @@ const AIContentGenerator = ({
   parseContent = null,
   showPromptTemplates = false,
   templateCategory = 'product_summary',
+  contextData = {},
   className = ''
 }) => {
   const [content, setContent] = useState(initialContent);
   const [isEditing, setIsEditing] = useState(false);
   const [sections, setSections] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
-  const [customPrompt, setCustomPrompt] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId);
+  const [selectedTemplateData, setSelectedTemplateData] = useState(null);
+  const [templateVariables, setTemplateVariables] = useState(initialTemplateVariables);
   const { generating, generate } = useContentGeneration();
   const { showToast } = useToast();
 
@@ -175,6 +247,12 @@ const AIContentGenerator = ({
         // Backend already parsed it - use the sections directly
         console.log('📊 Using structured sections from backend:', content.sections);
         setSections(content.sections);
+      } else if (typeof content === 'object') {
+        // JSON object from LLM - convert to sections dynamically
+        console.log('🔄 Converting JSON object to sections:', content);
+        const dynamicSections = convertJsonToSections(content);
+        console.log('📊 Dynamic sections:', dynamicSections);
+        setSections(dynamicSections);
       } else if (typeof content === 'string') {
         // Plain text - parse it
         const parser = parseContent || defaultParseContent;
@@ -189,36 +267,93 @@ const AIContentGenerator = ({
    * Handle content generation
    */
   const handleGenerate = async (regenerate = false) => {
-    // Build request data with template/prompt info
-    const requestData = {
-      ...inputData,
-      regenerate
-    };
+    // Validate that a template is selected when showPromptTemplates is enabled
+    if (showPromptTemplates && !selectedTemplateId) {
+      showToast('⚠️ Please select a prompt template before generating content', 'error', 5000);
+      return;
+    }
 
-    // Add template or custom prompt if enabled
-    if (showPromptTemplates) {
-      if (selectedTemplateId) {
-        requestData.template_id = selectedTemplateId;
-        requestData.use_template = true;
-      } else if (customPrompt) {
-        requestData.custom_prompt = customPrompt;
-        requestData.use_template = false;
+    // Validate required template variables
+    if (showPromptTemplates && selectedTemplateId && selectedTemplateData) {
+      const requiredVars = selectedTemplateData.variables?.filter(v => v.required) || [];
+      const missingVars = requiredVars.filter(v => {
+        const value = templateVariables[v.name];
+        // Check for empty string, null, undefined, or empty array
+        if (value === null || value === undefined || value === '') {
+          return true;
+        }
+        if (typeof value === 'string' && value.trim() === '') {
+          return true;
+        }
+        if (Array.isArray(value) && value.length === 0) {
+          return true;
+        }
+        return false;
+      });
+
+      if (missingVars.length > 0) {
+        const missingNames = missingVars.map(v => v.description || v.name).join(', ');
+        showToast(`⚠️ Please fill in all required fields: ${missingNames}`, 'error', 6000);
+
+        // Log for debugging
+        console.warn('❌ Missing required template variables:', {
+          template: selectedTemplateData.name,
+          missingVars: missingVars.map(v => ({
+            name: v.name,
+            description: v.description,
+            currentValue: templateVariables[v.name]
+          }))
+        });
+
+        return;
       }
     }
+
+    // Build request data with template info
+    const requestData = {
+      ...inputData,
+      regenerate,
+      template_id: selectedTemplateId,
+      template_variables: templateVariables
+    };
 
     const result = await generate({
       endpoint,
       data: requestData,
       onSuccess: (generatedContent) => {
         setContent(generatedContent);
-        showToast('Content generated successfully', 'success');
+        showToast('✅ Content generated successfully', 'success');
 
         if (onContentGenerated) {
           onContentGenerated(generatedContent);
         }
       },
       onError: (error) => {
-        showToast(error, 'error');
+        // Provide more user-friendly error messages
+        let errorMessage = error;
+
+        if (typeof error === 'string') {
+          if (error.includes('timeout')) {
+            errorMessage = '⏱️ Request timed out. Please try again.';
+          } else if (error.includes('network')) {
+            errorMessage = '🌐 Network error. Please check your connection.';
+          } else if (error.includes('401') || error.includes('unauthorized')) {
+            errorMessage = '🔒 Session expired. Please log in again.';
+          } else if (error.includes('500')) {
+            errorMessage = '⚠️ Server error. Please try again later.';
+          } else {
+            errorMessage = `❌ ${error}`;
+          }
+        }
+
+        showToast(errorMessage, 'error', 6000);
+
+        // Log detailed error for debugging
+        console.error('❌ Content generation failed:', {
+          endpoint,
+          requestData,
+          error
+        });
       }
     });
 
@@ -378,10 +513,19 @@ const AIContentGenerator = ({
           <PromptTemplateSelector
             category={templateCategory}
             selectedTemplateId={selectedTemplateId}
-            onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
-            showCustomPrompt={true}
-            customPrompt={customPrompt}
-            onCustomPromptChange={setCustomPrompt}
+            initialTemplateVariables={initialTemplateVariables}
+            onTemplateSelect={(templateId, templateData, variables) => {
+              setSelectedTemplateId(templateId);
+              setSelectedTemplateData(templateData);
+              setTemplateVariables(variables || {});
+
+              // Notify parent component about template selection
+              if (onTemplateSelect) {
+                onTemplateSelect(templateId, templateData, variables);
+              }
+            }}
+            showCustomPrompt={false}
+            contextData={contextData}
           />
         </div>
       )}
@@ -405,8 +549,22 @@ const AIContentGenerator = ({
           {isEditing ? (
             <textarea
               className="w-full min-h-[300px] p-2 border-0 focus:outline-none focus:ring-0 resize-none"
-              value={typeof content === 'string' ? content : content.full_text || ''}
-              onChange={(e) => handleContentChange(e.target.value)}
+              value={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
+              onChange={(e) => {
+                // Try to parse as JSON if it looks like JSON, otherwise treat as string
+                const value = e.target.value;
+                try {
+                  if (value.trim().startsWith('{') || value.trim().startsWith('[')) {
+                    const parsed = JSON.parse(value);
+                    handleContentChange(parsed);
+                  } else {
+                    handleContentChange(value);
+                  }
+                } catch (err) {
+                  // If JSON parsing fails, just store as string
+                  handleContentChange(value);
+                }
+              }}
             />
           ) : showSections && sections.length > 0 ? (
             // Structured section view
@@ -424,7 +582,7 @@ const AIContentGenerator = ({
             // Plain text view
             <div className="prose max-w-none">
               <div className="whitespace-pre-wrap text-gray-700">
-                {typeof content === 'string' ? content : content.full_text || ''}
+                {typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
               </div>
             </div>
           )}

@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useState, useImperativeHandle, forwardRef } from 'react';
 import { Button, AIContentGenerator } from '../../common';
 import { useToast } from '../../../hooks/useToast';
+import api from '../../../services/api';
 
 /**
- * Step 2: AI Summary Generation
+ * Step 2: Content Generation
  */
-const Step2_AISummaryGeneration = ({ formData, onComplete, onUpdate }) => {
+const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => {
   const { showToast } = useToast();
 
   // Handle both old (string) and new (object) formats for initial state
@@ -19,31 +20,143 @@ const Step2_AISummaryGeneration = ({ formData, onComplete, onUpdate }) => {
     return '';
   };
 
+  // Use local state to store the summary until user clicks "Next"
+  const [currentSummary, setCurrentSummary] = useState(getInitialSummary());
+
+  // Store template info for saving
+  const [selectedTemplateId, setSelectedTemplateId] = useState(formData.prompt_template_id || null);
+  const [selectedTemplateVariables, setSelectedTemplateVariables] = useState(formData.prompt_template_variables || {});
+
   const handleContentGenerated = (content) => {
-    // Update parent formData when content is generated
-    onUpdate({ ai_summary: content });
+    console.log('🎯 Step2 handleContentGenerated called with:', content);
+
+    // Backend now sends us pre-formatted text, no parsing needed!
+    // Just use the content directly (it's already a string)
+    const textContent = typeof content === 'string' ? content : String(content);
+
+    console.log('📝 Received text content:', textContent);
+    console.log('📝 Text content length:', textContent?.length);
+
+    // Store in local state - don't save to backend yet
+    setCurrentSummary(textContent);
+
+    console.log('✅ currentSummary state updated');
+  };
+
+  const handleTemplateSelect = (templateId, templateData, variables) => {
+    console.log('🎯 Step2 handleTemplateSelect called:', { templateId, templateData, variables });
+
+    // Store template info for saving later
+    setSelectedTemplateId(templateId);
+    setSelectedTemplateVariables(variables || {});
   };
 
   const handleContentChange = (content) => {
-    // Update parent formData when content is edited
-    onUpdate({ ai_summary: content });
+    console.log('🎯 Step2 handleContentChange called with:', content);
+    console.log('📝 Content type:', typeof content);
+    console.log('📝 Content length:', content?.length);
+
+    // Update local state when content is edited
+    setCurrentSummary(content);
+
+    console.log('✅ currentSummary state updated from edit');
   };
 
-  const handleNext = () => {
-    const summary = getInitialSummary();
-    if (!summary || !summary.trim()) {
-      showToast('Please generate or enter an AI summary', 'error');
-      return;
+  // Expose handleNext to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleNext
+  }));
+
+  const handleNext = async () => {
+    // Use local state instead of formData
+    const summary = currentSummary;
+
+    console.log('🔍 Step2 handleNext - Validation:', {
+      summary,
+      summaryType: typeof summary,
+      summaryLength: summary?.length,
+      trimmedLength: summary?.trim?.()?.length
+    });
+
+    // Validate that summary exists
+    if (!summary || (typeof summary === 'string' && !summary.trim())) {
+      showToast('⚠️ Please generate or enter an AI summary before proceeding', 'error', 5000);
+      return false;
     }
 
-    onComplete({ ai_summary: summary });
+    // Save AI summary to product and update status to 'summary_generated'
+    if (formData.product_id) {
+      try {
+        console.log('💾 Saving AI summary to product:', formData.product_id);
+
+        await api.put(`/products/${formData.product_id}`, {
+          status: 'summary_generated',
+          ai_summary: summary,
+          prompt_template_id: selectedTemplateId,
+          prompt_template_variables: selectedTemplateVariables
+        });
+
+        console.log('✅ AI summary saved successfully');
+        showToast('✅ AI summary saved successfully', 'success');
+      } catch (error) {
+        console.error('❌ Error saving AI summary:', error);
+
+        // Provide more specific error messages
+        let errorMessage = 'Failed to save AI summary. Please try again.';
+
+        if (error.response) {
+          const status = error.response.status;
+          const data = error.response.data;
+
+          if (status === 401) {
+            errorMessage = '🔒 Session expired. Please log in again.';
+          } else if (status === 404) {
+            errorMessage = '❌ Product not found. Please refresh and try again.';
+          } else if (status === 500) {
+            errorMessage = '⚠️ Server error. Please try again later.';
+          } else if (data?.message) {
+            errorMessage = `❌ ${data.message}`;
+          }
+        } else if (error.request) {
+          errorMessage = '🌐 Network error. Please check your connection.';
+        }
+
+        showToast(errorMessage, 'error', 6000);
+        return false;
+      }
+    }
+
+    console.log('✅ Proceeding to next step with data:', {
+      ai_summary: summary,
+      prompt_template_id: selectedTemplateId,
+      prompt_template_variables: selectedTemplateVariables
+    });
+
+    // Proceed to next step (Audio Configuration)
+    onComplete({
+      ai_summary: summary,
+      prompt_template_id: selectedTemplateId,
+      prompt_template_variables: selectedTemplateVariables
+    });
+
+    return true;
+  };
+
+  // Build context data for template variable auto-population
+  const contextData = {
+    product_name: formData.product_name || '',
+    description: formData.description || '',
+    category: formData.category || 'General',
+    price_info: formData.price ? `$${formData.price} ${formData.currency || 'USD'}` : 'Premium quality',
+    price: formData.price || '',
+    currency: formData.currency || 'USD'
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">🤖 AI Summary Generation</h3>
-        <p className="text-gray-600">Generate a compelling summary for your product video</p>
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">🤖 Content Generation</h3>
+        <p className="text-gray-600">Generate compelling content for your product video using AI prompt templates</p>
       </div>
 
       {/* Original Description */}
@@ -54,40 +167,36 @@ const Step2_AISummaryGeneration = ({ formData, onComplete, onUpdate }) => {
 
       {/* AI Content Generator */}
       <AIContentGenerator
-        endpoint={`/products/${formData.product_id}/generate-summary`}
+        endpoint="/content/generate"
         inputData={{}}
         initialContent={getInitialSummary()}
+        initialTemplateId={selectedTemplateId}
+        initialTemplateVariables={selectedTemplateVariables}
         onContentGenerated={handleContentGenerated}
         onContentChange={handleContentChange}
-        label="AI Generated Summary"
-        placeholder="Click 'Generate' to create an AI summary"
+        onTemplateSelect={handleTemplateSelect}
+        label="Generated Content"
+        placeholder="Click 'Generate' to create content for your product"
         showEditMode={true}
         showSections={true}
         showPromptTemplates={true}
         templateCategory="product_summary"
+        contextData={contextData}
       />
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="font-medium text-blue-900 mb-2">💡 Tips for a Great Summary:</h4>
+        <h4 className="font-medium text-blue-900 mb-2">💡 Tips for Great Content:</h4>
         <ul className="text-sm text-blue-800 space-y-1">
+          <li>• Select a prompt template that matches your content needs</li>
           <li>• Aim for 300-450 words for a 2-3 minute video narration</li>
-          <li>• Summary will have 5 sections: Opening Hook, Product Introduction, Key Features & Benefits, Social Proof & Trust, Call-to-Action</li>
           <li>• Use conversational tone suitable for voiceover</li>
-          <li>• Focus on what makes your product unique</li>
+          <li>• Focus on what makes your product unique and valuable</li>
         </ul>
-      </div>
-
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          onClick={handleNext}
-          disabled={!getInitialSummary().trim()}
-        >
-          Next: Configure Audio →
-        </Button>
       </div>
     </div>
   );
-};
+});
+
+Step2_AISummaryGeneration.displayName = 'Step2_AISummaryGeneration';
 
 export default Step2_AISummaryGeneration;

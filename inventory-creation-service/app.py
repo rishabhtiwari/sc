@@ -15,9 +15,11 @@ from services import (
     product_bp,
     public_bp,
     prompt_template_bp,
+    content_generation_bp,
     init_product_service,
     init_public_service,
-    init_prompt_template_service
+    init_prompt_template_service,
+    init_content_generation_service
 )
 
 # Configure logging
@@ -62,18 +64,20 @@ product_workflow = ProductWorkflow(
 init_product_service(products_collection, product_workflow, API_SERVER_URL)
 init_public_service(products_collection)
 init_prompt_template_service(prompt_templates_collection)
+init_content_generation_service(product_workflow.prompt_template_handler)
 
 # Register Blueprints
 app.register_blueprint(product_bp)
 app.register_blueprint(public_bp)
 app.register_blueprint(prompt_template_bp)
+app.register_blueprint(content_generation_bp)
 
 logger.info("✅ Inventory Creation Service initialized")
 logger.info(f"   LLM Service: {LLM_SERVICE_URL}")
 logger.info(f"   Audio Service: {AUDIO_GENERATION_URL}")
 logger.info(f"   Template Service: {TEMPLATE_SERVICE_URL}")
 logger.info(f"   Video Generator: {VIDEO_GENERATOR_URL}")
-logger.info(f"   Registered Blueprints: product, public, prompt_template")
+logger.info(f"   Registered Blueprints: product, public, prompt_template, content_generation")
 
 
 # ========== Health Check ==========

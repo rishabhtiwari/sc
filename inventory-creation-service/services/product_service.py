@@ -103,16 +103,21 @@ def create_product():
     try:
         customer_id = request.headers.get('X-Customer-ID', 'default')
         user_id = request.headers.get('X-User-ID', 'default')
-        
+
         data = request.get_json()
-        
-        # Validate required fields
-        if not data.get('name'):
+
+        # Validate required fields - accept both 'name' and 'product_name'
+        product_name = data.get('name') or data.get('product_name')
+        if not product_name:
             return jsonify({
                 'status': 'error',
                 'message': 'Product name is required'
             }), 400
-        
+
+        # Normalize to 'name' for backend consistency
+        if 'product_name' in data and 'name' not in data:
+            data['name'] = data['product_name']
+
         # Create product using workflow
         product_id = product_bp.product_workflow.create_product(
             data, customer_id, user_id
@@ -203,49 +208,79 @@ def delete_product(product_id):
 
 @product_bp.route('/stats', methods=['GET'])
 def get_product_stats():
-    """Get product statistics"""
+    """
+    Get product statistics
+
+    Returns counts for:
+    - total: All products
+    - pending: Products in draft or summary_generated status (not yet started video generation)
+    - processing: Products currently being processed (video generation in progress)
+    - completed: Products with completed video generation
+    - failed: Products with failed video generation
+    """
     try:
         customer_id = request.headers.get('X-Customer-ID', 'default')
         user_id = request.headers.get('X-User-ID', 'default')
 
+        # Total products
         total = product_bp.products_collection.count_documents({
             'customer_id': customer_id,
             'user_id': user_id
         })
 
+        # Pending: Products in draft, summary_generated, audio_configured, or template_selected status
+        # These are products that haven't started video generation yet
+        pending = product_bp.products_collection.count_documents({
+            'customer_id': customer_id,
+            'user_id': user_id,
+            '$or': [
+                {'status': 'draft'},
+                {'status': 'summary_generated'},
+                {'status': 'audio_configured'},
+                {'status': 'template_selected'},
+                {'generated_video': {'$exists': False}},
+                {'generated_video.status': {'$exists': False}},
+                {'generated_video.status': 'pending'}
+            ]
+        })
+
+        # Processing: Products with video generation in progress
+        processing = product_bp.products_collection.count_documents({
+            'customer_id': customer_id,
+            'user_id': user_id,
+            'generated_video.status': 'processing'
+        })
+
+        # Completed: Products with completed video generation
         completed = product_bp.products_collection.count_documents({
             'customer_id': customer_id,
             'user_id': user_id,
             'generated_video.status': 'completed'
         })
 
-        in_progress = product_bp.products_collection.count_documents({
+        # Failed: Products with failed video generation
+        failed = product_bp.products_collection.count_documents({
             'customer_id': customer_id,
             'user_id': user_id,
-            'generated_video.status': 'processing'
-        })
-
-        draft = product_bp.products_collection.count_documents({
-            'customer_id': customer_id,
-            'user_id': user_id,
-            'status': 'draft'
+            'generated_video.status': 'failed'
         })
 
         stats = {
             'total': total,
+            'pending': pending,
+            'processing': processing,
             'completed': completed,
-            'in_progress': in_progress,
-            'draft': draft
+            'failed': failed
         }
 
-        logger.info(f"✅ Stats: {stats}")
+        logger.info(f"✅ Product Stats: {stats}")
         return jsonify({
             'status': 'success',
             'stats': stats
         }), 200
 
     except Exception as e:
-        logger.error(f"❌ Error fetching stats: {str(e)}")
+        logger.error(f"❌ Error fetching stats: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': str(e)
@@ -290,16 +325,19 @@ def generate_summary(product_id):
         custom_prompt = data.get('custom_prompt')
         template_id = data.get('template_id', 'product_summary_default_v1')
         use_template = data.get('use_template', True)
+        template_variables = data.get('template_variables', {})
 
         # Choose generation method
         if use_template and not custom_prompt:
             # New template-based generation with JSON output
             logger.info(f"Using template-based generation with template: {template_id}")
+            logger.info(f"Template variables: {template_variables}")
             result = product_bp.product_workflow.generate_ai_summary_with_template(
                 content_id=product_id,
                 template_id=template_id,
                 customer_id=customer_id,
-                regenerate=regenerate
+                regenerate=regenerate,
+                template_variables=template_variables
             )
         else:
             # Legacy generation method

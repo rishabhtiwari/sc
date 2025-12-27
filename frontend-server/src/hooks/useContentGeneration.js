@@ -28,9 +28,11 @@ export const useContentGeneration = () => {
       const response = await api.post(endpoint, data);
 
       if (response.data.status === 'success') {
-        const generatedContent = response.data.ai_summary || response.data.content || response.data.result;
+        // Backend now sends 'content_text' (formatted text) and 'content' (raw JSON)
+        // Prefer content_text for display, fallback to other fields for backward compatibility
+        const generatedContent = response.data.content_text || response.data.ai_summary || response.data.content || response.data.result;
         setContent(generatedContent);
-        
+
         if (onSuccess) {
           onSuccess(generatedContent, response.data);
         }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Button, AuthenticatedImage, AuthenticatedVideo } from '../../common';
 import { templateService, productService } from '../../../services';
 import { useToast } from '../../../hooks/useToast';
@@ -6,7 +6,7 @@ import { useToast } from '../../../hooks/useToast';
 /**
  * Step 5: Template Selection with User Templates & Variables
  */
-const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
+const Step5_TemplateSelection = forwardRef(({ formData, onComplete }, ref) => {
   console.log('🎨 Step5_TemplateSelection - formData:', formData);
   console.log('🎨 Step5_TemplateSelection - formData.template_id:', formData.template_id);
   console.log('🎨 Step5_TemplateSelection - formData.media_files:', formData.media_files);
@@ -134,7 +134,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
       if (reconstructedFiles.length > 0) {
         console.log('✅ Reconstructed mediaFiles:', reconstructedFiles);
         setMediaFiles(reconstructedFiles);
-        onUpdate({ media_files: reconstructedFiles });
       } else {
         console.log('⚠️ No files to reconstruct');
       }
@@ -215,7 +214,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
     console.log('💾 Saving updated section mapping:', updatedMapping);
     setSectionMapping(updatedMapping);
-    onUpdate({ section_mapping: updatedMapping });
   };
 
   // Wrapper functions for images and videos
@@ -294,11 +292,7 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
               setSelectedTemplate(firstTemplate.template_id);
 
-              // Update formData with the new template_id
-              onUpdate({
-                template_id: firstTemplate.template_id,
-                template_variables: firstTemplate.variables || {}
-              });
+              // Template ID is already set in local state
             }
           }
         } else {
@@ -401,7 +395,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
           });
           console.log('✅ Final initialized variables:', initialVars);
           setTemplateVariables(initialVars);
-          onUpdate({ template_variables: initialVars });
           setInitializedTemplate(selectedTemplate);
         }
       }
@@ -416,13 +409,11 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
     setTemplateVariables({});
     setSelectedTemplateDetails(null);
     setInitializedTemplate(null); // Reset initialization flag
-    onUpdate({ template_id: templateId, template_variables: {} });
   };
 
   const handleVariableChange = (varName, value) => {
     const updatedVars = { ...templateVariables, [varName]: value };
     setTemplateVariables(updatedVars);
-    onUpdate({ template_variables: updatedVars });
   };
 
 
@@ -473,7 +464,8 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
     if (invalidFiles.length > 0) {
       console.error('❌ Invalid file types:', invalidFiles.map(f => ({ name: f.name, type: f.type })));
-      showToast(`Invalid file type. Please upload ${type === 'image' ? 'images (JPG, PNG, WEBP, GIF)' : 'videos (MP4, WEBM, MOV)'}`, 'error');
+      const allowedFormats = type === 'image' ? 'JPG, PNG, WEBP, GIF' : 'MP4, WEBM, MOV';
+      showToast(`⚠️ Invalid file type. Please upload ${type === 'image' ? 'images' : 'videos'} (${allowedFormats})`, 'error', 5000);
       return;
     }
 
@@ -513,16 +505,16 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
       console.log('✅ Updated media files (browser-only):', updatedMedia);
 
       setMediaFiles(updatedMedia);
-      onUpdate({ media_files: updatedMedia });
 
       // Don't update template variables yet - wait until files are uploaded to server
       // This prevents blob URLs from being saved to backend
       console.log('ℹ️ Skipping template variable update until files are uploaded to server');
 
-      showToast(`${files.length} ${type}(s) added (will upload when you click Next/Preview)`, 'success');
+      showToast(`✅ ${files.length} ${type}(s) added (will upload when you click Next/Preview)`, 'success');
     } catch (error) {
       console.error('❌ Error processing files:', error);
-      showToast(`Failed to process ${type}s: ${error.message}`, 'error');
+      const errorMsg = error.message || 'Unknown error';
+      showToast(`❌ Failed to process ${type}s: ${errorMsg}`, 'error', 6000);
     } finally {
       setUploadingMedia(false);
       // Reset file input
@@ -568,7 +560,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
       console.log('🗑️ [STEP 6-BLOB] Updating state...');
       setMediaFiles(updatedMedia);
-      onUpdate({ media_files: updatedMedia });
 
       // Don't update template variables for local files - they haven't been uploaded yet
       console.log('🗑️ Skipping template variable update for local file removal');
@@ -621,13 +612,8 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
         console.log('🗑️ [STEP 9.1-SERVER] All states updated with backend data');
 
-        // Update parent component with all updated data from backend
-        onUpdate({
-          media_files: updatedMediaFiles,
-          template_variables: updatedTemplateVars,
-          section_mapping: updatedSectionMapping
-        });
-        console.log('🗑️ [STEP 9.2-SERVER] onUpdate called with backend data');
+        // State already updated with backend data
+        console.log('🗑️ [STEP 9.2-SERVER] State updated with backend data');
 
         console.log('🗑️ [STEP 10-SERVER] ✅ Server deletion complete');
         showToast(`${fileToRemove?.type || 'Media'} removed successfully`, 'success');
@@ -656,7 +642,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
     [newMedia[index], newMedia[targetIndex]] = [newMedia[targetIndex], newMedia[index]];
     setMediaFiles(newMedia);
-    onUpdate({ media_files: newMedia });
 
     // Update template variables
     updateArrayVariablesWithMedia(newMedia);
@@ -701,7 +686,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
     if (hasChanges) {
       console.log('✅ Saving updated template variables:', updatedVars);
       setTemplateVariables(updatedVars);
-      onUpdate({ template_variables: updatedVars });
     } else {
       console.log('⚠️ No changes to template variables');
     }
@@ -739,6 +723,11 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
     }
   };
 
+  // Expose handleNext to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleNext
+  }));
+
   const handleNext = async () => {
     console.log('🚀 handleNext called in Step5_TemplateSelection');
     console.log('📋 selectedTemplate:', selectedTemplate);
@@ -749,7 +738,7 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
     // Check if a template is selected
     if (!selectedTemplate) {
       console.log('❌ No template selected');
-      showToast('Please select a template', 'error');
+      showToast('⚠️ Please select a video template before proceeding', 'error', 5000);
       return;
     }
 
@@ -783,7 +772,7 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
         if (!hasAnyMedia) {
           console.log('❌ No media files uploaded (images or videos)');
-          showToast('Please upload at least one image or video', 'error');
+          showToast('⚠️ Please upload at least one image or video for the template', 'error', 5000);
           return;
         }
         console.log('✅ Media validation passed - at least one media type has files');
@@ -791,7 +780,8 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
 
       if (missingVars.length > 0) {
         console.log('❌ Validation failed. Missing variables:', missingVars);
-        showToast(`Please fill in required fields: ${missingVars.join(', ')}`, 'error');
+        const formattedVars = missingVars.map(v => v.replace(/_/g, ' ')).join(', ');
+        showToast(`⚠️ Please fill in required fields: ${formattedVars}`, 'error', 6000);
         return;
       }
       console.log('✅ All required variables validated');
@@ -907,7 +897,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
         if (finalMediaFiles.length > 0 && finalMediaFiles !== mediaFiles) {
           console.log('🔄 Updating state with server URLs');
           setMediaFiles(finalMediaFiles);
-          onUpdate({ media_files: finalMediaFiles });
         }
 
         // Update template variables with final media URLs
@@ -1425,7 +1414,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
               <button
                 onClick={() => {
                   setDistributionMode('auto');
-                  onUpdate({ distribution_mode: 'auto' });
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                   distributionMode === 'auto'
@@ -1438,7 +1426,6 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
               <button
                 onClick={() => {
                   setDistributionMode('manual');
-                  onUpdate({ distribution_mode: 'manual' });
                 }}
                 className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
                   distributionMode === 'manual'
@@ -1653,36 +1640,12 @@ const Step5_TemplateSelection = ({ formData, onComplete, onUpdate }) => {
         </ul>
       </div>
 
-      <div className="flex justify-end">
-        {/* Show tooltip when no media is uploaded */}
-        {mediaFiles.length === 0 ? (
-          <div className="relative group">
-            <Button variant="primary" disabled={true}>
-              Next: Preview & Generate →
-            </Button>
-            <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 bg-gray-900 text-white text-sm rounded-lg px-4 py-2 shadow-lg z-10">
-              <div className="flex items-start gap-2">
-                <span className="text-yellow-400">⚠️</span>
-                <div>
-                  <div className="font-semibold mb-1">No media uploaded</div>
-                  <div className="text-gray-300">Please upload at least one image or video to continue</div>
-                </div>
-              </div>
-              {/* Arrow pointing down */}
-              <div className="absolute top-full right-4 -mt-1">
-                <div className="border-8 border-transparent border-t-gray-900"></div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <Button variant="primary" onClick={handleNext} disabled={uploadingMedia}>
-            {uploadingMedia ? 'Saving media...' : 'Next: Preview & Generate →'}
-          </Button>
-        )}
-      </div>
+
     </div>
   );
-};
+});
+
+Step5_TemplateSelection.displayName = 'Step5_TemplateSelection';
 
 export default Step5_TemplateSelection;
 

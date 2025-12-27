@@ -103,50 +103,83 @@ class ProductWorkflow(BaseContentGenerator):
     def create_product(self, product_data, customer_id='default', user_id='default'):
         """
         Create a new product
-        
+
         Args:
             product_data: Product data dict
             customer_id: Customer ID for multi-tenancy
             user_id: User ID for multi-tenancy
-            
+
         Returns:
             str: Created product ID
         """
         from datetime import datetime
-        
+
         product_data['customer_id'] = customer_id
         product_data['user_id'] = user_id
         product_data['created_at'] = datetime.utcnow()
         product_data['updated_at'] = datetime.utcnow()
-        
+
+        # Set initial status to 'draft'
+        # Status flow: draft -> summary_generated -> audio_configured -> template_selected -> completed
+        product_data['status'] = product_data.get('status', 'draft')
+
         result = self.collection.insert_one(product_data)
-        logger.info(f"Created product {result.inserted_id}")
-        
+        logger.info(f"Created product {result.inserted_id} with status: {product_data['status']}")
+
         return str(result.inserted_id)
     
     def update_product(self, product_id, updates, customer_id=None, user_id=None):
         """
         Update product data
-        
+
         Args:
             product_id: Product ID
             updates: Dict of fields to update
             customer_id: Optional customer ID for filtering
             user_id: Optional user ID for filtering
-            
+
         Returns:
             bool: True if updated, False otherwise
         """
         from datetime import datetime
-        
+
         query = {'_id': ObjectId(product_id)}
         if customer_id:
             query['customer_id'] = customer_id
         if user_id:
             query['user_id'] = user_id
-        
+
         updates['updated_at'] = datetime.utcnow()
-        
+
         result = self.collection.update_one(query, {'$set': updates})
         return result.modified_count > 0
+
+    def update_product_status(self, product_id, status, customer_id=None, user_id=None):
+        """
+        Update product status
+
+        Valid statuses:
+        - draft: Initial state after product creation
+        - summary_generated: AI summary has been generated
+        - audio_configured: Audio settings configured
+        - template_selected: Video template selected
+        - completed: Video generation completed
+
+        Args:
+            product_id: Product ID
+            status: New status value
+            customer_id: Optional customer ID for filtering
+            user_id: Optional user ID for filtering
+
+        Returns:
+            bool: True if updated, False otherwise
+        """
+        valid_statuses = ['draft', 'summary_generated', 'audio_configured', 'template_selected', 'completed']
+
+        if status not in valid_statuses:
+            logger.warning(f"Invalid status: {status}. Valid statuses: {valid_statuses}")
+            return False
+
+        logger.info(f"Updating product {product_id} status to: {status}")
+        return self.update_product(product_id, {'status': status}, customer_id, user_id)
 

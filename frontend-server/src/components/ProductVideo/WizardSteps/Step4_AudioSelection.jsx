@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Button } from '../../common';
 import { productService } from '../../../services';
 import { useToast } from '../../../hooks/useToast';
@@ -16,7 +16,7 @@ import {
  * Step 4: Audio Selection
  */
 
-const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
+const Step4_AudioSelection = forwardRef(({ formData, onComplete }, ref) => {
   // Auto-detect language from product description
   const detectedLanguage = detectLanguage(formData.description || formData.ai_summary?.full_text || '');
 
@@ -248,7 +248,13 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
 
   const handleGenerateAudio = async () => {
     if (!formData.product_id) {
-      showToast('Product ID not found', 'error');
+      showToast('⚠️ Product ID not found. Please save the product first.', 'error', 5000);
+      return;
+    }
+
+    // Validate voice selection
+    if (!selectedVoice) {
+      showToast('⚠️ Please select a voice before generating audio', 'error', 5000);
       return;
     }
 
@@ -277,34 +283,62 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
 
         if (generatedAudioUrl) {
           setAudioUrl(generatedAudioUrl);
-          showToast('Audio generated successfully! Click "Play Product Audio" to listen.', 'success');
+          showToast('✅ Audio generated successfully! Click "Play Product Audio" to listen.', 'success');
 
-          // Update formData with new audio config and URL
-          onUpdate({
-            audio_url: generatedAudioUrl,
-            section_audio_urls: response.data.section_audio_urls,
-            audio_config: {
-              voice: selectedVoice,
-              model: selectedModel,
-              language: selectedLanguage,
-              sectionPitches: finalSpeeds
-            }
-          });
+          // Audio URL is already stored in local state (audioUrl)
+          // Will be saved when user clicks "Next"
         } else {
-          showToast('Audio generated but no URL returned', 'warning');
+          showToast('⚠️ Audio generated but no URL returned', 'warning', 5000);
         }
+      } else {
+        throw new Error(response.data.message || 'Audio generation failed');
       }
     } catch (error) {
-      console.error('Error generating audio:', error);
-      showToast('Failed to generate audio', 'error');
+      console.error('❌ Error generating audio:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Failed to generate audio. Please try again.';
+
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+
+        if (status === 401) {
+          errorMessage = '🔒 Session expired. Please log in again.';
+        } else if (status === 404) {
+          errorMessage = '❌ Product not found. Please refresh and try again.';
+        } else if (status === 500) {
+          errorMessage = '⚠️ Server error. Please try again later.';
+        } else if (data?.message) {
+          errorMessage = `❌ ${data.message}`;
+        }
+      } else if (error.request) {
+        errorMessage = '🌐 Network error. Please check your connection.';
+      } else if (error.message) {
+        errorMessage = `❌ ${error.message}`;
+      }
+
+      showToast(errorMessage, 'error', 6000);
     } finally {
       setGenerating(false);
     }
   };
 
+  // Expose handleNext to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleNext
+  }));
+
   const handleNext = () => {
+    // Validate audio is generated or uploaded
     if (!audioUrl) {
-      showToast('Please generate or upload audio', 'error');
+      showToast('⚠️ Please generate or upload audio before proceeding', 'error', 5000);
+      return;
+    }
+
+    // Validate voice selection for generated audio
+    if (audioType === 'generated' && !selectedVoice) {
+      showToast('⚠️ Please select a voice for audio generation', 'error', 5000);
       return;
     }
 
@@ -656,19 +690,11 @@ const Step4_AudioSelection = ({ formData, onComplete, onUpdate }) => {
           <p className="text-sm text-gray-500 mt-4">Coming soon...</p>
         </div>
       )}
-
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          onClick={handleNext}
-          disabled={!audioUrl}
-        >
-          Next: Choose Template →
-        </Button>
-      </div>
     </div>
   );
-};
+});
+
+Step4_AudioSelection.displayName = 'Step4_AudioSelection';
 
 export default Step4_AudioSelection;
 

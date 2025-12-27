@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '../common';
 import Step1_ProductDescription from './WizardSteps/Step1_ProductDescription';
 import Step2_AISummaryGeneration from './WizardSteps/Step2_AISummaryGeneration';
@@ -12,6 +12,7 @@ import productService from '../../services/productService';
  */
 const ProductVideoWizard = ({ product, onClose, onComplete }) => {
   const [currentStep, setCurrentStep] = useState(1);
+  const stepRefs = useRef({});
 
   console.log('🎬 ProductVideoWizard - Product data:', product);
   console.log('🎬 Product template_variables:', product?.template_variables);
@@ -24,6 +25,8 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
     price: product?.price || '',
     currency: product?.currency || 'USD',
     ai_summary: product?.ai_summary || '',
+    prompt_template_id: product?.prompt_template_id || null,  // Prompt template used for AI summary
+    prompt_template_variables: product?.prompt_template_variables || {},  // Variables used in prompt template
     media_files: [],  // Will be reconstructed from template_variables in Step5
     audio: product?.audio || null,
     audio_url: product?.audio_url || null,  // Include existing audio URL
@@ -39,15 +42,22 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
 
   const steps = [
     { id: 1, name: 'Description', icon: '📝', component: Step1_ProductDescription },
-    { id: 2, name: 'AI Summary', icon: '🤖', component: Step2_AISummaryGeneration },
+    { id: 2, name: 'Content Generation', icon: '🤖', component: Step2_AISummaryGeneration },
     { id: 3, name: 'Audio', icon: '🎵', component: Step4_AudioSelection },
     { id: 4, name: 'Template', icon: '🎨', component: Step5_TemplateSelection },
     { id: 5, name: 'Preview', icon: '👁️', component: Step6_PreviewGenerate }
   ];
 
   const handleNext = () => {
-    if (currentStep < steps.length) {
-      setCurrentStep(currentStep + 1);
+    // Call the current step's handleNext method if it exists
+    const currentStepRef = stepRefs.current[currentStep];
+    if (currentStepRef && currentStepRef.handleNext) {
+      currentStepRef.handleNext();
+    } else {
+      // If step doesn't have handleNext (like Step6), just move to next step
+      if (currentStep < steps.length) {
+        setCurrentStep(currentStep + 1);
+      }
     }
   };
 
@@ -58,13 +68,11 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
   };
 
   const handleStepComplete = (stepData) => {
-    console.log('🎯 handleStepComplete called in ProductVideoWizard');
-    console.log('📦 stepData received:', stepData);
-    console.log('📦 current formData:', formData);
-    console.log('📦 currentStep:', currentStep);
     setFormData({ ...formData, ...stepData });
-    handleNext();
-    console.log('✅ Moving to next step');
+    // Move to next step
+    if (currentStep < steps.length) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
   const handleFinish = () => {
@@ -143,12 +151,9 @@ const ProductVideoWizard = ({ product, onClose, onComplete }) => {
         {/* Step Content */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
           <CurrentStepComponent
+            ref={(el) => (stepRefs.current[currentStep] = el)}
             formData={formData}
             onComplete={handleStepComplete}
-            onUpdate={(data) => {
-              console.log('🔄 onUpdate called with:', data);
-              setFormData({ ...formData, ...data });
-            }}
           />
         </div>
 

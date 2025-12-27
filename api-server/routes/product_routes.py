@@ -74,7 +74,7 @@ def proxy_to_inventory_service(path, method='GET', json_data=None, files=None):
         # - 30 seconds for other endpoints
         if any(x in path for x in ['/generate-audio', '/generate-video', '/generate-summary']):
             timeout = 600
-        elif '/prompt-templates/generate' in path:
+        elif any(x in path for x in ['/prompt-templates/generate', '/content/generate']):
             timeout = 120
         else:
             timeout = 30
@@ -664,5 +664,36 @@ def generate_prompt_template():
     """Proxy: Generate a prompt template using AI"""
     response_data, status_code = proxy_to_inventory_service(
         '/api/prompt-templates/generate', method='POST', json_data=request.get_json()
+    )
+    return jsonify(response_data), status_code
+
+
+# ========== Generic Content Generation ==========
+
+@product_bp.route('/content/generate', methods=['POST'])
+def generate_content():
+    """
+    Proxy: Generic content generation endpoint
+
+    This endpoint provides generic LLM content generation using prompt templates.
+    It's independent of specific content types (products, blogs, social media, etc.)
+
+    Request Body:
+    {
+        "template_id": "template_xyz",  // Required if use_template=true
+        "template_variables": {          // Variables to fill in the template
+            "product_name": "iPhone 15",
+            "description": "Latest smartphone...",
+            ...
+        },
+        "use_template": true,            // Use template or custom prompt
+        "custom_prompt": "...",          // Optional: custom prompt if use_template=false
+        "output_format": "json",         // "json" or "text"
+        "temperature": 0.7,              // LLM temperature (0.0-1.0)
+        "max_tokens": 2000               // Maximum tokens to generate
+    }
+    """
+    response_data, status_code = proxy_to_inventory_service(
+        '/api/content/generate', method='POST', json_data=request.get_json()
     )
     return jsonify(response_data), status_code

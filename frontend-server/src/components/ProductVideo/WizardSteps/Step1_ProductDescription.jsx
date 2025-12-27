@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { Input, Button } from '../../common';
 import { productService } from '../../../services';
 import { useToast } from '../../../hooks/useToast';
@@ -6,7 +6,7 @@ import { useToast } from '../../../hooks/useToast';
 /**
  * Step 1: Product Description
  */
-const Step1_ProductDescription = ({ formData, onComplete, onUpdate }) => {
+const Step1_ProductDescription = forwardRef(({ formData, onComplete }, ref) => {
   const [productName, setProductName] = useState(formData.product_name || '');
   const [description, setDescription] = useState(formData.description || '');
   const [category, setCategory] = useState(formData.category || 'General');
@@ -32,14 +32,25 @@ const Step1_ProductDescription = ({ formData, onComplete, onUpdate }) => {
 
   const currencies = ['USD', 'EUR', 'GBP', 'INR', 'JPY', 'CNY'];
 
+  // Expose handleNext to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleNext
+  }));
+
   const handleNext = async () => {
     // Validation
     if (!productName.trim()) {
-      showToast('Product name is required', 'error');
+      showToast('⚠️ Product name is required', 'error', 4000);
       return;
     }
     if (!description.trim()) {
-      showToast('Product description is required', 'error');
+      showToast('⚠️ Product description is required', 'error', 4000);
+      return;
+    }
+
+    // Validate price if provided
+    if (price && (isNaN(parseFloat(price)) || parseFloat(price) < 0)) {
+      showToast('⚠️ Please enter a valid price', 'error', 4000);
       return;
     }
 
@@ -56,17 +67,19 @@ const Step1_ProductDescription = ({ formData, onComplete, onUpdate }) => {
 
       // Create or update product
       let productId = formData.product_id;
-      
+
       if (productId) {
         // Update existing product
         await productService.updateProduct(productId, data);
-        showToast('Product updated successfully', 'success');
+        showToast('✅ Product updated successfully', 'success');
       } else {
         // Create new product
         const response = await productService.createProduct(data);
         if (response.data.status === 'success') {
           productId = response.data.product_id;
-          showToast('Product created successfully', 'success');
+          showToast('✅ Product created successfully', 'success');
+        } else {
+          throw new Error(response.data.message || 'Failed to create product');
         }
       }
 
@@ -77,8 +90,31 @@ const Step1_ProductDescription = ({ formData, onComplete, onUpdate }) => {
       });
 
     } catch (error) {
-      console.error('Error saving product:', error);
-      showToast('Failed to save product', 'error');
+      console.error('❌ Error saving product:', error);
+
+      // Provide more specific error messages
+      let errorMessage = 'Failed to save product. Please try again.';
+
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+
+        if (status === 401) {
+          errorMessage = '🔒 Session expired. Please log in again.';
+        } else if (status === 400) {
+          errorMessage = `⚠️ ${data?.message || 'Invalid product data'}`;
+        } else if (status === 500) {
+          errorMessage = '⚠️ Server error. Please try again later.';
+        } else if (data?.message) {
+          errorMessage = `❌ ${data.message}`;
+        }
+      } else if (error.request) {
+        errorMessage = '🌐 Network error. Please check your connection.';
+      } else if (error.message) {
+        errorMessage = `❌ ${error.message}`;
+      }
+
+      showToast(errorMessage, 'error', 6000);
     } finally {
       setLoading(false);
     }
@@ -159,20 +195,11 @@ const Step1_ProductDescription = ({ formData, onComplete, onUpdate }) => {
           </div>
         </div>
       </div>
-
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          onClick={handleNext}
-          loading={loading}
-          disabled={loading}
-        >
-          Next: Generate AI Summary →
-        </Button>
-      </div>
     </div>
   );
-};
+});
+
+Step1_ProductDescription.displayName = 'Step1_ProductDescription';
 
 export default Step1_ProductDescription;
 

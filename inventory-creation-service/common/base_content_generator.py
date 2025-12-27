@@ -166,7 +166,8 @@ class BaseContentGenerator(ABC):
         content_id,
         template_id='product_summary_default_v1',
         customer_id='default',
-        regenerate=False
+        regenerate=False,
+        template_variables=None
     ):
         """
         Generate AI summary using a prompt template with structured JSON output
@@ -179,6 +180,7 @@ class BaseContentGenerator(ABC):
             template_id: ID of the prompt template to use
             customer_id: Customer ID for multi-tenancy
             regenerate: Force regeneration even if summary exists
+            template_variables: Additional variables provided by user (dict)
 
         Returns:
             dict: Result with status, message, and ai_summary
@@ -216,8 +218,13 @@ class BaseContentGenerator(ABC):
                     'message': f'Template {template_id} not found'
                 }
 
-            # Build context for prompt formatting
+            # Build context for prompt formatting (auto-populated from content)
             context = self.build_prompt_context(content_id)
+
+            # Merge with user-provided template variables (user variables take precedence)
+            if template_variables:
+                logger.info(f"Merging user-provided template variables: {template_variables}")
+                context.update(template_variables)
 
             # Generate with JSON output
             result = self.prompt_template_handler.generate_with_json_output(

@@ -63,41 +63,142 @@ class PromptTemplateHandler:
     def format_prompt(self, template: Dict, context: Dict) -> str:
         """
         Format a prompt template with context variables
-        
+
+        This method uses a safe substitution approach that only replaces
+        template variables defined in the template's 'variables' list,
+        leaving other curly braces (like JSON structures) untouched.
+
         Args:
             template: Template document with prompt_text
             context: Dict of variables to substitute
-            
+
         Returns:
-            str: Formatted prompt
+            str: Formatted prompt with output schema appended
         """
         prompt_text = template['prompt_text']
-        
-        # Validate that all required variables are provided
+
+        # Build a complete context with all template variables
+        # Start with an empty dict for all variables
+        complete_context = {}
+
+        # Get all variables defined in the template
+        template_vars = template.get('variables', [])
+
+        # First, fill in defaults for all variables
+        for var in template_vars:
+            var_name = var['name']
+            if var.get('default'):
+                complete_context[var_name] = var['default']
+            else:
+                # Use empty string as fallback for missing variables
+                complete_context[var_name] = ''
+
+        # Then override with provided context values
+        complete_context.update(context)
+
+        # Check for required variables that are still empty
         required_vars = [
-            var['name'] for var in template.get('variables', [])
+            var['name'] for var in template_vars
             if var.get('required', False)
         ]
-        
-        missing_vars = [var for var in required_vars if var not in context]
-        if missing_vars:
-            logger.warning(f"Missing required variables: {missing_vars}")
-            # Fill with defaults or empty strings
-            for var in missing_vars:
-                var_def = next((v for v in template['variables'] if v['name'] == var), None)
-                if var_def and var_def.get('default'):
-                    context[var] = var_def['default']
-                else:
-                    context[var] = ''
-        
-        # Format the prompt
-        try:
-            formatted_prompt = prompt_text.format(**context)
-            return formatted_prompt
-        except KeyError as e:
-            logger.error(f"Error formatting prompt: missing variable {e}")
-            raise ValueError(f"Missing required variable: {e}")
-    
+
+        missing_required = [
+            var for var in required_vars
+            if not complete_context.get(var)
+        ]
+
+        if missing_required:
+            logger.warning(f"Missing required variables: {missing_required}")
+            # For required variables without values, we'll still proceed
+            # but log a warning. The LLM might still generate good output.
+
+        # Safe substitution: Only replace template variables, not all {placeholders}
+        # This prevents issues with JSON structures in the prompt text
+        formatted_prompt = prompt_text
+
+        # Get list of variable names from template definition
+        var_names = [var['name'] for var in template_vars]
+
+        # Only replace placeholders that match defined template variables
+        for var_name in var_names:
+            placeholder = '{' + var_name + '}'
+            value = str(complete_context.get(var_name, ''))
+            formatted_prompt = formatted_prompt.replace(placeholder, value)
+
+        # Check if there are any remaining {variable} patterns that look like
+        # template variables but weren't in the variables list
+        # Pattern: {word_characters} but not JSON-like patterns
+        remaining_vars = re.findall(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}', formatted_prompt)
+
+        if remaining_vars:
+            logger.warning(
+                f"Prompt text contains placeholders not in template variables: {remaining_vars}"
+            )
+            logger.warning(
+                f"Defined template variables: {var_names}"
+            )
+            # Don't raise an error - these might be intentional (e.g., examples in the prompt)
+
+        # Append output schema to the prompt so LLM knows what JSON structure to generate
+        output_schema = template.get('output_schema', {})
+        if output_schema:
+            # Generate a JSON example from the schema
+            schema_example = self._generate_schema_example(output_schema)
+            formatted_prompt += f"\n\n**IMPORTANT: You must respond with ONLY valid JSON matching this exact structure:**\n\n```json\n{schema_example}\n```\n\nGenerate the JSON response now (no additional text, just the JSON):"
+
+        return formatted_prompt
+
+    def _generate_schema_example(self, schema: Dict) -> str:
+        """
+        Generate a JSON example from a JSON schema
+
+        Args:
+            schema: JSON schema object
+
+        Returns:
+            str: JSON string example
+        """
+        import json
+
+        def generate_value(prop_schema):
+            """Generate example value based on schema type"""
+            prop_type = prop_schema.get('type', 'string')
+
+            if prop_type == 'string':
+                # Use description or a placeholder
+                desc = prop_schema.get('description', 'string value')
+                return f"<{desc}>"
+            elif prop_type == 'number' or prop_type == 'integer':
+                return 0
+            elif prop_type == 'boolean':
+                return True
+            elif prop_type == 'array':
+                items_schema = prop_schema.get('items', {})
+                # Generate one example item
+                example_item = generate_value(items_schema)
+                return [example_item]
+            elif prop_type == 'object':
+                # Recursively generate object
+                return generate_object(prop_schema)
+            else:
+                return None
+
+        def generate_object(obj_schema):
+            """Generate example object from schema"""
+            result = {}
+            properties = obj_schema.get('properties', {})
+
+            for prop_name, prop_schema in properties.items():
+                result[prop_name] = generate_value(prop_schema)
+
+            return result
+
+        # Generate the example
+        example = generate_object(schema)
+
+        # Convert to formatted JSON string
+        return json.dumps(example, indent=2)
+
     def generate_with_json_output(
         self,
         template: Dict,
@@ -256,4 +357,129 @@ class PromptTemplateHandler:
                 continue
 
         return None
+
+    def convert_json_to_text(self, json_data: Dict) -> str:
+        """
+        Convert structured JSON output to formatted text with section headings
+
+        This handles common JSON structures from prompt templates and converts them
+        to human-readable text format with proper headings.
+
+        Args:
+            json_data: Parsed JSON object from LLM
+
+        Returns:
+            str: Formatted text representation with headings
+        """
+        if not isinstance(json_data, dict):
+            # If it's not a dict, just convert to string
+            return str(json_data)
+
+        # Check for common section-based structures
+        section_fields = [
+            'opening_hook',
+            'product_introduction',
+            'key_features',
+            'social_proof',
+            'call_to_action',
+            'introduction',
+            'features',
+            'benefits',
+            'conclusion',
+            'body',
+            'summary'
+        ]
+
+        # Build text from sections with headings
+        section_texts = []
+
+        for field in section_fields:
+            if field in json_data:
+                value = json_data[field]
+                section_text = self._format_value_to_text(value)
+                if section_text:
+                    # Convert field name to readable heading
+                    heading = self._field_name_to_heading(field)
+                    # Add heading and content
+                    section_texts.append(f"## {heading}\n\n{section_text}")
+
+        # If we found sections, join them with double newlines
+        if section_texts:
+            return '\n\n'.join(section_texts)
+
+        # Fallback: If no known sections found, format all fields with headings
+        all_texts = []
+        for key, value in json_data.items():
+            text = self._format_value_to_text(value)
+            if text:
+                heading = self._field_name_to_heading(key)
+                all_texts.append(f"## {heading}\n\n{text}")
+
+        return '\n\n'.join(all_texts) if all_texts else str(json_data)
+
+    def _field_name_to_heading(self, field_name: str) -> str:
+        """
+        Convert a field name to a readable heading
+
+        Examples:
+            'opening_hook' -> 'Opening Hook'
+            'product_introduction' -> 'Product Introduction'
+            'key_features' -> 'Key Features'
+
+        Args:
+            field_name: Field name from JSON
+
+        Returns:
+            str: Formatted heading
+        """
+        # Replace underscores with spaces and title case
+        return field_name.replace('_', ' ').title()
+
+    def _format_value_to_text(self, value: Any) -> str:
+        """
+        Format a single value (string, array, or object) to text
+
+        Args:
+            value: Value to format
+
+        Returns:
+            str: Formatted text
+        """
+        if isinstance(value, str):
+            return value
+
+        elif isinstance(value, list):
+            # Handle array of items
+            item_texts = []
+            for item in value:
+                if isinstance(item, str):
+                    item_texts.append(item)
+                elif isinstance(item, dict):
+                    # Handle objects in array (e.g., key_features with feature_name and description)
+                    if 'feature_name' in item and 'description' in item:
+                        item_texts.append(f"{item['feature_name']}: {item['description']}")
+                    elif 'name' in item and 'description' in item:
+                        item_texts.append(f"{item['name']}: {item['description']}")
+                    elif 'title' in item and 'content' in item:
+                        item_texts.append(f"{item['title']}: {item['content']}")
+                    else:
+                        # Generic object: join all string values
+                        obj_values = [str(v) for v in item.values() if v]
+                        if obj_values:
+                            item_texts.append(': '.join(obj_values))
+
+            return '\n'.join(item_texts) if item_texts else ''
+
+        elif isinstance(value, dict):
+            # Handle nested objects
+            obj_texts = []
+            for k, v in value.items():
+                text = self._format_value_to_text(v)
+                if text:
+                    obj_texts.append(text)
+            return '\n'.join(obj_texts) if obj_texts else ''
+
+        else:
+            # For other types (numbers, booleans, etc.), convert to string
+            return str(value) if value is not None else ''
 
