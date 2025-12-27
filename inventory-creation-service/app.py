@@ -14,8 +14,10 @@ from workflows import ProductWorkflow
 from services import (
     product_bp,
     public_bp,
+    prompt_template_bp,
     init_product_service,
-    init_public_service
+    init_public_service,
+    init_prompt_template_service
 )
 
 # Configure logging
@@ -34,6 +36,7 @@ MONGO_URI = os.getenv('MONGODB_URL', 'mongodb://ichat_app:ichat_app_password_202
 mongo_client = MongoClient(MONGO_URI)
 db = mongo_client['news']
 products_collection = db['products']
+prompt_templates_collection = db['prompt_templates']
 
 # Service URLs
 LLM_SERVICE_URL = os.getenv('LLM_SERVICE_URL', 'http://ichat-llm-service:8083')
@@ -51,23 +54,26 @@ product_workflow = ProductWorkflow(
         'audio_service_url': AUDIO_GENERATION_URL,
         'template_service_url': TEMPLATE_SERVICE_URL,
         'video_generator_url': VIDEO_GENERATOR_URL
-    }
+    },
+    prompt_templates_collection=prompt_templates_collection
 )
 
 # Initialize services with dependencies
 init_product_service(products_collection, product_workflow, API_SERVER_URL)
 init_public_service(products_collection)
+init_prompt_template_service(prompt_templates_collection)
 
 # Register Blueprints
 app.register_blueprint(product_bp)
 app.register_blueprint(public_bp)
+app.register_blueprint(prompt_template_bp)
 
 logger.info("✅ Inventory Creation Service initialized")
 logger.info(f"   LLM Service: {LLM_SERVICE_URL}")
 logger.info(f"   Audio Service: {AUDIO_GENERATION_URL}")
 logger.info(f"   Template Service: {TEMPLATE_SERVICE_URL}")
 logger.info(f"   Video Generator: {VIDEO_GENERATOR_URL}")
-logger.info(f"   Registered Blueprints: product, public")
+logger.info(f"   Registered Blueprints: product, public, prompt_template")
 
 
 # ========== Health Check ==========

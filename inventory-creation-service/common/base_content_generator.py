@@ -28,6 +28,7 @@ from .utils import (
     convert_audio_url_to_proxy,
     distribute_media_across_sections
 )
+from .prompt_template_handler import PromptTemplateHandler
 
 logger = logging.getLogger(__name__)
 
@@ -49,17 +50,18 @@ class BaseContentGenerator(ABC):
     - build_prompt_context(): Build context data for prompt formatting
     """
     
-    def __init__(self, db_collection, config=None):
+    def __init__(self, db_collection, config=None, prompt_templates_collection=None):
         """
         Initialize the content generator
-        
+
         Args:
             db_collection: MongoDB collection for storing content
             config: Optional configuration dict with service URLs
+            prompt_templates_collection: Optional MongoDB collection for prompt templates
         """
         self.collection = db_collection
         self.config = config or {}
-        
+
         # Service URLs
         self.llm_service_url = self.config.get(
             'llm_service_url',
@@ -77,7 +79,15 @@ class BaseContentGenerator(ABC):
             'video_generator_url',
             os.getenv('VIDEO_GENERATOR_URL', 'http://ichat-video-generator:8095')
         )
-        
+
+        # Initialize prompt template handler if collection provided
+        self.prompt_template_handler = None
+        if prompt_templates_collection is not None:
+            self.prompt_template_handler = PromptTemplateHandler(
+                prompt_templates_collection,
+                self.llm_service_url
+            )
+
         logger.info(f"Initialized {self.__class__.__name__} with LLM: {self.llm_service_url}")
     
     # ========== Abstract Methods (Must Override) ==========
@@ -150,6 +160,154 @@ class BaseContentGenerator(ABC):
         return get_smart_audio_config(section_title, section_index, total_sections)
 
     # ========== Core Workflow Methods ==========
+
+    def generate_ai_summary_with_template(
+        self,
+        content_id,
+        template_id='product_summary_default_v1',
+        customer_id='default',
+        regenerate=False
+    ):
+        """
+        Generate AI summary using a prompt template with structured JSON output
+
+        This is the new method that uses the prompt template system.
+        It generates structured JSON output that's validated against a schema.
+
+        Args:
+            content_id: ID of the content item
+            template_id: ID of the prompt template to use
+            customer_id: Customer ID for multi-tenancy
+            regenerate: Force regeneration even if summary exists
+
+        Returns:
+            dict: Result with status, message, and ai_summary
+        """
+        try:
+            if not self.prompt_template_handler:
+                logger.warning("Prompt template handler not initialized, falling back to legacy method")
+                return self.generate_ai_summary(content_id, regenerate=regenerate)
+
+            logger.info(f"Generating AI summary with template {template_id} for {self.get_content_type()} {content_id}")
+
+            # Get content from database
+            content = self.collection.find_one({'_id': ObjectId(content_id)})
+            if not content:
+                return {
+                    'status': 'error',
+                    'message': 'Content not found'
+                }
+
+            # Check if summary already exists
+            if content.get('ai_summary') and not regenerate:
+                logger.info(f"AI summary already exists for {content_id}")
+                return {
+                    'status': 'success',
+                    'message': 'AI summary already exists',
+                    'ai_summary': content['ai_summary']
+                }
+
+            # Get prompt template
+            template = self.prompt_template_handler.get_template(template_id, customer_id)
+            if not template:
+                logger.error(f"Template {template_id} not found")
+                return {
+                    'status': 'error',
+                    'message': f'Template {template_id} not found'
+                }
+
+            # Build context for prompt formatting
+            context = self.build_prompt_context(content_id)
+
+            # Generate with JSON output
+            result = self.prompt_template_handler.generate_with_json_output(
+                template=template,
+                context=context,
+                max_retries=3,
+                temperature=0.7,
+                max_tokens=2000
+            )
+
+            if result['status'] != 'success':
+                logger.error(f"Failed to generate summary: {result.get('message')}")
+                return result
+
+            # Extract structured data
+            json_data = result['data']
+
+            # Convert JSON structure to sections format
+            sections = self._convert_json_to_sections(json_data, template)
+
+            # Create structured AI summary object
+            structured_summary = {
+                'sections': sections,
+                'json_data': json_data,  # Store the raw JSON data
+                'full_text': result.get('raw_response', ''),
+                'generated_at': datetime.utcnow(),
+                'version': '3.0',  # New version for template-based generation
+                'content_type': self.get_content_type(),
+                'template_id': template_id
+            }
+
+            # Update content with AI summary
+            self.collection.update_one(
+                {'_id': ObjectId(content_id)},
+                {
+                    '$set': {
+                        'ai_summary': structured_summary,
+                        'updated_at': datetime.utcnow()
+                    }
+                }
+            )
+
+            logger.info(f"✅ Generated AI summary with template for {self.get_content_type()} {content_id}")
+
+            return {
+                'status': 'success',
+                'message': 'AI summary generated successfully',
+                'ai_summary': structured_summary
+            }
+
+        except Exception as e:
+            logger.error(f"Error generating AI summary with template: {str(e)}", exc_info=True)
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+
+    def _convert_json_to_sections(self, json_data: dict, template: dict) -> list:
+        """
+        Convert JSON data to sections format for backward compatibility
+
+        Args:
+            json_data: Structured JSON data from LLM
+            template: Template document with output schema
+
+        Returns:
+            list: Sections in the format [{'title': ..., 'content': ...}, ...]
+        """
+        sections = []
+
+        # Get the expected fields from the schema
+        schema_properties = template['output_schema'].get('properties', {})
+
+        # Convert each field to a section
+        for field_name, field_schema in schema_properties.items():
+            if field_name in json_data:
+                # Convert field name to title (e.g., 'opening_hook' -> 'Opening Hook')
+                title = field_name.replace('_', ' ').title()
+                content = json_data[field_name]
+
+                # Handle arrays (like key_features)
+                if isinstance(content, list):
+                    content = '\n'.join(f"• {item}" for item in content)
+
+                sections.append({
+                    'title': title,
+                    'content': content
+                })
+
+        return sections
 
     def generate_ai_summary(self, content_id, custom_prompt=None, regenerate=False):
         """

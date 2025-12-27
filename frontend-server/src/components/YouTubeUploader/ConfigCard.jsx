@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Button } from '../common';
+import { Button, ConfirmDialog } from '../common';
 import RecomputeWizard from './RecomputeWizard';
 
 /**
@@ -10,6 +10,7 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
   const [showWizard, setShowWizard] = useState(false);
   const [videoBlobUrl, setVideoBlobUrl] = useState(null);
   const [thumbnailBlobUrl, setThumbnailBlobUrl] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false });
 
   const getStatusBadge = (status) => {
     const badges = {
@@ -131,9 +132,12 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
   };
 
   const handleDelete = () => {
-    if (window.confirm(`Are you sure you want to delete "${config.title}"?`)) {
-      onDelete(config._id);
-    }
+    setDeleteDialog({ isOpen: true });
+  };
+
+  const confirmDelete = () => {
+    setDeleteDialog({ isOpen: false });
+    onDelete(config._id);
   };
 
   const handleEdit = () => {
@@ -350,6 +354,20 @@ const ConfigCard = ({ config, onMerge, onUpload, onDelete, onEdit, loading }) =>
           loading={loading}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false })}
+        onConfirm={confirmDelete}
+        title="Delete Configuration"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete "${config.title}"?`}
+        warningMessage="This will permanently delete the video configuration. The generated video file will remain in storage but will no longer be associated with this configuration."
+        confirmText="Delete Configuration"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };

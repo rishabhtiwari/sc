@@ -256,7 +256,19 @@ def get_product_stats():
 
 @product_bp.route('/<product_id>/generate-summary', methods=['POST'])
 def generate_summary(product_id):
-    """Generate AI summary for product using ProductWorkflow"""
+    """
+    Generate AI summary for product using ProductWorkflow
+
+    Supports both legacy (custom_prompt) and new template-based generation.
+
+    Request body:
+    {
+        "regenerate": bool,           # Force regeneration
+        "custom_prompt": str,         # Legacy: custom prompt text
+        "template_id": str,           # New: prompt template ID
+        "use_template": bool          # New: use template-based generation (default: true)
+    }
+    """
     try:
         logger.info(f"📝 Generating summary for product {product_id}")
         customer_id = request.headers.get('X-Customer-ID', 'default')
@@ -276,13 +288,27 @@ def generate_summary(product_id):
         data = request.get_json() or {}
         regenerate = data.get('regenerate', False)
         custom_prompt = data.get('custom_prompt')
+        template_id = data.get('template_id', 'product_summary_default_v1')
+        use_template = data.get('use_template', True)
 
-        # Use workflow to generate AI summary
-        result = product_bp.product_workflow.generate_ai_summary(
-            content_id=product_id,
-            custom_prompt=custom_prompt,
-            regenerate=regenerate
-        )
+        # Choose generation method
+        if use_template and not custom_prompt:
+            # New template-based generation with JSON output
+            logger.info(f"Using template-based generation with template: {template_id}")
+            result = product_bp.product_workflow.generate_ai_summary_with_template(
+                content_id=product_id,
+                template_id=template_id,
+                customer_id=customer_id,
+                regenerate=regenerate
+            )
+        else:
+            # Legacy generation method
+            logger.info("Using legacy generation method")
+            result = product_bp.product_workflow.generate_ai_summary(
+                content_id=product_id,
+                custom_prompt=custom_prompt,
+                regenerate=regenerate
+            )
 
         if result['status'] == 'error':
             return jsonify(result), 500

@@ -68,9 +68,16 @@ def proxy_to_inventory_service(path, method='GET', json_data=None, files=None):
 
         logger.info(f"🔄 Proxying {method} {url}")
 
-        # Use longer timeout for audio/video generation endpoints (10 minutes)
-        # Default timeout for other endpoints (30 seconds)
-        timeout = 600 if any(x in path for x in ['/generate-audio', '/generate-video', '/generate-summary']) else 30
+        # Use longer timeout for audio/video generation and AI prompt generation endpoints
+        # - 10 minutes for audio/video generation
+        # - 2 minutes for AI prompt generation (LLM can take 50-60 seconds)
+        # - 30 seconds for other endpoints
+        if any(x in path for x in ['/generate-audio', '/generate-video', '/generate-summary']):
+            timeout = 600
+        elif '/prompt-templates/generate' in path:
+            timeout = 120
+        else:
+            timeout = 30
         kwargs = {'headers': headers, 'timeout': timeout}
 
         if files:
@@ -605,3 +612,57 @@ def serve_product_files(product_id, filename):
     except Exception as e:
         logger.error(f"❌ Error proxying file {filename}: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ========== Prompt Template Routes ==========
+
+@product_bp.route('/prompt-templates', methods=['GET'])
+def get_prompt_templates():
+    """Proxy: Get all prompt templates"""
+    response_data, status_code = proxy_to_inventory_service('/api/prompt-templates', method='GET')
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/prompt-templates/<template_id>', methods=['GET'])
+def get_prompt_template(template_id):
+    """Proxy: Get a specific prompt template by ID"""
+    response_data, status_code = proxy_to_inventory_service(
+        f'/api/prompt-templates/{template_id}', method='GET'
+    )
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/prompt-templates', methods=['POST'])
+def create_prompt_template():
+    """Proxy: Create a new prompt template"""
+    response_data, status_code = proxy_to_inventory_service(
+        '/api/prompt-templates', method='POST', json_data=request.get_json()
+    )
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/prompt-templates/<template_id>', methods=['PUT'])
+def update_prompt_template(template_id):
+    """Proxy: Update a prompt template"""
+    response_data, status_code = proxy_to_inventory_service(
+        f'/api/prompt-templates/{template_id}', method='PUT', json_data=request.get_json()
+    )
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/prompt-templates/<template_id>', methods=['DELETE'])
+def delete_prompt_template(template_id):
+    """Proxy: Delete a prompt template"""
+    response_data, status_code = proxy_to_inventory_service(
+        f'/api/prompt-templates/{template_id}', method='DELETE'
+    )
+    return jsonify(response_data), status_code
+
+
+@product_bp.route('/prompt-templates/generate', methods=['POST'])
+def generate_prompt_template():
+    """Proxy: Generate a prompt template using AI"""
+    response_data, status_code = proxy_to_inventory_service(
+        '/api/prompt-templates/generate', method='POST', json_data=request.get_json()
+    )
+    return jsonify(response_data), status_code

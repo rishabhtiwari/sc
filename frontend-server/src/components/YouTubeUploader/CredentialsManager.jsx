@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button } from '../common';
+import { Card, Button, ConfirmDialog } from '../common';
 import { useToast } from '../../hooks/useToast';
 import api from '../../services/api';
 
@@ -14,6 +14,7 @@ const CredentialsManager = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authCode, setAuthCode] = useState('');
   const [authenticatingCredentialId, setAuthenticatingCredentialId] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, credential: null });
   const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -163,13 +164,16 @@ const CredentialsManager = () => {
     showToast('Authentication cancelled', 'info');
   };
 
-  const handleDelete = async (credentialId) => {
-    if (!window.confirm('Are you sure you want to delete this credential?')) {
-      return;
-    }
+  const handleDelete = (credential) => {
+    setDeleteDialog({ isOpen: true, credential });
+  };
+
+  const confirmDelete = async () => {
+    const credential = deleteDialog.credential;
+    setDeleteDialog({ isOpen: false, credential: null });
 
     try {
-      const response = await api.delete(`/youtube/credentials/${credentialId}`);
+      const response = await api.delete(`/youtube/credentials/${credential._id}`);
       const data = response.data;
 
       if (data.status === 'success') {
@@ -462,7 +466,7 @@ const CredentialsManager = () => {
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => handleDelete(cred.credential_id)}
+                    onClick={() => handleDelete(cred)}
                   >
                     Delete
                   </Button>
@@ -523,6 +527,24 @@ const CredentialsManager = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, credential: null })}
+        onConfirm={confirmDelete}
+        title="Delete Credential"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.credential
+            ? `Are you sure you want to delete the credential "${deleteDialog.credential.name}"?`
+            : ''
+        }
+        warningMessage="This will permanently delete the YouTube credential. You will need to re-authenticate if you want to use this account again."
+        confirmText="Delete Credential"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };

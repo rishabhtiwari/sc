@@ -63,6 +63,8 @@ const Step2_AISummaryGeneration = ({ formData, onComplete, onUpdate }) => {
         placeholder="Click 'Generate' to create an AI summary"
         showEditMode={true}
         showSections={true}
+        showPromptTemplates={true}
+        templateCategory="product_summary"
       />
 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

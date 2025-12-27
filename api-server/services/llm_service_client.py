@@ -204,13 +204,13 @@ class LLMServiceClient:
     ) -> Dict[str, Any]:
         """
         Generate text using LLM service
-        
+
         Args:
             prompt: Text prompt
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             top_p: Top-p sampling parameter
-            
+
         Returns:
             Dict containing generated text or error
         """
@@ -218,23 +218,23 @@ class LLMServiceClient:
             payload = {
                 "prompt": prompt
             }
-            
+
             if max_tokens is not None:
                 payload["max_tokens"] = max_tokens
             if temperature is not None:
                 payload["temperature"] = temperature
             if top_p is not None:
                 payload["top_p"] = top_p
-            
+
             self.logger.info(f"Sending generation request to LLM service: {prompt[:50]}...")
-            
+
             response = requests.post(
                 f"{self.base_url}/llm/generate",
                 json=payload,
                 timeout=self.timeout,
                 headers={'Content-Type': 'application/json'}
             )
-            
+
             if response.status_code == 200:
                 result = response.json()
                 return {
@@ -251,13 +251,13 @@ class LLMServiceClient:
                     error_msg = error_data.get("error", error_msg)
                 except:
                     pass
-                
+
                 return {
                     "status": "error",
                     "error": error_msg,
                     "timestamp": int(datetime.now().timestamp() * 1000)
                 }
-                
+
         except Exception as e:
             error_msg = f"LLM generation client error: {str(e)}"
             self.logger.error(error_msg)

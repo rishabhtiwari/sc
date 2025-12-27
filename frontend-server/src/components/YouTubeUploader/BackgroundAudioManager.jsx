@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Button } from '../common';
+import { Card, Button, ConfirmDialog } from '../common';
 import { useToast } from '../../hooks/useToast';
 import { backgroundAudioService } from '../../services';
 
@@ -13,6 +13,7 @@ const BackgroundAudioManager = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [playingAudio, setPlayingAudio] = useState(null);
   const [shortsDefaultAudio, setShortsDefaultAudio] = useState('background_music.wav');
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, audioId: null });
   const { showToast } = useToast();
   const fileInputRef = useRef(null);
   const audioPlayerRef = useRef(null);
@@ -88,20 +89,23 @@ const BackgroundAudioManager = () => {
     }
   };
 
-  const handleDelete = async (audioId) => {
-    if (!confirm(`Are you sure you want to delete "${audioId}"?`)) {
-      return;
-    }
+  const handleDelete = (audioId) => {
+    setDeleteDialog({ isOpen: true, audioId });
+  };
+
+  const confirmDelete = async () => {
+    const audioId = deleteDialog.audioId;
+    setDeleteDialog({ isOpen: false, audioId: null });
 
     try {
       await backgroundAudioService.deleteBackgroundAudio(audioId);
       showToast('Audio file deleted successfully', 'success');
-      
+
       // Stop playing if this audio is currently playing
       if (playingAudio === audioId) {
         stopAudio();
       }
-      
+
       loadAudioFiles();
     } catch (error) {
       console.error('Error deleting audio:', error);
@@ -340,6 +344,24 @@ const BackgroundAudioManager = () => {
           <li>• The same audio file can be used across multiple video configurations</li>
         </ul>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, audioId: null })}
+        onConfirm={confirmDelete}
+        title="Delete Audio File"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.audioId
+            ? `Are you sure you want to delete "${deleteDialog.audioId}"?`
+            : ''
+        }
+        warningMessage="This will permanently delete the audio file. Any video configurations using this audio will need to be updated."
+        confirmText="Delete Audio"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };

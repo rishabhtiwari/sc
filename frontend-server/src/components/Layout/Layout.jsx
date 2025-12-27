@@ -16,7 +16,15 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
     { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
-    { path: '/templates', icon: '🎨', label: 'Templates' },
+    {
+      id: 'templates',
+      icon: '🎨',
+      label: 'Templates',
+      subItems: [
+        { path: '/templates/prompt', icon: '📝', label: 'Prompt Templates' },
+        { path: '/templates/video', icon: '🎬', label: 'Video Templates' },
+      ]
+    },
     { path: '/workflow', icon: '🔄', label: 'Workflow Pipeline' },
     { path: '/monitoring', icon: '📈', label: 'Monitoring & Logs' },
     { path: '/settings', icon: '⚙️', label: 'Settings' },
@@ -102,7 +110,77 @@ const Layout = ({ children, user, onLogout }) => {
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {navItems.map((item, index) => {
+            // Handle menu items with sub-items
+            if (item.subItems) {
+              const isExpanded = expandedMenus[item.id];
+              const hasActiveSubItem = isMenuActive(item);
+
+              return (
+                <div key={item.id || index}>
+                  <button
+                    onClick={() => toggleMenu(item.id)}
+                    className={`
+                      w-full group flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all
+                      ${hasActiveSubItem
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900'
+                      }
+                    `}
+                    title={!sidebarOpen ? item.label : ''}
+                  >
+                    <span className={`text-xl ${hasActiveSubItem ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>
+                      {item.icon}
+                    </span>
+                    {sidebarOpen && (
+                      <>
+                        <div className="flex-1 min-w-0 text-left">
+                          <span className="block text-sm truncate">{item.label}</span>
+                        </div>
+                        <svg
+                          className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Sub-items */}
+                  {sidebarOpen && isExpanded && (
+                    <div className="ml-6 mt-1 space-y-1">
+                      {item.subItems.map((subItem) => {
+                        const subActive = isActive(subItem.path);
+                        return (
+                          <Link
+                            key={subItem.path}
+                            to={subItem.path}
+                            className={`
+                              group flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm
+                              ${subActive
+                                ? 'bg-blue-50 text-blue-700 font-medium'
+                                : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
+                              }
+                            `}
+                          >
+                            <span className="text-base">{subItem.icon}</span>
+                            <span className="truncate">{subItem.label}</span>
+                            {subActive && (
+                              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full ml-auto"></div>
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // Handle regular menu items
             const active = isActive(item.path);
             return (
               <Link

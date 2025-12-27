@@ -13,6 +13,7 @@ import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
 import SettingsPage from './pages/SettingsPage';
 import TemplateManagementPage from './pages/TemplateManagementPage';
+import PromptTemplateManagementPage from './pages/PromptTemplateManagementPage';
 import ProductVideoPage from './pages/ProductVideoPage';
 import EcommercePage from './pages/EcommercePage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
@@ -120,7 +121,11 @@ function App() {
                   <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />
-                  <Route path="/templates" element={<TemplateManagementPage />} />
+                  <Route path="/templates/video" element={<TemplateManagementPage />} />
+                  <Route path="/templates/prompt" element={<PromptTemplateManagementPage />} />
+                  {/* Legacy routes for backward compatibility */}
+                  <Route path="/templates" element={<Navigate to="/templates/video" replace />} />
+                  <Route path="/prompt-templates" element={<Navigate to="/templates/prompt" replace />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </Layout>

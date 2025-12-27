@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '../';
 import { useContentGeneration } from '../../../hooks/useContentGeneration';
 import { useToast } from '../../../hooks/useToast';
+import PromptTemplateSelector from './PromptTemplateSelector';
 
 /**
  * Default content parser for markdown-style sections
@@ -134,6 +135,8 @@ const defaultParseContent = (text) => {
  * @param {boolean} props.showEditMode - Show edit/preview toggle
  * @param {boolean} props.showSections - Parse and show content as sections
  * @param {Function} props.parseContent - Custom parser for content sections (uses default markdown parser if not provided)
+ * @param {boolean} props.showPromptTemplates - Show prompt template selector
+ * @param {string} props.templateCategory - Template category for filtering (e.g., 'product_summary', 'article_summary')
  * @param {string} props.className - Additional CSS classes
  */
 const AIContentGenerator = ({
@@ -147,11 +150,15 @@ const AIContentGenerator = ({
   showEditMode = true,
   showSections = false,
   parseContent = null,
+  showPromptTemplates = false,
+  templateCategory = 'product_summary',
   className = ''
 }) => {
   const [content, setContent] = useState(initialContent);
   const [isEditing, setIsEditing] = useState(false);
   const [sections, setSections] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+  const [customPrompt, setCustomPrompt] = useState('');
   const { generating, generate } = useContentGeneration();
   const { showToast } = useToast();
 
@@ -182,16 +189,30 @@ const AIContentGenerator = ({
    * Handle content generation
    */
   const handleGenerate = async (regenerate = false) => {
+    // Build request data with template/prompt info
+    const requestData = {
+      ...inputData,
+      regenerate
+    };
+
+    // Add template or custom prompt if enabled
+    if (showPromptTemplates) {
+      if (selectedTemplateId) {
+        requestData.template_id = selectedTemplateId;
+        requestData.use_template = true;
+      } else if (customPrompt) {
+        requestData.custom_prompt = customPrompt;
+        requestData.use_template = false;
+      }
+    }
+
     const result = await generate({
       endpoint,
-      data: {
-        ...inputData,
-        regenerate
-      },
+      data: requestData,
       onSuccess: (generatedContent) => {
         setContent(generatedContent);
         showToast('Content generated successfully', 'success');
-        
+
         if (onContentGenerated) {
           onContentGenerated(generatedContent);
         }
@@ -350,6 +371,20 @@ const AIContentGenerator = ({
           </Button>
         </div>
       </div>
+
+      {/* Prompt Template Selector */}
+      {showPromptTemplates && (
+        <div className="mb-4">
+          <PromptTemplateSelector
+            category={templateCategory}
+            selectedTemplateId={selectedTemplateId}
+            onTemplateSelect={(templateId) => setSelectedTemplateId(templateId)}
+            showCustomPrompt={true}
+            customPrompt={customPrompt}
+            onCustomPromptChange={setCustomPrompt}
+          />
+        </div>
+      )}
 
       {/* Content Display/Edit Area */}
       {!content && !generating && (

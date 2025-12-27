@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button } from '../common';
+import { Card, Button, ConfirmDialog } from '../common';
 import { useToast } from '../../hooks/useToast';
 import { newsService } from '../../services';
 
@@ -13,6 +13,7 @@ const EnrichmentConfigPanel = () => {
   const [resetting, setResetting] = useState(false);
   const [editedConfig, setEditedConfig] = useState(null);
   const [hasChanges, setHasChanges] = useState(false);
+  const [resetDialog, setResetDialog] = useState({ isOpen: false });
 
   const { showToast } = useToast();
 
@@ -77,10 +78,12 @@ const EnrichmentConfigPanel = () => {
     }
   };
 
-  const handleReset = async () => {
-    if (!window.confirm('Are you sure you want to reset to default configuration? This will overwrite all custom settings.')) {
-      return;
-    }
+  const handleReset = () => {
+    setResetDialog({ isOpen: true });
+  };
+
+  const confirmReset = async () => {
+    setResetDialog({ isOpen: false });
 
     try {
       setResetting(true);
@@ -355,6 +358,20 @@ const EnrichmentConfigPanel = () => {
           </div>
         </div>
       </Card>
+
+      {/* Reset Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={resetDialog.isOpen}
+        onClose={() => setResetDialog({ isOpen: false })}
+        onConfirm={confirmReset}
+        title="Reset to Default Configuration"
+        description="Restore default enrichment settings"
+        message="Are you sure you want to reset to default configuration?"
+        warningMessage="This will overwrite all custom settings with the default configuration. This action cannot be undone."
+        confirmText="Reset to Defaults"
+        cancelText="Cancel"
+        variant="warning"
+      />
     </div>
   );
 };

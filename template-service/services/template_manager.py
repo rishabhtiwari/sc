@@ -72,12 +72,18 @@ class TemplateManager:
                     'metadata': 1,
                     'customer_id': 1,  # Include customer_id to identify system vs customer templates
                     'variables': 1,  # Include variables for frontend to display variable inputs
+                    'layers': 1,  # Include layers to count them
+                    'effects': 1,  # Include effects to count them
                     '_id': 0
                 }
             )
 
             templates = []
             for template in cursor:
+                # Count layers and effects for display
+                layer_count = len(template.get('layers', []))
+                effect_count = len(template.get('effects', []))
+
                 templates.append({
                     'template_id': template.get('template_id'),
                     'name': template.get('name'),
@@ -87,7 +93,9 @@ class TemplateManager:
                     'thumbnail': template.get('metadata', {}).get('thumbnail', ''),
                     'customer_id': template.get('customer_id'),  # Include to identify ownership
                     'tags': template.get('metadata', {}).get('tags', []),
-                    'variables': template.get('variables', {})  # Include variables for frontend
+                    'variables': template.get('variables', {}),  # Include variables for frontend
+                    'layer_count': layer_count,  # Add layer count
+                    'effect_count': effect_count  # Add effect count
                 })
 
             if self.logger:

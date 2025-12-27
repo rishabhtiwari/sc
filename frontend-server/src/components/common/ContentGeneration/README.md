@@ -8,6 +8,8 @@ Reusable React components for AI-powered content generation workflows.
 
 Generic component for AI content generation (summaries, articles, social posts, etc.)
 
+**NEW: Prompt Template Support** - Now supports customizable prompt templates for flexible content generation!
+
 **Props:**
 - `endpoint` (string, required): API endpoint for content generation
 - `inputData` (object): Data to send to the endpoint
@@ -72,7 +74,62 @@ import { AIContentGenerator } from '@/components/common';
 />
 ```
 
-### 2. AudioSelector
+**Example (With Prompt Templates):**
+```jsx
+<AIContentGenerator
+  endpoint="/api/products/123/generate-summary"
+  initialContent={product.ai_summary}
+  onContentGenerated={(content) => setAiSummary(content)}
+  label="Product Summary"
+  showEditMode={true}
+  showSections={true}
+  showPromptTemplates={true}
+  templateCategory="product_summary"
+/>
+```
+
+### 2. PromptTemplateSelector
+
+**NEW** - Generic component for selecting and managing prompt templates for AI content generation.
+
+**Props:**
+- `category` (string): Template category filter (e.g., 'product_summary', 'article_summary')
+- `selectedTemplateId` (string): Currently selected template ID
+- `onTemplateSelect` (function): Callback when template is selected (templateId, templateData)
+- `showCustomPrompt` (boolean): Show custom prompt option (default: true)
+- `customPrompt` (string): Custom prompt text
+- `onCustomPromptChange` (function): Callback when custom prompt changes
+- `className` (string): Additional CSS classes
+
+**Features:**
+- Fetches templates from `/api/prompt-templates` endpoint
+- Filters by category and active status
+- Auto-selects default template
+- Toggle between template mode and custom prompt mode
+- Displays template descriptions
+- Fully generic - works with any content type
+
+**Example:**
+```jsx
+import { PromptTemplateSelector } from '@/components/common';
+
+const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+const [customPrompt, setCustomPrompt] = useState('');
+
+<PromptTemplateSelector
+  category="product_summary"
+  selectedTemplateId={selectedTemplateId}
+  onTemplateSelect={(templateId, template) => {
+    setSelectedTemplateId(templateId);
+    console.log('Selected template:', template);
+  }}
+  showCustomPrompt={true}
+  customPrompt={customPrompt}
+  onCustomPromptChange={setCustomPrompt}
+/>
+```
+
+### 3. AudioSelector
 
 Component for TTS audio generation with model/voice selection
 

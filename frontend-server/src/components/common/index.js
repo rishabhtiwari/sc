@@ -13,11 +13,14 @@ export { default as Badge } from './Badge';
 export { default as AuthenticatedImage } from './AuthenticatedImage';
 export { default as AuthenticatedVideo } from './AuthenticatedVideo';
 export { default as ConfirmDialog } from './ConfirmDialog';
+export { default as ErrorAlert } from './ErrorAlert';
+export { default as ToastContainer } from './ToastContainer';
 
 // Content Generation Components
 export {
   AIContentGenerator,
   AudioSelector,
   TemplateSelector,
-  MediaUploader
+  MediaUploader,
+  PromptTemplateSelector
 } from './ContentGeneration';

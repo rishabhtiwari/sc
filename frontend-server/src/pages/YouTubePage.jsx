@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Button } from '../components/common';
+import { Card, Button, ConfirmDialog } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { youtubeService, videoService, videoConfigService } from '../services';
 import api from '../services/api';
@@ -44,6 +44,8 @@ const YouTubePage = () => {
   const [configsLoading, setConfigsLoading] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [editingConfig, setEditingConfig] = useState(null);
+  const [uploadShortDialog, setUploadShortDialog] = useState({ isOpen: false, short: null });
+  const [uploadCompilationDialog, setUploadCompilationDialog] = useState({ isOpen: false });
 
   const { showToast } = useToast();
 
@@ -231,10 +233,14 @@ const YouTubePage = () => {
   };
 
   // Upload long video with configuration
-  const handleUploadLongVideo = async (configId) => {
-    if (!window.confirm('Upload this video to YouTube?')) {
-      return;
-    }
+  const handleUploadLongVideo = (configId) => {
+    const config = videoConfigs.find(c => c._id === configId);
+    setUploadShortDialog({ isOpen: true, short: config });
+  };
+
+  const confirmUploadLongVideo = async () => {
+    const configId = uploadShortDialog.short._id;
+    setUploadShortDialog({ isOpen: false, short: null });
 
     setUploading(true);
     setShowProgress(true);
@@ -362,10 +368,12 @@ const YouTubePage = () => {
   };
 
   // Upload latest 20 compilation video
-  const handleUploadLatest20 = async () => {
-    if (!window.confirm('Upload latest 20 news compilation video to YouTube?')) {
-      return;
-    }
+  const handleUploadLatest20 = () => {
+    setUploadCompilationDialog({ isOpen: true });
+  };
+
+  const confirmUploadLatest20 = async () => {
+    setUploadCompilationDialog({ isOpen: false });
 
     setUploading(true);
     setShowProgress(true);
@@ -825,6 +833,38 @@ const YouTubePage = () => {
           )}
         </div>
       </div>
+
+      {/* Upload Long Video Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={uploadShortDialog.isOpen}
+        onClose={() => setUploadShortDialog({ isOpen: false, short: null })}
+        onConfirm={confirmUploadLongVideo}
+        title="Upload Video to YouTube"
+        description="Upload this video to your YouTube channel"
+        message={
+          uploadShortDialog.short
+            ? `Upload "${uploadShortDialog.short.title}" to YouTube?`
+            : 'Upload this video to YouTube?'
+        }
+        warningMessage="Make sure you have configured your YouTube credentials before uploading."
+        confirmText="Upload to YouTube"
+        cancelText="Cancel"
+        variant="info"
+      />
+
+      {/* Upload Compilation Video Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={uploadCompilationDialog.isOpen}
+        onClose={() => setUploadCompilationDialog({ isOpen: false })}
+        onConfirm={confirmUploadLatest20}
+        title="Upload Compilation Video"
+        description="Upload latest 20 news compilation to YouTube"
+        message="Upload the latest 20 news compilation video to YouTube?"
+        warningMessage="This will create and upload a compilation of the latest 20 news videos. Make sure you have configured your YouTube credentials."
+        confirmText="Upload Compilation"
+        cancelText="Cancel"
+        variant="info"
+      />
     </div>
   );
 };
