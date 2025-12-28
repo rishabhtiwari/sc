@@ -579,11 +579,11 @@ class BaseContentGenerator(ABC):
                 # Continue without combined audio - sections still work
 
             # Update content with audio information
+            # Note: sections are already in ai_summary, no need to update them
             self.collection.update_one(
                 {'_id': ObjectId(content_id)},
                 {
                     '$set': {
-                        'ai_summary.sections': sections,
                         'audio_url': combined_audio_url,
                         'section_audio_urls': section_audio_urls,
                         'updated_at': datetime.utcnow()

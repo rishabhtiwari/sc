@@ -144,17 +144,38 @@ const Step5_TemplateSelection = forwardRef(({ formData, onComplete }, ref) => {
   const getAISections = () => {
     if (!formData.ai_summary) return [];
 
-    const sections = [];
-    const lines = formData.ai_summary.split('\n');
-
-    for (const line of lines) {
-      if (line.startsWith('## ')) {
-        const title = line.substring(3).trim();
-        sections.push({ title });
-      }
+    // If ai_summary is a JSON object with sections
+    if (typeof formData.ai_summary === 'object' && formData.ai_summary.sections) {
+      return formData.ai_summary.sections.map(section => ({
+        title: section.title
+      }));
     }
 
-    return sections;
+    // If ai_summary is a JSON object without sections (direct fields)
+    if (typeof formData.ai_summary === 'object') {
+      return Object.keys(formData.ai_summary)
+        .filter(key => !['sections', 'content', 'generated_at', 'version', 'content_type', 'updated_at'].includes(key))
+        .map(key => ({
+          title: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+        }));
+    }
+
+    // Legacy: Parse from text format
+    if (typeof formData.ai_summary === 'string') {
+      const sections = [];
+      const lines = formData.ai_summary.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('## ')) {
+          const title = line.substring(3).trim();
+          sections.push({ title });
+        }
+      }
+
+      return sections;
+    }
+
+    return [];
   };
 
   const aiSections = getAISections();

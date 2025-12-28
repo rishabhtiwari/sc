@@ -52,7 +52,11 @@ const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
             : `http://localhost:8080${generatedVideoUrl}`;
           console.log('🌐 Full video URL:', fullUrl);
           setVideoUrl(fullUrl);
-          onUpdate({ video_url: fullUrl });
+
+          // Call onUpdate if it's provided
+          if (onUpdate && typeof onUpdate === 'function') {
+            onUpdate({ video_url: fullUrl });
+          }
         } else {
           console.warn('⚠️ No video URL in response');
         }
@@ -112,7 +116,32 @@ const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
             <span className="text-xl mr-2">🤖</span>
             AI Summary
           </h4>
-          <p className="text-sm text-gray-700 italic">"{formData.ai_summary}"</p>
+          <div className="text-sm text-gray-700">
+            {typeof formData.ai_summary === 'object' && formData.ai_summary?.sections ? (
+              // Display sections from JSON structure
+              <div className="space-y-2">
+                {formData.ai_summary.sections.map((section, idx) => (
+                  <div key={idx}>
+                    <strong>{section.title}:</strong> {section.content}
+                  </div>
+                ))}
+              </div>
+            ) : typeof formData.ai_summary === 'object' ? (
+              // Display JSON fields
+              <div className="space-y-2">
+                {Object.entries(formData.ai_summary)
+                  .filter(([key]) => !['sections', 'content', 'generated_at', 'version', 'content_type', 'updated_at'].includes(key))
+                  .map(([key, value], idx) => (
+                    <div key={idx}>
+                      <strong>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:</strong> {String(value)}
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              // Legacy: Display as string
+              <p className="italic">"{formData.ai_summary}"</p>
+            )}
+          </div>
         </div>
 
         {/* Media Files */}

@@ -506,32 +506,37 @@ const Step4_AudioSelection = forwardRef(({ formData, onComplete }, ref) => {
                 </span>
               </button>
 
-              {/* Smart Defaults Info (Always Visible) */}
+              {/* Smart Defaults Info (Always Visible) - Dynamic based on actual sections */}
               <div className="mt-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3">
                 <p className="text-xs font-semibold text-purple-900 mb-2">
                   ✨ Smart Speed Defaults Applied:
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-700">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">⚡ Opening Hook:</span>
-                    <span className="text-gray-600">1.1x</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">👋 Introduction:</span>
-                    <span className="text-gray-600">1.0x</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">📋 Key Features:</span>
-                    <span className="text-gray-600">0.95x</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">✅ Social Proof:</span>
-                    <span className="text-gray-600">1.0x</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">🎯 Call-to-Action:</span>
-                    <span className="text-gray-600">1.05x</span>
-                  </div>
+                  {sections.map((section, index) => {
+                    // Get emoji based on section title or index
+                    const getSectionEmoji = (title, idx) => {
+                      const titleLower = title.toLowerCase();
+                      if (titleLower.includes('hook') || titleLower.includes('opening')) return '⚡';
+                      if (titleLower.includes('introduction') || titleLower.includes('intro')) return '👋';
+                      if (titleLower.includes('feature') || titleLower.includes('benefit')) return '📋';
+                      if (titleLower.includes('proof') || titleLower.includes('trust') || titleLower.includes('testimonial')) return '✅';
+                      if (titleLower.includes('action') || titleLower.includes('cta') || titleLower.includes('call')) return '🎯';
+                      if (titleLower.includes('conclusion') || titleLower.includes('closing')) return '🎯';
+                      // Default emojis based on position
+                      if (idx === 0) return '⚡';
+                      if (idx === sections.length - 1) return '🎯';
+                      return '📝';
+                    };
+
+                    return (
+                      <div key={index} className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {getSectionEmoji(section.title, index)} {section.title}:
+                        </span>
+                        <span className="text-gray-600">{section.defaultSpeed}x</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

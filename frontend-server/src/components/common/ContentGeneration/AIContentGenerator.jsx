@@ -226,6 +226,7 @@ const AIContentGenerator = ({
   className = ''
 }) => {
   const [content, setContent] = useState(initialContent);
+  const [contentJson, setContentJson] = useState(null); // Store structured JSON
   const [isEditing, setIsEditing] = useState(false);
   const [sections, setSections] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId);
@@ -237,6 +238,10 @@ const AIContentGenerator = ({
   // Update content when initialContent changes
   useEffect(() => {
     setContent(initialContent);
+    // If initialContent is JSON, store it
+    if (typeof initialContent === 'object' && initialContent !== null) {
+      setContentJson(initialContent);
+    }
   }, [initialContent]);
 
   // Parse content into sections if needed
@@ -320,12 +325,15 @@ const AIContentGenerator = ({
     const result = await generate({
       endpoint,
       data: requestData,
-      onSuccess: (generatedContent) => {
+      onSuccess: (generatedContent, fullResponse) => {
+        // generatedContent is now the JSON structure
         setContent(generatedContent);
+        setContentJson(generatedContent);
         showToast('✅ Content generated successfully', 'success');
 
         if (onContentGenerated) {
-          onContentGenerated(generatedContent);
+          // Pass JSON content and full response
+          onContentGenerated(generatedContent, fullResponse);
         }
       },
       onError: (error) => {
@@ -379,12 +387,34 @@ const AIContentGenerator = ({
     updatedSections[index].content = newSectionContent;
     setSections(updatedSections);
 
-    // Convert sections back to full content
-    const newContent = updatedSections
-      .map(section => `## ${section.title}\n${section.content}`)
-      .join('\n\n');
+    // Update the JSON structure if we have it
+    if (contentJson && typeof contentJson === 'object') {
+      const updatedJson = { ...contentJson };
+      const sectionTitle = updatedSections[index].title;
 
-    handleContentChange(newContent);
+      // Find the corresponding field in JSON (convert title back to field name)
+      // e.g., "Opening Hook" -> "opening_hook"
+      const fieldName = sectionTitle.toLowerCase().replace(/\s+/g, '_');
+
+      // Update the field value in JSON
+      if (fieldName in updatedJson) {
+        updatedJson[fieldName] = newSectionContent;
+      }
+
+      setContentJson(updatedJson);
+      setContent(updatedJson);
+
+      if (onContentChange) {
+        onContentChange(updatedJson);
+      }
+    } else {
+      // Fallback: Convert sections back to text format
+      const newContent = updatedSections
+        .map(section => `## ${section.title}\n${section.content}`)
+        .join('\n\n');
+
+      handleContentChange(newContent);
+    }
   };
 
   /**

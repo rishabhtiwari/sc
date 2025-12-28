@@ -12,9 +12,8 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
   // Handle both old (string) and new (object) formats for initial state
   const getInitialSummary = () => {
     const aiSummaryData = formData.ai_summary;
-    if (typeof aiSummaryData === 'object' && aiSummaryData?.full_text) {
-      return aiSummaryData.full_text;
-    } else if (typeof aiSummaryData === 'string') {
+    // Return the data as-is (can be JSON object or string)
+    if (aiSummaryData) {
       return aiSummaryData;
     }
     return '';
@@ -27,20 +26,19 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
   const [selectedTemplateId, setSelectedTemplateId] = useState(formData.prompt_template_id || null);
   const [selectedTemplateVariables, setSelectedTemplateVariables] = useState(formData.prompt_template_variables || {});
 
-  const handleContentGenerated = (content) => {
+  // Store the full response data (includes structured JSON content)
+  const [generatedContentData, setGeneratedContentData] = useState(null);
+
+  const handleContentGenerated = (content, fullResponseData) => {
     console.log('🎯 Step2 handleContentGenerated called with:', content);
+    console.log('🎯 Full response data:', fullResponseData);
 
-    // Backend now sends us pre-formatted text, no parsing needed!
-    // Just use the content directly (it's already a string)
-    const textContent = typeof content === 'string' ? content : String(content);
+    // Content is now the JSON structure from backend
+    // Store the JSON directly
+    setCurrentSummary(content);
+    setGeneratedContentData(fullResponseData);
 
-    console.log('📝 Received text content:', textContent);
-    console.log('📝 Text content length:', textContent?.length);
-
-    // Store in local state - don't save to backend yet
-    setCurrentSummary(textContent);
-
-    console.log('✅ currentSummary state updated');
+    console.log('✅ Stored JSON content:', content);
   };
 
   const handleTemplateSelect = (templateId, templateData, variables) => {
@@ -54,12 +52,11 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
   const handleContentChange = (content) => {
     console.log('🎯 Step2 handleContentChange called with:', content);
     console.log('📝 Content type:', typeof content);
-    console.log('📝 Content length:', content?.length);
 
-    // Update local state when content is edited
+    // Content is now JSON structure after edits
     setCurrentSummary(content);
 
-    console.log('✅ currentSummary state updated from edit');
+    console.log('✅ currentSummary state updated from edit (JSON)');
   };
 
   // Expose handleNext to parent via ref
@@ -74,13 +71,24 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
     console.log('🔍 Step2 handleNext - Validation:', {
       summary,
       summaryType: typeof summary,
-      summaryLength: summary?.length,
-      trimmedLength: summary?.trim?.()?.length
+      hasGeneratedData: !!generatedContentData
     });
 
-    // Validate that summary exists
-    if (!summary || (typeof summary === 'string' && !summary.trim())) {
-      showToast('⚠️ Please generate or enter an AI summary before proceeding', 'error', 5000);
+    // Validate that summary exists (can be JSON object or string)
+    if (!summary) {
+      showToast('⚠️ Please generate content before proceeding', 'error', 5000);
+      return false;
+    }
+
+    // If it's a string, make sure it's not empty
+    if (typeof summary === 'string' && !summary.trim()) {
+      showToast('⚠️ Please generate content before proceeding', 'error', 5000);
+      return false;
+    }
+
+    // If it's an object, make sure it has some content
+    if (typeof summary === 'object' && Object.keys(summary).length === 0) {
+      showToast('⚠️ Please generate content before proceeding', 'error', 5000);
       return false;
     }
 
@@ -88,16 +96,18 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
     if (formData.product_id) {
       try {
         console.log('💾 Saving AI summary to product:', formData.product_id);
+        console.log('💾 AI summary data:', summary);
 
+        // Save the JSON structure directly
         await api.put(`/products/${formData.product_id}`, {
           status: 'summary_generated',
-          ai_summary: summary,
+          ai_summary: summary,  // Save JSON structure directly
           prompt_template_id: selectedTemplateId,
           prompt_template_variables: selectedTemplateVariables
         });
 
         console.log('✅ AI summary saved successfully');
-        showToast('✅ AI summary saved successfully', 'success');
+        showToast('✅ Content saved successfully', 'success');
       } catch (error) {
         console.error('❌ Error saving AI summary:', error);
 

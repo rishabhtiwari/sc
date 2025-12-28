@@ -28,16 +28,19 @@ export const useContentGeneration = () => {
       const response = await api.post(endpoint, data);
 
       if (response.data.status === 'success') {
-        // Backend now sends 'content_text' (formatted text) and 'content' (raw JSON)
-        // Prefer content_text for display, fallback to other fields for backward compatibility
-        const generatedContent = response.data.content_text || response.data.ai_summary || response.data.content || response.data.result;
+        // Backend sends 'content' (structured JSON) and 'content_text' (formatted text)
+        // Use JSON as primary format for editing and storage
+        const generatedContent = response.data.content || response.data.ai_summary || response.data.result;
+        const contentText = response.data.content_text || '';
+
         setContent(generatedContent);
 
         if (onSuccess) {
+          // Pass JSON content as primary, full response as secondary
           onSuccess(generatedContent, response.data);
         }
 
-        return { success: true, content: generatedContent, data: response.data };
+        return { success: true, content: generatedContent, contentText, data: response.data };
       } else {
         const errorMsg = response.data.message || 'Content generation failed';
         setError(errorMsg);

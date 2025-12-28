@@ -228,20 +228,11 @@ def get_product_stats():
             'user_id': user_id
         })
 
-        # Pending: Products in draft, summary_generated, audio_configured, or template_selected status
-        # These are products that haven't started video generation yet
-        pending = product_bp.products_collection.count_documents({
+        # Completed: Products with completed video generation
+        completed = product_bp.products_collection.count_documents({
             'customer_id': customer_id,
             'user_id': user_id,
-            '$or': [
-                {'status': 'draft'},
-                {'status': 'summary_generated'},
-                {'status': 'audio_configured'},
-                {'status': 'template_selected'},
-                {'generated_video': {'$exists': False}},
-                {'generated_video.status': {'$exists': False}},
-                {'generated_video.status': 'pending'}
-            ]
+            'generated_video.status': 'completed'
         })
 
         # Processing: Products with video generation in progress
@@ -251,18 +242,28 @@ def get_product_stats():
             'generated_video.status': 'processing'
         })
 
-        # Completed: Products with completed video generation
-        completed = product_bp.products_collection.count_documents({
-            'customer_id': customer_id,
-            'user_id': user_id,
-            'generated_video.status': 'completed'
-        })
-
         # Failed: Products with failed video generation
         failed = product_bp.products_collection.count_documents({
             'customer_id': customer_id,
             'user_id': user_id,
             'generated_video.status': 'failed'
+        })
+
+        # Pending: Products that haven't completed video generation yet
+        # This includes products without generated_video field or with pending status
+        # Exclude products that are completed, processing, or failed
+        pending = product_bp.products_collection.count_documents({
+            'customer_id': customer_id,
+            'user_id': user_id,
+            '$and': [
+                {
+                    '$or': [
+                        {'generated_video': {'$exists': False}},
+                        {'generated_video.status': {'$exists': False}},
+                        {'generated_video.status': 'pending'}
+                    ]
+                }
+            ]
         })
 
         stats = {
