@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '../../common';
 import { productService } from '../../../services';
 import { useToast } from '../../../hooks/useToast';
@@ -9,8 +9,39 @@ import { useToast } from '../../../hooks/useToast';
 const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
   const [generating, setGenerating] = useState(false);
   const [videoStatus, setVideoStatus] = useState(formData.generated_video?.status || 'pending');
-  const [videoUrl, setVideoUrl] = useState(formData.video_url || null);
+  const [videoUrl, setVideoUrl] = useState(null);
   const { showToast } = useToast();
+
+  // Load existing video URL from database on component mount
+  useEffect(() => {
+    const loadExistingVideo = async () => {
+      if (formData.product_id) {
+        try {
+          console.log('🔄 Loading existing video URL from database...');
+          const response = await productService.getProduct(formData.product_id);
+          const product = response.data?.product;
+
+          if (product?.video_url) {
+            const fullUrl = product.video_url.startsWith('http')
+              ? product.video_url
+              : `http://localhost:8080${product.video_url}`;
+            console.log('✅ Found existing video URL:', fullUrl);
+            setVideoUrl(fullUrl);
+            setVideoStatus('completed');
+          } else {
+            console.log('ℹ️ No existing video URL found');
+            setVideoUrl(null);
+            setVideoStatus('pending');
+          }
+        } catch (error) {
+          console.error('❌ Failed to load existing video:', error);
+          // Non-critical error, don't show to user
+        }
+      }
+    };
+
+    loadExistingVideo();
+  }, [formData.product_id]);
 
   const handleGenerate = async () => {
     if (!formData.product_id) {
@@ -27,13 +58,19 @@ const Step6_PreviewGenerate = ({ formData, onComplete, onUpdate }) => {
       console.log('🔧 Template variables:', formData.template_variables);
       console.log('🎯 Distribution mode:', formData.distribution_mode);
       console.log('🗂️ Section mapping:', formData.section_mapping);
+      console.log('🗂️ Section mapping keys:', Object.keys(formData.section_mapping || {}));
+      console.log('🗂️ Section mapping JSON:', JSON.stringify(formData.section_mapping, null, 2));
 
-      const response = await productService.generateVideo(formData.product_id, {
+      const requestData = {
         template_id: formData.template_id,
         template_variables: formData.template_variables || {},
         distribution_mode: formData.distribution_mode || 'auto',
         section_mapping: formData.section_mapping || {}
-      });
+      };
+
+      console.log('📤 Request data being sent to backend:', JSON.stringify(requestData, null, 2));
+
+      const response = await productService.generateVideo(formData.product_id, requestData);
 
       console.log('✅ Video generation response:', response.data);
 

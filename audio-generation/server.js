@@ -360,6 +360,44 @@ app.get('/api/audio/:articleId/:audioType/exists', (req, res) => {
     }
 });
 
+// Delete product audio folder
+app.delete('/product/:productId', (req, res) => {
+    try {
+        const { productId } = req.params;
+        const productDir = path.join(__dirname, 'public', 'product', productId);
+
+        console.log(`🗑️ Deleting product audio folder: ${productDir}`);
+
+        // Check if directory exists
+        if (!fs.existsSync(productDir)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product audio folder not found',
+                product_id: productId
+            });
+        }
+
+        // Delete directory recursively
+        fs.rmSync(productDir, { recursive: true, force: true });
+
+        console.log(`✅ Deleted product audio folder: ${productId}`);
+
+        res.json({
+            success: true,
+            message: 'Product audio folder deleted successfully',
+            product_id: productId
+        });
+
+    } catch (error) {
+        console.error('Delete product folder error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete product audio folder',
+            details: error.message
+        });
+    }
+});
+
 // Start server
 async function startServer() {
     // Create public directory for audio files

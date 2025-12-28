@@ -285,8 +285,24 @@ const Step4_AudioSelection = forwardRef(({ formData, onComplete }, ref) => {
           setAudioUrl(generatedAudioUrl);
           showToast('✅ Audio generated successfully! Click "Play Product Audio" to listen.', 'success');
 
-          // Audio URL is already stored in local state (audioUrl)
-          // Will be saved when user clicks "Next"
+          // Reload product data to get updated sections with audio_config.duration
+          try {
+            const productResponse = await productService.getProduct(formData.product_id);
+            if (productResponse.data?.product?.ai_summary?.sections) {
+              const updatedSections = productResponse.data.product.ai_summary.sections;
+              console.log('🔄 Reloaded sections with updated durations:', updatedSections);
+
+              // Update sections in parent formData
+              if (onFormDataChange) {
+                onFormDataChange({
+                  ai_summary: { sections: updatedSections }
+                });
+              }
+            }
+          } catch (error) {
+            console.error('⚠️ Failed to reload product data:', error);
+            // Non-critical error, don't show to user
+          }
         } else {
           showToast('⚠️ Audio generated but no URL returned', 'warning', 5000);
         }

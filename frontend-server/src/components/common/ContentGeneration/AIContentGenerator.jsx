@@ -226,7 +226,6 @@ const AIContentGenerator = ({
   className = ''
 }) => {
   const [content, setContent] = useState(initialContent);
-  const [contentJson, setContentJson] = useState(null); // Store structured JSON
   const [isEditing, setIsEditing] = useState(false);
   const [sections, setSections] = useState([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId);
@@ -238,35 +237,21 @@ const AIContentGenerator = ({
   // Update content when initialContent changes
   useEffect(() => {
     setContent(initialContent);
-    // If initialContent is JSON, store it
-    if (typeof initialContent === 'object' && initialContent !== null) {
-      setContentJson(initialContent);
-    }
   }, [initialContent]);
 
   // Parse content into sections if needed
   useEffect(() => {
     if (showSections && content) {
-      // Check if content is already structured (from backend)
+      // SIMPLIFIED: Content is always { sections: [...] } from backend
       if (typeof content === 'object' && content.sections) {
-        // Backend already parsed it - use the sections directly
-        console.log('📊 Using structured sections from backend:', content.sections);
+        console.log('📊 Using sections from backend:', content.sections);
         setSections(content.sections);
-      } else if (typeof content === 'object') {
-        // JSON object from LLM - convert to sections dynamically
-        console.log('🔄 Converting JSON object to sections:', content);
-        const dynamicSections = convertJsonToSections(content);
-        console.log('📊 Dynamic sections:', dynamicSections);
-        setSections(dynamicSections);
-      } else if (typeof content === 'string') {
-        // Plain text - parse it
-        const parser = parseContent || defaultParseContent;
-        const parsed = parser(content);
-        console.log('📝 Parsed sections from text:', parsed);
-        setSections(parsed);
+      } else {
+        console.warn('⚠️ Content does not have expected format: { sections: [...] }');
+        setSections([]);
       }
     }
-  }, [content, showSections, parseContent]);
+  }, [content, showSections]);
 
   /**
    * Handle content generation
@@ -326,13 +311,13 @@ const AIContentGenerator = ({
       endpoint,
       data: requestData,
       onSuccess: (generatedContent, fullResponse) => {
-        // generatedContent is now the JSON structure
+        // SIMPLIFIED: generatedContent is { sections: [...] } from backend
+        console.log('✅ Received content from backend:', generatedContent);
         setContent(generatedContent);
-        setContentJson(generatedContent);
         showToast('✅ Content generated successfully', 'success');
 
         if (onContentGenerated) {
-          // Pass JSON content and full response
+          // Pass sections content and full response
           onContentGenerated(generatedContent, fullResponse);
         }
       },
@@ -381,39 +366,22 @@ const AIContentGenerator = ({
 
   /**
    * Handle section update (for structured content)
+   * SIMPLIFIED: Just update sections array and notify parent
    */
   const handleSectionUpdate = (index, newSectionContent) => {
     const updatedSections = [...sections];
     updatedSections[index].content = newSectionContent;
     setSections(updatedSections);
 
-    // Update the JSON structure if we have it
-    if (contentJson && typeof contentJson === 'object') {
-      const updatedJson = { ...contentJson };
-      const sectionTitle = updatedSections[index].title;
+    // Update content with new sections
+    const updatedContent = {
+      sections: updatedSections
+    };
+    setContent(updatedContent);
 
-      // Find the corresponding field in JSON (convert title back to field name)
-      // e.g., "Opening Hook" -> "opening_hook"
-      const fieldName = sectionTitle.toLowerCase().replace(/\s+/g, '_');
-
-      // Update the field value in JSON
-      if (fieldName in updatedJson) {
-        updatedJson[fieldName] = newSectionContent;
-      }
-
-      setContentJson(updatedJson);
-      setContent(updatedJson);
-
-      if (onContentChange) {
-        onContentChange(updatedJson);
-      }
-    } else {
-      // Fallback: Convert sections back to text format
-      const newContent = updatedSections
-        .map(section => `## ${section.title}\n${section.content}`)
-        .join('\n\n');
-
-      handleContentChange(newContent);
+    // Notify parent component
+    if (onContentChange) {
+      onContentChange(updatedContent);
     }
   };
 
@@ -576,44 +544,29 @@ const AIContentGenerator = ({
 
       {content && !generating && (
         <div className="border border-gray-300 rounded-lg p-4">
-          {isEditing ? (
-            <textarea
-              className="w-full min-h-[300px] p-2 border-0 focus:outline-none focus:ring-0 resize-none"
-              value={typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-              onChange={(e) => {
-                // Try to parse as JSON if it looks like JSON, otherwise treat as string
-                const value = e.target.value;
-                try {
-                  if (value.trim().startsWith('{') || value.trim().startsWith('[')) {
-                    const parsed = JSON.parse(value);
-                    handleContentChange(parsed);
-                  } else {
-                    handleContentChange(value);
-                  }
-                } catch (err) {
-                  // If JSON parsing fails, just store as string
-                  handleContentChange(value);
-                }
-              }}
-            />
-          ) : showSections && sections.length > 0 ? (
-            // Structured section view
+          {/* SIMPLIFIED: Only section-based editing */}
+          {showSections && sections.length > 0 ? (
             <div className="space-y-4">
               {sections.map((section, index) => (
                 <div key={index} className="border-b border-gray-200 pb-4 last:border-0">
                   <h3 className="font-semibold text-gray-800 mb-2">{section.title}</h3>
-                  <div className="text-gray-700">
-                    {renderSectionContent(section.content)}
-                  </div>
+                  {isEditing ? (
+                    <textarea
+                      className="w-full min-h-[100px] p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      value={section.content}
+                      onChange={(e) => handleSectionUpdate(index, e.target.value)}
+                    />
+                  ) : (
+                    <div className="text-gray-700">
+                      {renderSectionContent(section.content)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           ) : (
-            // Plain text view
-            <div className="prose max-w-none">
-              <div className="whitespace-pre-wrap text-gray-700">
-                {typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
-              </div>
+            <div className="text-gray-500 text-center p-4">
+              No sections available
             </div>
           )}
         </div>

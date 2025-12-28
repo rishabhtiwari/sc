@@ -245,23 +245,19 @@ class BaseContentGenerator(ABC):
             # Convert JSON structure to sections format
             sections = self._convert_json_to_sections(json_data, template)
 
-            # Create structured AI summary object
+            # Create simplified AI summary object - ONLY sections array
             structured_summary = {
-                'sections': sections,
-                'json_data': json_data,  # Store the raw JSON data
-                'full_text': result.get('raw_response', ''),
-                'generated_at': datetime.utcnow(),
-                'version': '3.0',  # New version for template-based generation
-                'content_type': self.get_content_type(),
-                'template_id': template_id
+                'sections': sections
             }
 
-            # Update content with AI summary
+            # Update content with AI summary and template info at product level
             self.collection.update_one(
                 {'_id': ObjectId(content_id)},
                 {
                     '$set': {
                         'ai_summary': structured_summary,
+                        'prompt_template_id': template_id,
+                        'prompt_template_variables': template_variables or {},
                         'updated_at': datetime.utcnow()
                     }
                 }
@@ -391,13 +387,9 @@ class BaseContentGenerator(ABC):
             sections = self.parse_summary_to_sections(summary_text)
             logger.info(f"Parsed {len(sections)} sections from AI summary")
 
-            # Create structured AI summary object
+            # Create simplified AI summary object - ONLY sections array
             structured_summary = {
-                'sections': sections,
-                'full_text': summary_text,
-                'generated_at': datetime.utcnow(),
-                'version': '2.0',
-                'content_type': self.get_content_type()
+                'sections': sections
             }
 
             # Update content with AI summary
@@ -451,6 +443,10 @@ class BaseContentGenerator(ABC):
                     'status': 'error',
                     'message': 'Content not found'
                 }
+
+            # Store old audio URLs for cleanup after successful generation
+            old_audio_url = content.get('audio_url')
+            old_section_audio_urls = content.get('section_audio_urls', [])
 
             # Get AI summary
             ai_summary = content.get('ai_summary')
@@ -579,17 +575,41 @@ class BaseContentGenerator(ABC):
                 # Continue without combined audio - sections still work
 
             # Update content with audio information
-            # Note: sections are already in ai_summary, no need to update them
-            self.collection.update_one(
+            # IMPORTANT: Save updated sections with audio_config.duration back to database
+            logger.info(f"💾 Saving audio data to database:")
+            logger.info(f"   - audio_url: {combined_audio_url}")
+            logger.info(f"   - section_audio_urls: {section_audio_urls}")
+            logger.info(f"   - sections count: {len(sections)}")
+            logger.info(f"   - sections with durations: {[(s['title'], s['audio_config']['duration']) for s in sections]}")
+
+            update_result = self.collection.update_one(
                 {'_id': ObjectId(content_id)},
                 {
                     '$set': {
+                        'ai_summary.sections': sections,  # Save updated sections with durations
                         'audio_url': combined_audio_url,
                         'section_audio_urls': section_audio_urls,
                         'updated_at': datetime.utcnow()
                     }
                 }
             )
+
+            logger.info(f"💾 Database update result: matched={update_result.matched_count}, modified={update_result.modified_count}")
+
+            # Verify the data was saved
+            verification = self.collection.find_one(
+                {'_id': ObjectId(content_id)},
+                {'audio_url': 1, 'section_audio_urls': 1, 'ai_summary.sections.audio_config.duration': 1}
+            )
+            logger.info(f"✅ Verification - audio_url in DB: {verification.get('audio_url')}")
+            logger.info(f"✅ Verification - section_audio_urls in DB: {verification.get('section_audio_urls')}")
+
+            # Clean up old audio files from disk AFTER successfully saving new ones
+            if old_audio_url or old_section_audio_urls:
+                logger.info(f"🗑️ Cleaning up old audio files after successful regeneration")
+                logger.info(f"   - Old audio_url: {old_audio_url}")
+                logger.info(f"   - Old section_audio_urls: {old_section_audio_urls}")
+                self._cleanup_audio_files(content_id)
 
             return {
                 'status': 'success',
@@ -717,6 +737,56 @@ class BaseContentGenerator(ABC):
             except:
                 pass
 
+    def _cleanup_audio_files(self, content_id):
+        """
+        Clean up audio files from disk when content is regenerated
+
+        Args:
+            content_id: ID of the content (product, blog, etc.)
+        """
+        try:
+            logger.info(f"🗑️ Cleaning up audio files for content {content_id}")
+
+            # Call audio service to delete product folder
+            delete_url = f"{self.audio_service_url}/product/{content_id}"
+            response = requests.delete(delete_url, timeout=30)
+
+            if response.status_code == 200:
+                logger.info(f"   ✅ Deleted audio files from disk")
+            else:
+                logger.warning(f"   ⚠️ Failed to delete audio files: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"   ❌ Error cleaning up audio files: {str(e)}")
+
+    def _cleanup_old_video(self, video_url):
+        """
+        Clean up old video file from disk when regenerating video
+
+        Args:
+            video_url: URL of the old video file to delete
+        """
+        try:
+            logger.info(f"🗑️ Cleaning up old video file: {video_url}")
+
+            # Call template service cleanup endpoint
+            cleanup_url = f"{self.template_service_url}/preview/cleanup"
+            response = requests.post(
+                cleanup_url,
+                json={'preview_url': video_url},
+                timeout=30
+            )
+
+            if response.status_code == 200:
+                logger.info(f"   ✅ Deleted old video file from disk")
+            elif response.status_code == 404:
+                logger.info(f"   ℹ️ Old video file not found (already deleted)")
+            else:
+                logger.warning(f"   ⚠️ Failed to delete old video file: {response.status_code}")
+
+        except Exception as e:
+            logger.error(f"   ❌ Error cleaning up old video file: {str(e)}")
+
     def generate_video(self, content_id, template_id, template_variables=None,
                       distribution_mode='auto', section_mapping=None):
         """
@@ -734,6 +804,12 @@ class BaseContentGenerator(ABC):
         """
         try:
             logger.info(f"🎬 Generating video for content {content_id}")
+            logger.info(f"📥 Received parameters:")
+            logger.info(f"   - template_id: {template_id}")
+            logger.info(f"   - distribution_mode: {distribution_mode}")
+            logger.info(f"   - section_mapping: {section_mapping}")
+            logger.info(f"   - section_mapping type: {type(section_mapping)}")
+            logger.info(f"   - section_mapping keys: {list(section_mapping.keys()) if section_mapping else 'None'}")
 
             # Get content
             content = self.collection.find_one({'_id': ObjectId(content_id)})
@@ -829,10 +905,64 @@ class BaseContentGenerator(ABC):
                     logger.info(f"  {i+1}. {media['type']}: {media['url']}")
 
             # If section_mapping not provided, try to get from product
+            # BUT validate that the mapping keys match current section titles
             if not section_mapping and content.get('section_mapping'):
-                section_mapping = content['section_mapping']
-                distribution_mode = 'manual'
-                logger.info(f"📦 Using section_mapping from product data (manual mode)")
+                stored_mapping = content['section_mapping']
+
+                # Validate that the stored mapping keys match current sections
+                # This prevents using outdated mappings from old prompt templates
+                def normalize_key(s):
+                    """Convert 'Opening Hook' to 'opening_hook' for matching"""
+                    return s.lower().replace(' ', '_').replace('&', 'and').replace('-', '_')
+
+                current_section_keys = {normalize_key(section['title']) for section in sections}
+                stored_mapping_keys = {normalize_key(key) for key in stored_mapping.keys()}
+
+                # Check if at least 50% of stored mapping keys match current sections
+                matching_keys = current_section_keys & stored_mapping_keys
+                match_ratio = len(matching_keys) / len(stored_mapping_keys) if stored_mapping_keys else 0
+
+                if match_ratio >= 0.5:
+                    section_mapping = stored_mapping
+                    distribution_mode = 'manual'
+                    logger.info(f"📦 Using section_mapping from product data (manual mode)")
+                    logger.info(f"   ✅ {len(matching_keys)}/{len(stored_mapping_keys)} mapping keys match current sections")
+                else:
+                    logger.warning(f"⚠️ Stored section_mapping is outdated (only {len(matching_keys)}/{len(stored_mapping_keys)} keys match)")
+                    logger.warning(f"   Current sections: {[s['title'] for s in sections]}")
+                    logger.warning(f"   Stored mapping keys: {list(stored_mapping.keys())}")
+                    logger.warning(f"   Falling back to AUTO distribution mode and clearing outdated data")
+                    section_mapping = None
+                    distribution_mode = 'auto'
+
+                    # Clean up outdated audio files from disk
+                    self._cleanup_audio_files(content_id)
+
+                    # Clear outdated section_mapping and audio references from database
+                    try:
+                        # Also reset audio_config.duration in sections to 0
+                        for section in sections:
+                            section['audio_path'] = None
+                            section['audio_config']['duration'] = 0
+
+                        self.collection.update_one(
+                            {'_id': ObjectId(content_id)},
+                            {
+                                '$set': {
+                                    'ai_summary.sections': sections,  # Save updated sections with duration=0
+                                    'section_mapping': {},
+                                    'distribution_mode': 'auto'
+                                },
+                                '$unset': {
+                                    'audio_url': '',
+                                    'section_audio_urls': ''
+                                }
+                            }
+                        )
+
+                        logger.info(f"   ✅ Cleared outdated section_mapping and audio references from database")
+                    except Exception as e:
+                        logger.error(f"   ❌ Failed to clear outdated data: {str(e)}")
 
             # Distribute media across sections
             if media_files and sections:
@@ -901,6 +1031,11 @@ class BaseContentGenerator(ABC):
                     'status': 'error',
                     'message': 'Failed to generate video'
                 }
+
+            # Clean up old video file if exists
+            old_video_url = content.get('video_url') or content.get('generated_video', {}).get('video_url')
+            if old_video_url:
+                self._cleanup_old_video(old_video_url)
 
             # Update content with video URL
             self.collection.update_one(

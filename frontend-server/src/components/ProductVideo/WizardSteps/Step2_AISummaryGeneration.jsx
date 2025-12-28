@@ -33,12 +33,11 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
     console.log('🎯 Step2 handleContentGenerated called with:', content);
     console.log('🎯 Full response data:', fullResponseData);
 
-    // Content is now the JSON structure from backend
-    // Store the JSON directly
+    // SIMPLIFIED: Content is { sections: [...] } from backend
     setCurrentSummary(content);
     setGeneratedContentData(fullResponseData);
 
-    console.log('✅ Stored JSON content:', content);
+    console.log('✅ Stored sections content:', content);
   };
 
   const handleTemplateSelect = (templateId, templateData, variables) => {
@@ -51,12 +50,11 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
 
   const handleContentChange = (content) => {
     console.log('🎯 Step2 handleContentChange called with:', content);
-    console.log('📝 Content type:', typeof content);
 
-    // Content is now JSON structure after edits
+    // SIMPLIFIED: Content is { sections: [...] } after edits
     setCurrentSummary(content);
 
-    console.log('✅ currentSummary state updated from edit (JSON)');
+    console.log('✅ currentSummary state updated from edit (sections)');
   };
 
   // Expose handleNext to parent via ref
@@ -74,20 +72,8 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
       hasGeneratedData: !!generatedContentData
     });
 
-    // Validate that summary exists (can be JSON object or string)
-    if (!summary) {
-      showToast('⚠️ Please generate content before proceeding', 'error', 5000);
-      return false;
-    }
-
-    // If it's a string, make sure it's not empty
-    if (typeof summary === 'string' && !summary.trim()) {
-      showToast('⚠️ Please generate content before proceeding', 'error', 5000);
-      return false;
-    }
-
-    // If it's an object, make sure it has some content
-    if (typeof summary === 'object' && Object.keys(summary).length === 0) {
+    // SIMPLIFIED: Validate that summary has sections array
+    if (!summary || !summary.sections || summary.sections.length === 0) {
       showToast('⚠️ Please generate content before proceeding', 'error', 5000);
       return false;
     }
@@ -98,13 +84,23 @@ const Step2_AISummaryGeneration = forwardRef(({ formData, onComplete }, ref) => 
         console.log('💾 Saving AI summary to product:', formData.product_id);
         console.log('💾 AI summary data:', summary);
 
-        // Save the JSON structure directly
-        await api.put(`/products/${formData.product_id}`, {
+        // SIMPLIFIED: Save sections directly - no conversion needed
+        // Also clear section_mapping if prompt template changed (to avoid outdated mappings)
+        const updateData = {
           status: 'summary_generated',
-          ai_summary: summary,  // Save JSON structure directly
+          ai_summary: summary,  // { sections: [...] }
           prompt_template_id: selectedTemplateId,
           prompt_template_variables: selectedTemplateVariables
-        });
+        };
+
+        // Clear section_mapping if prompt template changed
+        if (formData.prompt_template_id && formData.prompt_template_id !== selectedTemplateId) {
+          console.log('🔄 Prompt template changed - clearing section_mapping');
+          updateData.section_mapping = {};
+          updateData.distribution_mode = 'auto';
+        }
+
+        await api.put(`/products/${formData.product_id}`, updateData);
 
         console.log('✅ AI summary saved successfully');
         showToast('✅ Content saved successfully', 'success');

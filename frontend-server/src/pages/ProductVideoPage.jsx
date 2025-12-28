@@ -62,11 +62,11 @@ const ProductVideoPage = ({ embedded = false }) => {
       return;
     }
 
-    // Poll every 3 seconds
+    // Poll every 15 seconds
     const pollInterval = setInterval(() => {
       fetchProducts();
       fetchStats();
-    }, 3000);
+    }, 15000);
 
     return () => clearInterval(pollInterval);
   }, [products, recomputingProductId]);

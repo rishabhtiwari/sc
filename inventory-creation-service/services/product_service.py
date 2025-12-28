@@ -598,8 +598,17 @@ def generate_video(product_id):
                 'message': 'Product not found'
             }), 404
 
-        # Get options from request
-        data = request.get_json() or {}
+        # Get options from request - be lenient with Content-Type
+        data = {}
+        if request.is_json:
+            data = request.get_json() or {}
+        elif request.data:
+            try:
+                import json
+                data = json.loads(request.data) or {}
+            except:
+                data = {}
+
         template_id = data.get('template_id', 'default')
         template_variables = data.get('template_variables', {})
         distribution_mode = data.get('distribution_mode', 'auto')

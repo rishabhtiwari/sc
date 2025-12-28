@@ -110,17 +110,43 @@ def generate_content():
         # The result contains 'data' (parsed JSON) and 'raw_response'
         content = result['data']
 
-        # Convert JSON to formatted text
-        content_text = content_generation_bp.prompt_template_handler.convert_json_to_text(content)
+        # SIMPLIFIED: Convert JSON to sections format
+        # This ensures frontend always receives { sections: [...] }
+        sections = []
+        order = 0
+
+        # Iterate through the output schema to maintain field order
+        if template.get('output_schema') and template['output_schema'].get('properties'):
+            for field_name, field_schema in template['output_schema']['properties'].items():
+                if field_name in content:
+                    field_value = content[field_name]
+
+                    # Convert field to section
+                    section = {
+                        'title': field_schema.get('title', field_name.replace('_', ' ').title()),
+                        'content': field_value if isinstance(field_value, str) else str(field_value),
+                        'order': order,
+                        'audio_path': None,
+                        'video_path': None,
+                        'audio_config': {
+                            'speed': 1.0,
+                            'voice': 'am_adam',
+                            'duration': 0
+                        }
+                    }
+                    sections.append(section)
+                    order += 1
+
+        logger.info(f"✅ Converted JSON to {len(sections)} sections")
 
         # Calculate generation time
         end_time = datetime.utcnow()
         generation_time = int((end_time - start_time).total_seconds() * 1000)
 
+        # SIMPLIFIED: Return only sections format
         return jsonify({
             'status': 'success',
-            'content': content,              # Original JSON structure
-            'content_text': content_text,    # Formatted text for display
+            'sections': sections,            # Sections array for frontend
             'template_id': template_id,
             'generation_time': generation_time
         }), 200

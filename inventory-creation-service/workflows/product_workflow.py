@@ -149,157 +149,20 @@ class ProductWorkflow(BaseContentGenerator):
         if user_id:
             query['user_id'] = user_id
 
-        # Process ai_summary - convert JSON structure to sections format
+        # Simplified: ai_summary is just { sections: [...] }
+        # No conversion needed - frontend sends sections, we store sections
         if 'ai_summary' in updates:
             ai_summary_data = updates['ai_summary']
 
-            # If it's a dict (JSON from frontend), convert to sections format
-            if isinstance(ai_summary_data, dict):
-                logger.info("Processing ai_summary as JSON structure")
-
-                # Check if it already has sections (already processed)
-                if 'sections' not in ai_summary_data:
-                    # Convert JSON fields to sections
-                    sections = self._parse_json_to_sections(ai_summary_data)
-
-                    # Create structured ai_summary with sections
-                    updates['ai_summary'] = {
-                        'sections': sections,
-                        'content': ai_summary_data,  # Store original JSON
-                        'generated_at': datetime.utcnow(),
-                        'version': '2.0',
-                        'content_type': self.get_content_type()
-                    }
-
-                    logger.info(f"Converted JSON to {len(sections)} sections")
-                else:
-                    # Already has sections, just update timestamp
-                    updates['ai_summary']['updated_at'] = datetime.utcnow()
-
-            elif isinstance(ai_summary_data, str):
-                # Legacy: plain text format
-                logger.info("Processing ai_summary as plain text (legacy)")
-                # Keep as-is for backward compatibility
-                pass
+            if isinstance(ai_summary_data, dict) and 'sections' in ai_summary_data:
+                logger.info(f"Storing ai_summary with {len(ai_summary_data['sections'])} sections")
+            else:
+                logger.warning("ai_summary does not have expected format: { sections: [...] }")
 
         updates['updated_at'] = datetime.utcnow()
 
         result = self.collection.update_one(query, {'$set': updates})
         return result.modified_count > 0
-
-    def _parse_json_to_sections(self, json_data):
-        """
-        Parse structured JSON content into sections array
-
-        Args:
-            json_data: Dict with section fields (e.g., opening_hook, product_introduction, etc.)
-
-        Returns:
-            list: Array of section dicts with title, content, order
-        """
-        if not isinstance(json_data, dict):
-            logger.warning(f"raw_content is not a dict: {type(json_data)}")
-            return []
-
-        sections = []
-        order = 0
-
-        # Common section field names (in order)
-        section_fields = [
-            'opening_hook',
-            'product_introduction',
-            'key_features',
-            'social_proof',
-            'call_to_action',
-            'introduction',
-            'features',
-            'benefits',
-            'conclusion',
-            'body',
-            'summary'
-        ]
-
-        # Extract sections in order
-        for field in section_fields:
-            if field in json_data:
-                value = json_data[field]
-
-                # Convert field name to title (e.g., opening_hook -> Opening Hook)
-                title = field.replace('_', ' ').title()
-
-                # Format the content
-                content = self._format_section_content(value)
-
-                if content:
-                    sections.append({
-                        'title': title,
-                        'content': content,
-                        'order': order
-                    })
-                    order += 1
-
-        # If no known sections found, try to extract all fields
-        if not sections:
-            for key, value in json_data.items():
-                content = self._format_section_content(value)
-                if content:
-                    title = key.replace('_', ' ').title()
-                    sections.append({
-                        'title': title,
-                        'content': content,
-                        'order': order
-                    })
-                    order += 1
-
-        return sections
-
-    def _format_section_content(self, value):
-        """
-        Format a section value (string, array, or object) to text
-
-        Args:
-            value: The section value
-
-        Returns:
-            str: Formatted text content
-        """
-        if isinstance(value, str):
-            return value
-
-        elif isinstance(value, list):
-            # Handle array of items
-            item_texts = []
-            for item in value:
-                if isinstance(item, str):
-                    item_texts.append(item)
-                elif isinstance(item, dict):
-                    # Handle objects in array (e.g., key_features with feature_name and description)
-                    if 'feature_name' in item and 'description' in item:
-                        item_texts.append(f"{item['feature_name']}: {item['description']}")
-                    elif 'name' in item and 'description' in item:
-                        item_texts.append(f"{item['name']}: {item['description']}")
-                    elif 'title' in item and 'content' in item:
-                        item_texts.append(f"{item['title']}: {item['content']}")
-                    else:
-                        # Generic object: join all string values
-                        obj_values = [str(v) for v in item.values() if v]
-                        if obj_values:
-                            item_texts.append(': '.join(obj_values))
-
-            return '\n'.join(item_texts) if item_texts else ''
-
-        elif isinstance(value, dict):
-            # Handle nested objects
-            obj_texts = []
-            for k, v in value.items():
-                text = self._format_section_content(v)
-                if text:
-                    obj_texts.append(text)
-            return '\n'.join(obj_texts) if obj_texts else ''
-
-        else:
-            # For other types (numbers, booleans, etc.), convert to string
-            return str(value) if value is not None else ''
 
     def update_product_status(self, product_id, status, customer_id=None, user_id=None):
         """
