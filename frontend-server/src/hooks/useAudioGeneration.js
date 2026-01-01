@@ -136,6 +136,48 @@ export const useAudioGeneration = () => {
   }, [audioConfig, generate]);
 
   /**
+   * Simple audio generation for Audio Studio
+   * @param {Object} options - Generation options
+   * @param {string} options.text - Text to convert to speech
+   * @param {string} options.model - TTS model
+   * @param {string} options.voice - Voice ID
+   * @param {number} options.speed - Speech speed
+   */
+  const generateAudio = useCallback(async ({ text, model, voice, speed = 1.0 }) => {
+    setGenerating(true);
+    setError(null);
+
+    try {
+      // Call audio generation service via API proxy
+      const response = await api.post('/audio/generate', {
+        text,
+        model,
+        voice,
+        speed,
+        format: 'wav'
+      });
+
+      if (response.data.success) {
+        const url = response.data.audio_url;
+        setAudioUrl(url);
+        return {
+          success: true,
+          audio_url: url,
+          audio_info: response.data.audio_info
+        };
+      } else {
+        throw new Error(response.data.error || 'Audio generation failed');
+      }
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || err.message || 'Failed to generate audio';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setGenerating(false);
+    }
+  }, []);
+
+  /**
    * Reset the hook state
    */
   const reset = useCallback(() => {
@@ -150,6 +192,7 @@ export const useAudioGeneration = () => {
     audioConfig,
     error,
     generate,
+    generateAudio,
     previewVoice,
     detectLanguage,
     setAudioUrl,

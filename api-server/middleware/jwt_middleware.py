@@ -145,25 +145,52 @@ def get_request_headers_with_context():
     """
     Helper function to get headers with customer_id and user_id injected
     Use this when making requests to backend services
-    
+
     Returns:
         dict: Headers with X-Customer-ID and X-User-ID
     """
     headers = {}
-    
+
     # Get from Flask's g object (set by middleware)
     customer_id = getattr(g, 'customer_id', None)
     user_id = getattr(g, 'user_id', None)
-    
+
     if customer_id:
         headers['X-Customer-ID'] = customer_id
     if user_id:
         headers['X-User-ID'] = user_id
-    
+
     # Also forward Authorization header if present
     auth_header = request.headers.get('Authorization')
     if auth_header:
         headers['Authorization'] = auth_header
-    
+
     return headers
+
+
+def extract_user_context_from_headers(headers):
+    """
+    Extract user context (customer_id, user_id) from request headers
+    Use this in route handlers to get user context
+
+    Args:
+        headers: Flask request.headers object
+
+    Returns:
+        dict: Dictionary with customer_id and user_id
+    """
+    # First try to get from Flask's g object (set by middleware)
+    customer_id = getattr(g, 'customer_id', None)
+    user_id = getattr(g, 'user_id', None)
+
+    # If not in g, try to extract from headers directly
+    if not customer_id:
+        customer_id = headers.get('X-Customer-ID')
+    if not user_id:
+        user_id = headers.get('X-User-ID')
+
+    return {
+        'customer_id': customer_id,
+        'user_id': user_id
+    }
 

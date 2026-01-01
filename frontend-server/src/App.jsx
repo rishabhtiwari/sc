@@ -16,6 +16,9 @@ import TemplateManagementPage from './pages/TemplateManagementPage';
 import PromptTemplateManagementPage from './pages/PromptTemplateManagementPage';
 import ProductVideoPage from './pages/ProductVideoPage';
 import EcommercePage from './pages/EcommercePage';
+import AudioStudioPage from './pages/AudioStudioPage';
+import AudioLibraryPage from './pages/AudioLibraryPage';
+import VoicePreviewPage from './pages/VoicePreviewPage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
@@ -117,6 +120,9 @@ function App() {
                   <Route path="/news-fetcher" element={<NewsFetcherPage />} />
                   <Route path="/image-processing" element={<ImageProcessingPage />} />
                   <Route path="/voice-llm" element={<AudioProcessingPage />} />
+                  <Route path="/audio-studio" element={<AudioStudioPage />} />
+                  <Route path="/audio-studio/library" element={<AudioLibraryPage />} />
+                  <Route path="/audio-studio/voice-preview" element={<VoicePreviewPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />

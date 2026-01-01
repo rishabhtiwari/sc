@@ -201,6 +201,7 @@ app.use('/api', async (req, res) => {
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
                                 req.originalUrl.startsWith('/api/voice/preview/audio/') ||
                                 req.originalUrl.startsWith('/api/audio/proxy/') ||
+                                req.originalUrl.match(/\/api\/audio-studio\/library\/[^\/]+\/stream$/) ||
                                 req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 
         // Check if this is a video endpoint that returns binary data

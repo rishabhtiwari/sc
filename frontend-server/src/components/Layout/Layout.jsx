@@ -14,6 +14,7 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/news-fetcher', icon: '📰', label: 'News Fetcher' },
     { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
     { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
+    { path: '/audio-studio', icon: '🎙️', label: 'Audio Studio' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
     { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
     {

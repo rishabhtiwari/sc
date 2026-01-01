@@ -48,6 +48,7 @@ services:
       - YOUTUBE_UPLOADER_URL=http://ichat-youtube-uploader:8097
       - VOICE_GENERATOR_URL=http://ichat-voice-generator:8094
       - AUDIO_GENERATION_URL=http://audio-generation-factory:3000
+      - ASSET_SERVICE_URL=http://ichat-asset-service:8099
 
       # Frontend Configuration
       - VITE_API_BASE_URL=/api
@@ -1107,6 +1108,76 @@ services:
         reservations:
           memory: 512M
 
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: ichat-minio
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - ichat-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # Asset Service
+  asset-service:
+    build:
+      context: ./asset-service
+      dockerfile: Dockerfile
+    container_name: ichat-asset-service
+    ports:
+      - "8099:8099"
+    environment:
+      # MongoDB
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db?authSource=admin
+      - MONGODB_DB_NAME=ichat_db
+
+      # MinIO
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_REGION=us-east-1
+
+      # JWT
+      - JWT_SECRET_KEY=your-secret-key-change-in-production
+
+      # Logging
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+    volumes:
+      - ./asset-service/logs:/app/logs
+      - ./asset-service/temp:/app/temp
+    networks:
+      - ichat-network
+    depends_on:
+      ichat-mongodb:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8099/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "com.ichat.service=asset-service"
+      - "com.ichat.version=1.0.0"
+
 networks:
   ichat-network:
     driver: bridge
@@ -1114,6 +1185,8 @@ networks:
 
 volumes:
   api-logs:
+    driver: local
+  minio-data:
     driver: local
   ocr-uploads:
     driver: local

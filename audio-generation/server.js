@@ -398,6 +398,53 @@ app.delete('/product/:productId', (req, res) => {
     }
 });
 
+// Cleanup temp audio file (called by asset-service after saving to library)
+app.delete('/api/cleanup/temp/:filename', (req, res) => {
+    try {
+        const { filename } = req.params;
+        const tempFilePath = path.join(__dirname, 'public', 'temp', filename);
+
+        console.log(`🗑️ Cleanup request for temp file: ${filename}`);
+
+        // Security check: ensure filename doesn't contain path traversal
+        if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid filename',
+                message: 'Filename cannot contain path separators'
+            });
+        }
+
+        // Check if file exists
+        if (!fs.existsSync(tempFilePath)) {
+            console.log(`⚠️ Temp file not found (may have been already deleted): ${filename}`);
+            return res.json({
+                success: true,
+                message: 'File not found (may have been already deleted)',
+                filename: filename
+            });
+        }
+
+        // Delete the file
+        fs.unlinkSync(tempFilePath);
+        console.log(`✅ Deleted temp file: ${filename}`);
+
+        res.json({
+            success: true,
+            message: 'Temp file deleted successfully',
+            filename: filename
+        });
+
+    } catch (error) {
+        console.error('Cleanup temp file error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to delete temp file',
+            details: error.message
+        });
+    }
+});
+
 // Start server
 async function startServer() {
     // Create public directory for audio files
