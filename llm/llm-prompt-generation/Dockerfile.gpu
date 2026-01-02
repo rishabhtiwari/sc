@@ -46,9 +46,19 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
 RUN pip3 install --no-cache-dir "numpy>=1.20.0,<2.0"
 
 # Install llama-cpp-python with CUDA support (requires CMAKE_ARGS)
-ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on"
+# Set all necessary environment variables for CUDA compilation
+ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc"
 ENV FORCE_CMAKE=1
-RUN pip3 install --no-cache-dir --force-reinstall llama-cpp-python==0.2.20
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+ENV CUDA_PATH=/usr/local/cuda
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
+# Verify CUDA is available before building
+RUN nvcc --version && \
+    pip3 install --no-cache-dir --force-reinstall --verbose llama-cpp-python==0.2.20 2>&1 | tee /tmp/llama-build.log && \
+    echo "Build completed. Checking for CUDA support..." && \
+    python3 -c "from llama_cpp import Llama; print('llama-cpp-python installed successfully')"
 
 # Install other dependencies WITHOUT upgrading torch or numpy
 # Pin tokenizers to <0.19 as required by transformers 4.36.0
