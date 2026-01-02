@@ -280,6 +280,7 @@ services:
       context: ./audio-generation
       dockerfile: Dockerfile.gpu
     environment:
+      - USE_GPU=true
       - CUDA_VISIBLE_DEVICES=0
       - PYTORCH_ALLOC_CONF=max_split_size_mb:512
     deploy:

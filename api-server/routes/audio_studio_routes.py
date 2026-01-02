@@ -322,12 +322,13 @@ def generate_audio():
             }), 400
 
         # Call audio generation service
+        # Default to Bark English with voice cloning support
         response = requests.post(
             f"{AUDIO_GENERATION_URL}/tts",
             json={
                 'text': data.get('text'),
-                'model': data.get('model', 'kokoro-82m'),
-                'voice': data.get('voice', 'am_adam'),
+                'model': data.get('model', 'bark-en'),
+                'voice': data.get('voice', 'v2/en_speaker_0'),
                 'speed': data.get('speed', 1.0),
                 'format': data.get('format', 'wav')
             },
@@ -358,9 +359,10 @@ def preview_audio():
     """Generate preview audio for voice selection"""
     try:
         data = request.get_json()
-        text = data.get('text', 'Hello! This is a preview of how this voice sounds.')
-        model = data.get('model', 'kokoro-82m')
-        voice = data.get('voice', 'am_adam')
+        preview_text = 'Hello! This is a preview of how this voice sounds.'
+        text = data.get('text', preview_text)
+        model = data.get('model', 'bark-en')
+        voice = data.get('voice', 'v2/en_speaker_0')
         language = data.get('language', 'en')
 
         logger.info(f"🎤 Generating preview audio - Model: {model}, Voice: {voice}, Language: {language}")

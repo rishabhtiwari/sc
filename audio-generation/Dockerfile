@@ -11,15 +11,31 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     espeak-ng \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Create Python virtual environment and install dependencies
 RUN python3 -m venv /app/venv
+
+# Install PyTorch with CUDA support for GPU acceleration
+# Using torch 2.0.1 which is available in the CUDA 11.8 index
+RUN /app/venv/bin/pip install --no-cache-dir \
+    torch==2.0.1 \
+    torchaudio==2.0.2 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install other Python dependencies
 RUN /app/venv/bin/pip install --no-cache-dir \
     kokoro>=0.9.4 \
     soundfile \
-    numpy \
-    torch
+    "numpy<2" \
+    scipy \
+    transformers \
+    git+https://github.com/suno-ai/bark.git
+
+# Set environment variables for Bark optimization
+ENV SUNO_OFFLOAD_CPU=False
+ENV SUNO_USE_SMALL_MODELS=False
 
 # Create data directory for model caching
 RUN mkdir -p /app/data/models

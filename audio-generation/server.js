@@ -57,16 +57,34 @@ const voiceService = new VoiceService(path.join(__dirname, 'public'), cacheDir);
 // Initialize default models
 async function initializeModels() {
     console.log('Initializing voice models...');
+
+    // Detect if GPU is available by checking environment variable
+    const useGPU = process.env.USE_GPU === 'true' || process.env.CUDA_VISIBLE_DEVICES !== undefined;
+
     try {
-        // Load Kokoro-82M as primary English model (high quality)
-        await voiceService.loadModel('kokoro-82m', false);
-        console.log('✅ Kokoro-82M English model loaded successfully!');
+        if (useGPU) {
+            console.log('🎮 GPU detected - Loading Bark models (GPU-accelerated)');
 
-        // Load Hindi MMS model
-        await voiceService.loadModel('mms-tts-hin', false);
-        console.log('✅ Hindi MMS model loaded successfully!');
+            // Load Bark as the default model for English (supports voice cloning, emotions, music)
+            await voiceService.loadModel('bark-en', true);
+            console.log('✅ Bark English model loaded successfully (default)!');
 
-        console.log('🎉 Voice model(s) initialized successfully!');
+            // Load Bark for Hindi
+            await voiceService.loadModel('bark-hi', false);
+            console.log('✅ Bark Hindi model loaded successfully!');
+
+            console.log('🎉 Bark models initialized successfully with GPU acceleration!');
+            console.log('🎭 Bark supports: voice cloning, emotions ([laughs], [sighs]), music (♪), and 13+ languages');
+        } else {
+            console.log('💻 CPU mode - Loading Kokoro-82M model (optimized for CPU)');
+
+            // Load Kokoro-82M as the default model for CPU (faster on CPU than Bark)
+            await voiceService.loadModel('kokoro-82m', true);
+            console.log('✅ Kokoro-82M model loaded successfully (default)!');
+
+            console.log('🎉 Kokoro-82M model initialized successfully for CPU!');
+            console.log('💡 For GPU acceleration and multi-language support, deploy with --gpu flag');
+        }
     } catch (error) {
         console.error('Failed to initialize voice models:', error);
         process.exit(1);
@@ -464,7 +482,10 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Supported Languages: English (kokoro-82m), Hindi (mms-tts-hin)`);
+        console.log(`🌍 Default Model: Bark (bark-en)`);
+        console.log(`🎭 Bark Features: Voice cloning, emotions, music, 13+ languages`);
+        console.log(`📝 Emotion tags: [laughs], [sighs], [gasps], [clears throat]`);
+        console.log(`🎵 Music: Wrap lyrics in ♪ symbols`);
     });
 }
 
