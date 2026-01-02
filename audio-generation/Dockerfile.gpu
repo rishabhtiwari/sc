@@ -66,6 +66,11 @@ COPY . .
 ENV CUDA_VISIBLE_DEVICES=0
 ENV PYTORCH_ALLOC_CONF=max_split_size_mb:512
 
+# Set Bark model cache directory to persistent storage
+ENV XDG_CACHE_HOME=/app/data/cache
+ENV SUNO_USE_SMALL_MODELS=False
+ENV SUNO_OFFLOAD_CPU=False
+
 # Create volume mount point for persistent model storage
 VOLUME ["/app/data"]
 
