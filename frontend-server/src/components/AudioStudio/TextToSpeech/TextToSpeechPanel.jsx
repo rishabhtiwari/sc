@@ -3,22 +3,26 @@ import { Button } from '../../common';
 import { useToast } from '../../../hooks/useToast';
 import { useAudioGeneration } from '../../../hooks/useAudioGeneration';
 import { useAudioLibrary } from '../../../hooks/useAudioLibrary';
-import { AUDIO_MODELS, LANGUAGES, detectLanguage, getDefaultModel, getDefaultVoice } from '../../../constants/audioModels';
 import AudioMessageBubble from './AudioMessageBubble';
+import api from '../../../services/api';
 
 /**
  * Text-to-Speech Panel Component - Chat-like Interface
- * Chat-style UI for generating voiceovers with Kokoro-82m
+ * API-driven chat-style UI for generating voiceovers
  */
 const TextToSpeechPanel = ({ onAudioGenerated }) => {
   const { showToast } = useToast();
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // API-driven TTS configuration
+  const [ttsConfig, setTtsConfig] = useState(null);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+
   // State
   const [text, setText] = useState('');
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
-  const [selectedVoice, setSelectedVoice] = useState('am_adam');
+  const [selectedModel, setSelectedModel] = useState(null);
+  const [selectedVoice, setSelectedVoice] = useState(null);
   const [speed, setSpeed] = useState(1.0);
   const [audioMessages, setAudioMessages] = useState([]);
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
@@ -27,35 +31,62 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
   const { generating, generateAudio } = useAudioGeneration();
   const { saveToLibrary, saving } = useAudioLibrary();
 
-  // Get current model based on language
-  const currentModel = getDefaultModel(selectedLanguage);
-  const modelData = AUDIO_MODELS[currentModel];
+  // Fetch TTS configuration from API
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await api.get('/audio-studio/config');
+        const config = response.data;
+        setTtsConfig(config);
+
+        // Set defaults from API
+        if (config.default_model) {
+          setSelectedModel(config.default_model);
+          const defaultModelConfig = config.models[config.default_model];
+          if (defaultModelConfig?.default_voice) {
+            setSelectedVoice(defaultModelConfig.default_voice);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch TTS config:', error);
+        showToast('Failed to load audio configuration', 'error');
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   // Get available voices for current model
-  const allVoices = Object.entries(modelData.voices).flatMap(([category, voices]) =>
-    voices.map(v => ({ ...v, category }))
-  );
+  const allVoices = selectedModel && ttsConfig
+    ? (ttsConfig.models[selectedModel]?.voices || []).map(voiceId => ({
+        id: voiceId,
+        name: voiceId,
+        description: `${ttsConfig.models[selectedModel]?.name} voice`,
+        category: 'default'
+      }))
+    : [];
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [audioMessages]);
 
-  // Handle language change
-  const handleLanguageChange = (langId) => {
-    setSelectedLanguage(langId);
-    const newModel = getDefaultModel(langId);
-    const newVoice = getDefaultVoice(langId);
-    setSelectedVoice(newVoice);
-    showToast(`Language changed to ${LANGUAGES.find(l => l.id === langId)?.name}`, 'success');
+  // Handle model change
+  const handleModelChange = (modelKey) => {
+    setSelectedModel(modelKey);
+    const modelConfig = ttsConfig.models[modelKey];
+    if (modelConfig?.default_voice) {
+      setSelectedVoice(modelConfig.default_voice);
+    }
+    showToast(`Model changed to ${modelConfig?.name}`, 'success');
   };
 
   // Handle voice selection
   const handleVoiceSelect = (voiceId) => {
     setSelectedVoice(voiceId);
     setShowVoiceSelector(false);
-    const voiceName = allVoices.find(v => v.id === voiceId)?.name;
-    showToast(`Voice changed to ${voiceName}`, 'success');
+    showToast(`Voice changed to ${voiceId}`, 'success');
   };
 
   // Handle audio generation
@@ -76,10 +107,9 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
     try {
       const result = await generateAudio({
         text: userText,
-        model: currentModel,
+        model: selectedModel,
         voice: selectedVoice,
-        speed: speed,
-        language: selectedLanguage
+        speed: speed
       });
 
       if (result.success) {
@@ -89,8 +119,8 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
           audioUrl: result.audio_url,
           duration: result.audio_info?.duration || 0,
           voice: selectedVoice,
-          voiceName: allVoices.find(v => v.id === selectedVoice)?.name,
-          language: selectedLanguage,
+          voiceName: selectedVoice,
+          model: selectedModel,
           speed: speed,
           timestamp: new Date().toISOString()
         };
@@ -117,7 +147,7 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
         text: message.text,
         voice: message.voice,
         metadata: {
-          language: message.language,
+          model: message.model,
           speed: message.speed,
           duration: message.duration
         }
@@ -233,46 +263,66 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
 
         {/* Controls Row */}
         <div className="flex flex-wrap items-center gap-3 mb-3">
-          {/* Language Selector */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Language:</label>
-            <select
-              value={selectedLanguage}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.id} value={lang.id}>
-                  {lang.flag} {lang.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {loadingConfig ? (
+            <div className="text-sm text-gray-600">Loading configuration...</div>
+          ) : !ttsConfig ? (
+            <div className="text-sm text-red-600">Failed to load configuration</div>
+          ) : (
+            <>
+              {/* Model Selector */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  Model:
+                  {ttsConfig.gpu_enabled && (
+                    <span className="ml-2 text-xs text-green-600 font-semibold">🎮 GPU</span>
+                  )}
+                </label>
+                <select
+                  value={selectedModel || ''}
+                  onChange={(e) => handleModelChange(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  {Object.entries(ttsConfig.models).map(([key, model]) => (
+                    <option key={key} value={key}>
+                      {model.name} - {model.language}
+                      {model.supports_emotions && ' 🎭'}
+                      {model.supports_music && ' 🎵'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
-          {/* Voice Selector Button */}
-          <button
-            onClick={() => setShowVoiceSelector(!showVoiceSelector)}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
-          >
-            <span>🎤</span>
-            <span className="max-w-[150px] truncate">{selectedVoiceInfo?.name || 'Select Voice'}</span>
-            <span className="text-xs text-gray-600">▼</span>
-          </button>
+          {!loadingConfig && ttsConfig && (
+            <>
+              {/* Voice Selector Button */}
+              <button
+                onClick={() => setShowVoiceSelector(!showVoiceSelector)}
+                className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium whitespace-nowrap"
+                disabled={!selectedModel}
+              >
+                <span>🎤</span>
+                <span className="max-w-[150px] truncate">{selectedVoice || 'Select Voice'}</span>
+                <span className="text-xs text-gray-600">▼</span>
+              </button>
 
-          {/* Speed Control */}
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Speed:</label>
-            <input
-              type="range"
-              min="0.5"
-              max="2.0"
-              step="0.1"
-              value={speed}
-              onChange={(e) => setSpeed(parseFloat(e.target.value))}
-              className="w-20"
-            />
-            <span className="text-sm text-gray-600 w-12 whitespace-nowrap">{speed}x</span>
-          </div>
+              {/* Speed Control */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Speed:</label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={speed}
+                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  className="w-20"
+                />
+                <span className="text-sm text-gray-600 w-12 whitespace-nowrap">{speed}x</span>
+              </div>
+            </>
+          )}
 
           {/* Character Count */}
           <div className="ml-auto text-sm text-gray-600 whitespace-nowrap">
