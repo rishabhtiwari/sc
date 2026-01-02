@@ -135,6 +135,8 @@ create_directories() {
 
     # List of directories that need to exist
     local dirs=(
+        "mongodb/data"
+        "mongodb/logs"
         "api-server/logs"
         "api-server/data"
         "frontend-server/logs"
@@ -143,14 +145,26 @@ create_directories() {
         "template-service/public"
         "inventory-creation-service/logs"
         "inventory-creation-service/public"
+        "auth-service/logs"
+        "asset-service/logs"
+        "asset-service/temp"
         "llm/llm-prompt-generation/cache"
         "llm/llm-prompt-generation/logs"
         "jobs/news-fetcher/logs"
         "jobs/news-fetcher/data"
         "jobs/voice-generator/logs"
+        "jobs/voice-generator/data"
         "jobs/video-generator/logs"
+        "jobs/video-generator/public"
+        "jobs/video-generator/temp"
+        "jobs/video-generator/assets"
         "jobs/youtube-uploader/logs"
+        "jobs/youtube-uploader/credentials"
         "jobs/cleanup/logs"
+        "jobs/watermark-remover/public"
+        "jobs/watermark-remover/models"
+        "audio-generation/data"
+        "audio-generation/public"
     )
 
     for dir in "${dirs[@]}"; do

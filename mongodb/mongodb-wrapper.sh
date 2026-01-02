@@ -7,6 +7,13 @@ set -e
 
 echo "=== MongoDB Wrapper: Starting MongoDB with Migration Support ==="
 
+# Fix permissions for mounted volumes
+echo "🔧 Fixing permissions for mounted volumes..."
+mkdir -p /var/log/mongodb /data/db
+chown -R mongodb:mongodb /var/log/mongodb /data/db
+chmod 777 /var/log/mongodb
+echo "✅ Permissions fixed"
+
 # Check if this is a fresh database (empty data directory)
 if [ -z "$(ls -A /data/db 2>/dev/null)" ]; then
     echo "🆕 Fresh database detected - using MongoDB's initialization system"
