@@ -401,15 +401,19 @@ class NewsAudioService:
                 self.logger.warning(
                     f"No voice config found for customer {customer_id}, using device-aware defaults")
 
-                # Fetch models from API to determine device type
-                en_model = self._get_audio_model_for_language('en', customer_id=customer_id)
-                hi_model = self._get_audio_model_for_language('hi', customer_id=customer_id)
+                # Determine device type from USE_GPU environment variable
+                # (Don't call _get_audio_model_for_language to avoid recursion)
+                use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
+
+                # Select models based on GPU availability
+                en_model = 'bark-en' if use_gpu else 'kokoro-82m'
+                hi_model = 'bark-hi' if use_gpu else 'mms-tts-hin'
 
                 # Get device-aware voice configs
                 en_voices = self._get_default_voices_for_model(en_model, 'en')
                 hi_voices = self._get_default_voices_for_model(hi_model, 'hi')
 
-                self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}")
+                self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}, USE_GPU={use_gpu}")
 
                 return {
                     'language': 'en',
