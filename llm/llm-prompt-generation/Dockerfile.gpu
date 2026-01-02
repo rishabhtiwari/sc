@@ -19,6 +19,10 @@ RUN apt-get update && apt-get install -y \
     make \
     cmake \
     curl \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.11 as default
@@ -38,10 +42,13 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     torchaudio==2.1.2+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
+# Install numpy first (use binary wheel, not source)
+RUN pip3 install --no-cache-dir numpy==1.24.3
+
 # Install llama-cpp-python with CUDA support (requires CMAKE_ARGS)
 ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on"
 ENV FORCE_CMAKE=1
-RUN pip3 install --no-cache-dir --force-reinstall --no-binary :all: llama-cpp-python==0.2.20
+RUN pip3 install --no-cache-dir --force-reinstall llama-cpp-python==0.2.20
 
 # Install other dependencies
 RUN pip3 install --no-cache-dir --ignore-installed blinker \
@@ -49,7 +56,6 @@ RUN pip3 install --no-cache-dir --ignore-installed blinker \
     accelerate==0.24.0 \
     sentencepiece==0.1.99 \
     protobuf==4.25.0 \
-    numpy==1.24.3 \
     huggingface-hub==0.19.4 \
     Flask==3.0.0 \
     Flask-CORS==4.0.0 \
