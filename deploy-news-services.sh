@@ -135,6 +135,14 @@ create_directories() {
 
     # List of directories that need to exist
     local dirs=(
+        "api-server/logs"
+        "api-server/data"
+        "frontend-server/logs"
+        "frontend-server/data"
+        "template-service/logs"
+        "template-service/public"
+        "inventory-creation-service/logs"
+        "inventory-creation-service/public"
         "llm/llm-prompt-generation/cache"
         "llm/llm-prompt-generation/logs"
         "jobs/news-fetcher/logs"
@@ -148,11 +156,16 @@ create_directories() {
     for dir in "${dirs[@]}"; do
         if [ ! -d "$dir" ]; then
             mkdir -p "$dir"
+            # Set permissions to allow Docker containers to write
+            chmod 777 "$dir"
             print_success "Created directory: $dir"
+        else
+            # Ensure existing directories have write permissions
+            chmod 777 "$dir"
         fi
     done
 
-    print_success "All necessary directories exist"
+    print_success "All necessary directories exist with proper permissions"
 }
 
 # Function to check if docker-compose is available
