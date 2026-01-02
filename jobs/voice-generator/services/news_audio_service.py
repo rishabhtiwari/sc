@@ -356,10 +356,20 @@ class NewsAudioService:
             self.logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
 
         # Fallback to hardcoded defaults if API call fails
+        # Check if GPU is enabled via environment variable
+        use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
+        self.logger.info(f"🔧 Fallback: USE_GPU={use_gpu}")
+
         if lang_code == 'hi':
-            return self.config.HINDI_AUDIO_MODEL
+            # Hindi: bark-hi (GPU) or mms-tts-hin (CPU)
+            fallback_model = 'bark-hi' if use_gpu else 'mms-tts-hin'
+            self.logger.info(f"🔧 Fallback Hindi model: {fallback_model}")
+            return fallback_model
         else:
-            return self.config.DEFAULT_AUDIO_MODEL
+            # English: bark-en (GPU) or kokoro-82m (CPU)
+            fallback_model = 'bark-en' if use_gpu else 'kokoro-82m'
+            self.logger.info(f"🔧 Fallback English model: {fallback_model}")
+            return fallback_model
 
     def _get_voice_config(self, customer_id: str = None) -> Dict[str, Any]:
         """
@@ -387,41 +397,37 @@ class NewsAudioService:
             config = voice_config_collection.find_one(query)
 
             if not config:
-                # Return default config if not found
+                # Return default config if not found - device-aware
                 self.logger.warning(
-                    f"No voice config found for customer {customer_id}, using defaults")
+                    f"No voice config found for customer {customer_id}, using device-aware defaults")
+
+                # Fetch models from API to determine device type
+                en_model = self._get_audio_model_for_language('en', customer_id=customer_id)
+                hi_model = self._get_audio_model_for_language('hi', customer_id=customer_id)
+
+                # Get device-aware voice configs
+                en_voices = self._get_default_voices_for_model(en_model, 'en')
+                hi_voices = self._get_default_voices_for_model(hi_model, 'hi')
+
+                self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}")
+
                 return {
                     'language': 'en',
-                    'models': {
-                        'en': 'kokoro-82m',
-                        'hi': 'mms-tts-hin'
-                    },
+                    'models': {},  # Empty - models will be selected based on GPU availability via API
                     'voices': {
-                        'en': {
-                            'defaultVoice': 'am_adam',
-                            'enableAlternation': True,
-                            'maleVoices': ['am_adam', 'am_michael'],
-                            'femaleVoices': ['af_bella', 'af_sarah']
-                        },
-                        'hi': {
-                            'defaultVoice': 'hi_default',
-                            'enableAlternation': False,  # MMS Hindi only has one voice
-                            'maleVoices': [],
-                            'femaleVoices': []
-                        }
+                        'en': en_voices,
+                        'hi': hi_voices
                     }
                 }
 
             return config
         except Exception as e:
             self.logger.error(f"Error loading voice config: {e}")
-            # Return default config on error
+            # Return safe CPU defaults on error (don't call API in exception handler to avoid recursion)
+            self.logger.warning("Using safe CPU defaults due to error")
             return {
                 'language': 'en',
-                'models': {
-                    'en': 'kokoro-82m',
-                    'hi': 'mms-tts-hin'
-                },
+                'models': {},  # Empty - models will be selected based on GPU availability via API
                 'voices': {
                     'en': {
                         'defaultVoice': 'am_adam',
@@ -438,9 +444,63 @@ class NewsAudioService:
                 }
             }
 
+    def _get_default_voices_for_model(self, model: str, lang_code: str) -> Dict[str, Any]:
+        """
+        Get default voice configuration based on model type (device-aware)
+
+        Args:
+            model: Model name (e.g., 'bark-en', 'kokoro-82m', 'mms-tts-hin')
+            lang_code: Language code ('en' or 'hi')
+
+        Returns:
+            Voice configuration dict with defaultVoice, maleVoices, femaleVoices
+        """
+        # Bark models (GPU)
+        if model.startswith('bark'):
+            if lang_code == 'hi':
+                return {
+                    'defaultVoice': 'v2/hi_speaker_0',
+                    'enableAlternation': True,
+                    'maleVoices': ['v2/hi_speaker_0', 'v2/hi_speaker_1'],
+                    'femaleVoices': ['v2/hi_speaker_2', 'v2/hi_speaker_3']
+                }
+            else:  # English
+                return {
+                    'defaultVoice': 'v2/en_speaker_0',
+                    'enableAlternation': True,
+                    'maleVoices': ['v2/en_speaker_0', 'v2/en_speaker_1', 'v2/en_speaker_2'],
+                    'femaleVoices': ['v2/en_speaker_3', 'v2/en_speaker_4', 'v2/en_speaker_5']
+                }
+        # Kokoro model (CPU - English)
+        elif model == 'kokoro-82m':
+            return {
+                'defaultVoice': 'am_adam',
+                'enableAlternation': True,
+                'maleVoices': ['am_adam', 'am_michael'],
+                'femaleVoices': ['af_bella', 'af_sarah']
+            }
+        # MMS TTS (CPU - Hindi)
+        elif model == 'mms-tts-hin':
+            return {
+                'defaultVoice': 'hi_default',
+                'enableAlternation': False,  # MMS Hindi only has one voice
+                'maleVoices': [],
+                'femaleVoices': []
+            }
+        else:
+            # Unknown model, return safe defaults
+            self.logger.warning(f"Unknown model {model}, using Kokoro defaults")
+            return {
+                'defaultVoice': 'am_adam',
+                'enableAlternation': True,
+                'maleVoices': ['am_adam'],
+                'femaleVoices': ['af_bella']
+            }
+
     def _determine_voice(self, voice: str = None, language: str = 'en', customer_id: str = None) -> str:
         """
         Determine which voice to use based on language and customer config
+        Device-aware: uses different voices for Bark (GPU) vs Kokoro/MMS (CPU)
 
         Args:
             voice: Requested voice ('male', 'female', or specific voice name)
@@ -465,20 +525,11 @@ class NewsAudioService:
         lang_voice_config = voices.get(lang_code, {})
 
         if not lang_voice_config:
-            # Fallback to default language config
-            self.logger.warning(f"No voice config for language {lang_code}, using defaults")
-            if lang_code == 'hi':
-                lang_voice_config = {
-                    'defaultVoice': 'hi_default',
-                    'maleVoices': [],
-                    'femaleVoices': []
-                }
-            else:
-                lang_voice_config = {
-                    'defaultVoice': 'am_adam',
-                    'maleVoices': ['am_adam', 'am_michael'],
-                    'femaleVoices': ['af_bella', 'af_sarah']
-                }
+            # Fallback to device-aware defaults based on model
+            self.logger.warning(f"No voice config for language {lang_code}, fetching device-aware defaults")
+            model = self._get_audio_model_for_language(language, customer_id=customer_id)
+            lang_voice_config = self._get_default_voices_for_model(model, lang_code)
+            self.logger.info(f"🎭 Using device-aware defaults for model {model}: {lang_voice_config.get('defaultVoice')}")
 
         # Determine voice based on request
         if not voice:
@@ -523,21 +574,11 @@ class NewsAudioService:
         lang_voice_config = voices.get(lang_code, {})
 
         if not lang_voice_config:
-            # Fallback to defaults
-            if lang_code == 'hi':
-                lang_voice_config = {
-                    'defaultVoice': 'hi_default',
-                    'enableAlternation': False,  # MMS Hindi only has one voice
-                    'maleVoices': [],
-                    'femaleVoices': []
-                }
-            else:
-                lang_voice_config = {
-                    'defaultVoice': 'am_adam',
-                    'enableAlternation': True,
-                    'maleVoices': ['am_adam', 'am_michael'],
-                    'femaleVoices': ['af_bella', 'af_sarah']
-                }
+            # Fallback to device-aware defaults based on model
+            self.logger.warning(f"No voice config for language {lang_code}, fetching device-aware defaults")
+            model = self._get_audio_model_for_language(language, customer_id=customer_id)
+            lang_voice_config = self._get_default_voices_for_model(model, lang_code)
+            self.logger.info(f"🎭 Using device-aware defaults for model {model}: {lang_voice_config.get('defaultVoice')}")
 
         # Check if alternation is enabled for this language
         if not lang_voice_config.get('enableAlternation', True):
