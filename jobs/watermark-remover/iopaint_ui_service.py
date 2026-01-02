@@ -85,6 +85,13 @@ def get_model():
             _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             logger.info(f"📱 Using device: {_device}")
 
+            # Log GPU info if available
+            if torch.cuda.is_available():
+                logger.info(f"🎮 GPU: {torch.cuda.get_device_name(0)}")
+                logger.info(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+            else:
+                logger.warning("⚠️  CUDA not available, using CPU (will be slower)")
+
             # Initialize LaMa model directly from the models registry
             if "lama" not in models:
                 raise ValueError("LaMa model not found in IOPaint models registry")

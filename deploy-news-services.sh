@@ -20,15 +20,23 @@
 # 14. News Automation Frontend (React UI for managing news automation)
 #
 # Usage:
-#   ./deploy-news-services.sh [options]
+#   ./deploy-news-services.sh [options] [service_name]
 #
 # Options:
 #   --build         Force rebuild of all services
-#   --logs          Show logs after deployment
+#   --gpu           Enable GPU support for compatible services (LLM, Audio, IOPaint)
+#   --logs [svc]    Show logs (optionally for specific service)
 #   --status        Show status of all services
-#   --stop          Stop all news services
-#   --restart       Restart all news services
+#   --stop [svc]    Stop all services or specific service
+#   --restart [svc] Restart all services or specific service
+#   --service <name> Deploy only specific service
 #   --help          Show this help message
+#
+# Examples:
+#   ./deploy-news-services.sh --build                    # Deploy all with rebuild
+#   ./deploy-news-services.sh --build --gpu              # Deploy all with GPU support
+#   ./deploy-news-services.sh --service llm-service      # Deploy only LLM service
+#   ./deploy-news-services.sh --service llm-service --gpu --build  # Deploy LLM with GPU
 ################################################################################
 
 set -e  # Exit on error
@@ -38,7 +46,13 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+# Global flags
+USE_GPU=false
+SINGLE_SERVICE=""
 
 # Service names
 SERVICES=(
@@ -58,6 +72,13 @@ SERVICES=(
     "inventory-creation-service"
     "ichat-api"
     "news-automation-frontend"
+)
+
+# GPU-capable services
+GPU_SERVICES=(
+    "llm-service"
+    "audio-generation-factory"
+    "iopaint"
 )
 
 # Function to print colored messages
@@ -92,6 +113,44 @@ check_docker() {
         exit 1
     fi
     print_success "Docker is running"
+}
+
+# Function to check GPU availability
+check_gpu() {
+    if [ "$USE_GPU" = true ]; then
+        print_info "Checking GPU availability..."
+
+        # Check if nvidia-smi is available
+        if ! command -v nvidia-smi &> /dev/null; then
+            print_warning "nvidia-smi not found. GPU support may not work."
+            print_warning "Install NVIDIA drivers and CUDA toolkit for GPU support."
+            return 1
+        fi
+
+        # Check if NVIDIA Docker runtime is available
+        if ! docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null; then
+            print_warning "NVIDIA Docker runtime not available."
+            print_warning "Install nvidia-docker2 for GPU support in containers."
+            return 1
+        fi
+
+        print_success "GPU support is available"
+        nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader | while read line; do
+            print_info "  GPU: $line"
+        done
+        return 0
+    fi
+}
+
+# Function to check if service supports GPU
+is_gpu_service() {
+    local service=$1
+    for gpu_svc in "${GPU_SERVICES[@]}"; do
+        if [ "$service" = "$gpu_svc" ]; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Function to check .env file
@@ -191,21 +250,146 @@ check_docker_compose() {
     print_success "docker-compose is available"
 }
 
+# Function to generate GPU-enabled docker-compose override
+generate_gpu_compose() {
+    print_info "Generating GPU-enabled docker-compose override..."
+
+    cat > docker-compose.gpu.yml <<'EOF'
+version: '3.8'
+
+services:
+  # LLM Service with GPU support
+  llm-service:
+    build:
+      context: ./llm/llm-prompt-generation
+      dockerfile: Dockerfile.gpu
+    environment:
+      - LLM_USE_GPU=true
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Audio Generation Factory with GPU support
+  audio-generation-factory:
+    build:
+      context: ./audio-generation
+      dockerfile: Dockerfile.gpu
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # IOPaint with GPU support
+  iopaint:
+    build:
+      context: ./jobs
+      dockerfile: ./watermark-remover/Dockerfile.gpu
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+EOF
+
+    print_success "GPU docker-compose override created: docker-compose.gpu.yml"
+}
+
+# Function to get docker-compose command with appropriate files
+get_compose_command() {
+    local cmd="docker-compose -f docker-compose.yml"
+
+    if [ "$USE_GPU" = true ]; then
+        # Generate GPU override if it doesn't exist
+        if [ ! -f "docker-compose.gpu.yml" ]; then
+            generate_gpu_compose >&2
+        fi
+        cmd="$cmd -f docker-compose.gpu.yml"
+    fi
+
+    echo "$cmd"
+}
+
+# Function to validate service name
+validate_service() {
+    local service=$1
+    local valid=false
+
+    for svc in "${SERVICES[@]}"; do
+        if [ "$service" = "$svc" ]; then
+            valid=true
+            break
+        fi
+    done
+
+    if [ "$valid" = false ]; then
+        print_error "Invalid service name: $service"
+        print_info "Available services:"
+        for svc in "${SERVICES[@]}"; do
+            if is_gpu_service "$svc"; then
+                echo -e "  ${CYAN}$svc${NC} ${MAGENTA}(GPU capable)${NC}"
+            else
+                echo "  $svc"
+            fi
+        done
+        exit 1
+    fi
+}
+
 # Function to deploy a single service
 deploy_service() {
     local service=$1
     local build_flag=$2
-    
-    print_info "Deploying $service..."
-    
-    if [ "$build_flag" = "--build" ]; then
-        docker-compose build "$service"
+
+    # Validate service name
+    validate_service "$service"
+
+    # Get the appropriate docker-compose command
+    local compose_cmd=$(get_compose_command)
+
+    # Show GPU status if applicable
+    if is_gpu_service "$service" && [ "$USE_GPU" = true ]; then
+        print_info "Deploying $service with ${MAGENTA}GPU support${NC}..."
+    else
+        print_info "Deploying $service..."
     fi
-    
-    docker-compose up -d "$service"
-    
+
+    if [ "$build_flag" = "--build" ]; then
+        print_info "Building $service..."
+        $compose_cmd build "$service"
+    fi
+
+    $compose_cmd up -d "$service"
+
     if [ $? -eq 0 ]; then
         print_success "$service deployed successfully"
+
+        # Show GPU info if applicable
+        if is_gpu_service "$service" && [ "$USE_GPU" = true ]; then
+            local container_name=$($compose_cmd ps -q "$service" 2>/dev/null | xargs docker inspect --format='{{.Name}}' 2>/dev/null | sed 's/\///')
+            if [ -n "$container_name" ]; then
+                print_info "Verifying GPU access in $container_name..."
+                sleep 2
+                docker exec "$container_name" nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | while read gpu; do
+                    print_success "  GPU detected: $gpu"
+                done || print_warning "  Could not verify GPU access (container may still be starting)"
+            fi
+        fi
     else
         print_error "Failed to deploy $service"
         return 1
@@ -291,47 +475,79 @@ show_status() {
 # Function to show logs
 show_logs() {
     local service=${1:-""}
-    
+    local compose_cmd=$(get_compose_command)
+
     if [ -z "$service" ]; then
         print_header "Showing logs for all news services"
-        docker-compose logs --tail=50 -f "${SERVICES[@]}"
+        $compose_cmd logs --tail=50 -f "${SERVICES[@]}"
     else
+        validate_service "$service"
         print_header "Showing logs for $service"
-        docker-compose logs --tail=100 -f "$service"
+        $compose_cmd logs --tail=100 -f "$service"
     fi
 }
 
-# Function to stop all services
+# Function to stop services
 stop_services() {
-    print_header "Stopping News Services"
-    
-    # Stop in reverse order
-    for ((i=${#SERVICES[@]}-1; i>=0; i--)); do
-        local service="${SERVICES[$i]}"
-        print_info "Stopping $service..."
-        docker-compose stop "$service"
+    local service=${1:-""}
+    local compose_cmd=$(get_compose_command)
+
+    if [ -z "$service" ]; then
+        print_header "Stopping All News Services"
+
+        # Stop in reverse order
+        for ((i=${#SERVICES[@]}-1; i>=0; i--)); do
+            local svc="${SERVICES[$i]}"
+            print_info "Stopping $svc..."
+            $compose_cmd stop "$svc"
+            print_success "$svc stopped"
+        done
+    else
+        validate_service "$service"
+        print_header "Stopping $service"
+        $compose_cmd stop "$service"
         print_success "$service stopped"
-    done
+    fi
 }
 
-# Function to restart all services
+# Function to restart services
 restart_services() {
-    print_header "Restarting News Services"
-    
-    stop_services
-    sleep 2
-    deploy_all_services "$1"
+    local service=${1:-""}
+    local build_flag=$2
+
+    if [ -z "$service" ]; then
+        print_header "Restarting All News Services"
+        stop_services
+        sleep 2
+        deploy_all_services "$build_flag"
+    else
+        validate_service "$service"
+        print_header "Restarting $service"
+        stop_services "$service"
+        sleep 2
+        deploy_service "$service" "$build_flag"
+    fi
 }
 
 # Function to deploy all services
 deploy_all_services() {
     local build_flag=$1
-    
-    print_header "Deploying News Services"
+
+    if [ "$USE_GPU" = true ]; then
+        print_header "Deploying News Services with GPU Support"
+    else
+        print_header "Deploying News Services (CPU Mode)"
+    fi
 
     # Check prerequisites
     check_docker
     check_docker_compose
+
+    # Check GPU if requested
+    if [ "$USE_GPU" = true ]; then
+        check_gpu
+    fi
+
 #    check_env_file
 
     # Create necessary directories
@@ -460,7 +676,9 @@ deploy_all_services() {
 # Function to show help
 show_help() {
     cat << EOF
-News Services Deployment Script
+${BLUE}═══════════════════════════════════════════════════════════${NC}
+${BLUE}  News Services Deployment Script${NC}
+${BLUE}═══════════════════════════════════════════════════════════${NC}
 
 This script manages deployment of all news-related services:
   1. MongoDB (database)
@@ -469,10 +687,10 @@ This script manages deployment of all news-related services:
   4. Template Service (video templates management)
   5. Asset Service (asset management with MinIO)
   6. News Fetcher Job (fetches news articles)
-  7. LLM Service (generates summaries)
-  8. Audio Generation Factory (TTS: Kokoro English + Veena Hindi)
+  7. LLM Service (generates summaries) ${MAGENTA}[GPU capable]${NC}
+  8. Audio Generation Factory (TTS: Kokoro English + Veena Hindi) ${MAGENTA}[GPU capable]${NC}
   9. Voice Generator Job (generates audio from news)
-  10. IOPaint Watermark Remover (removes watermarks from images)
+  10. IOPaint Watermark Remover (removes watermarks from images) ${MAGENTA}[GPU capable]${NC}
   11. Video Generator Job (creates videos from news + audio)
   12. YouTube Uploader (uploads videos to YouTube)
   13. Cleanup Job (cleans up old files and MongoDB records)
@@ -480,71 +698,155 @@ This script manages deployment of all news-related services:
   15. API Server (serves news data to frontend)
   16. News Automation Frontend (React UI for managing news automation)
 
-Usage:
-  ./deploy-news-services.sh [options]
+${YELLOW}Usage:${NC}
+  ./deploy-news-services.sh [options] [service_name]
 
-Options:
-  --build         Force rebuild of all services before deployment
-  --logs [svc]    Show logs (optionally for specific service)
-  --status        Show status of all services
-  --stop          Stop all news services
-  --restart       Restart all news services
-  --help          Show this help message
+${YELLOW}Options:${NC}
+  --build              Force rebuild of services before deployment
+  --gpu                Enable GPU support for compatible services
+  --service <name>     Deploy only specific service
+  --logs [service]     Show logs (all services or specific service)
+  --status             Show status of all services
+  --stop [service]     Stop all services or specific service
+  --restart [service]  Restart all services or specific service
+  --help               Show this help message
 
-Examples:
-  # Deploy all services
+${YELLOW}Available Services:${NC}
+EOF
+    for svc in "${SERVICES[@]}"; do
+        if is_gpu_service "$svc"; then
+            echo -e "  ${CYAN}$svc${NC} ${MAGENTA}(GPU capable)${NC}"
+        else
+            echo "  $svc"
+        fi
+    done
+
+    cat << EOF
+
+${YELLOW}Examples:${NC}
+  ${GREEN}# Deploy all services (CPU mode)${NC}
   ./deploy-news-services.sh
 
-  # Deploy with rebuild
+  ${GREEN}# Deploy all services with rebuild${NC}
   ./deploy-news-services.sh --build
 
-  # Check status
+  ${GREEN}# Deploy all services with GPU support${NC}
+  ./deploy-news-services.sh --build --gpu
+
+  ${GREEN}# Deploy only LLM service${NC}
+  ./deploy-news-services.sh --service llm-service
+
+  ${GREEN}# Deploy LLM service with GPU and rebuild${NC}
+  ./deploy-news-services.sh --service llm-service --gpu --build
+
+  ${GREEN}# Deploy audio generation with GPU${NC}
+  ./deploy-news-services.sh --service audio-generation-factory --gpu --build
+
+  ${GREEN}# Check status${NC}
   ./deploy-news-services.sh --status
 
-  # View logs for all services
-  ./deploy-news-services.sh --logs
+  ${GREEN}# Show logs for specific service${NC}
+  ./deploy-news-services.sh --logs llm-service
 
-  # View logs for specific service
-  ./deploy-news-services.sh --logs job-news-fetcher
+  ${GREEN}# Stop specific service${NC}
+  ./deploy-news-services.sh --stop audio-generation-factory
 
-  # Restart all services
-  ./deploy-news-services.sh --restart
-
-  # Stop all services
-  ./deploy-news-services.sh --stop
+  ${GREEN}# Restart specific service with rebuild${NC}
+  ./deploy-news-services.sh --restart llm-service --build
 
 EOF
 }
 
 # Main script logic
 main() {
-    case "${1:-}" in
-        --build)
-            deploy_all_services "--build"
+    local build_flag=""
+    local action=""
+    local target_service=""
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --build)
+                build_flag="--build"
+                shift
+                ;;
+            --gpu)
+                USE_GPU=true
+                shift
+                ;;
+            --service)
+                if [ -z "${2:-}" ]; then
+                    print_error "--service requires a service name"
+                    show_help
+                    exit 1
+                fi
+                target_service="$2"
+                shift 2
+                ;;
+            --logs)
+                action="logs"
+                target_service="${2:-}"
+                shift
+                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                    shift
+                fi
+                ;;
+            --status)
+                action="status"
+                shift
+                ;;
+            --stop)
+                action="stop"
+                target_service="${2:-}"
+                shift
+                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                    shift
+                fi
+                ;;
+            --restart)
+                action="restart"
+                target_service="${2:-}"
+                shift
+                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                    shift
+                fi
+                ;;
+            --help|-h)
+                show_help
+                exit 0
+                ;;
+            *)
+                print_error "Unknown option: $1"
+                echo ""
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+
+    # Execute action
+    case "$action" in
+        logs)
+            show_logs "$target_service"
             ;;
-        --logs)
-            show_logs "${2:-}"
-            ;;
-        --status)
+        status)
             show_status
             ;;
-        --stop)
-            stop_services
+        stop)
+            stop_services "$target_service"
             ;;
-        --restart)
-            restart_services "${2:-}"
-            ;;
-        --help|-h)
-            show_help
-            ;;
-        "")
-            deploy_all_services ""
+        restart)
+            restart_services "$target_service" "$build_flag"
             ;;
         *)
-            print_error "Unknown option: $1"
-            echo ""
-            show_help
-            exit 1
+            # Deploy action
+            if [ -n "$target_service" ]; then
+                # Deploy single service
+                deploy_service "$target_service" "$build_flag"
+            else
+                # Deploy all services
+                deploy_all_services "$build_flag"
+            fi
             ;;
     esac
 }

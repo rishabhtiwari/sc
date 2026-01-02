@@ -66,6 +66,12 @@ class MistralGGUFModel(BaseLLMModel):
             # Import Config to get context window settings
             from config.settings import Config
 
+            # Determine GPU layers based on use_gpu config
+            # -1 means offload all layers to GPU, 0 means CPU only
+            n_gpu_layers = -1 if self.config.get('use_gpu', False) else 0
+
+            self.logger.info(f"GPU layers: {n_gpu_layers} ({'GPU' if n_gpu_layers != 0 else 'CPU'} mode)")
+
             self.llm = Llama(
                 model_path=self.model_path,
                 n_ctx=Config.N_CTX,  # Use configurable context window (2048)
@@ -74,7 +80,7 @@ class MistralGGUFModel(BaseLLMModel):
                 verbose=True,
                 use_mmap=True,  # Memory mapping for efficiency
                 use_mlock=False,  # Don't lock memory
-                n_gpu_layers=0  # CPU only for now
+                n_gpu_layers=n_gpu_layers  # Offload layers to GPU if available
             )
 
             self.model_loaded = True

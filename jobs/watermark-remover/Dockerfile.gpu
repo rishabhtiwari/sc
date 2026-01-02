@@ -1,0 +1,68 @@
+# GPU-enabled Dockerfile for IOPaint Watermark Remover
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Set timezone non-interactively
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+WORKDIR /app
+
+# Install Python 3.10 and system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
+    python3-pip \
+    curl \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+# Install Python dependencies with CUDA support
+# Install PyTorch with CUDA first (compatible version)
+RUN pip3 install --no-cache-dir --upgrade pip && \
+    pip3 install --no-cache-dir \
+    torch==2.1.2+cu118 \
+    torchvision==0.16.2+cu118 \
+    torchaudio==2.1.2+cu118 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# Install IOPaint and other dependencies
+RUN pip3 install --no-cache-dir --ignore-installed blinker \
+    Flask==3.0.0 \
+    Werkzeug==3.0.1 \
+    iopaint[all]==1.5.3 \
+    pymongo==4.6.0 \
+    requests==2.31.0
+
+# Copy common utilities
+COPY common /app/common
+
+# Copy service files
+COPY watermark-remover/iopaint_ui_service.py /app/iopaint_ui_service.py
+
+# Create output directory
+RUN mkdir -p /app/output /root/.cache && \
+    chmod 777 /app/output /root/.cache
+
+# Set environment variables for GPU
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_ALLOC_CONF=max_split_size_mb:512
+
+# Expose port
+EXPOSE 8096
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=120s \
+    CMD curl -f http://localhost:8096/health || exit 1
+
+# Start Flask UI Service with IOPaint and MongoDB integration
+CMD ["python3", "iopaint_ui_service.py"]
+

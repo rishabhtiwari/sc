@@ -38,6 +38,13 @@ def generate_speech(text, voice="af_heart", speed=1.0, output_path=None):
         import soundfile as sf
         import torch
 
+        # Check GPU availability
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"🖥️  Using device: {device}", file=sys.stderr)
+        if device == 'cuda':
+            print(f"🎮 GPU: {torch.cuda.get_device_name(0)}", file=sys.stderr)
+            print(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB", file=sys.stderr)
+
         print(f"🔄 Initializing Kokoro pipeline with voice: {voice}, speed: {speed}", file=sys.stderr)
 
         # Initialize pipeline based on voice
@@ -48,7 +55,8 @@ def generate_speech(text, voice="af_heart", speed=1.0, output_path=None):
         else:
             lang_code = 'a'  # Default to American English
 
-        pipeline = KPipeline(lang_code=lang_code)
+        # Initialize pipeline with device
+        pipeline = KPipeline(lang_code=lang_code, device=device)
 
         print(f"🎤 Generating speech for text: {text[:50]}...", file=sys.stderr)
 
