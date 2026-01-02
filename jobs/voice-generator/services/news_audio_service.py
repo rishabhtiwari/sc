@@ -319,16 +319,33 @@ class NewsAudioService:
         if lang_code in models:
             return models[lang_code]
 
-        # Fetch default model from audio generation service (API-driven)
+        # Fetch configuration from audio generation service (API-driven)
+        # This will automatically select the right model based on GPU availability
         try:
             config_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/config"
             response = requests.get(config_url, timeout=10)
             if response.status_code == 200:
                 audio_config = response.json()
-                default_model = audio_config.get('default_model')
-                if default_model:
-                    self.logger.info(f"✅ Using API-driven default model: {default_model}")
-                    return default_model
+                available_models = audio_config.get('models', {})
+                gpu_enabled = audio_config.get('gpu_enabled', False)
+
+                # Select model based on language and GPU availability
+                if lang_code == 'hi':
+                    # Hindi: bark-hi (GPU) or mms-tts-hin (CPU)
+                    if gpu_enabled and 'bark-hi' in available_models:
+                        self.logger.info(f"✅ Using GPU model for Hindi: bark-hi")
+                        return 'bark-hi'
+                    else:
+                        self.logger.info(f"✅ Using CPU model for Hindi: mms-tts-hin")
+                        return 'mms-tts-hin'
+                else:
+                    # English: bark-en (GPU) or kokoro-82m (CPU)
+                    if gpu_enabled and 'bark-en' in available_models:
+                        self.logger.info(f"✅ Using GPU model for English: bark-en")
+                        return 'bark-en'
+                    else:
+                        self.logger.info(f"✅ Using CPU model for English: kokoro-82m")
+                        return 'kokoro-82m'
         except Exception as e:
             self.logger.warning(f"⚠️ Failed to fetch audio config from API: {str(e)}, using fallback")
 

@@ -18,7 +18,7 @@ const VoicePreviewPage = () => {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await api.get('/audio/config');
+        const response = await api.get('/audio-studio/config');
         const config = response.data;
         setTtsConfig(config);
         // Set default model
