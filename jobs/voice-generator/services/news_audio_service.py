@@ -323,11 +323,15 @@ class NewsAudioService:
         # This will automatically select the right model based on GPU availability
         try:
             config_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/config"
+            self.logger.info(f"🔍 Fetching audio config from: {config_url}")
             response = requests.get(config_url, timeout=10)
             if response.status_code == 200:
                 audio_config = response.json()
                 available_models = audio_config.get('models', {})
                 gpu_enabled = audio_config.get('gpu_enabled', False)
+
+                self.logger.info(f"🎛️  Audio config received - GPU enabled: {gpu_enabled}")
+                self.logger.info(f"🎛️  Available models: {list(available_models.keys())}")
 
                 # Select model based on language and GPU availability
                 if lang_code == 'hi':
@@ -348,6 +352,8 @@ class NewsAudioService:
                         return 'kokoro-82m'
         except Exception as e:
             self.logger.warning(f"⚠️ Failed to fetch audio config from API: {str(e)}, using fallback")
+            import traceback
+            self.logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
 
         # Fallback to hardcoded defaults if API call fails
         if lang_code == 'hi':
