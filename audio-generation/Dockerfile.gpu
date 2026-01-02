@@ -58,6 +58,8 @@ RUN mkdir -p /app/data/models /app/public && \
 COPY package*.json ./
 
 # Install Node.js dependencies
+# Skip onnxruntime CUDA installation (we use PyTorch for GPU, not ONNX Runtime)
+ENV npm_config_onnxruntime_node_install_cuda=skip
 RUN npm install
 
 # Copy application code
