@@ -50,19 +50,33 @@ ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on"
 ENV FORCE_CMAKE=1
 RUN pip3 install --no-cache-dir --force-reinstall llama-cpp-python==0.2.20
 
-# Install other dependencies
+# Install other dependencies WITHOUT upgrading torch
+# Use --no-deps for packages that depend on torch, then install their other dependencies manually
 RUN pip3 install --no-cache-dir --ignore-installed blinker \
-    transformers==4.36.0 \
-    accelerate==0.24.0 \
     sentencepiece==0.1.99 \
     protobuf==4.25.0 \
-    huggingface-hub==0.19.4 \
     Flask==3.0.0 \
     Flask-CORS==4.0.0 \
     requests==2.31.0 \
     python-dotenv==1.0.0 \
     Werkzeug==3.0.1 \
-    gunicorn==21.2.0
+    gunicorn==21.2.0 \
+    filelock \
+    packaging \
+    pyyaml \
+    regex \
+    tokenizers \
+    safetensors \
+    tqdm \
+    fsspec \
+    typing-extensions \
+    psutil
+
+# Install transformers and accelerate WITHOUT their torch dependencies
+RUN pip3 install --no-cache-dir --no-deps \
+    transformers==4.36.0 \
+    accelerate==0.24.0 \
+    huggingface-hub==0.19.4
 
 # Copy application code
 COPY . .
