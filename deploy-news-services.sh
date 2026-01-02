@@ -282,7 +282,7 @@ services:
     environment:
       - USE_GPU=true
       - CUDA_VISIBLE_DEVICES=0
-      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     deploy:
       resources:
         reservations:
@@ -298,7 +298,7 @@ services:
       dockerfile: ./watermark-remover/Dockerfile.gpu
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     deploy:
       resources:
         reservations:
@@ -306,6 +306,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # Voice Generator Job with GPU awareness
+  job-voice-generator:
+    environment:
+      - USE_GPU=true
 EOF
 
     print_success "GPU docker-compose override created: docker-compose.gpu.yml"
