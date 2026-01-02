@@ -308,11 +308,11 @@ def update_library_item(audio_id):
         }), 500
 
 
-@audio_studio_bp.route('/audio/config', methods=['GET'])
+@audio_studio_bp.route('/audio-studio/config', methods=['GET'])
 def get_audio_config():
     """Get TTS configuration (models, voices, default settings)"""
     try:
-        logger.info("🎛️  GET /audio/config - Fetching TTS configuration")
+        logger.info("🎛️  GET /audio-studio/config - Fetching TTS configuration")
 
         # Call audio generation service config endpoint
         response = requests.get(

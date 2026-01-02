@@ -319,7 +319,20 @@ class NewsAudioService:
         if lang_code in models:
             return models[lang_code]
 
-        # Fallback to hardcoded defaults if not in config
+        # Fetch default model from audio generation service (API-driven)
+        try:
+            config_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/config"
+            response = requests.get(config_url, timeout=10)
+            if response.status_code == 200:
+                audio_config = response.json()
+                default_model = audio_config.get('default_model')
+                if default_model:
+                    self.logger.info(f"✅ Using API-driven default model: {default_model}")
+                    return default_model
+        except Exception as e:
+            self.logger.warning(f"⚠️ Failed to fetch audio config from API: {str(e)}, using fallback")
+
+        # Fallback to hardcoded defaults if API call fails
         if lang_code == 'hi':
             return self.config.HINDI_AUDIO_MODEL
         else:
@@ -576,8 +589,9 @@ class NewsAudioService:
             self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}")
             self.logger.info(f"📦 Payload: {payload}")
 
-            # Use extended timeout for Kokoro model (10 minutes) as it takes longer to generate
-            timeout = 600 if model == 'kokoro-82m' else self.config.AUDIO_GENERATION_TIMEOUT
+            # Use extended timeout for CPU-based models (10 minutes) as they take longer to generate
+            # Kokoro on CPU is slow, Bark on GPU is fast
+            timeout = 600 if model in ['kokoro-82m', 'mms-tts-hin'] else self.config.AUDIO_GENERATION_TIMEOUT
             self.logger.info(f"⏱️ Using timeout: {timeout}s for model: {model}")
 
             response = requests.post(
