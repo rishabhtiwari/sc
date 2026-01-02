@@ -1,5 +1,6 @@
 # Multi-stage build for LLM prompt generation service with GPU support
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
+# Use devel image instead of runtime to get nvcc compiler for building llama-cpp-python
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 as base
 
 # Set timezone non-interactively
 ENV DEBIAN_FRONTEND=noninteractive
