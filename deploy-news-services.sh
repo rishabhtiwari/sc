@@ -321,10 +321,8 @@ get_compose_command() {
     local cmd="docker-compose -f docker-compose.yml"
 
     if [ "$USE_GPU" = true ]; then
-        # Generate GPU override if it doesn't exist
-        if [ ! -f "docker-compose.gpu.yml" ]; then
-            generate_gpu_compose >&2
-        fi
+        # Always regenerate GPU override to ensure latest configuration
+        generate_gpu_compose >&2
         cmd="$cmd -f docker-compose.gpu.yml"
     fi
 
