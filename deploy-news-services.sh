@@ -371,11 +371,12 @@ deploy_service() {
     fi
 
     if [ "$build_flag" = "--build" ]; then
-        print_info "Building $service..."
-        $compose_cmd build "$service"
+        print_info "Building and deploying $service..."
+        $compose_cmd up -d --build "$service"
+    else
+        print_info "Deploying $service..."
+        $compose_cmd up -d "$service"
     fi
-
-    $compose_cmd up -d "$service"
 
     if [ $? -eq 0 ]; then
         print_success "$service deployed successfully"
