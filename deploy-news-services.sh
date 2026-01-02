@@ -377,7 +377,7 @@ deploy_service() {
 
     if [ "$build_flag" = "--build" ]; then
         print_info "Building and deploying $service..."
-        $compose_cmd up -d --build "$service"
+        $compose_cmd up -d --build --force-recreate "$service"
     else
         print_info "Deploying $service..."
         $compose_cmd up -d "$service"
