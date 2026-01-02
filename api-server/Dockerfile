@@ -17,9 +17,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Create app directory
 WORKDIR /app
 
-# Create non-root user for security
-RUN groupadd -r ichat && useradd -r -g ichat ichat
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -36,12 +33,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Create logs directory
-RUN mkdir -p /app/logs && \
-    chown -R ichat:ichat /app
-
-# Switch to non-root user
-USER ichat
+# Create logs and data directories
+# Note: When mounted as volumes, host permissions will apply
+RUN mkdir -p /app/logs /app/data
 
 # Expose port
 EXPOSE 8080
@@ -50,5 +44,12 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/health || exit 1
 
-# Run the application
-CMD ["python3", "app.py"]
+# Create entrypoint script to fix permissions at runtime
+RUN echo '#!/bin/bash\n\
+mkdir -p /app/logs /app/data\n\
+chmod 777 /app/logs /app/data\n\
+exec python3 app.py' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+# Run the application via entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

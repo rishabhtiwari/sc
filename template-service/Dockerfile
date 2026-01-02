@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p /app/logs /app/templates/news /app/templates/shorts /app/templates/ecommerce
+RUN mkdir -p /app/logs /app/public /app/templates/news /app/templates/shorts /app/templates/ecommerce
 
 # Expose port
 EXPOSE 5000
@@ -31,6 +31,13 @@ ENV FLASK_HOST=0.0.0.0
 ENV FLASK_PORT=5000
 ENV PYTHONUNBUFFERED=1
 
-# Run the application
-CMD ["python", "app.py"]
+# Create entrypoint script to fix permissions at runtime
+RUN echo '#!/bin/bash\n\
+mkdir -p /app/logs /app/public /app/templates\n\
+chmod 777 /app/logs /app/public\n\
+exec python app.py' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+# Run the application via entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
 
