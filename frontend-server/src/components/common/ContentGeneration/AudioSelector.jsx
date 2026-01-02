@@ -33,18 +33,16 @@ const AudioSelector = ({
   const {
     generating,
     audioUrl,
-    audioConfig,
     generate,
     previewVoice,
     detectLanguage,
-    setAudioUrl,
-    setAudioConfig
+    setAudioUrl
   } = useAudioGeneration();
 
   const { showToast } = useToast();
 
-  // API-driven configuration
-  const [audioConfig, setAudioConfig] = useState(null);
+  // API-driven TTS configuration (models, voices, etc.)
+  const [ttsConfig, setTtsConfig] = useState(null);
   const [loadingConfig, setLoadingConfig] = useState(true);
 
   const [selectedModel, setSelectedModel] = useState(initialConfig.model || null);
@@ -59,7 +57,7 @@ const AudioSelector = ({
       try {
         const response = await api.get('/audio/config');
         const config = response.data;
-        setAudioConfig(config);
+        setTtsConfig(config);
 
         // Set defaults from API if not already set
         if (!selectedModel && config.default_model) {
@@ -92,13 +90,13 @@ const AudioSelector = ({
 
   // Update voice when model changes
   useEffect(() => {
-    if (audioConfig && selectedModel) {
-      const modelConfig = audioConfig.models[selectedModel];
+    if (ttsConfig && selectedModel) {
+      const modelConfig = ttsConfig.models[selectedModel];
       if (modelConfig && modelConfig.default_voice) {
         setSelectedVoice(modelConfig.default_voice);
       }
     }
-  }, [selectedModel, audioConfig]);
+  }, [selectedModel, ttsConfig]);
 
   // Set initial audio URL
   useEffect(() => {
@@ -196,8 +194,8 @@ const AudioSelector = ({
   };
 
   // Get available voices for selected model
-  const availableVoices = audioConfig && selectedModel
-    ? audioConfig.models[selectedModel]?.voices || []
+  const availableVoices = ttsConfig && selectedModel
+    ? ttsConfig.models[selectedModel]?.voices || []
     : [];
 
   // Show loading state
@@ -213,7 +211,7 @@ const AudioSelector = ({
   }
 
   // Show error state if config failed to load
-  if (!audioConfig) {
+  if (!ttsConfig) {
     return (
       <div className={`audio-selector ${className}`}>
         <div className="text-center py-8 text-red-600">
@@ -231,7 +229,7 @@ const AudioSelector = ({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             TTS Model
-            {audioConfig.gpu_enabled && (
+            {ttsConfig.gpu_enabled && (
               <span className="ml-2 text-xs text-green-600 font-semibold">🎮 GPU Enabled</span>
             )}
           </label>
@@ -240,7 +238,7 @@ const AudioSelector = ({
             value={selectedModel || ''}
             onChange={(e) => handleConfigChange('model', e.target.value)}
           >
-            {Object.entries(audioConfig.models).map(([key, model]) => (
+            {Object.entries(ttsConfig.models).map(([key, model]) => (
               <option key={key} value={key}>
                 {model.name} - {model.language}
                 {model.supports_emotions && ' 🎭'}
