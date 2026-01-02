@@ -1218,9 +1218,7 @@ volumes:
     driver: local
   llm-model-cache:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./llm/llm-prompt-generation/cache
+    # Use regular named volume instead of bind mount to avoid directory creation issues
+    # Models will be cached in Docker's volume directory
 
 

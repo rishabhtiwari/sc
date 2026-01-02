@@ -94,6 +94,67 @@ check_docker() {
     print_success "Docker is running"
 }
 
+# Function to check .env file
+check_env_file() {
+    if [ ! -f ".env" ]; then
+        print_warning ".env file not found!"
+        print_info "Creating .env file from .env.template..."
+
+        if [ -f ".env.template" ]; then
+            cp .env.template .env
+            print_warning "Please edit .env file and add your API keys:"
+            print_warning "  - HUGGINGFACE_HUB_TOKEN (get from: https://huggingface.co/settings/tokens)"
+            print_warning "  - GNEWS_API_KEY (get from: https://gnews.io/)"
+            print_error "Exiting. Please configure .env file and run again."
+            exit 1
+        else
+            print_error ".env.template not found. Cannot create .env file."
+            exit 1
+        fi
+    else
+        # Check if required variables are set
+        if grep -q "your_huggingface_token_here" .env || grep -q "your_gnews_api_key_here" .env; then
+            print_warning "⚠️  .env file contains placeholder values!"
+            print_warning "Please update .env file with your actual API keys:"
+            print_warning "  - HUGGINGFACE_HUB_TOKEN (get from: https://huggingface.co/settings/tokens)"
+            print_warning "  - GNEWS_API_KEY (get from: https://gnews.io/)"
+            read -p "Continue anyway? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        else
+            print_success ".env file found and configured"
+        fi
+    fi
+}
+
+# Function to create necessary directories
+create_directories() {
+    print_info "Creating necessary directories..."
+
+    # List of directories that need to exist
+    local dirs=(
+        "llm/llm-prompt-generation/cache"
+        "llm/llm-prompt-generation/logs"
+        "jobs/news-fetcher/logs"
+        "jobs/news-fetcher/data"
+        "jobs/voice-generator/logs"
+        "jobs/video-generator/logs"
+        "jobs/youtube-uploader/logs"
+        "jobs/cleanup/logs"
+    )
+
+    for dir in "${dirs[@]}"; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            print_success "Created directory: $dir"
+        fi
+    done
+
+    print_success "All necessary directories exist"
+}
+
 # Function to check if docker-compose is available
 check_docker_compose() {
     if ! command -v docker-compose &> /dev/null; then
@@ -240,11 +301,15 @@ deploy_all_services() {
     local build_flag=$1
     
     print_header "Deploying News Services"
-    
+
     # Check prerequisites
     check_docker
     check_docker_compose
-    
+#    check_env_file
+
+    # Create necessary directories
+    create_directories
+
     # Deploy services in order
     print_info "Starting deployment sequence..."
     echo ""
