@@ -29,9 +29,11 @@ RUN npm install --production
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 COPY server.js ./
+COPY entrypoint.sh ./
 
 # Create logs and data directories
-RUN mkdir -p /app/logs /app/data
+RUN mkdir -p /app/logs /app/data && \
+    chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 3002
@@ -40,13 +42,6 @@ EXPOSE 3002
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Create entrypoint script to fix permissions at runtime
-RUN echo '#!/bin/sh\n\
-mkdir -p /app/logs /app/data\n\
-chmod 777 /app/logs /app/data\n\
-exec node server.js' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
 # Start server via entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 

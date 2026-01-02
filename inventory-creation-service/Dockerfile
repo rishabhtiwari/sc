@@ -15,8 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY inventory-creation-service/ .
 
-# Create logs and public directories
-RUN mkdir -p /app/logs /app/public
+# Create logs and public directories and set entrypoint permissions
+RUN mkdir -p /app/logs /app/public && \
+    chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 5001
@@ -25,13 +26,6 @@ EXPOSE 5001
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
     CMD curl -f http://localhost:5001/health || exit 1
 
-# Create entrypoint script to fix permissions at runtime
-RUN echo '#!/bin/bash\n\
-mkdir -p /app/logs /app/public\n\
-chmod 777 /app/logs /app/public\n\
-exec python app.py' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
 # Run the application via entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
 

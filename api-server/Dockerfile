@@ -33,9 +33,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
-# Create logs and data directories
-# Note: When mounted as volumes, host permissions will apply
-RUN mkdir -p /app/logs /app/data
+# Create logs and data directories and set entrypoint permissions
+RUN mkdir -p /app/logs /app/data && \
+    chmod +x /app/entrypoint.sh
 
 # Expose port
 EXPOSE 8080
@@ -44,12 +44,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/health || exit 1
 
-# Create entrypoint script to fix permissions at runtime
-RUN echo '#!/bin/bash\n\
-mkdir -p /app/logs /app/data\n\
-chmod 777 /app/logs /app/data\n\
-exec python3 app.py' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
 # Run the application via entrypoint
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
