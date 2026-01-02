@@ -1,5 +1,6 @@
 # GPU-enabled Dockerfile for Audio Generation Factory
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+# Using devel image instead of runtime for full CUDA support
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
 
 # Set timezone non-interactively
 ENV DEBIAN_FRONTEND=noninteractive
