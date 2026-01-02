@@ -4,14 +4,15 @@ import api from '../services/api';
 /**
  * Hook for audio generation
  * Handles TTS generation with different models and voices
+ * Configuration is fetched from API, no hardcoded defaults
  */
 export const useAudioGeneration = () => {
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioConfig, setAudioConfig] = useState({
-    model: 'kokoro-82m',
+    model: null,  // Will be set from API or component
     language: 'en',
-    voice: 'am_adam'
+    voice: null   // Will be set from API or component
   });
   const [error, setError] = useState(null);
 

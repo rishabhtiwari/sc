@@ -308,6 +308,35 @@ def update_library_item(audio_id):
         }), 500
 
 
+@audio_studio_bp.route('/audio/config', methods=['GET'])
+def get_audio_config():
+    """Get TTS configuration (models, voices, default settings)"""
+    try:
+        logger.info("🎛️  GET /audio/config - Fetching TTS configuration")
+
+        # Call audio generation service config endpoint
+        response = requests.get(
+            f"{AUDIO_GENERATION_URL}/config",
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            return jsonify(response.json()), 200
+        else:
+            logger.error(f"Failed to get audio config: {response.status_code}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to get audio configuration'
+            }), response.status_code
+
+    except Exception as e:
+        logger.error(f"Error getting audio config: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @audio_studio_bp.route('/audio/generate', methods=['POST'])
 def generate_audio():
     """Generate audio using TTS service"""
@@ -322,13 +351,13 @@ def generate_audio():
             }), 400
 
         # Call audio generation service
-        # Default to Bark English with voice cloning support
+        # No defaults - let the service use its configured defaults
         response = requests.post(
             f"{AUDIO_GENERATION_URL}/tts",
             json={
                 'text': data.get('text'),
-                'model': data.get('model', 'bark-en'),
-                'voice': data.get('voice', 'v2/en_speaker_0'),
+                'model': data.get('model'),  # Let service use default if not provided
+                'voice': data.get('voice'),  # Let service use default if not provided
                 'speed': data.get('speed', 1.0),
                 'format': data.get('format', 'wav')
             },
@@ -361,8 +390,8 @@ def preview_audio():
         data = request.get_json()
         preview_text = 'Hello! This is a preview of how this voice sounds.'
         text = data.get('text', preview_text)
-        model = data.get('model', 'bark-en')
-        voice = data.get('voice', 'v2/en_speaker_0')
+        model = data.get('model')  # No default - let service decide
+        voice = data.get('voice')  # No default - let service decide
         language = data.get('language', 'en')
 
         logger.info(f"🎤 Generating preview audio - Model: {model}, Voice: {voice}, Language: {language}")
@@ -374,7 +403,7 @@ def preview_audio():
                 'text': text,
                 'model': model,
                 'voice': voice,
-                'filename': f'preview_{voice}_{language}.wav'
+                'filename': f'preview_{voice or "default"}_{language}.wav'
             },
             timeout=600  # 10 minutes for model initialization on first run
         )

@@ -197,6 +197,38 @@ app.get('/models/available', (req, res) => {
     });
 });
 
+// Get TTS configuration (default model, available voices, etc.)
+app.get('/config', (req, res) => {
+    try {
+        const loadedModels = voiceService.getLoadedModels();
+        const availableModels = voiceService.getAvailableModels();
+        const defaultModel = loadedModels.default_model;
+
+        // Get voices/speakers for loaded models
+        const models = {};
+        for (const [modelKey, modelInfo] of Object.entries(loadedModels.loaded_models)) {
+            models[modelKey] = {
+                name: modelInfo.model_name || modelKey,
+                language: modelInfo.language || 'Unknown',
+                voices: modelInfo.availableSpeakers || modelInfo.voices || [],
+                default_voice: modelInfo.defaultSpeaker || (modelInfo.availableSpeakers && modelInfo.availableSpeakers[0]) || null,
+                supports_emotions: modelInfo.supportsEmotions || false,
+                supports_music: modelInfo.supportsMusic || false,
+                supports_voice_cloning: modelInfo.supportsVoiceCloning || false
+            };
+        }
+
+        res.json({
+            default_model: defaultModel,
+            models: models,
+            gpu_enabled: process.env.USE_GPU === 'true'
+        });
+    } catch (error) {
+        console.error('Config error:', error);
+        res.status(500).json({ error: 'Failed to get configuration' });
+    }
+});
+
 // Get models by language
 app.get('/models/language/:language', (req, res) => {
     const { language } = req.params;
