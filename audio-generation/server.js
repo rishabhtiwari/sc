@@ -97,7 +97,7 @@ app.get('/health', (req, res) => {
 // TTS endpoint - unified endpoint for all TTS models
 app.post('/tts', async (req, res) => {
     try {
-        const { text, model, voice, speed, format = 'wav', news_id, product_id, filename } = req.body;
+        const { text, model, voice, speed, format = 'wav', language, news_id, product_id, filename } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
@@ -106,6 +106,7 @@ app.post('/tts', async (req, res) => {
         console.log(`🎤 Generating speech for: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
         console.log(`🤖 Model: ${model || 'default'}`);
         if (voice) console.log(`🎭 Voice: ${voice}`);
+        if (language) console.log(`🌍 Language: ${language}`);
         if (speed) console.log(`⚡ Speed: ${speed}`);
         if (news_id) console.log(`📰 News ID: ${news_id}`);
         if (product_id) console.log(`🛍️ Product ID: ${product_id}`);
@@ -114,6 +115,7 @@ app.post('/tts', async (req, res) => {
         // Build options object
         const options = { model, format };
         if (voice) options.voice = voice;
+        if (language) options.language = language;
         if (speed) options.speed = speed;
         if (news_id) options.news_id = news_id;
         if (product_id) options.product_id = product_id;

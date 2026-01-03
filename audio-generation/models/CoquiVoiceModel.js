@@ -81,7 +81,23 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         }
 
         const speaker = options.voice || options.speaker || this.defaultSpeaker;
-        const language = options.language || this.language;
+        let language = options.language || this.language;
+
+        // Normalize language to language code (in case full name is passed)
+        const languageNameToCode = {
+            'English': 'en', 'Hindi': 'hi', 'Spanish': 'es', 'French': 'fr',
+            'German': 'de', 'Italian': 'it', 'Portuguese': 'pt', 'Polish': 'pl',
+            'Turkish': 'tr', 'Russian': 'ru', 'Dutch': 'nl', 'Czech': 'cs',
+            'Arabic': 'ar', 'Chinese': 'zh-cn', 'Japanese': 'ja', 'Korean': 'ko',
+            'Hungarian': 'hu'
+        };
+
+        // Convert language name to code if needed
+        if (languageNameToCode[language]) {
+            console.log(`🔄 Converting language name "${language}" to code "${languageNameToCode[language]}"`);
+            language = languageNameToCode[language];
+        }
+
         const filename = options.filename || `coqui_${Date.now()}.wav`;
 
         // Determine output directory based on options
