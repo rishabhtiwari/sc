@@ -135,30 +135,43 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
         try {
             // Character limit per chunk (conservative to avoid truncation)
-            const CHAR_LIMIT = 200;
+            // Using 175 to ensure we stay well below the 250 char warning threshold
+            const CHAR_LIMIT = 175;
 
             // Check if text needs to be chunked
             if (text.length > CHAR_LIMIT) {
-                console.log(`📝 Text exceeds ${CHAR_LIMIT} chars, splitting into chunks using spaCy...`);
+                console.log(`📝 Text length: ${text.length} chars (exceeds ${CHAR_LIMIT} limit)`);
+                console.log(`📝 Splitting into chunks using spaCy for language: ${language}...`);
                 const chunks = await this._splitTextIntoChunks(text, CHAR_LIMIT, language);
-                console.log(`📦 Split into ${chunks.length} chunks`);
+                console.log(`📦 Successfully split into ${chunks.length} chunks\n`);
 
                 // Generate audio for each chunk
                 const audioBuffers = [];
                 for (let i = 0; i < chunks.length; i++) {
-                    console.log(`🔊 Generating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+                    console.log(`\n${'='.repeat(80)}`);
+                    console.log(`🔊 Processing chunk ${i + 1}/${chunks.length}`);
+                    console.log(`📏 Chunk length: ${chunks[i].length} characters`);
+                    console.log(`📄 Chunk text: "${chunks[i]}"`);
+                    console.log(`${'='.repeat(80)}\n`);
+
+                    const chunkStartTime = Date.now();
                     const chunkBuffer = await this._generateChunk(chunks[i], speaker, language);
+                    const chunkTime = Date.now() - chunkStartTime;
+
                     audioBuffers.push(chunkBuffer);
+                    console.log(`✅ Chunk ${i + 1} generated in ${chunkTime}ms\n`);
                 }
 
                 // Merge audio buffers
-                console.log(`🔗 Merging ${audioBuffers.length} audio chunks...`);
+                console.log(`\n🔗 Merging ${audioBuffers.length} audio chunks into single file...`);
                 const mergedBuffer = await this._mergeAudioBuffers(audioBuffers);
 
                 // Save the merged audio file
                 fs.writeFileSync(outputPath, mergedBuffer);
+                console.log(`💾 Merged audio saved to: ${outputPath}`);
             } else {
                 // Text is short enough, generate directly
+                console.log(`📝 Text length: ${text.length} chars (within ${CHAR_LIMIT} limit, no chunking needed)`);
                 const audioBuffer = await this._generateChunk(text, speaker, language);
                 fs.writeFileSync(outputPath, audioBuffer);
             }
@@ -368,28 +381,45 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * @private
      */
     _fallbackSplitText(text, maxChars) {
+        console.log(`⚠️ Using fallback regex-based text splitting (max ${maxChars} chars)`);
         const chunks = [];
 
         // Split by sentence endings (., !, ?, ।, ।।)
         const sentences = text.match(/[^.!?।]+[.!?।]+|[^.!?।]+$/g) || [text];
+        console.log(`✂️  Found ${sentences.length} sentences using regex`);
 
         let currentChunk = '';
+        let chunkNum = 0;
 
-        for (const sentence of sentences) {
-            const trimmedSentence = sentence.trim();
+        for (let i = 0; i < sentences.length; i++) {
+            const trimmedSentence = sentences[i].trim();
+            const sentenceLen = trimmedSentence.length;
+            const potentialLen = currentChunk.length + sentenceLen + (currentChunk ? 1 : 0);
+
+            console.log(`   Sentence ${i + 1}/${sentences.length}: ${sentenceLen} chars`);
 
             // If adding this sentence would exceed limit, save current chunk and start new one
-            if (currentChunk && (currentChunk.length + trimmedSentence.length + 1) > maxChars) {
+            if (currentChunk && potentialLen > maxChars) {
+                chunkNum++;
                 chunks.push(currentChunk.trim());
+                console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
                 currentChunk = trimmedSentence;
             } else {
                 currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
+                console.log(`   ➕ Added to current chunk (now ${currentChunk.length} chars)`);
             }
         }
 
         // Add the last chunk
         if (currentChunk) {
+            chunkNum++;
             chunks.push(currentChunk.trim());
+            console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
+        }
+
+        console.log(`\n📦 Total chunks created: ${chunks.length}`);
+        for (let i = 0; i < chunks.length; i++) {
+            console.log(`   Chunk ${i + 1}: ${chunks[i].length} chars`);
         }
 
         return chunks;
