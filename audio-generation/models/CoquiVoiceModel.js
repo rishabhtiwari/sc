@@ -135,46 +135,37 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
         try {
             // Character limit per chunk (conservative to avoid truncation)
-            // Using 175 to ensure we stay well below the 250 char warning threshold
             const CHAR_LIMIT = 175;
 
-            // Check if text needs to be chunked
+            let audioData;
+
+            // Check if text needs chunking
             if (text.length > CHAR_LIMIT) {
                 console.log(`📝 Text length: ${text.length} chars (exceeds ${CHAR_LIMIT} limit)`);
-                console.log(`📝 Splitting into chunks using spaCy for language: ${language}...`);
-                const chunks = await this._splitTextIntoChunks(text, CHAR_LIMIT, language);
-                console.log(`📦 Successfully split into ${chunks.length} chunks\n`);
+                console.log(`🔪 Chunking text using spaCy...`);
+
+                // Get chunks using Python spaCy
+                const chunks = await this._chunkText(text, CHAR_LIMIT, language);
+                console.log(`📦 Split into ${chunks.length} chunks`);
 
                 // Generate audio for each chunk
                 const audioBuffers = [];
                 for (let i = 0; i < chunks.length; i++) {
-                    console.log(`\n${'='.repeat(80)}`);
-                    console.log(`🔊 Processing chunk ${i + 1}/${chunks.length}`);
-                    console.log(`📏 Chunk length: ${chunks[i].length} characters`);
-                    console.log(`📄 Chunk text: "${chunks[i]}"`);
-                    console.log(`${'='.repeat(80)}\n`);
-
-                    const chunkStartTime = Date.now();
-                    const chunkBuffer = await this._generateChunk(chunks[i], speaker, language);
-                    const chunkTime = Date.now() - chunkStartTime;
-
-                    audioBuffers.push(chunkBuffer);
-                    console.log(`✅ Chunk ${i + 1} generated in ${chunkTime}ms\n`);
+                    console.log(`🔊 Processing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+                    const chunkAudio = await this._generateSingleChunk(chunks[i], speaker, language);
+                    audioBuffers.push(chunkAudio);
                 }
 
-                // Merge audio buffers
-                console.log(`\n🔗 Merging ${audioBuffers.length} audio chunks into single file...`);
-                const mergedBuffer = await this._mergeAudioBuffers(audioBuffers);
-
-                // Save the merged audio file
-                fs.writeFileSync(outputPath, mergedBuffer);
-                console.log(`💾 Merged audio saved to: ${outputPath}`);
+                // Merge audio chunks with 100ms silence between them
+                console.log(`🔗 Merging ${audioBuffers.length} audio chunks...`);
+                audioData = await this._mergeAudioChunks(audioBuffers);
             } else {
-                // Text is short enough, generate directly
-                console.log(`📝 Text length: ${text.length} chars (within ${CHAR_LIMIT} limit, no chunking needed)`);
-                const audioBuffer = await this._generateChunk(text, speaker, language);
-                fs.writeFileSync(outputPath, audioBuffer);
+                console.log(`📝 Text length: ${text.length} chars (within limit, no chunking needed)`);
+                audioData = await this._generateSingleChunk(text, speaker, language);
             }
+
+            // Save the audio file
+            fs.writeFileSync(outputPath, audioData);
 
             const generationTime = Date.now() - startTime;
             console.log(`✅ Audio generated successfully in ${generationTime}ms`);
@@ -316,178 +307,59 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
-     * Split text into chunks at sentence boundaries using spaCy
+     * Chunk text using Python spaCy
      * @private
      */
-    async _splitTextIntoChunks(text, maxChars, language) {
-        try {
-            const { spawn } = await import('child_process');
-            const { promisify } = await import('util');
+    async _chunkText(text, maxChars, language) {
+        const { spawn } = require('child_process');
 
-            return new Promise((resolve, reject) => {
-                // Call Python text splitter script
-                const pythonProcess = spawn('/app/venv/bin/python', [
-                    '/app/utils/text_splitter.py',
-                    maxChars.toString(),
-                    language
-                ]);
+        return new Promise((resolve, reject) => {
+            const pythonProcess = spawn('/app/venv/bin/python', [
+                '/app/utils/text_chunker.py',
+                maxChars.toString(),
+                language
+            ]);
 
-                let stdout = '';
-                let stderr = '';
+            let stdout = '';
+            let stderr = '';
 
-                pythonProcess.stdout.on('data', (data) => {
-                    stdout += data.toString();
-                });
-
-                pythonProcess.stderr.on('data', (data) => {
-                    stderr += data.toString();
-                });
-
-                pythonProcess.on('close', (code) => {
-                    if (code !== 0) {
-                        console.warn(`⚠️ spaCy text splitter failed, falling back to regex: ${stderr}`);
-                        // Fallback to simple regex-based splitting
-                        resolve(this._fallbackSplitText(text, maxChars));
-                        return;
-                    }
-
-                    try {
-                        const result = JSON.parse(stdout);
-                        if (result.success) {
-                            console.log(`✅ spaCy split text into ${result.chunk_count} chunks`);
-                            resolve(result.chunks);
-                        } else {
-                            console.warn(`⚠️ spaCy error: ${result.error}, falling back to regex`);
-                            resolve(this._fallbackSplitText(text, maxChars));
-                        }
-                    } catch (e) {
-                        console.warn(`⚠️ Failed to parse spaCy output, falling back to regex: ${e.message}`);
-                        resolve(this._fallbackSplitText(text, maxChars));
-                    }
-                });
-
-                // Write text to stdin
-                pythonProcess.stdin.write(text);
-                pythonProcess.stdin.end();
+            pythonProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
             });
-        } catch (error) {
-            console.warn(`⚠️ Failed to use spaCy, falling back to regex: ${error.message}`);
-            return this._fallbackSplitText(text, maxChars);
-        }
-    }
 
-    /**
-     * Split a long sentence into smaller parts at word boundaries
-     * @private
-     */
-    _splitLongSentence(sentence, maxChars) {
-        if (sentence.length <= maxChars) {
-            return [sentence];
-        }
+            pythonProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
 
-        console.log(`   ⚠️  Sentence too long (${sentence.length} chars), splitting further...`);
-        const parts = [];
-        const words = sentence.split(' ');
-        let currentPart = '';
-
-        for (const word of words) {
-            const potentialLen = currentPart.length + word.length + (currentPart ? 1 : 0);
-
-            if (potentialLen > maxChars && currentPart) {
-                parts.push(currentPart.trim());
-                console.log(`      ✂️  Sub-part: ${currentPart.length} chars`);
-                currentPart = word;
-            } else {
-                currentPart += (currentPart ? ' ' : '') + word;
-            }
-        }
-
-        if (currentPart) {
-            parts.push(currentPart.trim());
-            console.log(`      ✂️  Sub-part: ${currentPart.length} chars`);
-        }
-
-        return parts;
-    }
-
-    /**
-     * Fallback text splitting using regex (when spaCy is not available)
-     * @private
-     */
-    _fallbackSplitText(text, maxChars) {
-        console.log(`⚠️ Using fallback regex-based text splitting (max ${maxChars} chars)`);
-        const chunks = [];
-
-        // Split by sentence endings (., !, ?, ।, ।।)
-        const sentences = text.match(/[^.!?।]+[.!?।]+|[^.!?।]+$/g) || [text];
-        console.log(`✂️  Found ${sentences.length} sentences using regex`);
-
-        let currentChunk = '';
-        let chunkNum = 0;
-
-        for (let i = 0; i < sentences.length; i++) {
-            const trimmedSentence = sentences[i].trim();
-            const sentenceLen = trimmedSentence.length;
-
-            console.log(`   Sentence ${i + 1}/${sentences.length}: ${sentenceLen} chars`);
-
-            // If sentence itself is too long, split it further
-            if (sentenceLen > maxChars) {
-                // Save current chunk if it has content
-                if (currentChunk) {
-                    chunkNum++;
-                    chunks.push(currentChunk.trim());
-                    console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
-                    currentChunk = '';
+            pythonProcess.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`Text chunker failed: ${stderr}`));
+                    return;
                 }
 
-                // Split the long sentence into parts
-                const sentenceParts = this._splitLongSentence(trimmedSentence, maxChars);
-
-                // Add each part as a separate chunk
-                for (const part of sentenceParts) {
-                    chunkNum++;
-                    chunks.push(part.trim());
-                    console.log(`   ✅ Chunk ${chunkNum} complete: ${part.length} chars (from split sentence)`);
+                try {
+                    const result = JSON.parse(stdout);
+                    if (result.success) {
+                        resolve(result.chunks);
+                    } else {
+                        reject(new Error(result.error));
+                    }
+                } catch (e) {
+                    reject(new Error(`Failed to parse chunker output: ${e.message}`));
                 }
+            });
 
-                continue;
-            }
-
-            const potentialLen = currentChunk.length + sentenceLen + (currentChunk ? 1 : 0);
-
-            // If adding this sentence would exceed limit, save current chunk and start new one
-            if (currentChunk && potentialLen > maxChars) {
-                chunkNum++;
-                chunks.push(currentChunk.trim());
-                console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
-                currentChunk = trimmedSentence;
-            } else {
-                currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
-                console.log(`   ➕ Added to current chunk (now ${currentChunk.length} chars)`);
-            }
-        }
-
-        // Add the last chunk
-        if (currentChunk) {
-            chunkNum++;
-            chunks.push(currentChunk.trim());
-            console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
-        }
-
-        console.log(`\n📦 Total chunks created: ${chunks.length}`);
-        for (let i = 0; i < chunks.length; i++) {
-            console.log(`   Chunk ${i + 1}: ${chunks[i].length} chars`);
-        }
-
-        return chunks;
+            // Write text to stdin
+            pythonProcess.stdin.write(text);
+            pythonProcess.stdin.end();
+        });
     }
 
     /**
      * Generate audio for a single chunk
      * @private
      */
-    async _generateChunk(text, speaker, language) {
+    async _generateSingleChunk(text, speaker, language) {
         const formData = new FormData();
         formData.append('text', text);
         formData.append('speaker_id', speaker);
@@ -507,52 +379,59 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
-     * Merge multiple audio buffers into one
+     * Merge audio chunks using Python pydub
      * @private
      */
-    async _mergeAudioBuffers(buffers) {
-        // Simple concatenation for WAV files
-        // Note: This assumes all chunks have the same format (sample rate, channels, etc.)
+    async _mergeAudioChunks(audioBuffers, silenceMs = 100) {
+        const { spawn } = require('child_process');
+        const path = require('path');
+        const fs = require('fs');
 
-        if (buffers.length === 1) {
-            return buffers[0];
-        }
+        return new Promise(async (resolve, reject) => {
+            // Save chunks to temporary files
+            const tempDir = '/app/public/temp';
+            const tempFiles = [];
 
-        // For WAV files, we need to:
-        // 1. Extract the header from the first file
-        // 2. Concatenate all audio data
-        // 3. Update the file size in the header
+            for (let i = 0; i < audioBuffers.length; i++) {
+                const tempFile = path.join(tempDir, `chunk_${Date.now()}_${i}.wav`);
+                fs.writeFileSync(tempFile, audioBuffers[i]);
+                tempFiles.push(tempFile);
+            }
 
-        const firstBuffer = buffers[0];
-        const header = firstBuffer.slice(0, 44); // WAV header is 44 bytes
+            const pythonProcess = spawn('/app/venv/bin/python', [
+                '/app/utils/audio_merger.py',
+                silenceMs.toString()
+            ]);
 
-        // Extract audio data from all buffers
-        const audioDataChunks = buffers.map(buffer => buffer.slice(44));
+            let stdout = Buffer.alloc(0);
+            let stderr = '';
 
-        // Calculate total audio data size
-        const totalAudioSize = audioDataChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            pythonProcess.stdout.on('data', (data) => {
+                stdout = Buffer.concat([stdout, data]);
+            });
 
-        // Create merged buffer
-        const mergedBuffer = Buffer.alloc(44 + totalAudioSize);
+            pythonProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
 
-        // Copy header
-        header.copy(mergedBuffer, 0);
+            pythonProcess.on('close', (code) => {
+                // Clean up temp files
+                tempFiles.forEach(file => {
+                    try { fs.unlinkSync(file); } catch (e) {}
+                });
 
-        // Update file size in header (bytes 4-7)
-        const fileSize = 36 + totalAudioSize;
-        mergedBuffer.writeUInt32LE(fileSize, 4);
+                if (code !== 0) {
+                    reject(new Error(`Audio merger failed: ${stderr}`));
+                    return;
+                }
 
-        // Update data chunk size (bytes 40-43)
-        mergedBuffer.writeUInt32LE(totalAudioSize, 40);
+                resolve(stdout);
+            });
 
-        // Copy all audio data
-        let offset = 44;
-        for (const audioData of audioDataChunks) {
-            audioData.copy(mergedBuffer, offset);
-            offset += audioData.length;
-        }
-
-        return mergedBuffer;
+            // Write file paths to stdin as JSON
+            pythonProcess.stdin.write(JSON.stringify(tempFiles));
+            pythonProcess.stdin.end();
+        });
     }
 }
 

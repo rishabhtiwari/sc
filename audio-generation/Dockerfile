@@ -24,7 +24,7 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     torchaudio==2.0.2 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# Install other Python dependencies including spaCy for text splitting
+# Install other Python dependencies
 RUN /app/venv/bin/pip install --no-cache-dir \
     kokoro>=0.9.4 \
     soundfile \
@@ -32,13 +32,6 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     scipy \
     transformers \
     git+https://github.com/suno-ai/bark.git
-
-RUN /app/venv/bin/pip install --no-cache-dir spacy
-
-# Download spaCy language models for multi-lingual support
-# Using small models for efficiency
-RUN /app/venv/bin/python -m spacy download en_core_web_sm && \
-    /app/venv/bin/python -m spacy download xx_sent_ud_sm
 
 # Set environment variables for Bark optimization
 ENV SUNO_OFFLOAD_CPU=False
@@ -55,9 +48,6 @@ RUN npm install
 
 # Copy application code
 COPY . .
-
-# Make Python scripts executable
-RUN chmod +x /app/utils/text_splitter.py
 
 # Create volume mount point for persistent model storage
 VOLUME ["/app/data"]
