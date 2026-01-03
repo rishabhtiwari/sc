@@ -280,6 +280,7 @@ services:
   coqui-tts:
     image: ghcr.io/coqui-ai/tts:latest
     container_name: coqui-tts
+    entrypoint: tts-server
     ports:
       - "5002:5002"
     environment:
@@ -287,14 +288,19 @@ services:
     volumes:
       # Persistent model storage (models already downloaded)
       - /root/.local/share/tts:/root/.local/share/tts
-    command: >
-      tts-server
-      --model_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/
-      --config_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
-      --speakers_file_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/speakers_xtts.pth
-      --use_cuda 1
-      --port 5002
-      --host 0.0.0.0
+    command:
+      - --model_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/
+      - --config_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
+      - --speakers_file_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/speakers_xtts.pth
+      - --use_cuda
+      - "1"
+      - --port
+      - "5002"
+      - --host
+      - 0.0.0.0
     deploy:
       resources:
         reservations:
