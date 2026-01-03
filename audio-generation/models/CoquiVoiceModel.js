@@ -16,6 +16,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         this.defaultSpeaker = config.speaker || 'Claribel Dervla';
         this.language = config.language || 'en';
         this.initialized = false;
+        this.cachedSpeakers = []; // Cache speakers list after initialization
     }
 
     /**
@@ -44,6 +45,16 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
                 if (response.status === 200) {
                     console.log(`✅ Coqui TTS server is running at ${this.coquiServerUrl}`);
+
+                    // Cache speakers list during initialization
+                    try {
+                        this.cachedSpeakers = await CoquiVoiceModel.getAvailableSpeakers(this.coquiServerUrl);
+                        console.log(`✅ Cached ${this.cachedSpeakers.length} speakers from Coqui TTS server`);
+                    } catch (error) {
+                        console.warn(`⚠️ Failed to cache speakers, using fallback: ${error.message}`);
+                        this.cachedSpeakers = CoquiVoiceModel.getFallbackSpeakers();
+                    }
+
                     this.initialized = true;
                     return;
                 }
@@ -219,14 +230,42 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     /**
      * Get model information
      */
-    async getModelInfo() {
-        const speakers = await CoquiVoiceModel.getAvailableSpeakers(this.coquiServerUrl);
+    getModelInfo() {
+        const languageMap = {
+            'en': 'English',
+            'hi': 'Hindi',
+            'es': 'Spanish',
+            'fr': 'French',
+            'de': 'German',
+            'it': 'Italian',
+            'pt': 'Portuguese',
+            'pl': 'Polish',
+            'tr': 'Turkish',
+            'ru': 'Russian',
+            'nl': 'Dutch',
+            'cs': 'Czech',
+            'ar': 'Arabic',
+            'zh-cn': 'Chinese',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'hu': 'Hungarian'
+        };
+
         return {
             ...super.getModelInfo(),
             serverUrl: this.coquiServerUrl,
             defaultSpeaker: this.defaultSpeaker,
-            language: this.language,
-            totalSpeakers: speakers.length
+            language: languageMap[this.language] || this.language,
+            supportedLanguages: Object.keys(languageMap),
+            supportedLanguageNames: Object.values(languageMap),
+            availableSpeakers: this.cachedSpeakers,
+            voices: this.cachedSpeakers,
+            totalSpeakers: this.cachedSpeakers.length,
+            supportsEmotions: false,
+            supportsMusic: false,
+            supportsVoiceCloning: true,
+            description: 'Coqui TTS XTTS v2 - Multi-lingual TTS with 58 universal speakers supporting 17 languages',
+            speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.'
         };
     }
 }

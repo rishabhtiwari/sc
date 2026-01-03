@@ -63,18 +63,15 @@ async function initializeModels() {
 
     try {
         if (useGPU) {
-            console.log('🎮 GPU detected - Loading Coqui TTS XTTS v2 models (GPU-accelerated)');
+            console.log('🎮 GPU detected - Loading Coqui TTS XTTS v2 (GPU-accelerated)');
 
-            // Load Coqui TTS as the default model for English (58 speakers, multi-lingual, voice cloning)
+            // Load Coqui TTS as the default model (supports all languages via language parameter)
             await voiceService.loadModel('coqui-en', true);
-            console.log('✅ Coqui TTS English model loaded successfully (default)!');
+            console.log('✅ Coqui TTS XTTS v2 loaded successfully (default)!');
 
-            // Load Coqui TTS for Hindi
-            await voiceService.loadModel('coqui-hi', false);
-            console.log('✅ Coqui TTS Hindi model loaded successfully!');
-
-            console.log('🎉 Coqui TTS XTTS v2 models initialized successfully with GPU acceleration!');
-            console.log('🎭 Coqui TTS supports: 58 speakers, 16+ languages, voice cloning, fast generation');
+            console.log('🎉 Coqui TTS XTTS v2 initialized successfully with GPU acceleration!');
+            console.log('🎭 Features: 58 speakers, 17 languages, voice cloning, fast generation');
+            console.log('🌐 Supported languages: English, Hindi, Spanish, French, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese, Korean, Hungarian');
             console.log('📊 Available speakers: Claribel Dervla, Damien Black, and 56 more');
         } else {
             console.log('💻 CPU mode - Loading Kokoro-82M model (optimized for CPU)');
@@ -540,8 +537,9 @@ async function startServer() {
 
         if (defaultModel && defaultModel.startsWith('coqui')) {
             console.log(`🌍 Default Model: Coqui TTS XTTS v2 (${defaultModel})`);
-            console.log(`🎭 Coqui Features: 58 speakers, 16+ languages, voice cloning, fast generation`);
-            console.log(`🌐 Supported languages: en, hi, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh, ja, ko, hu`);
+            console.log(`🎭 Features: 58 speakers, 17 languages, voice cloning, fast generation`);
+            console.log(`🌐 Languages: English, Hindi, Spanish, French, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese, Korean, Hungarian`);
+            console.log(`💡 Specify language in request: { "language": "es" } for Spanish, { "language": "fr" } for French, etc.`);
         } else if (defaultModel && defaultModel.startsWith('bark')) {
             console.log(`🌍 Default Model: Bark (${defaultModel})`);
             console.log(`🎭 Bark Features: Voice cloning, emotions, music, 13+ languages`);
