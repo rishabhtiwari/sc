@@ -149,13 +149,22 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 const chunks = await this._chunkText(text, CHAR_LIMIT, language);
                 console.log(`📦 Split into ${chunks.length} chunks`);
 
-                // Generate audio for each chunk
-                const audioBuffers = [];
-                for (let i = 0; i < chunks.length; i++) {
-                    console.log(`🔊 Processing chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
-                    const chunkAudio = await this._generateSingleChunk(chunks[i], speaker, language);
-                    audioBuffers.push(chunkAudio);
-                }
+                // Generate audio for all chunks IN PARALLEL for faster processing
+                // Use concurrency limit to avoid overwhelming the TTS server
+                const MAX_CONCURRENT_REQUESTS = 5; // Process up to 5 chunks simultaneously
+                console.log(`🚀 Generating audio for ${chunks.length} chunks in parallel (max ${MAX_CONCURRENT_REQUESTS} concurrent)...`);
+                const parallelStartTime = Date.now();
+
+                const audioBuffers = await this._generateChunksWithConcurrency(
+                    chunks,
+                    speaker,
+                    language,
+                    MAX_CONCURRENT_REQUESTS
+                );
+
+                const parallelTime = Date.now() - parallelStartTime;
+                console.log(`✅ Parallel generation completed in ${parallelTime}ms`);
+                console.log(`   Average: ${Math.round(parallelTime / chunks.length)}ms per chunk`);
 
                 // Merge audio chunks with enhanced cleaning for natural-sounding speech
                 console.log(`🔗 Merging ${audioBuffers.length} audio chunks with professional cleaning...`);
@@ -367,6 +376,46 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             pythonProcess.stdin.write(text);
             pythonProcess.stdin.end();
         });
+    }
+
+    /**
+     * Generate audio for multiple chunks with concurrency control
+     * @private
+     */
+    async _generateChunksWithConcurrency(chunks, speaker, language, maxConcurrent = 5) {
+        const results = new Array(chunks.length);
+        let currentIndex = 0;
+        let completedCount = 0;
+
+        // Process chunks in batches with concurrency limit
+        const processNext = async (workerIndex) => {
+            while (currentIndex < chunks.length) {
+                const chunkIndex = currentIndex++;
+                const chunk = chunks[chunkIndex];
+
+                console.log(`🔊 [Worker ${workerIndex}] Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} chars)`);
+
+                try {
+                    const audio = await this._generateSingleChunk(chunk, speaker, language);
+                    results[chunkIndex] = audio;
+                    completedCount++;
+                    console.log(`✅ [Worker ${workerIndex}] Completed chunk ${chunkIndex + 1}/${chunks.length} (${completedCount}/${chunks.length} total)`);
+                } catch (error) {
+                    console.error(`❌ [Worker ${workerIndex}] Failed chunk ${chunkIndex + 1}:`, error.message);
+                    throw error;
+                }
+            }
+        };
+
+        // Create worker pool
+        const workers = Array.from({ length: Math.min(maxConcurrent, chunks.length) }, (_, i) =>
+            processNext(i + 1)
+        );
+
+        // Wait for all workers to complete
+        await Promise.all(workers);
+
+        return results;
     }
 
     /**

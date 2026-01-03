@@ -58,6 +58,7 @@ def clean_text_for_tts(text, language_code='en'):
     Clean problematic punctuation and characters that cause XTTS v2 to generate poor audio
 
     This is applied AFTER chunking, before sending each chunk to TTS.
+    Includes comprehensive Unicode normalization and pronunciation fixes for Hindi.
 
     Args:
         text: Input text
@@ -67,26 +68,48 @@ def clean_text_for_tts(text, language_code='en'):
         Cleaned text optimized for XTTS v2
     """
     import re
+    import unicodedata
+
+    if not text:
+        return ""
 
     if language_code == 'hi':
-        # Remove invisible Unicode characters that break TTS
+        # 1. Unicode Normalization (Essential for Devanagari)
+        # This fixes issues where 'matras' (vowel marks) are separate from their base characters
+        # NFC = Canonical Decomposition, followed by Canonical Composition
+        text = unicodedata.normalize('NFC', text)
+
+        # 2. Remove invisible Unicode characters that break TTS
         text = text.replace('\u200d', '')  # Zero-width joiner
         text = text.replace('\u200c', '')  # Zero-width non-joiner
         text = text.replace('\u200b', '')  # Zero-width space
         text = text.replace('\ufeff', '')  # Zero-width no-break space (BOM)
 
-        # XTTS v2 struggles with '!' and '?', so we replace them with Purna Viram (।)
-        # This maintains the sentence boundary without the prosody glitch
+        # 3. Punctuation Stabilization
+        # Replace '!' and '?' which cause 'looping' or 'glitches' in XTTS-v2
         text = text.replace("!!", "।")  # Replace !! first
         text = text.replace("!", "।")   # Then replace single !
         text = text.replace("??", "।")  # Replace ?? first
         text = text.replace("?", "।")   # Then replace single ?
 
-        # Remove other problematic characters that cause hallucinations
-        text = text.replace("...", "।")
+        # Replace ellipsis (causes hallucinations)
+        text = re.sub(r'\.{2,}', '।', text)  # Replace .. or ... with Purna Viram
         text = text.replace("…", "।")  # Ellipsis character
 
-        # Remove or normalize quotation marks (can cause issues)
+        # 4. Generic Conjunct & Pronunciation Fixes
+        # Fix common 'half-letter' clusters that models struggle to 'blend'
+        pronunciation_map = {
+            "त्य": "तय",    # Fixes Satyug (सत्युग → सतयुग), Tyag, etc.
+            "श्र": "श‍र",    # Adds a hidden joiner to smooth out 'Shra'
+            "ज्ञ": "ग्या",   # Fixes 'Gya' (common mispronunciation of Jna)
+            "क्ष": "क‍्षा",  # Fixes 'Ksha' pronunciation
+            "द्ध": "दध",    # Fixes 'ddha' clusters
+        }
+
+        for pattern, replacement in pronunciation_map.items():
+            text = text.replace(pattern, replacement)
+
+        # 5. Remove or normalize quotation marks (can cause issues)
         text = text.replace('"', '')  # Remove double quotes
         text = text.replace('"', '')  # Remove smart quotes
         text = text.replace('"', '')  # Remove smart quotes
@@ -94,21 +117,28 @@ def clean_text_for_tts(text, language_code='en'):
         text = text.replace("'", '')  # Remove smart quotes
         text = text.replace("'", '')  # Remove smart quotes
 
-        # Normalize dashes and hyphens
+        # 6. Normalize dashes and hyphens
         text = text.replace('—', '-')  # Em dash to hyphen
         text = text.replace('–', '-')  # En dash to hyphen
 
-        # Normalize spacing around Hindi punctuation
+        # 7. Remove non-Hindi/non-English noise (Emojis, special symbols)
+        # Keep only: Devanagari (U+0900-U+097F), spaces, A-Z, a-z, 0-9, and basic punctuation
+        text = re.sub(r'[^\u0900-\u097F\sA-Za-z0-9।,.\-]', '', text)
+
+        # 8. Normalize spacing around Hindi punctuation
         text = re.sub(r'\s+([।॥,;])', r'\1', text)  # Remove space before punctuation
         text = re.sub(r'([।॥,;])([^\s])', r'\1 \2', text)  # Add space after punctuation
 
-        # Remove multiple spaces
+        # 9. Remove multiple spaces
         text = re.sub(r'\s+', ' ', text)
 
-        # Clean up any trailing/leading whitespace
+        # 10. Clean up any trailing/leading whitespace
         text = text.strip()
 
     elif language_code == 'en':
+        # Unicode normalization for English
+        text = unicodedata.normalize('NFC', text)
+
         # Remove invisible Unicode characters
         text = text.replace('\u200d', '')
         text = text.replace('\u200c', '')
