@@ -63,22 +63,23 @@ async function initializeModels() {
 
     try {
         if (useGPU) {
-            console.log('🎮 GPU detected - Loading Bark models (GPU-accelerated)');
+            console.log('🎮 GPU detected - Loading Coqui TTS XTTS v2 models (GPU-accelerated)');
 
-            // Load Bark as the default model for English (supports voice cloning, emotions, music)
-            await voiceService.loadModel('bark-en', true);
-            console.log('✅ Bark English model loaded successfully (default)!');
+            // Load Coqui TTS as the default model for English (58 speakers, multi-lingual, voice cloning)
+            await voiceService.loadModel('coqui-en', true);
+            console.log('✅ Coqui TTS English model loaded successfully (default)!');
 
-            // Load Bark for Hindi
-            await voiceService.loadModel('bark-hi', false);
-            console.log('✅ Bark Hindi model loaded successfully!');
+            // Load Coqui TTS for Hindi
+            await voiceService.loadModel('coqui-hi', false);
+            console.log('✅ Coqui TTS Hindi model loaded successfully!');
 
-            console.log('🎉 Bark models initialized successfully with GPU acceleration!');
-            console.log('🎭 Bark supports: voice cloning, emotions ([laughs], [sighs]), music (♪), and 13+ languages');
+            console.log('🎉 Coqui TTS XTTS v2 models initialized successfully with GPU acceleration!');
+            console.log('🎭 Coqui TTS supports: 58 speakers, 16+ languages, voice cloning, fast generation');
+            console.log('📊 Available speakers: Claribel Dervla, Damien Black, and 56 more');
         } else {
             console.log('💻 CPU mode - Loading Kokoro-82M model (optimized for CPU)');
 
-            // Load Kokoro-82M as the default model for CPU (faster on CPU than Bark)
+            // Load Kokoro-82M as the default model for CPU (faster on CPU than Coqui)
             await voiceService.loadModel('kokoro-82m', true);
             console.log('✅ Kokoro-82M model loaded successfully (default)!');
 
@@ -195,6 +196,24 @@ app.get('/models/available', (req, res) => {
     res.json({
         available_models: voiceService.getAvailableModels()
     });
+});
+
+// Get available speakers for Coqui TTS XTTS v2
+app.get('/speakers', async (req, res) => {
+    try {
+        const { CoquiVoiceModel } = await import('./models/CoquiVoiceModel.js');
+        const speakers = await CoquiVoiceModel.getAvailableSpeakers();
+
+        res.json({
+            total: speakers.length,
+            speakers: speakers,
+            model: 'Coqui TTS XTTS v2',
+            description: 'Pre-trained speakers supporting 16+ languages (dynamically loaded from server)'
+        });
+    } catch (error) {
+        console.error('Speakers error:', error);
+        res.status(500).json({ error: 'Failed to get speakers list' });
+    }
 });
 
 // Get TTS configuration (default model, available voices, etc.)

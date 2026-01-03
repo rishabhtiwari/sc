@@ -2,6 +2,7 @@ import { MMSVoiceModel } from './MMSVoiceModel.js';
 import { SpeechT5VoiceModel } from './SpeechT5VoiceModel.js';
 import { KokoroVoiceModelPython } from './KokoroVoiceModelPython.js';
 import { BarkVoiceModel } from './BarkVoiceModel.js';
+import { CoquiVoiceModel } from './CoquiVoiceModel.js';
 
 /**
  * Factory for creating voice generation models
@@ -211,6 +212,178 @@ export class VoiceModelFactory {
             }
         },
 
+        // Coqui TTS XTTS v2 Models (Multi-lingual with 58 speakers, voice cloning)
+        'coqui-en': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'English',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla', // Default female speaker
+                language: 'en'
+            }
+        },
+        'coqui-hi': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Hindi',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Damien Black', // Default male speaker
+                language: 'hi'
+            }
+        },
+        'coqui-es': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Spanish',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'es'
+            }
+        },
+        'coqui-fr': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'French',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'fr'
+            }
+        },
+        'coqui-de': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'German',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'de'
+            }
+        },
+        'coqui-it': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Italian',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'it'
+            }
+        },
+        'coqui-pt': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Portuguese',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'pt'
+            }
+        },
+        'coqui-pl': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Polish',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'pl'
+            }
+        },
+        'coqui-tr': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Turkish',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'tr'
+            }
+        },
+        'coqui-ru': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Russian',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'ru'
+            }
+        },
+        'coqui-nl': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Dutch',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'nl'
+            }
+        },
+        'coqui-cs': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Czech',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'cs'
+            }
+        },
+        'coqui-ar': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Arabic',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'ar'
+            }
+        },
+        'coqui-zh': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Chinese',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'zh-cn'
+            }
+        },
+        'coqui-ja': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Japanese',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'ja'
+            }
+        },
+        'coqui-ko': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Korean',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'ko'
+            }
+        },
+        'coqui-hu': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Hungarian',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla',
+                language: 'hu'
+            }
+        },
+
         // MMS Models for Hindi
         'mms-tts-hin': {
             modelId: 'Xenova/mms-tts-hin',
@@ -315,6 +488,8 @@ export class VoiceModelFactory {
                 return new BarkVoiceModel(modelConfig.modelId, config);
             case 'Kokoro':
                 return new KokoroVoiceModelPython(modelConfig.modelId, config);
+            case 'Coqui':
+                return new CoquiVoiceModel(modelConfig.modelId, config);
             case 'MMS':
                 return new MMSVoiceModel(modelConfig.modelId, config);
             case 'SpeechT5':

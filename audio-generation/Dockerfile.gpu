@@ -74,6 +74,9 @@ ENV XDG_CACHE_HOME=/app/data/cache
 ENV SUNO_USE_SMALL_MODELS=False
 ENV SUNO_OFFLOAD_CPU=False
 
+# Coqui TTS server URL (will connect to separate Coqui TTS container)
+ENV COQUI_TTS_URL=http://coqui-tts:5002
+
 # Create volume mount point for persistent model storage
 VOLUME ["/app/data"]
 

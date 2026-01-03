@@ -274,6 +274,42 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # Coqui TTS XTTS v2 Server (GPU-accelerated)
+  coqui-tts:
+    image: ghcr.io/coqui-ai/tts:latest
+    container_name: coqui-tts
+    ports:
+      - "5002:5002"
+    environment:
+      - COQUI_TOS_AGREED=1
+    volumes:
+      # Persistent model storage (models already downloaded)
+      - /root/.local/share/tts:/root/.local/share/tts
+    command: >
+      tts-server
+      --model_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/
+      --config_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
+      --speakers_file_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/speakers_xtts.pth
+      --use_cuda 1
+      --port 5002
+      --host 0.0.0.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ichat-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
   # Audio Generation Factory with GPU support
   audio-generation-factory:
     build:
@@ -283,6 +319,9 @@ services:
       - USE_GPU=true
       - CUDA_VISIBLE_DEVICES=0
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - COQUI_TTS_URL=http://coqui-tts:5002
+    depends_on:
+      - coqui-tts
     deploy:
       resources:
         reservations:

@@ -335,18 +335,18 @@ class NewsAudioService:
 
                 # Select model based on language and GPU availability
                 if lang_code == 'hi':
-                    # Hindi: bark-hi (GPU) or mms-tts-hin (CPU)
-                    if gpu_enabled and 'bark-hi' in available_models:
-                        self.logger.info(f"✅ Using GPU model for Hindi: bark-hi")
-                        return 'bark-hi'
+                    # Hindi: coqui-hi (GPU) or mms-tts-hin (CPU)
+                    if gpu_enabled and 'coqui-hi' in available_models:
+                        self.logger.info(f"✅ Using GPU model for Hindi: coqui-hi")
+                        return 'coqui-hi'
                     else:
                         self.logger.info(f"✅ Using CPU model for Hindi: mms-tts-hin")
                         return 'mms-tts-hin'
                 else:
-                    # English: bark-en (GPU) or kokoro-82m (CPU)
-                    if gpu_enabled and 'bark-en' in available_models:
-                        self.logger.info(f"✅ Using GPU model for English: bark-en")
-                        return 'bark-en'
+                    # English: coqui-en (GPU) or kokoro-82m (CPU)
+                    if gpu_enabled and 'coqui-en' in available_models:
+                        self.logger.info(f"✅ Using GPU model for English: coqui-en")
+                        return 'coqui-en'
                     else:
                         self.logger.info(f"✅ Using CPU model for English: kokoro-82m")
                         return 'kokoro-82m'
@@ -361,13 +361,13 @@ class NewsAudioService:
         self.logger.info(f"🔧 Fallback: USE_GPU={use_gpu}")
 
         if lang_code == 'hi':
-            # Hindi: bark-hi (GPU) or mms-tts-hin (CPU)
-            fallback_model = 'bark-hi' if use_gpu else 'mms-tts-hin'
+            # Hindi: coqui-hi (GPU) or mms-tts-hin (CPU)
+            fallback_model = 'coqui-hi' if use_gpu else 'mms-tts-hin'
             self.logger.info(f"🔧 Fallback Hindi model: {fallback_model}")
             return fallback_model
         else:
-            # English: bark-en (GPU) or kokoro-82m (CPU)
-            fallback_model = 'bark-en' if use_gpu else 'kokoro-82m'
+            # English: coqui-en (GPU) or kokoro-82m (CPU)
+            fallback_model = 'coqui-en' if use_gpu else 'kokoro-82m'
             self.logger.info(f"🔧 Fallback English model: {fallback_model}")
             return fallback_model
 
@@ -406,8 +406,8 @@ class NewsAudioService:
                 use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
 
                 # Select models based on GPU availability
-                en_model = 'bark-en' if use_gpu else 'kokoro-82m'
-                hi_model = 'bark-hi' if use_gpu else 'mms-tts-hin'
+                en_model = 'coqui-en' if use_gpu else 'kokoro-82m'
+                hi_model = 'coqui-hi' if use_gpu else 'mms-tts-hin'
 
                 # Get device-aware voice configs
                 en_voices = self._get_default_voices_for_model(en_model, 'en')
@@ -453,14 +453,30 @@ class NewsAudioService:
         Get default voice configuration based on model type (device-aware)
 
         Args:
-            model: Model name (e.g., 'bark-en', 'kokoro-82m', 'mms-tts-hin')
+            model: Model name (e.g., 'coqui-en', 'kokoro-82m', 'mms-tts-hin')
             lang_code: Language code ('en' or 'hi')
 
         Returns:
             Voice configuration dict with defaultVoice, maleVoices, femaleVoices
         """
-        # Bark models (GPU)
-        if model.startswith('bark'):
+        # Coqui TTS models (GPU) - XTTS v2 with 58 speakers
+        if model.startswith('coqui'):
+            if lang_code == 'hi':
+                return {
+                    'defaultVoice': 'Damien Black',
+                    'enableAlternation': True,
+                    'maleVoices': ['Damien Black', 'Andrew Chipper', 'Badr Odhiambo'],
+                    'femaleVoices': ['Claribel Dervla', 'Daisy Studious', 'Gracie Wise']
+                }
+            else:  # English
+                return {
+                    'defaultVoice': 'Claribel Dervla',
+                    'enableAlternation': True,
+                    'maleVoices': ['Damien Black', 'Andrew Chipper', 'Craig Gutsy'],
+                    'femaleVoices': ['Claribel Dervla', 'Daisy Studious', 'Gracie Wise']
+                }
+        # Bark models (GPU) - Legacy support
+        elif model.startswith('bark'):
             if lang_code == 'hi':
                 return {
                     'defaultVoice': 'v2/hi_speaker_0',
