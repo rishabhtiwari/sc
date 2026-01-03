@@ -23,6 +23,7 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
   const [text, setText] = useState('');
   const [selectedModel, setSelectedModel] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState('en'); // Default to English
   const [speed, setSpeed] = useState(1.0);
   const [audioMessages, setAudioMessages] = useState([]);
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
@@ -109,6 +110,7 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
         text: userText,
         model: selectedModel,
         voice: selectedVoice,
+        language: selectedLanguage,
         speed: speed
       });
 
@@ -306,6 +308,26 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
                 <span className="max-w-[150px] truncate">{selectedVoice || 'Select Voice'}</span>
                 <span className="text-xs text-gray-600">▼</span>
               </button>
+
+              {/* Language Selector - Show only for multi-lingual models */}
+              {selectedModel && ttsConfig.models[selectedModel]?.supported_languages?.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                    🌍 Language:
+                  </label>
+                  <select
+                    value={selectedLanguage}
+                    onChange={(e) => setSelectedLanguage(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    {ttsConfig.models[selectedModel].supported_languages.map((langCode, index) => (
+                      <option key={langCode} value={langCode}>
+                        {ttsConfig.models[selectedModel].supported_language_names[index]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Speed Control */}
               <div className="flex items-center gap-2">

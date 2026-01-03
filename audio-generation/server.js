@@ -233,7 +233,10 @@ app.get('/config', (req, res) => {
                 default_voice: modelInfo.defaultSpeaker || (modelInfo.availableSpeakers && modelInfo.availableSpeakers[0]) || null,
                 supports_emotions: modelInfo.supportsEmotions || false,
                 supports_music: modelInfo.supportsMusic || false,
-                supports_voice_cloning: modelInfo.supportsVoiceCloning || false
+                supports_voice_cloning: modelInfo.supportsVoiceCloning || false,
+                supported_languages: modelInfo.supportedLanguages || [],
+                supported_language_names: modelInfo.supportedLanguageNames || [],
+                description: modelInfo.description || ''
             };
         }
 
