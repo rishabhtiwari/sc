@@ -56,8 +56,10 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     pydub
 
 # Download spaCy language models
+# - en_core_web_sm: English model for accurate sentence detection
+# - hi_core_news_sm: Hindi model with Devanagari punctuation support (।, ॥)
 RUN /app/venv/bin/python -m spacy download en_core_web_sm && \
-    /app/venv/bin/python -m spacy download xx_sent_ud_sm
+    /app/venv/bin/python -m spacy download hi_core_news_sm
 
 # Create data directory for model caching
 RUN mkdir -p /app/data/models /app/public && \

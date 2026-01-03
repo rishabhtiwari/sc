@@ -1,85 +1,264 @@
 #!/usr/bin/env python3
 """
-Clean text chunker using spaCy for natural sentence boundaries
+Language-aware text chunker using spaCy for natural sentence boundaries
+
+Supports:
+- English: en_core_web_sm model with English-specific clause detection
+- Hindi: hi_core_news_sm model with Devanagari punctuation awareness
 """
 
 import sys
 import json
 import spacy
 
+# ============================================================================
+# LANGUAGE-SPECIFIC CONFIGURATIONS
+# ============================================================================
+
 # Language code to spaCy model mapping
 LANGUAGE_MODELS = {
-    'en': 'en_core_web_sm',
-    'hi': 'xx_sent_ud_sm',  # Multi-lingual model for Hindi
-    'es': 'xx_sent_ud_sm',
-    'fr': 'xx_sent_ud_sm',
-    'de': 'xx_sent_ud_sm',
-    'it': 'xx_sent_ud_sm',
-    'pt': 'xx_sent_ud_sm',
-    'pl': 'xx_sent_ud_sm',
-    'tr': 'xx_sent_ud_sm',
-    'ru': 'xx_sent_ud_sm',
-    'nl': 'xx_sent_ud_sm',
-    'cs': 'xx_sent_ud_sm',
-    'ar': 'xx_sent_ud_sm',
-    'zh-cn': 'xx_sent_ud_sm',
-    'ja': 'xx_sent_ud_sm',
-    'ko': 'xx_sent_ud_sm',
-    'hu': 'xx_sent_ud_sm'
+    'en': 'en_core_web_sm',      # English: Best for English sentence detection
+    'hi': 'hi_core_news_sm',     # Hindi: Trained on Devanagari script
 }
 
-# Cache loaded models
+# Language-specific delimiters for natural pause detection
+# Order matters: Earlier delimiters are tried first
+LANGUAGE_DELIMITERS = {
+    'hi': [
+        "।",        # Purna Viram (primary Hindi sentence boundary)
+        "॥",        # Double Purna Viram (verse/section boundary)
+        ",",        # Comma (clause separator)
+        ";",        # Semicolon
+        "—",        # Em dash
+        " - ",      # Hyphen with spaces
+        " और ",    # "and" in Hindi
+        " लेकिन ", # "but" in Hindi
+        " परंतु ",  # "but" (formal)
+    ],
+    'en': [
+        ",",        # Comma (most common clause separator)
+        ";",        # Semicolon
+        ":",        # Colon
+        "—",        # Em dash
+        " - ",      # Hyphen with spaces
+        " and ",    # Coordinating conjunction
+        " but ",    # Coordinating conjunction
+        " or ",     # Coordinating conjunction
+        " while ",  # Subordinating conjunction
+        " though ", # Subordinating conjunction
+    ],
+}
+
+# Cache loaded models to avoid reloading
 _model_cache = {}
 
+# ============================================================================
+# MODEL LOADING
+# ============================================================================
+
 def get_spacy_model(language_code):
-    """Load and cache spaCy model for the given language"""
+    """
+    Load and cache spaCy model for the given language
+
+    Args:
+        language_code: Language code (e.g., 'en', 'hi')
+
+    Returns:
+        Loaded spaCy model
+
+    Raises:
+        OSError: If the required model is not installed
+    """
     if language_code not in _model_cache:
-        model_name = LANGUAGE_MODELS.get(language_code, 'xx_sent_ud_sm')
+        model_name = LANGUAGE_MODELS.get(language_code)
+
+        if not model_name:
+            raise ValueError(
+                f"Unsupported language: {language_code}. "
+                f"Supported languages: {', '.join(LANGUAGE_MODELS.keys())}"
+            )
+
         try:
+            print(f"Loading spaCy model: {model_name} for language: {language_code}", file=sys.stderr)
             _model_cache[language_code] = spacy.load(model_name)
-        except OSError:
-            # Fallback to multi-lingual model
-            _model_cache[language_code] = spacy.load('xx_sent_ud_sm')
+            print(f"✓ Model loaded successfully", file=sys.stderr)
+        except OSError as e:
+            raise OSError(
+                f"Failed to load spaCy model '{model_name}' for language '{language_code}'. "
+                f"Please install it with: python -m spacy download {model_name}"
+            ) from e
+
     return _model_cache[language_code]
+
+# ============================================================================
+# TEXT SPLITTING FUNCTIONS
+# ============================================================================
+
+def split_gracefully(text, max_chars, delimiters):
+    """
+    Split long sentences by natural pauses (clauses) before resorting to word boundaries
+
+    This creates more natural-sounding audio by splitting at commas, semicolons,
+    and Hindi punctuation (Purna Viram) rather than arbitrary word boundaries.
+
+    Args:
+        text: Text to split
+        max_chars: Maximum characters per chunk
+        delimiters: List of delimiters to try, in priority order
+
+    Returns:
+        List of text parts
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    # Try splitting by natural pauses first (commas, Hindi punctuation, etc.)
+    for delimiter in delimiters:
+        if delimiter in text:
+            parts = text.split(delimiter)
+            chunks = []
+            current = ""
+
+            for i, part in enumerate(parts):
+                part = part.strip()
+                # Re-add delimiter except for last part
+                if i < len(parts) - 1:
+                    part = part + delimiter
+
+                potential_len = len(current) + len(part) + (1 if current else 0)
+
+                if potential_len <= max_chars:
+                    current += (" " if current else "") + part
+                else:
+                    if current:
+                        chunks.append(current.strip())
+                    current = part
+
+            if current:
+                chunks.append(current.strip())
+
+            # If this delimiter successfully split the text into valid chunks, return it
+            if len(chunks) > 1 and all(len(c) <= max_chars for c in chunks):
+                return chunks
+
+    # Fallback: Split by words if no natural delimiters work
+    words = text.split()
+    chunks = []
+    current = ""
+
+    for word in words:
+        potential_len = len(current) + len(word) + (1 if current else 0)
+
+        if potential_len <= max_chars:
+            current += (" " if current else "") + word
+        else:
+            if current:
+                chunks.append(current.strip())
+            current = word
+
+    if current:
+        chunks.append(current.strip())
+
+    return chunks
 
 def chunk_text(text, max_chars, language_code='en'):
     """
-    Split text into chunks at natural sentence boundaries
-    
+    Split text into chunks at natural sentence boundaries with linguistic awareness
+
+    This function:
+    1. Uses language-specific spaCy models for accurate sentence detection
+    2. Splits long sentences at natural pauses (commas, Hindi punctuation, etc.)
+    3. Groups sentences into chunks without exceeding max_chars
+    4. Strips whitespace to prevent empty audio segments
+
     Args:
         text: Text to split
         max_chars: Maximum characters per chunk (default: 175)
-        language_code: Language code (e.g., 'en', 'hi', 'es')
-    
+        language_code: Language code ('en' or 'hi')
+
     Returns:
-        List of text chunks
+        List of text chunks, each ≤ max_chars
+
+    Example:
+        >>> chunk_text("This is a test. Another sentence.", 20, 'en')
+        ['This is a test.', 'Another sentence.']
     """
+    print(f"Chunking text for language: {language_code}", file=sys.stderr)
+    print(f"Max chars per chunk: {max_chars}", file=sys.stderr)
+    print(f"Input text length: {len(text)} chars", file=sys.stderr)
+
     # Load appropriate spaCy model
     nlp = get_spacy_model(language_code)
-    
+
+    # Get language-specific delimiters
+    delimiters = LANGUAGE_DELIMITERS.get(language_code, [",", ";", "—", " - "])
+    print(f"Using delimiters: {delimiters[:3]}...", file=sys.stderr)
+
     # Process text to get sentences
     doc = nlp(text)
-    
+    sentences = list(doc.sents)
+    print(f"Detected {len(sentences)} sentences", file=sys.stderr)
+
     # Group sentences into chunks
-    chunks = []
-    temp = ""
-    
-    for sent in doc.sents:
+    final_chunks = []
+    buffer = ""
+
+    for i, sent in enumerate(sentences):
         sentence_text = sent.text.strip()
-        
-        # If adding this sentence would exceed limit, save current chunk
-        if len(temp) + len(sentence_text) + 1 < max_chars:
-            temp += sentence_text + " "
+
+        # Skip empty sentences
+        if not sentence_text:
+            continue
+
+        print(f"  Sentence {i+1}/{len(sentences)}: {len(sentence_text)} chars", file=sys.stderr)
+
+        # If sentence itself is too long, split it gracefully
+        if len(sentence_text) > max_chars:
+            print(f"    ⚠️  Sentence exceeds limit, splitting at natural pauses...", file=sys.stderr)
+
+            # Save current buffer first
+            if buffer:
+                final_chunks.append(buffer.strip())
+                print(f"    ✓ Saved buffer chunk: {len(buffer)} chars", file=sys.stderr)
+                buffer = ""
+
+            # Split the long sentence at natural pauses
+            sentence_parts = split_gracefully(sentence_text, max_chars, delimiters)
+            print(f"    ✓ Split into {len(sentence_parts)} parts", file=sys.stderr)
+
+            for j, part in enumerate(sentence_parts):
+                part = part.strip()
+                if part:  # Only add non-empty parts
+                    final_chunks.append(part)
+                    print(f"      Part {j+1}: {len(part)} chars", file=sys.stderr)
         else:
-            if temp:
-                chunks.append(temp.strip())
-            temp = sentence_text + " "
-    
-    # Add the last chunk
-    if temp:
-        chunks.append(temp.strip())
-    
-    return chunks
+            # Check if adding this sentence would exceed limit
+            potential_len = len(buffer) + len(sentence_text) + (1 if buffer else 0)
+
+            if potential_len <= max_chars:
+                buffer += (" " if buffer else "") + sentence_text
+                print(f"    ✓ Added to buffer (now {len(buffer)} chars)", file=sys.stderr)
+            else:
+                # Save current buffer and start new one
+                if buffer:
+                    final_chunks.append(buffer.strip())
+                    print(f"    ✓ Saved buffer chunk: {len(buffer)} chars", file=sys.stderr)
+                buffer = sentence_text
+                print(f"    ✓ Started new buffer: {len(buffer)} chars", file=sys.stderr)
+
+    # Add the last buffer
+    if buffer:
+        final_chunks.append(buffer.strip())
+        print(f"  ✓ Saved final buffer: {len(buffer)} chars", file=sys.stderr)
+
+    # Final cleanup: Remove any empty chunks
+    final_chunks = [chunk for chunk in final_chunks if chunk.strip()]
+
+    print(f"\n✓ Created {len(final_chunks)} chunks", file=sys.stderr)
+    for i, chunk in enumerate(final_chunks):
+        print(f"  Chunk {i+1}: {len(chunk)} chars", file=sys.stderr)
+
+    return final_chunks
 
 def main():
     """Main function for CLI usage"""

@@ -313,6 +313,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     async _chunkText(text, maxChars, language) {
         const { spawn } = await import('child_process');
 
+        console.log(`📝 Calling text_chunker.py with language: ${language}, max_chars: ${maxChars}`);
+
         return new Promise((resolve, reject) => {
             const pythonProcess = spawn('/app/venv/bin/python', [
                 '/app/utils/text_chunker.py',
@@ -328,11 +330,16 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             });
 
             pythonProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
+                const stderrText = data.toString();
+                stderr += stderrText;
+                // Print Python script logs in real-time
+                console.log(`   [text_chunker] ${stderrText.trim()}`);
             });
 
             pythonProcess.on('close', (code) => {
                 if (code !== 0) {
+                    console.error(`❌ Text chunker failed with code ${code}`);
+                    console.error(`   Error: ${stderr}`);
                     reject(new Error(`Text chunker failed: ${stderr}`));
                     return;
                 }
@@ -340,6 +347,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 try {
                     const result = JSON.parse(stdout);
                     if (result.success) {
+                        console.log(`✅ Text chunker returned ${result.chunk_count} chunks`);
                         resolve(result.chunks);
                     } else {
                         reject(new Error(result.error));
