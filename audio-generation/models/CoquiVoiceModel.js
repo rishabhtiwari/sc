@@ -126,6 +126,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
         console.log(`🎤 Generating speech with Coqui TTS XTTS v2:`);
         console.log(`   Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`);
+        console.log(`   Text length: ${text.length} characters`);
         console.log(`   Speaker: ${speaker}`);
         console.log(`   Language: ${language}`);
         console.log(`   Output: ${outputPath}`);
@@ -133,25 +134,34 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         const startTime = Date.now();
 
         try {
-            // Create form data for multipart/form-data request
-            const formData = new FormData();
-            formData.append('text', text);
-            formData.append('speaker_id', speaker);
-            formData.append('language_id', language);
+            // Character limit per chunk (conservative to avoid truncation)
+            const CHAR_LIMIT = 200;
 
-            // Call Coqui TTS API
-            const response = await axios.post(
-                `${this.coquiServerUrl}/api/tts`,
-                formData,
-                {
-                    headers: formData.getHeaders(),
-                    responseType: 'arraybuffer',
-                    timeout: 120000 // 2 minutes timeout
+            // Check if text needs to be chunked
+            if (text.length > CHAR_LIMIT) {
+                console.log(`📝 Text exceeds ${CHAR_LIMIT} chars, splitting into chunks using spaCy...`);
+                const chunks = await this._splitTextIntoChunks(text, CHAR_LIMIT, language);
+                console.log(`📦 Split into ${chunks.length} chunks`);
+
+                // Generate audio for each chunk
+                const audioBuffers = [];
+                for (let i = 0; i < chunks.length; i++) {
+                    console.log(`🔊 Generating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+                    const chunkBuffer = await this._generateChunk(chunks[i], speaker, language);
+                    audioBuffers.push(chunkBuffer);
                 }
-            );
 
-            // Save the audio file
-            fs.writeFileSync(outputPath, response.data);
+                // Merge audio buffers
+                console.log(`🔗 Merging ${audioBuffers.length} audio chunks...`);
+                const mergedBuffer = await this._mergeAudioBuffers(audioBuffers);
+
+                // Save the merged audio file
+                fs.writeFileSync(outputPath, mergedBuffer);
+            } else {
+                // Text is short enough, generate directly
+                const audioBuffer = await this._generateChunk(text, speaker, language);
+                fs.writeFileSync(outputPath, audioBuffer);
+            }
 
             const generationTime = Date.now() - startTime;
             console.log(`✅ Audio generated successfully in ${generationTime}ms`);
@@ -290,6 +300,171 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             description: 'Coqui TTS XTTS v2 - Multi-lingual TTS with 58 universal speakers supporting 17 languages',
             speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.'
         };
+    }
+
+    /**
+     * Split text into chunks at sentence boundaries using spaCy
+     * @private
+     */
+    async _splitTextIntoChunks(text, maxChars, language) {
+        try {
+            const { spawn } = await import('child_process');
+            const { promisify } = await import('util');
+
+            return new Promise((resolve, reject) => {
+                // Call Python text splitter script
+                const pythonProcess = spawn('/app/venv/bin/python', [
+                    '/app/utils/text_splitter.py',
+                    maxChars.toString(),
+                    language
+                ]);
+
+                let stdout = '';
+                let stderr = '';
+
+                pythonProcess.stdout.on('data', (data) => {
+                    stdout += data.toString();
+                });
+
+                pythonProcess.stderr.on('data', (data) => {
+                    stderr += data.toString();
+                });
+
+                pythonProcess.on('close', (code) => {
+                    if (code !== 0) {
+                        console.warn(`⚠️ spaCy text splitter failed, falling back to regex: ${stderr}`);
+                        // Fallback to simple regex-based splitting
+                        resolve(this._fallbackSplitText(text, maxChars));
+                        return;
+                    }
+
+                    try {
+                        const result = JSON.parse(stdout);
+                        if (result.success) {
+                            console.log(`✅ spaCy split text into ${result.chunk_count} chunks`);
+                            resolve(result.chunks);
+                        } else {
+                            console.warn(`⚠️ spaCy error: ${result.error}, falling back to regex`);
+                            resolve(this._fallbackSplitText(text, maxChars));
+                        }
+                    } catch (e) {
+                        console.warn(`⚠️ Failed to parse spaCy output, falling back to regex: ${e.message}`);
+                        resolve(this._fallbackSplitText(text, maxChars));
+                    }
+                });
+
+                // Write text to stdin
+                pythonProcess.stdin.write(text);
+                pythonProcess.stdin.end();
+            });
+        } catch (error) {
+            console.warn(`⚠️ Failed to use spaCy, falling back to regex: ${error.message}`);
+            return this._fallbackSplitText(text, maxChars);
+        }
+    }
+
+    /**
+     * Fallback text splitting using regex (when spaCy is not available)
+     * @private
+     */
+    _fallbackSplitText(text, maxChars) {
+        const chunks = [];
+
+        // Split by sentence endings (., !, ?, ।, ।।)
+        const sentences = text.match(/[^.!?।]+[.!?।]+|[^.!?।]+$/g) || [text];
+
+        let currentChunk = '';
+
+        for (const sentence of sentences) {
+            const trimmedSentence = sentence.trim();
+
+            // If adding this sentence would exceed limit, save current chunk and start new one
+            if (currentChunk && (currentChunk.length + trimmedSentence.length + 1) > maxChars) {
+                chunks.push(currentChunk.trim());
+                currentChunk = trimmedSentence;
+            } else {
+                currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
+            }
+        }
+
+        // Add the last chunk
+        if (currentChunk) {
+            chunks.push(currentChunk.trim());
+        }
+
+        return chunks;
+    }
+
+    /**
+     * Generate audio for a single chunk
+     * @private
+     */
+    async _generateChunk(text, speaker, language) {
+        const formData = new FormData();
+        formData.append('text', text);
+        formData.append('speaker_id', speaker);
+        formData.append('language_id', language);
+
+        const response = await axios.post(
+            `${this.coquiServerUrl}/api/tts`,
+            formData,
+            {
+                headers: formData.getHeaders(),
+                responseType: 'arraybuffer',
+                timeout: 120000 // 2 minutes timeout
+            }
+        );
+
+        return response.data;
+    }
+
+    /**
+     * Merge multiple audio buffers into one
+     * @private
+     */
+    async _mergeAudioBuffers(buffers) {
+        // Simple concatenation for WAV files
+        // Note: This assumes all chunks have the same format (sample rate, channels, etc.)
+
+        if (buffers.length === 1) {
+            return buffers[0];
+        }
+
+        // For WAV files, we need to:
+        // 1. Extract the header from the first file
+        // 2. Concatenate all audio data
+        // 3. Update the file size in the header
+
+        const firstBuffer = buffers[0];
+        const header = firstBuffer.slice(0, 44); // WAV header is 44 bytes
+
+        // Extract audio data from all buffers
+        const audioDataChunks = buffers.map(buffer => buffer.slice(44));
+
+        // Calculate total audio data size
+        const totalAudioSize = audioDataChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+
+        // Create merged buffer
+        const mergedBuffer = Buffer.alloc(44 + totalAudioSize);
+
+        // Copy header
+        header.copy(mergedBuffer, 0);
+
+        // Update file size in header (bytes 4-7)
+        const fileSize = 36 + totalAudioSize;
+        mergedBuffer.writeUInt32LE(fileSize, 4);
+
+        // Update data chunk size (bytes 40-43)
+        mergedBuffer.writeUInt32LE(totalAudioSize, 40);
+
+        // Copy all audio data
+        let offset = 44;
+        for (const audioData of audioDataChunks) {
+            audioData.copy(mergedBuffer, offset);
+            offset += audioData.length;
+        }
+
+        return mergedBuffer;
     }
 }
 
