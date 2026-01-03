@@ -18,7 +18,7 @@ import spacy
 # Language code to spaCy model mapping
 LANGUAGE_MODELS = {
     'en': 'en_core_web_sm',      # English: Best for English sentence detection
-    'hi': 'hi_core_news_sm',     # Hindi: Trained on Devanagari script
+    'hi': 'xx_sent_ud_sm',       # Hindi: Multi-language model with statistical sentence boundary detection
 }
 
 # Language-specific delimiters for natural pause detection

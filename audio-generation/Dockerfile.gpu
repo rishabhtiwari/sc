@@ -57,9 +57,9 @@ RUN /app/venv/bin/pip install --no-cache-dir \
 
 # Download spaCy language models
 # - en_core_web_sm: English model for accurate sentence detection
-# - hi_core_news_sm: Hindi model with Devanagari punctuation support (।, ॥)
+# - xx_sent_ud_sm: Multi-language model for Hindi and other languages (statistical sentence boundary detection)
 RUN /app/venv/bin/python -m spacy download en_core_web_sm && \
-    /app/venv/bin/python -m spacy download hi_core_news_sm
+    /app/venv/bin/python -m spacy download xx_sent_ud_sm
 
 # Create data directory for model caching
 RUN mkdir -p /app/data/models /app/public && \
