@@ -309,11 +309,11 @@ services:
     networks:
       - ichat-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
 
   # Audio Generation Factory with GPU support
