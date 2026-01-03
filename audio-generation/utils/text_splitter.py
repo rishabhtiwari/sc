@@ -43,6 +43,45 @@ def get_spacy_model(language_code):
             _model_cache[language_code] = spacy.load('xx_sent_ud_sm')
     return _model_cache[language_code]
 
+def split_long_sentence(sentence, max_chars):
+    """
+    Split a long sentence into smaller parts at natural break points (commas, conjunctions)
+    """
+    import sys
+
+    if len(sentence) <= max_chars:
+        return [sentence]
+
+    print(f"   ⚠️  Sentence too long ({len(sentence)} chars), splitting further...", file=sys.stderr)
+
+    # Try to split at commas, semicolons, or conjunctions
+    parts = []
+
+    # Split by common delimiters (comma, semicolon, etc.)
+    # For Hindi: also split at ',' and other punctuation
+    delimiters = [', ', '। ', '| ', '; ', ' और ', ' या ', ' तथा ', ' एवं ', ' but ', ' and ', ' or ']
+
+    current_part = ''
+    words = sentence.split()
+
+    for word in words:
+        potential_len = len(current_part) + len(word) + (1 if current_part else 0)
+
+        if potential_len > max_chars and current_part:
+            # Save current part and start new one
+            parts.append(current_part.strip())
+            print(f"      ✂️  Sub-part: {len(current_part)} chars", file=sys.stderr)
+            current_part = word
+        else:
+            current_part += (' ' if current_part else '') + word
+
+    # Add the last part
+    if current_part:
+        parts.append(current_part.strip())
+        print(f"      ✂️  Sub-part: {len(current_part)} chars", file=sys.stderr)
+
+    return parts
+
 def split_text_into_chunks(text, max_chars, language_code='en'):
     """
     Split text into chunks at natural sentence boundaries
@@ -75,9 +114,30 @@ def split_text_into_chunks(text, max_chars, language_code='en'):
 
     for i, sentence in enumerate(sentences, 1):
         sentence_len = len(sentence)
-        potential_len = len(current_chunk) + sentence_len + (1 if current_chunk else 0)
 
         print(f"   Sentence {i}/{len(sentences)}: {sentence_len} chars", file=sys.stderr)
+
+        # If sentence itself is too long, split it further
+        if sentence_len > max_chars:
+            # Save current chunk if it has content
+            if current_chunk:
+                chunk_num += 1
+                chunks.append(current_chunk.strip())
+                print(f"   ✅ Chunk {chunk_num} complete: {len(current_chunk)} chars", file=sys.stderr)
+                current_chunk = ''
+
+            # Split the long sentence into parts
+            sentence_parts = split_long_sentence(sentence, max_chars)
+
+            # Add each part as a separate chunk
+            for part in sentence_parts:
+                chunk_num += 1
+                chunks.append(part.strip())
+                print(f"   ✅ Chunk {chunk_num} complete: {len(part)} chars (from split sentence)", file=sys.stderr)
+
+            continue
+
+        potential_len = len(current_chunk) + sentence_len + (1 if current_chunk else 0)
 
         # If adding this sentence would exceed limit, save current chunk and start new one
         if current_chunk and potential_len > max_chars:

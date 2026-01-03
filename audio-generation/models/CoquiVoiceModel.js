@@ -377,6 +377,40 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
+     * Split a long sentence into smaller parts at word boundaries
+     * @private
+     */
+    _splitLongSentence(sentence, maxChars) {
+        if (sentence.length <= maxChars) {
+            return [sentence];
+        }
+
+        console.log(`   ⚠️  Sentence too long (${sentence.length} chars), splitting further...`);
+        const parts = [];
+        const words = sentence.split(' ');
+        let currentPart = '';
+
+        for (const word of words) {
+            const potentialLen = currentPart.length + word.length + (currentPart ? 1 : 0);
+
+            if (potentialLen > maxChars && currentPart) {
+                parts.push(currentPart.trim());
+                console.log(`      ✂️  Sub-part: ${currentPart.length} chars`);
+                currentPart = word;
+            } else {
+                currentPart += (currentPart ? ' ' : '') + word;
+            }
+        }
+
+        if (currentPart) {
+            parts.push(currentPart.trim());
+            console.log(`      ✂️  Sub-part: ${currentPart.length} chars`);
+        }
+
+        return parts;
+    }
+
+    /**
      * Fallback text splitting using regex (when spaCy is not available)
      * @private
      */
@@ -394,9 +428,33 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         for (let i = 0; i < sentences.length; i++) {
             const trimmedSentence = sentences[i].trim();
             const sentenceLen = trimmedSentence.length;
-            const potentialLen = currentChunk.length + sentenceLen + (currentChunk ? 1 : 0);
 
             console.log(`   Sentence ${i + 1}/${sentences.length}: ${sentenceLen} chars`);
+
+            // If sentence itself is too long, split it further
+            if (sentenceLen > maxChars) {
+                // Save current chunk if it has content
+                if (currentChunk) {
+                    chunkNum++;
+                    chunks.push(currentChunk.trim());
+                    console.log(`   ✅ Chunk ${chunkNum} complete: ${currentChunk.length} chars`);
+                    currentChunk = '';
+                }
+
+                // Split the long sentence into parts
+                const sentenceParts = this._splitLongSentence(trimmedSentence, maxChars);
+
+                // Add each part as a separate chunk
+                for (const part of sentenceParts) {
+                    chunkNum++;
+                    chunks.push(part.trim());
+                    console.log(`   ✅ Chunk ${chunkNum} complete: ${part.length} chars (from split sentence)`);
+                }
+
+                continue;
+            }
+
+            const potentialLen = currentChunk.length + sentenceLen + (currentChunk ? 1 : 0);
 
             // If adding this sentence would exceed limit, save current chunk and start new one
             if (currentChunk && potentialLen > maxChars) {
