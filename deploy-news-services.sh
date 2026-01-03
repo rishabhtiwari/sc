@@ -63,6 +63,7 @@ SERVICES=(
     "asset-service"
     "job-news-fetcher"
     "llm-service"
+    "coqui-tts"
     "audio-generation-factory"
     "job-voice-generator"
     "iopaint"
@@ -77,6 +78,7 @@ SERVICES=(
 # GPU-capable services
 GPU_SERVICES=(
     "llm-service"
+    "coqui-tts"
     "audio-generation-factory"
     "iopaint"
 )
