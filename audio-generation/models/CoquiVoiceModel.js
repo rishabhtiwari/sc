@@ -156,9 +156,14 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                     audioBuffers.push(chunkAudio);
                 }
 
-                // Merge audio chunks with 100ms silence between them
-                console.log(`🔗 Merging ${audioBuffers.length} audio chunks...`);
-                audioData = await this._mergeAudioChunks(audioBuffers);
+                // Merge audio chunks with enhanced cleaning for natural-sounding speech
+                console.log(`🔗 Merging ${audioBuffers.length} audio chunks with professional cleaning...`);
+                audioData = await this._mergeAudioChunks(audioBuffers, {
+                    silenceMs: 200,      // Natural breathing pause
+                    crossfadeMs: 50,     // Smooth transitions
+                    normalize: true,     // Consistent volume
+                    denoise: false       // Set to true if background noise is present
+                });
             } else {
                 console.log(`📝 Text length: ${text.length} chars (within limit, no chunking needed)`);
                 audioData = await this._generateSingleChunk(text, speaker, language);
@@ -387,11 +392,25 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
-     * Merge audio chunks using Python pydub
+     * Merge audio chunks using Python pydub with advanced cleaning
      * @private
+     * @param {Array} audioBuffers - Array of audio buffers to merge
+     * @param {Object} options - Merge options
+     * @param {number} options.silenceMs - Silence between chunks (default: 200ms for natural breathing)
+     * @param {number} options.crossfadeMs - Crossfade duration (default: 50ms for smooth transitions)
+     * @param {boolean} options.normalize - Enable volume normalization (default: true)
+     * @param {boolean} options.denoise - Enable noise reduction (default: false)
      */
-    async _mergeAudioChunks(audioBuffers, silenceMs = 100) {
+    async _mergeAudioChunks(audioBuffers, options = {}) {
         const { spawn } = await import('child_process');
+
+        // Default options for clean, natural-sounding audio
+        const {
+            silenceMs = 200,      // Natural breathing pause between sentences
+            crossfadeMs = 50,     // Smooth transitions to prevent clicks
+            normalize = true,     // Consistent volume across chunks
+            denoise = false       // Optional noise reduction (requires noisereduce library)
+        } = options;
 
         return new Promise(async (resolve, reject) => {
             // Save chunks to temporary files
@@ -404,9 +423,13 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 tempFiles.push(tempFile);
             }
 
+            // Use the new audio_cleaner.py with enhanced cleaning capabilities
             const pythonProcess = spawn('/app/venv/bin/python', [
-                '/app/utils/audio_merger.py',
-                silenceMs.toString()
+                '/app/utils/audio_cleaner.py',
+                silenceMs.toString(),
+                crossfadeMs.toString(),
+                normalize.toString(),
+                denoise.toString()
             ]);
 
             let stdout = Buffer.alloc(0);
@@ -418,6 +441,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
             pythonProcess.stderr.on('data', (data) => {
                 stderr += data.toString();
+                // Log cleaning progress
+                console.log(`🎵 Audio Cleaner: ${data.toString().trim()}`);
             });
 
             pythonProcess.on('close', (code) => {
@@ -427,7 +452,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 });
 
                 if (code !== 0) {
-                    reject(new Error(`Audio merger failed: ${stderr}`));
+                    reject(new Error(`Audio cleaner failed: ${stderr}`));
                     return;
                 }
 
