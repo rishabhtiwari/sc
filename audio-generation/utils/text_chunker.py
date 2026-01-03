@@ -34,6 +34,8 @@ LANGUAGE_DELIMITERS = {
         " और ",    # "and" in Hindi
         " लेकिन ", # "but" in Hindi
         " परंतु ",  # "but" (formal)
+        " तो ",     # "then/so" in Hindi
+        " या ",     # "or" in Hindi
     ],
     'en': [
         ",",        # Comma (most common clause separator)
@@ -48,6 +50,49 @@ LANGUAGE_DELIMITERS = {
         " though ", # Subordinating conjunction
     ],
 }
+
+# Text preprocessing rules for better TTS quality
+# XTTS v2 struggles with certain punctuation, so we normalize them BEFORE chunking
+def clean_text_for_tts(text, language_code='en'):
+    """
+    Clean problematic punctuation that causes XTTS v2 to generate poor audio
+
+    This is applied BEFORE chunking to ensure the model gets clean input.
+
+    Args:
+        text: Input text
+        language_code: Language code ('en', 'hi', etc.)
+
+    Returns:
+        Cleaned text optimized for XTTS v2
+    """
+    if language_code == 'hi':
+        # XTTS v2 struggles with '!', so we replace it with Purna Viram (।)
+        # This maintains the sentence boundary without the prosody glitch
+        text = text.replace("!!", "।")  # Replace !! first
+        text = text.replace("!", "।")   # Then replace single !
+
+        # Remove other problematic characters that cause hallucinations
+        text = text.replace("...", "।")
+        text = text.replace("…", "।")  # Ellipsis character
+
+        # Normalize spacing around Hindi punctuation
+        import re
+        text = re.sub(r'\s+([।॥,;])', r'\1', text)  # Remove space before punctuation
+        text = re.sub(r'([।॥,;])([^\s])', r'\1 \2', text)  # Add space after punctuation
+
+    elif language_code == 'en':
+        # For English, keep exclamations but normalize multiples
+        import re
+        text = re.sub(r'!{2,}', '!', text)  # !! → !
+        text = re.sub(r'\?{2,}', '?', text)  # ?? → ?
+        text = re.sub(r'\.{3,}', '.', text)  # ... → .
+
+        # Normalize spacing
+        text = re.sub(r'\s+([,.;!?])', r'\1', text)  # Remove space before punctuation
+        text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)  # Add space after punctuation
+
+    return text
 
 # Cache loaded models to avoid reloading
 _model_cache = {}
@@ -166,14 +211,15 @@ def chunk_text(text, max_chars, language_code='en'):
     Split text into chunks at natural sentence boundaries with linguistic awareness
 
     This function:
-    1. Uses language-specific spaCy models for accurate sentence detection
-    2. Splits long sentences at natural pauses (commas, Hindi punctuation, etc.)
-    3. Groups sentences into chunks without exceeding max_chars
-    4. Strips whitespace to prevent empty audio segments
+    1. Preprocesses text for better TTS quality
+    2. Uses language-specific spaCy models for accurate sentence detection
+    3. Splits long sentences at natural pauses (commas, Hindi punctuation, etc.)
+    4. Groups sentences into chunks without exceeding max_chars
+    5. Strips whitespace to prevent empty audio segments
 
     Args:
         text: Text to split
-        max_chars: Maximum characters per chunk (default: 175)
+        max_chars: Maximum characters per chunk (default: 150)
         language_code: Language code ('en' or 'hi')
 
     Returns:
@@ -313,7 +359,17 @@ def chunk_text(text, max_chars, language_code='en'):
         status = "✓" if len(chunk) >= MIN_CHUNK_SIZE else "⚠️ "
         print(f"  {status} Chunk {i+1}: {len(chunk)} chars", file=sys.stderr)
 
-    return final_chunks
+    # Clean each chunk for TTS AFTER chunking is complete
+    # This replaces problematic punctuation that XTTS v2 struggles with
+    print(f"\n🔧 Cleaning chunks for TTS model...", file=sys.stderr)
+    cleaned_chunks = []
+    for i, chunk in enumerate(final_chunks):
+        cleaned = clean_text_for_tts(chunk, language_code)
+        if cleaned != chunk:
+            print(f"  ✓ Chunk {i+1}: Cleaned (replaced problematic punctuation)", file=sys.stderr)
+        cleaned_chunks.append(cleaned)
+
+    return cleaned_chunks
 
 def main():
     """Main function for CLI usage"""
