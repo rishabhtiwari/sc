@@ -28,17 +28,36 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         }
 
         console.log(`🎤 Initializing Coqui TTS model: ${this.modelId}`);
-        
-        try {
-            // Check if Coqui TTS server is running
-            const response = await axios.get(`${this.coquiServerUrl}/`);
-            if (response.status === 200) {
-                console.log(`✅ Coqui TTS server is running at ${this.coquiServerUrl}`);
-                this.initialized = true;
+        console.log(`📡 Coqui TTS server URL: ${this.coquiServerUrl}`);
+
+        // Retry logic for server availability (server might be starting up)
+        const maxRetries = 10;
+        const retryDelay = 3000; // 3 seconds
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🔍 Checking Coqui TTS server availability (attempt ${attempt}/${maxRetries})...`);
+                const response = await axios.get(`${this.coquiServerUrl}/`, {
+                    timeout: 5000,
+                    headers: { 'Connection': 'close' }
+                });
+
+                if (response.status === 200) {
+                    console.log(`✅ Coqui TTS server is running at ${this.coquiServerUrl}`);
+                    this.initialized = true;
+                    return;
+                }
+            } catch (error) {
+                console.warn(`⚠️ Attempt ${attempt}/${maxRetries} failed: ${error.message}`);
+
+                if (attempt < maxRetries) {
+                    console.log(`⏳ Waiting ${retryDelay/1000}s before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                } else {
+                    console.error(`❌ Failed to connect to Coqui TTS server after ${maxRetries} attempts`);
+                    throw new Error(`Coqui TTS server not available at ${this.coquiServerUrl}. Please ensure the Coqui TTS container is running.`);
+                }
             }
-        } catch (error) {
-            console.error(`❌ Failed to connect to Coqui TTS server at ${this.coquiServerUrl}:`, error.message);
-            throw new Error(`Coqui TTS server not available at ${this.coquiServerUrl}`);
         }
     }
 

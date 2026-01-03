@@ -327,7 +327,8 @@ services:
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
       - COQUI_TTS_URL=http://coqui-tts:5002
     depends_on:
-      - coqui-tts
+      coqui-tts:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
