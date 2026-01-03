@@ -134,8 +134,9 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         const startTime = Date.now();
 
         try {
-            // Character limit per chunk (conservative to avoid truncation)
-            const CHAR_LIMIT = 175;
+            // Character limit per chunk (150 chars with smart merging for chunks < 100 chars)
+            // Small chunks will be merged with previous chunks up to 250 chars max
+            const CHAR_LIMIT = 150;
 
             let audioData;
 
