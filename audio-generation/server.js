@@ -533,10 +533,26 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Default Model: Bark (bark-en)`);
-        console.log(`🎭 Bark Features: Voice cloning, emotions, music, 13+ languages`);
-        console.log(`📝 Emotion tags: [laughs], [sighs], [gasps], [clears throat]`);
-        console.log(`🎵 Music: Wrap lyrics in ♪ symbols`);
+
+        // Show default model info
+        const loadedModels = voiceService.getLoadedModels();
+        const defaultModel = loadedModels.default_model;
+
+        if (defaultModel && defaultModel.startsWith('coqui')) {
+            console.log(`🌍 Default Model: Coqui TTS XTTS v2 (${defaultModel})`);
+            console.log(`🎭 Coqui Features: 58 speakers, 16+ languages, voice cloning, fast generation`);
+            console.log(`🌐 Supported languages: en, hi, es, fr, de, it, pt, pl, tr, ru, nl, cs, ar, zh, ja, ko, hu`);
+        } else if (defaultModel && defaultModel.startsWith('bark')) {
+            console.log(`🌍 Default Model: Bark (${defaultModel})`);
+            console.log(`🎭 Bark Features: Voice cloning, emotions, music, 13+ languages`);
+            console.log(`📝 Emotion tags: [laughs], [sighs], [gasps], [clears throat]`);
+            console.log(`🎵 Music: Wrap lyrics in ♪ symbols`);
+        } else if (defaultModel && defaultModel.startsWith('kokoro')) {
+            console.log(`🌍 Default Model: Kokoro (${defaultModel})`);
+            console.log(`🎭 Kokoro Features: Fast CPU inference, natural English voices`);
+        } else {
+            console.log(`🌍 Default Model: ${defaultModel || 'None'}`);
+        }
     });
 }
 
