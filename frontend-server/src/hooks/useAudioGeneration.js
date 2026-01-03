@@ -142,9 +142,10 @@ export const useAudioGeneration = () => {
    * @param {string} options.text - Text to convert to speech
    * @param {string} options.model - TTS model
    * @param {string} options.voice - Voice ID
+   * @param {string} options.language - Language code (optional)
    * @param {number} options.speed - Speech speed
    */
-  const generateAudio = useCallback(async ({ text, model, voice, speed = 1.0 }) => {
+  const generateAudio = useCallback(async ({ text, model, voice, language, speed = 1.0 }) => {
     setGenerating(true);
     setError(null);
 
@@ -154,6 +155,7 @@ export const useAudioGeneration = () => {
         text,
         model,
         voice,
+        language,
         speed,
         format: 'wav'
       });
