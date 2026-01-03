@@ -55,9 +55,9 @@ LANGUAGE_DELIMITERS = {
 # XTTS v2 struggles with certain punctuation, so we normalize them BEFORE chunking
 def clean_text_for_tts(text, language_code='en'):
     """
-    Clean problematic punctuation that causes XTTS v2 to generate poor audio
+    Clean problematic punctuation and characters that cause XTTS v2 to generate poor audio
 
-    This is applied BEFORE chunking to ensure the model gets clean input.
+    This is applied AFTER chunking, before sending each chunk to TTS.
 
     Args:
         text: Input text
@@ -66,24 +66,56 @@ def clean_text_for_tts(text, language_code='en'):
     Returns:
         Cleaned text optimized for XTTS v2
     """
+    import re
+
     if language_code == 'hi':
-        # XTTS v2 struggles with '!', so we replace it with Purna Viram (।)
+        # Remove invisible Unicode characters that break TTS
+        text = text.replace('\u200d', '')  # Zero-width joiner
+        text = text.replace('\u200c', '')  # Zero-width non-joiner
+        text = text.replace('\u200b', '')  # Zero-width space
+        text = text.replace('\ufeff', '')  # Zero-width no-break space (BOM)
+
+        # XTTS v2 struggles with '!' and '?', so we replace them with Purna Viram (।)
         # This maintains the sentence boundary without the prosody glitch
         text = text.replace("!!", "।")  # Replace !! first
         text = text.replace("!", "।")   # Then replace single !
+        text = text.replace("??", "।")  # Replace ?? first
+        text = text.replace("?", "।")   # Then replace single ?
 
         # Remove other problematic characters that cause hallucinations
         text = text.replace("...", "।")
         text = text.replace("…", "।")  # Ellipsis character
 
+        # Remove or normalize quotation marks (can cause issues)
+        text = text.replace('"', '')  # Remove double quotes
+        text = text.replace('"', '')  # Remove smart quotes
+        text = text.replace('"', '')  # Remove smart quotes
+        text = text.replace("'", '')  # Remove single quotes
+        text = text.replace("'", '')  # Remove smart quotes
+        text = text.replace("'", '')  # Remove smart quotes
+
+        # Normalize dashes and hyphens
+        text = text.replace('—', '-')  # Em dash to hyphen
+        text = text.replace('–', '-')  # En dash to hyphen
+
         # Normalize spacing around Hindi punctuation
-        import re
         text = re.sub(r'\s+([।॥,;])', r'\1', text)  # Remove space before punctuation
         text = re.sub(r'([।॥,;])([^\s])', r'\1 \2', text)  # Add space after punctuation
 
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+
+        # Clean up any trailing/leading whitespace
+        text = text.strip()
+
     elif language_code == 'en':
+        # Remove invisible Unicode characters
+        text = text.replace('\u200d', '')
+        text = text.replace('\u200c', '')
+        text = text.replace('\u200b', '')
+        text = text.replace('\ufeff', '')
+
         # For English, keep exclamations but normalize multiples
-        import re
         text = re.sub(r'!{2,}', '!', text)  # !! → !
         text = re.sub(r'\?{2,}', '?', text)  # ?? → ?
         text = re.sub(r'\.{3,}', '.', text)  # ... → .
@@ -91,6 +123,12 @@ def clean_text_for_tts(text, language_code='en'):
         # Normalize spacing
         text = re.sub(r'\s+([,.;!?])', r'\1', text)  # Remove space before punctuation
         text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)  # Add space after punctuation
+
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+
+        # Clean up any trailing/leading whitespace
+        text = text.strip()
 
     return text
 
