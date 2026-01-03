@@ -358,6 +358,7 @@ def generate_audio():
                 'text': data.get('text'),
                 'model': data.get('model'),  # Let service use default if not provided
                 'voice': data.get('voice'),  # Let service use default if not provided
+                'language': data.get('language'),  # Language code for multi-lingual models
                 'speed': data.get('speed', 1.0),
                 'format': data.get('format', 'wav')
             },
@@ -403,6 +404,7 @@ def preview_audio():
                 'text': text,
                 'model': model,
                 'voice': voice,
+                'language': language,  # Forward language parameter for multi-lingual models
                 'filename': f'preview_{voice or "default"}_{language}.wav'
             },
             timeout=600  # 10 minutes for model initialization on first run
