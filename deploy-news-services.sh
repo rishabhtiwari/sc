@@ -299,8 +299,6 @@ services:
       - "1"
       - --port
       - "5002"
-      - --host
-      - 0.0.0.0
     deploy:
       resources:
         reservations:
