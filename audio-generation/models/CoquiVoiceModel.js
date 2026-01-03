@@ -98,6 +98,13 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             language = languageNameToCode[language];
         }
 
+        // Ensure language is a valid code (not a full name)
+        const validLanguageCodes = ['en', 'hi', 'es', 'fr', 'de', 'it', 'pt', 'pl', 'tr', 'ru', 'nl', 'cs', 'ar', 'zh-cn', 'ja', 'ko', 'hu'];
+        if (!validLanguageCodes.includes(language)) {
+            console.warn(`⚠️ Invalid language "${language}", defaulting to "en"`);
+            language = 'en';
+        }
+
         const filename = options.filename || `coqui_${Date.now()}.wav`;
 
         // Determine output directory based on options

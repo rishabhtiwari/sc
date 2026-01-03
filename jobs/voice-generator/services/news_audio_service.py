@@ -157,8 +157,8 @@ class NewsAudioService:
 
                 self.logger.info(f"🔊 Generating {field_name} audio for article {article_id}")
 
-                # Generate audio via audio-generation service with voice
-                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use)
+                # Generate audio via audio-generation service with voice and language
+                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use, language)
 
                 if audio_result['success']:
                     # Move generated file to our structure
@@ -333,20 +333,20 @@ class NewsAudioService:
                 self.logger.info(f"🎛️  Audio config received - GPU enabled: {gpu_enabled}")
                 self.logger.info(f"🎛️  Available models: {list(available_models.keys())}")
 
-                # Select model based on language and GPU availability
-                if lang_code == 'hi':
-                    # Hindi: coqui-hi (GPU) or mms-tts-hin (CPU)
-                    if gpu_enabled and 'coqui-hi' in available_models:
-                        self.logger.info(f"✅ Using GPU model for Hindi: coqui-hi")
-                        return 'coqui-hi'
-                    else:
+                # Select model based on GPU availability
+                # Coqui XTTS v2 is a universal model that supports all languages
+                if gpu_enabled and 'coqui-xtts' in available_models:
+                    self.logger.info(f"✅ Using GPU model (universal): coqui-xtts for language: {lang_code}")
+                    return 'coqui-xtts'
+                elif gpu_enabled and 'coqui-en' in available_models:
+                    # Fallback to legacy coqui-en (also universal)
+                    self.logger.info(f"✅ Using GPU model (legacy): coqui-en for language: {lang_code}")
+                    return 'coqui-en'
+                else:
+                    # CPU models are language-specific
+                    if lang_code == 'hi':
                         self.logger.info(f"✅ Using CPU model for Hindi: mms-tts-hin")
                         return 'mms-tts-hin'
-                else:
-                    # English: coqui-en (GPU) or kokoro-82m (CPU)
-                    if gpu_enabled and 'coqui-en' in available_models:
-                        self.logger.info(f"✅ Using GPU model for English: coqui-en")
-                        return 'coqui-en'
                     else:
                         self.logger.info(f"✅ Using CPU model for English: kokoro-82m")
                         return 'kokoro-82m'
@@ -360,16 +360,21 @@ class NewsAudioService:
         use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
         self.logger.info(f"🔧 Fallback: USE_GPU={use_gpu}")
 
-        if lang_code == 'hi':
-            # Hindi: coqui-hi (GPU) or mms-tts-hin (CPU)
-            fallback_model = 'coqui-hi' if use_gpu else 'mms-tts-hin'
-            self.logger.info(f"🔧 Fallback Hindi model: {fallback_model}")
+        if use_gpu:
+            # GPU: Universal Coqui XTTS v2 model (supports all languages)
+            fallback_model = 'coqui-xtts'
+            self.logger.info(f"🔧 Fallback GPU model (universal): {fallback_model} for language: {lang_code}")
             return fallback_model
         else:
-            # English: coqui-en (GPU) or kokoro-82m (CPU)
-            fallback_model = 'coqui-en' if use_gpu else 'kokoro-82m'
-            self.logger.info(f"🔧 Fallback English model: {fallback_model}")
-            return fallback_model
+            # CPU: Language-specific models
+            if lang_code == 'hi':
+                fallback_model = 'mms-tts-hin'
+                self.logger.info(f"🔧 Fallback CPU model for Hindi: {fallback_model}")
+                return fallback_model
+            else:
+                fallback_model = 'kokoro-82m'
+                self.logger.info(f"🔧 Fallback CPU model for English: {fallback_model}")
+                return fallback_model
 
     def _get_voice_config(self, customer_id: str = None) -> Dict[str, Any]:
         """
@@ -406,14 +411,19 @@ class NewsAudioService:
                 use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
 
                 # Select models based on GPU availability
-                en_model = 'coqui-en' if use_gpu else 'kokoro-82m'
-                hi_model = 'coqui-hi' if use_gpu else 'mms-tts-hin'
-
-                # Get device-aware voice configs
-                en_voices = self._get_default_voices_for_model(en_model, 'en')
-                hi_voices = self._get_default_voices_for_model(hi_model, 'hi')
-
-                self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}, USE_GPU={use_gpu}")
+                if use_gpu:
+                    # GPU: Universal Coqui XTTS v2 model (supports all languages)
+                    universal_model = 'coqui-xtts'
+                    en_voices = self._get_default_voices_for_model(universal_model, 'en')
+                    hi_voices = self._get_default_voices_for_model(universal_model, 'hi')
+                    self.logger.info(f"🎭 Device-aware defaults: Universal Model={universal_model}, USE_GPU={use_gpu}")
+                else:
+                    # CPU: Language-specific models
+                    en_model = 'kokoro-82m'
+                    hi_model = 'mms-tts-hin'
+                    en_voices = self._get_default_voices_for_model(en_model, 'en')
+                    hi_voices = self._get_default_voices_for_model(hi_model, 'hi')
+                    self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}, USE_GPU={use_gpu}")
 
                 return {
                     'language': 'en',
@@ -648,7 +658,7 @@ class NewsAudioService:
             self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default")
             return lang_voice_config.get('defaultVoice', 'am_adam')
 
-    def _call_audio_generation_service(self, text: str, model: str, voice: str = None) -> Dict[str, Any]:
+    def _call_audio_generation_service(self, text: str, model: str, voice: str = None, language: str = 'en') -> Dict[str, Any]:
         """
         Call the audio-generation service to generate TTS
 
@@ -656,6 +666,7 @@ class NewsAudioService:
             text: Text to convert to speech
             model: TTS model to use
             voice: Voice to use for generation (optional)
+            language: Language code for generation (e.g., 'en', 'hi', 'es') - used by universal models like Coqui XTTS
 
         Returns:
             Dictionary with generation results
@@ -666,11 +677,12 @@ class NewsAudioService:
                 'text': text,
                 'model': model,
                 'format': 'wav',
-                'voice': voice or self.config.DEFAULT_MALE_VOICE  # Use provided voice or default
+                'voice': voice or self.config.DEFAULT_MALE_VOICE,  # Use provided voice or default
+                'language': language  # Add language parameter for universal models
             }
 
             self.logger.info(f"🔊 Calling audio generation service: {url}")
-            self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}")
+            self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}, Language: {language}")
             self.logger.info(f"📦 Payload: {payload}")
 
             # Use extended timeout for CPU-based models (10 minutes) as they take longer to generate

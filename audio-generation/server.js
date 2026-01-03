@@ -65,14 +65,15 @@ async function initializeModels() {
         if (useGPU) {
             console.log('🎮 GPU detected - Loading Coqui TTS XTTS v2 (GPU-accelerated)');
 
-            // Load Coqui TTS as the default model (supports all languages via language parameter)
-            await voiceService.loadModel('coqui-en', true);
+            // Load Coqui TTS as the default model (single universal model supports all 17 languages)
+            await voiceService.loadModel('coqui-xtts', true);
             console.log('✅ Coqui TTS XTTS v2 loaded successfully (default)!');
 
             console.log('🎉 Coqui TTS XTTS v2 initialized successfully with GPU acceleration!');
-            console.log('🎭 Features: 58 speakers, 17 languages, voice cloning, fast generation');
+            console.log('🎭 Features: 58 universal speakers, 17 languages, voice cloning, fast generation');
             console.log('🌐 Supported languages: English, Hindi, Spanish, French, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese, Korean, Hungarian');
             console.log('📊 Available speakers: Claribel Dervla, Damien Black, and 56 more');
+            console.log('💡 All speakers can speak all languages - just specify language code in request (en, hi, es, fr, etc.)');
         } else {
             console.log('💻 CPU mode - Loading Kokoro-82M model (optimized for CPU)');
 

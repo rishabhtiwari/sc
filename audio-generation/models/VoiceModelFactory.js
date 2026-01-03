@@ -212,14 +212,26 @@ export class VoiceModelFactory {
             }
         },
 
-        // Coqui TTS XTTS v2 Models (Multi-lingual with 58 speakers, voice cloning)
+        // Coqui TTS XTTS v2 - Universal Multi-lingual Model (58 speakers, 17 languages, voice cloning)
+        'coqui-xtts': {
+            modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
+            type: 'Coqui',
+            language: 'Multi-lingual',
+            baseModel: 'coqui/XTTS-v2',
+            config: {
+                speaker: 'Claribel Dervla', // Default speaker (can speak all languages)
+                language: 'en' // Default language (can be overridden per request)
+            }
+        },
+
+        // Legacy language-specific aliases (all use the same universal XTTS v2 model)
         'coqui-en': {
             modelId: 'tts_models/multilingual/multi-dataset/xtts_v2',
             type: 'Coqui',
             language: 'English',
             baseModel: 'coqui/XTTS-v2',
             config: {
-                speaker: 'Claribel Dervla', // Default female speaker
+                speaker: 'Claribel Dervla',
                 language: 'en'
             }
         },
@@ -229,7 +241,7 @@ export class VoiceModelFactory {
             language: 'Hindi',
             baseModel: 'coqui/XTTS-v2',
             config: {
-                speaker: 'Damien Black', // Default male speaker
+                speaker: 'Damien Black',
                 language: 'hi'
             }
         },
