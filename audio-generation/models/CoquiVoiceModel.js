@@ -311,7 +311,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * @private
      */
     async _chunkText(text, maxChars, language) {
-        const { spawn } = require('child_process');
+        const { spawn } = await import('child_process');
 
         return new Promise((resolve, reject) => {
             const pythonProcess = spawn('/app/venv/bin/python', [
@@ -383,9 +383,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * @private
      */
     async _mergeAudioChunks(audioBuffers, silenceMs = 100) {
-        const { spawn } = require('child_process');
-        const path = require('path');
-        const fs = require('fs');
+        const { spawn } = await import('child_process');
 
         return new Promise(async (resolve, reject) => {
             // Save chunks to temporary files
