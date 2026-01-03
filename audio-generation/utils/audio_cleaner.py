@@ -38,7 +38,8 @@ def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable
     print(f"🎵 Merging {len(audio_buffers)} audio chunks with cleaning...", file=sys.stderr)
     print(f"   - Silence between chunks: {silence_ms}ms", file=sys.stderr)
     print(f"   - Crossfade duration: {crossfade_ms}ms", file=sys.stderr)
-    print(f"   - Normalization: {'enabled' ✓' if enable_normalization else 'disabled ✗'}", file=sys.stderr)
+    normalization_status = "enabled ✓" if enable_normalization else "disabled ✗"
+    print(f"   - Normalization: {normalization_status}", file=sys.stderr)
     
     for i, audio_data in enumerate(audio_buffers):
         # Load WAV from bytes
