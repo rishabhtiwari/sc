@@ -17,43 +17,78 @@ from pydub.effects import normalize
 def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable_normalization=True):
     """
     Merge multiple audio buffers with professional cleaning and enhancement
-    
+
     Args:
         audio_buffers: List of audio data (bytes)
         silence_ms: Milliseconds of silence to add between chunks for natural breathing (default: 200ms)
         crossfade_ms: Milliseconds of crossfade for smooth transitions (default: 50ms)
         enable_normalization: Whether to normalize volume (default: True)
-    
+
     Returns:
         Merged and cleaned audio data as bytes
     """
     if not audio_buffers:
         raise ValueError("No audio buffers provided")
-    
+
     final_audio = AudioSegment.empty()
-    
-    # Create silence for natural breathing pauses between sentences
-    silence = AudioSegment.silent(duration=silence_ms)
-    
+    silence = None  # Will be created after we know the sample rate
+
     print(f"🎵 Merging {len(audio_buffers)} audio chunks with cleaning...", file=sys.stderr)
     print(f"   - Silence between chunks: {silence_ms}ms", file=sys.stderr)
     print(f"   - Crossfade duration: {crossfade_ms}ms", file=sys.stderr)
     normalization_status = "enabled ✓" if enable_normalization else "disabled ✗"
     print(f"   - Normalization: {normalization_status}", file=sys.stderr)
-    
+
+    # First pass: detect target audio parameters from first chunk
+    target_sample_rate = None
+    target_channels = None
+    target_sample_width = None
+
     for i, audio_data in enumerate(audio_buffers):
         # Load WAV from bytes
         chunk = AudioSegment.from_wav(io.BytesIO(audio_data))
-        
-        print(f"   📦 Processing chunk {i+1}/{len(audio_buffers)} ({len(chunk)}ms)", file=sys.stderr)
-        
+
+        # Set target parameters from first chunk
+        if target_sample_rate is None:
+            target_sample_rate = chunk.frame_rate
+            target_channels = chunk.channels
+            target_sample_width = chunk.sample_width
+            print(f"   🎚️  Target audio format: {target_sample_rate}Hz, {target_channels} channel(s), {target_sample_width*8}-bit", file=sys.stderr)
+            silence = AudioSegment.silent(duration=silence_ms, frame_rate=target_sample_rate)
+
+        # Normalize chunk to match target parameters
+        needs_conversion = False
+
+        if chunk.frame_rate != target_sample_rate:
+            print(f"   ⚠️  Chunk {i+1}: Resampling {chunk.frame_rate}Hz → {target_sample_rate}Hz", file=sys.stderr)
+            chunk = chunk.set_frame_rate(target_sample_rate)
+            needs_conversion = True
+
+        if chunk.channels != target_channels:
+            print(f"   ⚠️  Chunk {i+1}: Converting {chunk.channels} channel(s) → {target_channels} channel(s)", file=sys.stderr)
+            if target_channels == 1:
+                chunk = chunk.set_channels(1)  # Convert to mono
+            else:
+                chunk = chunk.set_channels(target_channels)
+            needs_conversion = True
+
+        if chunk.sample_width != target_sample_width:
+            print(f"   ⚠️  Chunk {i+1}: Converting {chunk.sample_width*8}-bit → {target_sample_width*8}-bit", file=sys.stderr)
+            chunk = chunk.set_sample_width(target_sample_width)
+            needs_conversion = True
+
+        if needs_conversion:
+            print(f"   ✅ Chunk {i+1}: Normalized to target format", file=sys.stderr)
+
+        print(f"   📦 Processing chunk {i+1}/{len(audio_buffers)} ({len(chunk)}ms, {chunk.frame_rate}Hz)", file=sys.stderr)
+
         # First chunk: just add it
         if len(final_audio) == 0:
             final_audio = chunk
         else:
             # Add silence before the chunk for natural breathing
             chunk_with_silence = silence + chunk
-            
+
             # Append with crossfade to smooth the join and prevent clicks
             # This creates a natural flow like a single breath
             final_audio = final_audio.append(chunk_with_silence, crossfade=crossfade_ms)
