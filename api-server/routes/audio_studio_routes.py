@@ -6,8 +6,7 @@ API Server acts as a proxy with authentication - all business logic in microserv
 import logging
 import requests
 import os
-from io import BytesIO
-from flask import Blueprint, request, jsonify, Response, send_file
+from flask import Blueprint, request, jsonify, Response, make_response
 from middleware.jwt_middleware import extract_user_context_from_headers
 
 # Create blueprint
@@ -64,17 +63,15 @@ def get_preview_audio(audio_id):
                 logger.info(f"MinIO response: {audio_response.status_code}, Content-Type: {audio_response.headers.get('Content-Type')}, Size: {audio_response.headers.get('Content-Length')}")
 
                 if audio_response.status_code == 200:
-                    # Create a BytesIO buffer from the audio content
-                    audio_buffer = BytesIO(audio_response.content)
-                    audio_buffer.seek(0)
+                    # Create response with proper headers
+                    response = make_response(audio_response.content)
+                    response.headers['Content-Type'] = 'audio/wav'
+                    response.headers['Content-Length'] = str(len(audio_response.content))
+                    response.headers['Accept-Ranges'] = 'bytes'
+                    response.headers['Cache-Control'] = 'public, max-age=3600'
 
-                    # Use send_file to properly stream the audio
-                    return send_file(
-                        audio_buffer,
-                        mimetype='audio/wav',
-                        as_attachment=False,
-                        download_name=f'{audio_id}.wav'
-                    )
+                    logger.info(f"Returning audio: {len(audio_response.content)} bytes, Content-Type: audio/wav")
+                    return response
                 else:
                     logger.error(f"MinIO returned {audio_response.status_code}")
                     return jsonify({'error': 'Failed to fetch audio from storage', 'status': 'error'}), 500
