@@ -27,19 +27,90 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
-     * Load speakers metadata from JSON file
+     * Load speakers metadata (gender inference + sample texts)
      * @private
      */
     _loadSpeakersMetadata() {
+        // Try to load from JSON file first (if exists)
         try {
             const metadataPath = path.join(__dirname, '../data/coqui_speakers_metadata.json');
-            const metadataContent = fs.readFileSync(metadataPath, 'utf8');
-            this.speakersMetadata = JSON.parse(metadataContent);
-            console.log(`✅ Loaded metadata for ${Object.keys(this.speakersMetadata.speakers).length} speakers`);
+            if (fs.existsSync(metadataPath)) {
+                const metadataContent = fs.readFileSync(metadataPath, 'utf8');
+                this.speakersMetadata = JSON.parse(metadataContent);
+                console.log(`✅ Loaded metadata for ${Object.keys(this.speakersMetadata.speakers).length} speakers from file`);
+                return;
+            }
         } catch (error) {
-            console.warn(`⚠️ Failed to load speakers metadata: ${error.message}`);
-            this.speakersMetadata = { speakers: {}, sample_texts: {} };
+            console.warn(`⚠️ Could not load metadata file: ${error.message}`);
         }
+
+        // Fallback: Use built-in gender inference and sample texts
+        console.log(`📝 Using built-in speaker metadata with gender inference`);
+        this.speakersMetadata = {
+            speakers: this._getBuiltInSpeakerMetadata(),
+            sample_texts: this._getBuiltInSampleTexts()
+        };
+    }
+
+    /**
+     * Get built-in speaker metadata with gender inference
+     * @private
+     */
+    _getBuiltInSpeakerMetadata() {
+        // Common female first names for gender inference
+        const femaleNames = [
+            'Claribel', 'Daisy', 'Gracie', 'Tammie', 'Alison', 'Ana', 'Annmarie',
+            'Asya', 'Brenda', 'Gitta', 'Henriette', 'Sofia', 'Tammy', 'Tanja',
+            'Vjollca', 'Nova', 'Maja', 'Uta', 'Lidiya', 'Chandra', 'Szofi',
+            'Camilla', 'Lilya', 'Zofija', 'Narelle', 'Barbora', 'Alexandra',
+            'Alma', 'Rosemary', 'Ige'
+        ];
+
+        // Common male first names for gender inference
+        const maleNames = [
+            'Andrew', 'Badr', 'Dionisio', 'Royston', 'Viktor', 'Abrahan', 'Adde',
+            'Baldur', 'Craig', 'Damien', 'Gilberto', 'Ilkin', 'Kazuhiko', 'Ludvig',
+            'Suad', 'Torcull', 'Zacharie', 'Filip', 'Damjan', 'Wulf', 'Aaron',
+            'Kumar', 'Eugenio', 'Ferran', 'Xavier', 'Luis', 'Marcos'
+        ];
+
+        const metadata = {};
+        const allSpeakers = CoquiVoiceModel.getFallbackSpeakers();
+
+        for (const speaker of allSpeakers) {
+            const firstName = speaker.split(' ')[0];
+            let gender = 'unknown';
+
+            if (femaleNames.includes(firstName)) {
+                gender = 'female';
+            } else if (maleNames.includes(firstName)) {
+                gender = 'male';
+            }
+
+            metadata[speaker] = {
+                gender: gender,
+                accent: 'neutral',
+                description: `${gender === 'female' ? 'Professional female' : gender === 'male' ? 'Professional male' : 'Professional'} voice`
+            };
+        }
+
+        return metadata;
+    }
+
+    /**
+     * Get built-in sample texts for different languages
+     * @private
+     */
+    _getBuiltInSampleTexts() {
+        return {
+            en: "Welcome to our professional text-to-speech service. This advanced voice generation system uses state-of-the-art artificial intelligence to create natural-sounding speech in multiple languages. Whether you're creating content for videos, presentations, audiobooks, or accessibility features, our technology delivers high-quality results.",
+            hi: "हमारी पेशेवर टेक्स्ट-टू-स्पीच सेवा में आपका स्वागत है। यह उन्नत आवाज़ निर्माण प्रणाली कई भाषाओं में प्राकृतिक-ध्वनि वाली वाणी बनाने के लिए अत्याधुनिक कृत्रिम बुद्धिमत्ता का उपयोग करती है। चाहे आप वीडियो, प्रस्तुतियों, ऑडियोबुक या पहुंच सुविधाओं के लिए सामग्री बना रहे हों, हमारी तकनीक उच्च गुणवत्ता वाले परिणाम प्रदान करती है।",
+            es: "Bienvenido a nuestro servicio profesional de texto a voz. Este avanzado sistema de generación de voz utiliza inteligencia artificial de última generación para crear un habla de sonido natural en múltiples idiomas.",
+            fr: "Bienvenue dans notre service professionnel de synthèse vocale. Ce système avancé de génération vocale utilise une intelligence artificielle de pointe pour créer une parole naturelle dans plusieurs langues.",
+            de: "Willkommen bei unserem professionellen Text-zu-Sprache-Service. Dieses fortschrittliche Sprachgenerierungssystem verwendet modernste künstliche Intelligenz, um natürlich klingende Sprache in mehreren Sprachen zu erstellen.",
+            it: "Benvenuto nel nostro servizio professionale di sintesi vocale. Questo avanzato sistema di generazione vocale utilizza intelligenza artificiale all'avanguardia per creare un parlato dal suono naturale in più lingue.",
+            pt: "Bem-vindo ao nosso serviço profissional de texto para fala. Este sistema avançado de geração de voz usa inteligência artificial de ponta para criar fala com som natural em vários idiomas."
+        };
     }
 
     /**
