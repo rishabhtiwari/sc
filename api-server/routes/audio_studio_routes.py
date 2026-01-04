@@ -6,7 +6,8 @@ API Server acts as a proxy with authentication - all business logic in microserv
 import logging
 import requests
 import os
-from flask import Blueprint, request, jsonify, Response
+from io import BytesIO
+from flask import Blueprint, request, jsonify, Response, send_file
 from middleware.jwt_middleware import extract_user_context_from_headers
 
 # Create blueprint
@@ -47,32 +48,45 @@ def get_preview_audio(audio_id):
             timeout=30
         )
 
+        logger.info(f"Asset service response: {response.status_code}")
+
         if response.status_code == 200:
             result = response.json()
             presigned_url = result.get('url')
 
-            if presigned_url:
-                # Stream the audio file from MinIO
-                audio_response = requests.get(presigned_url, stream=True, timeout=30)
+            logger.info(f"Got presigned URL: {presigned_url[:100]}..." if presigned_url else "No URL")
 
-                return Response(
-                    audio_response.iter_content(chunk_size=8192),
-                    status=audio_response.status_code,
-                    content_type=audio_response.headers.get('Content-Type', 'audio/wav'),
-                    headers={
-                        'Content-Length': audio_response.headers.get('Content-Length'),
-                        'Accept-Ranges': 'bytes'
-                    }
-                )
+            if presigned_url:
+                # Download the audio file from MinIO
+                logger.info(f"Fetching audio from MinIO...")
+                audio_response = requests.get(presigned_url, timeout=30)
+
+                logger.info(f"MinIO response: {audio_response.status_code}, Content-Type: {audio_response.headers.get('Content-Type')}, Size: {audio_response.headers.get('Content-Length')}")
+
+                if audio_response.status_code == 200:
+                    # Create a BytesIO buffer from the audio content
+                    audio_buffer = BytesIO(audio_response.content)
+                    audio_buffer.seek(0)
+
+                    # Use send_file to properly stream the audio
+                    return send_file(
+                        audio_buffer,
+                        mimetype='audio/wav',
+                        as_attachment=False,
+                        download_name=f'{audio_id}.wav'
+                    )
+                else:
+                    logger.error(f"MinIO returned {audio_response.status_code}")
+                    return jsonify({'error': 'Failed to fetch audio from storage', 'status': 'error'}), 500
             else:
                 logger.error(f"No URL in response from asset service")
                 return jsonify({'error': 'No URL found', 'status': 'error'}), 500
         else:
-            logger.error(f"Asset service returned {response.status_code}")
+            logger.error(f"Asset service returned {response.status_code}: {response.text}")
             return jsonify({'error': 'Preview not found', 'status': 'error'}), response.status_code
 
     except Exception as e:
-        logger.error(f"Error streaming preview audio: {str(e)}")
+        logger.error(f"Error streaming preview audio: {str(e)}", exc_info=True)
         return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
