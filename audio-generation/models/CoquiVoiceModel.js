@@ -176,6 +176,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
         const speaker = options.voice || options.speaker || this.defaultSpeaker;
         let language = options.language || this.language;
+        const speed = options.speed || 1.0;
 
         // Normalize language to language code (in case full name is passed)
         const languageNameToCode = {
@@ -223,6 +224,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         console.log(`   Text length: ${text.length} characters`);
         console.log(`   Speaker: ${speaker}`);
         console.log(`   Language: ${language}`);
+        console.log(`   Speed: ${speed}x`);
         console.log(`   Output: ${outputPath}`);
 
         const startTime = Date.now();
@@ -253,7 +255,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                     chunks,
                     speaker,
                     language,
-                    MAX_CONCURRENT_REQUESTS
+                    MAX_CONCURRENT_REQUESTS,
+                    speed
                 );
 
                 const parallelTime = Date.now() - parallelStartTime;
@@ -266,11 +269,12 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                     silenceMs: 200,      // Natural breathing pause
                     crossfadeMs: 50,     // Smooth transitions
                     normalize: true,     // Consistent volume
-                    denoise: false       // Set to true if background noise is present
+                    denoise: false,      // Set to true if background noise is present
+                    speed: speed         // Speed adjustment (0.5-2.0)
                 });
             } else {
                 console.log(`📝 Text length: ${text.length} chars (within limit, no chunking needed)`);
-                audioData = await this._generateSingleChunk(text, speaker, language);
+                audioData = await this._generateSingleChunk(text, speaker, language, speed);
             }
 
             // Save the audio file
@@ -506,7 +510,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * Generate audio for multiple chunks with concurrency control
      * @private
      */
-    async _generateChunksWithConcurrency(chunks, speaker, language, maxConcurrent = 5) {
+    async _generateChunksWithConcurrency(chunks, speaker, language, maxConcurrent = 5, speed = 1.0) {
         const results = new Array(chunks.length);
         let currentIndex = 0;
         let completedCount = 0;
@@ -520,7 +524,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 console.log(`🔊 [Worker ${workerIndex}] Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} chars)`);
 
                 try {
-                    const audio = await this._generateSingleChunk(chunk, speaker, language);
+                    const audio = await this._generateSingleChunk(chunk, speaker, language, speed);
                     results[chunkIndex] = audio;
                     completedCount++;
                     console.log(`✅ [Worker ${workerIndex}] Completed chunk ${chunkIndex + 1}/${chunks.length} (${completedCount}/${chunks.length} total)`);
@@ -546,11 +550,12 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * Generate audio for a single chunk
      * @private
      */
-    async _generateSingleChunk(text, speaker, language) {
+    async _generateSingleChunk(text, speaker, language, speed = 1.0) {
         const formData = new FormData();
         formData.append('text', text);
         formData.append('speaker_id', speaker);
         formData.append('language_id', language);
+        formData.append('speed', speed.toString());
 
         const response = await axios.post(
             `${this.coquiServerUrl}/api/tts`,
@@ -583,7 +588,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             silenceMs = 200,      // Natural breathing pause between sentences
             crossfadeMs = 50,     // Smooth transitions to prevent clicks
             normalize = true,     // Consistent volume across chunks
-            denoise = false       // Optional noise reduction (requires noisereduce library)
+            denoise = false,      // Optional noise reduction (requires noisereduce library)
+            speed = 1.0           // Speed adjustment (0.5 = half speed, 2.0 = double speed)
         } = options;
 
         return new Promise(async (resolve, reject) => {
@@ -603,7 +609,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 silenceMs.toString(),
                 crossfadeMs.toString(),
                 normalize.toString(),
-                denoise.toString()
+                denoise.toString(),
+                speed.toString()
             ]);
 
             let stdout = Buffer.alloc(0);

@@ -14,7 +14,7 @@ import io
 from pydub import AudioSegment
 from pydub.effects import normalize
 
-def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable_normalization=True):
+def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable_normalization=True, speed=1.0):
     """
     Merge multiple audio buffers with professional cleaning and enhancement
 
@@ -23,6 +23,7 @@ def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable
         silence_ms: Milliseconds of silence to add between chunks for natural breathing (default: 200ms)
         crossfade_ms: Milliseconds of crossfade for smooth transitions (default: 50ms)
         enable_normalization: Whether to normalize volume (default: True)
+        speed: Speed adjustment factor (default: 1.0, range: 0.5-2.0)
 
     Returns:
         Merged and cleaned audio data as bytes
@@ -92,7 +93,19 @@ def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable
             # Append with crossfade to smooth the join and prevent clicks
             # This creates a natural flow like a single breath
             final_audio = final_audio.append(chunk_with_silence, crossfade=crossfade_ms)
-    
+
+    # Apply speed adjustment if needed (before normalization)
+    if speed != 1.0:
+        print(f"   ⚡ Applying speed adjustment: {speed}x", file=sys.stderr)
+        # Calculate new frame rate to achieve speed change
+        # Speed > 1.0 = faster (increase frame rate)
+        # Speed < 1.0 = slower (decrease frame rate)
+        new_frame_rate = int(final_audio.frame_rate * speed)
+        final_audio = final_audio._spawn(final_audio.raw_data, overrides={
+            "frame_rate": new_frame_rate
+        }).set_frame_rate(target_sample_rate)
+        print(f"   ✅ Speed adjusted to {speed}x", file=sys.stderr)
+
     # Final overall cleanup: Normalize volume to prevent sudden jumps
     if enable_normalization:
         print("   🔊 Normalizing volume...", file=sys.stderr)
@@ -108,27 +121,29 @@ def merge_and_clean_audio(audio_buffers, silence_ms=200, crossfade_ms=50, enable
     return output_buffer.read()
 
 
-def merge_and_clean_audio_advanced(audio_buffers, silence_ms=200, crossfade_ms=50, 
-                                   enable_normalization=True, enable_noise_reduction=False):
+def merge_and_clean_audio_advanced(audio_buffers, silence_ms=200, crossfade_ms=50,
+                                   enable_normalization=True, enable_noise_reduction=False, speed=1.0):
     """
     Advanced version with optional noise reduction (requires noisereduce library)
-    
+
     Args:
         audio_buffers: List of audio data (bytes)
         silence_ms: Milliseconds of silence between chunks (default: 200ms)
         crossfade_ms: Milliseconds of crossfade (default: 50ms)
         enable_normalization: Whether to normalize volume (default: True)
         enable_noise_reduction: Whether to apply noise reduction (default: False)
-    
+        speed: Speed adjustment factor (default: 1.0, range: 0.5-2.0)
+
     Returns:
         Merged and cleaned audio data as bytes
     """
     # First merge with basic cleaning
     merged_audio_bytes = merge_and_clean_audio(
-        audio_buffers, 
-        silence_ms=silence_ms, 
+        audio_buffers,
+        silence_ms=silence_ms,
         crossfade_ms=crossfade_ms,
-        enable_normalization=enable_normalization
+        enable_normalization=enable_normalization,
+        speed=speed
     )
     
     # Apply noise reduction if enabled
@@ -179,15 +194,16 @@ def main():
     """Main function for CLI usage"""
     if len(sys.argv) < 2:
         print(json.dumps({
-            'error': 'Usage: audio_cleaner.py <silence_ms> [crossfade_ms] [normalize] [denoise]'
+            'error': 'Usage: audio_cleaner.py <silence_ms> [crossfade_ms] [normalize] [denoise] [speed]'
         }))
         sys.exit(1)
-    
+
     # Parse arguments
     silence_ms = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     crossfade_ms = int(sys.argv[2]) if len(sys.argv) > 2 else 50
     enable_normalization = sys.argv[3].lower() == 'true' if len(sys.argv) > 3 else True
     enable_noise_reduction = sys.argv[4].lower() == 'true' if len(sys.argv) > 4 else False
+    speed = float(sys.argv[5]) if len(sys.argv) > 5 else 1.0
     
     # Read file paths from stdin as JSON
     input_data = sys.stdin.read().strip()
@@ -208,18 +224,20 @@ def main():
         # Merge and clean audio
         if enable_noise_reduction:
             merged_audio = merge_and_clean_audio_advanced(
-                audio_buffers, 
+                audio_buffers,
                 silence_ms=silence_ms,
                 crossfade_ms=crossfade_ms,
                 enable_normalization=enable_normalization,
-                enable_noise_reduction=True
+                enable_noise_reduction=True,
+                speed=speed
             )
         else:
             merged_audio = merge_and_clean_audio(
                 audio_buffers,
                 silence_ms=silence_ms,
                 crossfade_ms=crossfade_ms,
-                enable_normalization=enable_normalization
+                enable_normalization=enable_normalization,
+                speed=speed
             )
         
         # Write to stdout (binary)
