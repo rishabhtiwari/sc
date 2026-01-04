@@ -441,64 +441,85 @@ def chunk_text(text, max_chars, language_code='en'):
         print(f"  Chunk {i+1}: {len(chunk)} chars - '{chunk[:50]}...'", file=sys.stderr)
 
     # Smart merging: Merge chunks < 100 chars with adjacent chunks if combined size <= 250
+    # Run multiple passes until no more merges are possible
     MIN_CHUNK_SIZE = 100
     MAX_COMBINED_SIZE = 250
 
     if len(final_chunks) > 1:
         print(f"\n🔄 Merging small chunks (< {MIN_CHUNK_SIZE} chars) with adjacent chunks...", file=sys.stderr)
-        merged_chunks = []
-        i = 0
 
-        while i < len(final_chunks):
-            current_chunk = final_chunks[i]
+        # Keep merging until no more merges are possible
+        merge_pass = 1
+        while True:
+            merged_chunks = []
+            i = 0
+            merges_made = False
 
-            # PRIORITY 1: If current chunk is too small, try merging with next chunk first
-            if len(current_chunk) < MIN_CHUNK_SIZE and i + 1 < len(final_chunks):
-                next_chunk = final_chunks[i + 1]
-                combined_length = len(current_chunk) + len(next_chunk) + 1  # +1 for space
+            while i < len(final_chunks):
+                current_chunk = final_chunks[i]
 
-                # Merge forward if combined size doesn't exceed limit
-                if combined_length <= MAX_COMBINED_SIZE:
-                    merged = current_chunk + " " + next_chunk
-                    merged_chunks.append(merged)
-                    print(f"  ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
-                    i += 2  # Skip both chunks
-                    continue
-                else:
-                    print(f"  ⚠️  Cannot merge chunk {i+1} ({len(current_chunk)} chars) forward - would exceed {MAX_COMBINED_SIZE} chars", file=sys.stderr)
+                # PRIORITY 1: If current chunk is too small, try merging backwards first (to avoid creating more small chunks)
+                if len(current_chunk) < MIN_CHUNK_SIZE and len(merged_chunks) > 0:
+                    prev_chunk = merged_chunks[-1]
+                    combined_length = len(prev_chunk) + len(current_chunk) + 1
 
-            # PRIORITY 2: If current chunk is still too small, try merging backwards with previous chunk
-            if len(current_chunk) < MIN_CHUNK_SIZE and len(merged_chunks) > 0:
-                prev_chunk = merged_chunks[-1]
-                combined_length = len(prev_chunk) + len(current_chunk) + 1
+                    if combined_length <= MAX_COMBINED_SIZE:
+                        merged = prev_chunk + " " + current_chunk
+                        merged_chunks[-1] = merged
+                        print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) backwards with previous chunk = {len(merged)} chars", file=sys.stderr)
+                        merges_made = True
+                        i += 1
+                        continue
 
-                if combined_length <= MAX_COMBINED_SIZE:
-                    merged = prev_chunk + " " + current_chunk
-                    merged_chunks[-1] = merged
-                    print(f"  ✓ Merged chunk {i+1} ({len(current_chunk)} chars) backwards with previous chunk = {len(merged)} chars", file=sys.stderr)
-                    i += 1
-                    continue
-                else:
-                    print(f"  ⚠️  Chunk {i+1} is small ({len(current_chunk)} chars) but cannot merge - would exceed limit", file=sys.stderr)
+                # PRIORITY 2: If backward merge failed/not possible, try merging forward
+                if len(current_chunk) < MIN_CHUNK_SIZE and i + 1 < len(final_chunks):
+                    next_chunk = final_chunks[i + 1]
+                    combined_length = len(current_chunk) + len(next_chunk) + 1  # +1 for space
 
-            # PRIORITY 3: Check if next chunk is too small (even if current is OK)
-            if i + 1 < len(final_chunks) and len(final_chunks[i + 1]) < MIN_CHUNK_SIZE:
-                next_chunk = final_chunks[i + 1]
-                combined_length = len(current_chunk) + len(next_chunk) + 1  # +1 for space
+                    # Merge forward if combined size doesn't exceed limit
+                    if combined_length <= MAX_COMBINED_SIZE:
+                        merged = current_chunk + " " + next_chunk
+                        merged_chunks.append(merged)
+                        print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
+                        merges_made = True
+                        i += 2  # Skip both chunks
+                        continue
+                    else:
+                        print(f"  [Pass {merge_pass}] ⚠️  Cannot merge chunk {i+1} ({len(current_chunk)} chars) forward - would exceed {MAX_COMBINED_SIZE} chars", file=sys.stderr)
 
-                # Merge if combined size doesn't exceed limit
-                if combined_length <= MAX_COMBINED_SIZE:
-                    merged = current_chunk + " " + next_chunk
-                    merged_chunks.append(merged)
-                    print(f"  ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
-                    i += 2  # Skip both chunks
-                    continue
+                # PRIORITY 3: Check if next chunk is too small (even if current is OK)
+                if i + 1 < len(final_chunks) and len(final_chunks[i + 1]) < MIN_CHUNK_SIZE:
+                    next_chunk = final_chunks[i + 1]
+                    combined_length = len(current_chunk) + len(next_chunk) + 1  # +1 for space
 
-            # No merging needed or possible
-            merged_chunks.append(current_chunk)
-            i += 1
+                    # Merge if combined size doesn't exceed limit
+                    if combined_length <= MAX_COMBINED_SIZE:
+                        merged = current_chunk + " " + next_chunk
+                        merged_chunks.append(merged)
+                        print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
+                        merges_made = True
+                        i += 2  # Skip both chunks
+                        continue
 
-        final_chunks = merged_chunks
+                # No merging needed or possible for this chunk
+                merged_chunks.append(current_chunk)
+                i += 1
+
+            # Update final_chunks for next pass
+            final_chunks = merged_chunks
+
+            # If no merges were made in this pass, we're done
+            if not merges_made:
+                print(f"  No more merges possible after {merge_pass} pass(es)", file=sys.stderr)
+                break
+
+            merge_pass += 1
+
+            # Safety limit: max 5 passes
+            if merge_pass > 5:
+                print(f"  ⚠️  Reached maximum merge passes (5), stopping", file=sys.stderr)
+                break
+
         print(f"\n✅ Final result: {len(final_chunks)} chunks (after smart merging)", file=sys.stderr)
     else:
         print(f"\n✅ Only 1 chunk, no merging needed", file=sys.stderr)
