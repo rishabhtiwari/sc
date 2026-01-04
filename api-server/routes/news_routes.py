@@ -364,6 +364,34 @@ def news_not_found(error):
 # NEWS-FETCHER JOB MANAGEMENT ENDPOINTS
 # ============================================================================
 
+@news_bp.route('/news/seed-urls/config/supported-categories', methods=['GET'])
+def get_supported_categories():
+    """Get supported categories for seed URL configuration"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+        response = requests.get(f'{news_fetcher_url}/seed-urls/config/supported-categories', headers=headers, timeout=30)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher seed-urls/config/supported-categories: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
+@news_bp.route('/news/seed-urls/status', methods=['GET'])
+def get_seed_urls_status():
+    """Get seed URLs status"""
+    import requests
+    try:
+        headers = get_request_headers_with_context()
+        news_fetcher_url = 'http://ichat-news-fetcher:8093'
+        response = requests.get(f'{news_fetcher_url}/seed-urls/status', headers=headers, timeout=30)
+        return jsonify(response.json()), response.status_code
+    except Exception as e:
+        logger.error(f"Error proxying to news-fetcher seed-urls/status: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
 @news_bp.route('/news/seed-urls', methods=['GET', 'POST'])
 def manage_seed_urls():
     """Get or create seed URLs for news fetching"""
