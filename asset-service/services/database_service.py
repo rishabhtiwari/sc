@@ -257,7 +257,7 @@ class DatabaseService:
                 query["user_id"] = user_id
 
             logger.info(f"Querying audio_library with: {query}")
-            audio = self.audio_library_collection.find_one(query)
+            audio = self.audio_library.find_one(query)
 
             if audio:
                 logger.info(f"Found audio: {audio.get('audio_id')}")
@@ -300,7 +300,7 @@ class DatabaseService:
 
             logger.info(f"Soft deleting audio_library entry with query: {query}")
 
-            result = self.audio_library_collection.update_one(
+            result = self.audio_library.update_one(
                 query,
                 {
                     "$set": {
