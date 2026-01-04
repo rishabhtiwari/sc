@@ -18,7 +18,8 @@ const TemplateManagementPage = () => {
     all: { label: 'All Templates', icon: '📋', color: 'gray' },
     news: { label: 'News Videos', icon: '📰', color: 'blue' },
     shorts: { label: 'YouTube Shorts', icon: '📱', color: 'purple' },
-    ecommerce: { label: 'E-commerce', icon: '🛍️', color: 'green' }
+    ecommerce: { label: 'E-commerce', icon: '🛍️', color: 'green' },
+    social: { label: 'Social Media', icon: '📱', color: 'pink' }
   };
 
   useEffect(() => {

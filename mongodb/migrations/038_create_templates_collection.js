@@ -28,7 +28,7 @@ db.createCollection('templates', {
                 },
                 category: {
                     bsonType: 'string',
-                    enum: ['news', 'shorts', 'ecommerce'],
+                    enum: ['news', 'shorts', 'ecommerce', 'social'],
                     description: 'Template category'
                 },
                 version: {
