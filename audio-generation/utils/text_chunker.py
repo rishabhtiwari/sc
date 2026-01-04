@@ -438,7 +438,7 @@ def chunk_text(text, max_chars, language_code='en'):
 
     print(f"\n✓ Created {len(final_chunks)} chunks (before merging small chunks)", file=sys.stderr)
     for i, chunk in enumerate(final_chunks):
-        print(f"  Chunk {i+1}: {len(chunk)} chars", file=sys.stderr)
+        print(f"  Chunk {i+1}: {len(chunk)} chars - '{chunk[:50]}...'", file=sys.stderr)
 
     # Smart merging: Merge chunks < 100 chars with previous chunk if combined size <= 250
     MIN_CHUNK_SIZE = 100
@@ -493,7 +493,8 @@ def chunk_text(text, max_chars, language_code='en'):
     # Final report
     for i, chunk in enumerate(final_chunks):
         status = "✓" if len(chunk) >= MIN_CHUNK_SIZE else "⚠️ "
-        print(f"  {status} Chunk {i+1}: {len(chunk)} chars", file=sys.stderr)
+        preview = chunk[:80] + "..." if len(chunk) > 80 else chunk
+        print(f"  {status} Chunk {i+1}: {len(chunk)} chars - '{preview}'", file=sys.stderr)
 
     # Clean each chunk for TTS AFTER chunking is complete
     # This replaces problematic punctuation that XTTS v2 struggles with
