@@ -241,6 +241,7 @@ class AudioLibraryService:
                 "provider": "kokoro",  # Default provider
                 "model": model,
                 "voice": voice,
+                "language": language,  # Add language for cache matching
                 "text": text,
                 "settings": {
                     "speed": speed

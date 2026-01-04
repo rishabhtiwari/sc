@@ -316,28 +316,22 @@ app.post('/preview', async (req, res) => {
                     return matches;
                 });
 
-                if (existingPreview && existingPreview.url) {
-                    // Verify the URL is accessible (MinIO check)
-                    try {
-                        const urlCheck = await axios.head(existingPreview.url, { timeout: 5000 });
-                        if (urlCheck.status === 200) {
-                            console.log(`✅ Found cached preview in DB + MinIO verified for ${voice} (${language})`);
-                            console.log(`   URL: ${existingPreview.url}`);
-                            return res.json({
-                                success: true,
-                                audio_url: existingPreview.url,
-                                duration: existingPreview.duration || 0,
-                                cached: true,
-                                audio_id: existingPreview.audio_id
-                            });
-                        } else {
-                            console.warn(`⚠️ Preview found in DB but MinIO returned status ${urlCheck.status}`);
-                        }
-                    } catch (urlError) {
-                        console.warn(`⚠️ Preview found in DB but MinIO verification failed: ${urlError.message}`);
-                        console.warn(`   URL: ${existingPreview.url}`);
-                        // Continue to regenerate if MinIO file is missing
-                    }
+                if (existingPreview && existingPreview.audio_id) {
+                    // Found cached preview - return proxy URL (no need to verify MinIO)
+                    // The proxy endpoint will handle fetching from MinIO with fresh presigned URL
+                    const proxyUrl = `/api/audio-studio/preview/${existingPreview.audio_id}`;
+
+                    console.log(`✅ Found cached preview for ${voice} (${language})`);
+                    console.log(`   Audio ID: ${existingPreview.audio_id}`);
+                    console.log(`   Proxy URL: ${proxyUrl}`);
+
+                    return res.json({
+                        success: true,
+                        audio_url: proxyUrl,
+                        duration: existingPreview.duration || 0,
+                        cached: true,
+                        audio_id: existingPreview.audio_id
+                    });
                 } else {
                     console.log(`📝 No matching preview found in database`);
                 }
