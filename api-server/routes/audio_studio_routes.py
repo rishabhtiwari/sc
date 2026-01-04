@@ -392,7 +392,7 @@ def preview_audio():
     """
     try:
         # Extract user context
-        user_context = extract_user_context_from_headers()
+        user_context = extract_user_context_from_headers(request.headers)
 
         data = request.get_json()
         preview_text = 'Hello! This is a preview of how this voice sounds.'
