@@ -10,6 +10,8 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
   const [audioConfig, setAudioConfig] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState(config?.language || 'en');
   const [previewingVoice, setPreviewingVoice] = useState(null);
+  const [genderFilter, setGenderFilter] = useState('all'); // 'all', 'male', 'female'
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Initialize form data from config (new nested structure)
   const [formData, setFormData] = useState({
@@ -201,8 +203,33 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
     return { male: [], female: [], all: [] };
   };
 
+  // Filter voices based on gender filter and search query
+  const getFilteredVoices = () => {
+    const voices = getAvailableVoices();
+    let filtered = voices.all;
+
+    // Apply gender filter
+    if (genderFilter === 'male') {
+      filtered = voices.male;
+    } else if (genderFilter === 'female') {
+      filtered = voices.female;
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(v =>
+        (v.name || v.id).toLowerCase().includes(query) ||
+        (v.accent && v.accent.toLowerCase().includes(query))
+      );
+    }
+
+    return filtered;
+  };
+
   const currentVoiceConfig = getCurrentVoiceConfig();
   const availableVoices = getAvailableVoices();
+  const filteredVoices = getFilteredVoices();
   const isGpuMode = audioConfig?.gpu_enabled || false;
 
   return (
@@ -298,108 +325,115 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         </div>
       </Card>
 
-      {/* Male Voices */}
-      {availableVoices.male && availableVoices.male.length > 0 && (
-        <Card title={`👨 Male Voices (${availableVoices.male.length})`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {availableVoices.male.map((voice) => {
-              const isSelected = (currentVoiceConfig.maleVoices || []).includes(voice.id);
-              return (
-                <div
-                  key={voice.id}
-                  className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  onClick={() => handleVoiceSelection(voice.id, 'male')}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">{voice.name || voice.id}</h4>
-                      {voice.accent && (
-                        <p className="text-xs text-gray-500 mt-1">Accent: {voice.accent}</p>
-                      )}
-                      {voice.description && (
-                        <p className="text-xs text-gray-600 mt-1">{voice.description}</p>
-                      )}
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {}}
-                      className="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePreview(voice.id);
-                    }}
-                    disabled={previewingVoice === voice.id}
-                    className="w-full"
-                  >
-                    {previewingVoice === voice.id ? (
-                      <>
-                        <Spinner size="sm" /> Playing...
-                      </>
-                    ) : (
-                      '🔊 Preview'
-                    )}
-                  </Button>
-                </div>
-              );
-            })}
+      {/* Browse Voices */}
+      <Card title="🎤 Browse Voices">
+        {/* Filters */}
+        <div className="mb-4 space-y-3">
+          {/* Search */}
+          <div>
+            <input
+              type="text"
+              placeholder="Search voices by name or accent..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
-        </Card>
-      )}
 
-      {/* Female Voices */}
-      {availableVoices.female && availableVoices.female.length > 0 && (
-        <Card title={`👩 Female Voices (${availableVoices.female.length})`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {availableVoices.female.map((voice) => {
-              const isSelected = (currentVoiceConfig.femaleVoices || []).includes(voice.id);
-              return (
-                <div
-                  key={voice.id}
-                  className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                    isSelected
-                      ? 'border-pink-500 bg-pink-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  onClick={() => handleVoiceSelection(voice.id, 'female')}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-900">{voice.name || voice.id}</h4>
-                      {voice.accent && (
-                        <p className="text-xs text-gray-500 mt-1">Accent: {voice.accent}</p>
-                      )}
-                      {voice.description && (
-                        <p className="text-xs text-gray-600 mt-1">{voice.description}</p>
-                      )}
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {}}
-                      className="h-5 w-5 text-pink-600 focus:ring-pink-500 border-gray-300 rounded"
-                    />
+          {/* Gender Filter */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setGenderFilter('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All ({availableVoices.all.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenderFilter('male')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'male'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              👨 Male ({availableVoices.male.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenderFilter('female')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'female'
+                  ? 'bg-pink-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              👩 Female ({availableVoices.female.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Voice Cards Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {filteredVoices.map((voice) => {
+            const isDefault = currentVoiceConfig.defaultVoice === voice.id;
+            const isMaleVoice = (currentVoiceConfig.maleVoices || []).includes(voice.id);
+            const isFemaleVoice = (currentVoiceConfig.femaleVoices || []).includes(voice.id);
+            const genderIcon = voice.gender === 'male' ? '👨' : voice.gender === 'female' ? '👩' : '🎭';
+
+            return (
+              <div
+                key={voice.id}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  isDefault
+                    ? 'border-green-500 bg-green-50'
+                    : 'border-gray-200 bg-white hover:border-gray-300'
+                }`}
+              >
+                <div className="mb-2">
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className="text-lg">{genderIcon}</span>
+                    <h4 className="font-medium text-sm text-gray-900 truncate flex-1" title={voice.name || voice.id}>
+                      {voice.name || voice.id}
+                    </h4>
                   </div>
+                  {voice.accent && voice.accent !== 'neutral' && (
+                    <p className="text-xs text-gray-500 truncate" title={voice.accent}>
+                      {voice.accent}
+                    </p>
+                  )}
+                  <div className="flex gap-1 mt-1 flex-wrap">
+                    {isDefault && (
+                      <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
+                        ⭐ Default
+                      </span>
+                    )}
+                    {isMaleVoice && (
+                      <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                        👨 Male
+                      </span>
+                    )}
+                    {isFemaleVoice && (
+                      <span className="inline-block px-2 py-0.5 bg-pink-100 text-pink-700 text-xs font-medium rounded">
+                        👩 Female
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePreview(voice.id);
-                    }}
+                    onClick={() => handlePreview(voice.id)}
                     disabled={previewingVoice === voice.id}
-                    className="w-full"
+                    className="w-full text-xs py-1.5"
                   >
                     {previewingVoice === voice.id ? (
                       <>
@@ -409,12 +443,53 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                       '🔊 Preview'
                     )}
                   </Button>
+
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    onClick={() => handleVoiceConfigChange('defaultVoice', voice.id)}
+                    className="w-full text-xs py-1.5"
+                  >
+                    {isDefault ? '⭐ Default' : 'Set Default'}
+                  </Button>
+
+                  {/* Add to Male/Female for alternation */}
+                  {currentVoiceConfig.enableAlternation && voice.gender === 'male' && (
+                    <Button
+                      type="button"
+                      variant={isMaleVoice ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => handleVoiceSelection(voice.id, 'male')}
+                      className="w-full text-xs py-1.5"
+                    >
+                      {isMaleVoice ? '✓ Male Voice' : '+ Add Male'}
+                    </Button>
+                  )}
+
+                  {currentVoiceConfig.enableAlternation && voice.gender === 'female' && (
+                    <Button
+                      type="button"
+                      variant={isFemaleVoice ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => handleVoiceSelection(voice.id, 'female')}
+                      className="w-full text-xs py-1.5"
+                    >
+                      {isFemaleVoice ? '✓ Female Voice' : '+ Add Female'}
+                    </Button>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredVoices.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <p>No voices found matching your filters.</p>
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* Default Voices (for models with single voice like Hindi MMS) */}
       {availableVoices.default && availableVoices.default.length > 0 && (
@@ -449,45 +524,66 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         </Card>
       )}
 
-      {/* Default Voice Selection */}
-      <Card title="Default Voice">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Default Voice for {selectedLanguage === 'en' ? 'English' : 'Hindi'}
-          </label>
-          <select
-            value={currentVoiceConfig.defaultVoice || ''}
-            onChange={(e) => handleVoiceConfigChange('defaultVoice', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            {availableVoices.default && availableVoices.default.length > 0 && (
-              <optgroup label="Default Voice">
-                {availableVoices.default.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {availableVoices.male && availableVoices.male.length > 0 && (
-              <optgroup label="Male Voices">
-                {availableVoices.male.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {availableVoices.female && availableVoices.female.length > 0 && (
-              <optgroup label="Female Voices">
-                {availableVoices.female.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+
+
+      {/* Automation Summary */}
+      <Card title="📋 Automation Summary">
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 mb-2">
+              {selectedLanguage === 'en' ? '🇬🇧 English' : '🇮🇳 Hindi'} News Articles
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Model:</span>
+                <span className="text-gray-700">{formData.models[selectedLanguage]}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Default Voice:</span>
+                <span className="text-gray-700">{currentVoiceConfig.defaultVoice || 'Not set'}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Alternation:</span>
+                <span className={`font-semibold ${currentVoiceConfig.enableAlternation ? 'text-green-600' : 'text-gray-600'}`}>
+                  {currentVoiceConfig.enableAlternation ? '✅ Enabled' : '❌ Disabled'}
+                </span>
+              </div>
+              {currentVoiceConfig.enableAlternation && (
+                <>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600 font-medium min-w-[120px]">Male Voices:</span>
+                    <span className="text-gray-700">
+                      {(currentVoiceConfig.maleVoices || []).length > 0
+                        ? currentVoiceConfig.maleVoices.join(', ')
+                        : 'None selected'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600 font-medium min-w-[120px]">Female Voices:</span>
+                    <span className="text-gray-700">
+                      {(currentVoiceConfig.femaleVoices || []).length > 0
+                        ? currentVoiceConfig.femaleVoices.join(', ')
+                        : 'None selected'}
+                    </span>
+                  </div>
+                  <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                    <p className="text-xs text-gray-600">
+                      <strong>How it works:</strong> When generating audio for news articles, the system will automatically
+                      alternate between the first male voice and the first female voice from your selected lists.
+                      This creates variety in your automated news narration.
+                    </p>
+                  </div>
+                </>
+              )}
+              {!currentVoiceConfig.enableAlternation && (
+                <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                  <p className="text-xs text-gray-600">
+                    <strong>How it works:</strong> All news articles will use the default voice: <strong>{currentVoiceConfig.defaultVoice}</strong>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </Card>
 
