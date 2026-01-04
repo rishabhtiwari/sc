@@ -373,10 +373,10 @@ app.post('/preview', async (req, res) => {
                 `${ASSET_SERVICE_URL}/api/audio-studio/library`,
                 {
                     text: text,
-                    audio_url: result.audio_url,
+                    audioUrl: result.audio_url,  // Use camelCase for Pydantic validation_alias
                     duration: result.duration || 0,
                     voice: voice,
-                    voice_name: voice,
+                    voiceName: voice,  // Use camelCase for Pydantic validation_alias
                     language: language,
                     speed: 1.0,
                     model: model,
