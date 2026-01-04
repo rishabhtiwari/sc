@@ -283,7 +283,7 @@ app.post('/preview', async (req, res) => {
         try {
             console.log(`🔍 Checking cache for: voice=${voice}, model=${model}, language=${language}`);
 
-            const checkResponse = await axios.get(`${ASSET_SERVICE_URL}/api/audio-library/`, {
+            const checkResponse = await axios.get(`${ASSET_SERVICE_URL}/api/audio-studio/library`, {
                 params: {
                     page: 1,
                     page_size: 100,
@@ -370,7 +370,7 @@ app.post('/preview', async (req, res) => {
             console.log(`   Voice: ${voice}, Model: ${model}, Language: ${language}`);
 
             const saveResponse = await axios.post(
-                `${ASSET_SERVICE_URL}/api/audio-library/`,
+                `${ASSET_SERVICE_URL}/api/audio-studio/library`,
                 {
                     text: text,
                     audio_url: result.audio_url,
