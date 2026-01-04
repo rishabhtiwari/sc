@@ -271,33 +271,6 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
             <div className="text-sm text-red-600">Failed to load configuration</div>
           ) : (
             <>
-              {/* Model Selector */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
-                  Model:
-                  {ttsConfig.gpu_enabled && (
-                    <span className="ml-2 text-xs text-green-600 font-semibold">🎮 GPU</span>
-                  )}
-                </label>
-                <select
-                  value={selectedModel || ''}
-                  onChange={(e) => handleModelChange(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  {Object.entries(ttsConfig.models).map(([key, model]) => (
-                    <option key={key} value={key}>
-                      {model.name} - {model.language}
-                      {model.supports_emotions && ' 🎭'}
-                      {model.supports_music && ' 🎵'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          {!loadingConfig && ttsConfig && (
-            <>
               {/* Voice Selector Button */}
               <button
                 onClick={() => setShowVoiceSelector(!showVoiceSelector)}
@@ -320,11 +293,15 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
                     onChange={(e) => setSelectedLanguage(e.target.value)}
                     className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   >
-                    {ttsConfig.models[selectedModel].supported_languages.map((langCode, index) => (
-                      <option key={langCode} value={langCode}>
-                        {ttsConfig.models[selectedModel].supported_language_names[index]}
-                      </option>
-                    ))}
+                    {ttsConfig.models[selectedModel].supported_languages
+                      .map((langCode, index) => ({ code: langCode, name: ttsConfig.models[selectedModel].supported_language_names[index] }))
+                      .filter(lang => lang.code.toLowerCase() === 'en' || lang.code.toLowerCase() === 'hi')
+                      .map(lang => (
+                        <option key={lang.code} value={lang.code}>
+                          {lang.name}
+                        </option>
+                      ))
+                    }
                   </select>
                 </div>
               )}

@@ -159,15 +159,6 @@ const VoicePreviewCard = ({ voice, modelId, language, sampleText }) => {
             <span className="text-gray-500">Language:</span>
             <span className="font-medium text-gray-900">{language === 'en' ? 'English' : language === 'hi' ? 'Hindi' : language.toUpperCase()}</span>
           </div>
-          {cachedAudioUrl && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">Status:</span>
-              <span className="font-medium text-green-600 flex items-center gap-1">
-                <span>✓</span>
-                <span>Cached</span>
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Preview Button */}

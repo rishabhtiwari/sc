@@ -26,10 +26,8 @@ const VoicePreviewPage = () => {
         if (config.default_model) {
           setSelectedModel(config.default_model);
         }
-        // Set default language from model
-        if (config.models[config.default_model]?.language) {
-          setSelectedLanguage(config.models[config.default_model].language);
-        }
+        // Always default to English language
+        setSelectedLanguage('en');
       } catch (error) {
         console.error('Failed to fetch TTS config:', error);
       } finally {
@@ -40,6 +38,7 @@ const VoicePreviewPage = () => {
   }, []);
 
   // Get all voices for selected model with metadata
+  // Filter out voices with MULTI-LINGUAL or invalid languages
   const allVoices = selectedModel && ttsConfig
     ? (ttsConfig.models[selectedModel]?.voicesWithMetadata ||
        ttsConfig.models[selectedModel]?.voices?.map(voiceId => ({
@@ -48,6 +47,11 @@ const VoicePreviewPage = () => {
         description: `${ttsConfig.models[selectedModel]?.name} voice`,
         gender: 'unknown'
       })) || [])
+        .filter(voice => {
+          // Filter out voices with MULTI-LINGUAL language
+          const voiceLang = voice.language || '';
+          return voiceLang !== 'MULTI-LINGUAL' && voiceLang.toLowerCase() !== 'multi-lingual';
+        })
     : [];
 
   // Filter voices by gender
@@ -57,10 +61,16 @@ const VoicePreviewPage = () => {
   });
 
   // Get available languages from selected model
+  // Only show English and Hindi for now
   const availableLanguages = selectedModel && ttsConfig
     ? (ttsConfig.models[selectedModel]?.supported_languages ||
        ttsConfig.models[selectedModel]?.supportedLanguages ||
        ['en'])
+        .filter(lang => {
+          const langLower = lang.toLowerCase();
+          // Only allow English and Hindi
+          return langLower === 'en' || langLower === 'hi';
+        })
     : ['en'];
 
   // Count voices by gender
@@ -109,9 +119,6 @@ const VoicePreviewPage = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
                 🎭 Voice Gallery
-                {ttsConfig.gpu_enabled && (
-                  <span className="ml-3 text-sm text-green-600 font-semibold">🎮 GPU Enabled</span>
-                )}
               </h1>
               <p className="text-gray-600 mt-2">
                 Browse and preview all available voices for text-to-speech
@@ -127,40 +134,10 @@ const VoicePreviewPage = () => {
         </div>
       </div>
 
-      {/* Model Selector */}
+      {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center gap-4 flex-wrap">
-            {/* Model Selection */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700">Model:</label>
-              <div className="flex gap-2">
-                {Object.entries(ttsConfig.models).map(([modelKey, model]) => (
-                  <button
-                    key={modelKey}
-                    onClick={() => {
-                      setSelectedModel(modelKey);
-                      // Update language when model changes
-                      if (model.language) {
-                        setSelectedLanguage(model.language);
-                      }
-                    }}
-                    className={`
-                      px-4 py-2 rounded-lg font-medium transition-colors text-sm
-                      ${selectedModel === modelKey
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }
-                    `}
-                  >
-                    {model.name}
-                    {model.supports_emotions && ' 🎭'}
-                    {model.supports_music && ' 🎵'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Language Selection */}
             {availableLanguages.length > 1 && (
               <div className="flex items-center gap-2">
