@@ -41,7 +41,8 @@ RUN /app/venv/bin/pip install --no-cache-dir --ignore-installed blinker \
     --no-deps \
     kokoro>=0.9.4 \
     soundfile \
-    scipy
+    scipy \
+    num2words
 
 # Install Bark and its dependencies (transformers, etc.) with compatible versions
 RUN /app/venv/bin/pip install --no-cache-dir \

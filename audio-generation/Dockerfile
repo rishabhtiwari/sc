@@ -33,6 +33,8 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     transformers \
     git+https://github.com/suno-ai/bark.git
 
+RUN /app/venv/bin/pip install --no-cache-dir num2words
+
 # Set environment variables for Bark optimization
 ENV SUNO_OFFLOAD_CPU=False
 ENV SUNO_USE_SMALL_MODELS=False

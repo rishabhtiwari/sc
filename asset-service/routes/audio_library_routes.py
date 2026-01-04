@@ -167,15 +167,20 @@ async def get_audio_url(
 ):
     """Get presigned URL for a specific audio library item"""
     try:
+        logger.info(f"Getting URL for audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
+
         # Get audio from library
         audio = db_service.get_audio_by_id(
             audio_id=audio_id,
             customer_id=x_customer_id,
-            user_id=x_user_id
+            user_id=x_user_id  # Include user_id for proper filtering
         )
 
         if not audio:
+            logger.error(f"Audio not found: audio_id={audio_id}, customer={x_customer_id}")
             raise HTTPException(status_code=404, detail="Audio not found")
+
+        logger.info(f"Found audio: {audio.get('audio_id')}, url={audio.get('url')}")
 
         # Return the presigned URL
         return {

@@ -53,6 +53,71 @@ LANGUAGE_DELIMITERS = {
 
 # Text preprocessing rules for better TTS quality
 # XTTS v2 struggles with certain punctuation, so we normalize them BEFORE chunking
+def convert_numbers_to_words(text, language_code='en'):
+    """
+    Convert numbers to words in the respective language for better TTS pronunciation
+
+    Args:
+        text: Input text with numbers
+        language_code: Language code ('en', 'hi', 'es', 'fr', 'de', 'it', 'pt', etc.)
+
+    Returns:
+        Text with numbers converted to words
+    """
+    import re
+
+    try:
+        from num2words import num2words
+    except ImportError:
+        print("⚠️ num2words not installed, skipping number conversion", file=sys.stderr)
+        return text
+
+    # Map language codes to num2words language codes
+    lang_map = {
+        'en': 'en',
+        'hi': 'hi',  # Hindi
+        'es': 'es',  # Spanish
+        'fr': 'fr',  # French
+        'de': 'de',  # German
+        'it': 'it',  # Italian
+        'pt': 'pt',  # Portuguese
+        'pl': 'pl',  # Polish
+        'tr': 'tr',  # Turkish
+        'ru': 'ru',  # Russian
+        'nl': 'nl',  # Dutch
+        'cs': 'cs',  # Czech
+        'ar': 'ar',  # Arabic
+        'zh': 'zh',  # Chinese
+        'ja': 'ja',  # Japanese
+        'ko': 'ko',  # Korean
+    }
+
+    num2words_lang = lang_map.get(language_code, 'en')
+
+    def replace_number(match):
+        """Replace a number with its word representation"""
+        number_str = match.group(0)
+        try:
+            # Handle integers and decimals
+            if '.' in number_str:
+                # For decimals, convert integer part and decimal part separately
+                parts = number_str.split('.')
+                integer_part = num2words(int(parts[0]), lang=num2words_lang)
+                decimal_part = ' '.join([num2words(int(d), lang=num2words_lang) for d in parts[1]])
+                return f"{integer_part} point {decimal_part}"
+            else:
+                return num2words(int(number_str), lang=num2words_lang)
+        except Exception as e:
+            print(f"⚠️ Could not convert number '{number_str}': {e}", file=sys.stderr)
+            return number_str
+
+    # Replace standalone numbers (not part of words)
+    # Match numbers with optional decimal points
+    text = re.sub(r'\b\d+\.?\d*\b', replace_number, text)
+
+    return text
+
+
 def clean_text_for_tts(text, language_code='en'):
     """
     Clean problematic punctuation and characters that cause XTTS v2 to generate poor audio
@@ -72,6 +137,9 @@ def clean_text_for_tts(text, language_code='en'):
 
     if not text:
         return ""
+
+    # Step 1: Convert numbers to words FIRST (before any other cleaning)
+    text = convert_numbers_to_words(text, language_code)
 
     if language_code == 'hi':
         # 1. Unicode Normalization (Essential for Devanagari)

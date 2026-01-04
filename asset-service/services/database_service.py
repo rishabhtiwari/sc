@@ -256,10 +256,14 @@ class DatabaseService:
             if user_id:
                 query["user_id"] = user_id
 
+            logger.info(f"Querying audio_library with: {query}")
             audio = self.audio_library_collection.find_one(query)
 
             if audio:
+                logger.info(f"Found audio: {audio.get('audio_id')}")
                 audio['_id'] = str(audio['_id'])
+            else:
+                logger.warning(f"Audio not found with query: {query}")
 
             return audio
 
