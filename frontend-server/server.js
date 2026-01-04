@@ -86,6 +86,175 @@ app.post('/api/videos/background-audio', upload.single('file'), async (req, res)
     }
 });
 
+// Special routes for template file uploads (must come before general API proxy)
+app.post('/api/templates/upload/video', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        const targetUrl = `${API_SERVER_URL}/api/templates/upload/video`;
+        console.log(`🔄 Proxying template video upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Template video upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'File upload proxy error',
+            message: error.message
+        });
+    }
+});
+
+app.post('/api/templates/upload/image', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        const targetUrl = `${API_SERVER_URL}/api/templates/upload/image`;
+        console.log(`🔄 Proxying template image upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Template image upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'File upload proxy error',
+            message: error.message
+        });
+    }
+});
+
+app.post('/api/templates/upload/audio', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        const targetUrl = `${API_SERVER_URL}/api/templates/upload/audio`;
+        console.log(`🔄 Proxying template audio upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Template audio upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'File upload proxy error',
+            message: error.message
+        });
+    }
+});
+
+app.post('/api/templates/upload/logo', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ status: 'error', error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        const targetUrl = `${API_SERVER_URL}/api/templates/upload/logo`;
+        console.log(`🔄 Proxying template logo upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers: headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Template logo upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'File upload proxy error',
+            message: error.message
+        });
+    }
+});
+
 // Special route for product media file uploads (must come before general API proxy)
 // This proxies to API server to maintain API Gateway pattern
 app.post('/api/products/:productId/upload-media', upload.array('files', 20), async (req, res) => {
@@ -201,6 +370,7 @@ app.use('/api', async (req, res) => {
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
                                 req.originalUrl.startsWith('/api/voice/preview/audio/') ||
                                 req.originalUrl.startsWith('/api/audio/proxy/') ||
+                                req.originalUrl.startsWith('/api/audio-studio/preview/') ||
                                 req.originalUrl.match(/\/api\/audio-studio\/library\/[^\/]+\/stream$/) ||
                                 req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
 

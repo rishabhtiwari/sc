@@ -63,6 +63,7 @@ SERVICES=(
     "asset-service"
     "job-news-fetcher"
     "llm-service"
+    "coqui-tts"
     "audio-generation-factory"
     "job-voice-generator"
     "iopaint"
@@ -77,6 +78,7 @@ SERVICES=(
 # GPU-capable services
 GPU_SERVICES=(
     "llm-service"
+    "coqui-tts"
     "audio-generation-factory"
     "iopaint"
 )
@@ -274,14 +276,59 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # Coqui TTS XTTS v2 Server (GPU-accelerated)
+  coqui-tts:
+    image: ghcr.io/coqui-ai/tts:latest
+    container_name: coqui-tts
+    entrypoint: tts-server
+    ports:
+      - "5002:5002"
+    environment:
+      - COQUI_TOS_AGREED=1
+    volumes:
+      # Persistent model storage (models already downloaded)
+      - /root/.local/share/tts:/root/.local/share/tts
+    command:
+      - --model_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/
+      - --config_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
+      - --speakers_file_path
+      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/speakers_xtts.pth
+      - --use_cuda
+      - "1"
+      - --port
+      - "5002"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ichat-network
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    restart: unless-stopped
+
   # Audio Generation Factory with GPU support
   audio-generation-factory:
     build:
       context: ./audio-generation
       dockerfile: Dockerfile.gpu
     environment:
+      - USE_GPU=true
       - CUDA_VISIBLE_DEVICES=0
-      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - COQUI_TTS_URL=http://coqui-tts:5002
+    depends_on:
+      coqui-tts:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
@@ -297,7 +344,7 @@ services:
       dockerfile: ./watermark-remover/Dockerfile.gpu
     environment:
       - CUDA_VISIBLE_DEVICES=0
-      - PYTORCH_ALLOC_CONF=max_split_size_mb:512
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     deploy:
       resources:
         reservations:
@@ -305,6 +352,11 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # Voice Generator Job with GPU awareness
+  job-voice-generator:
+    environment:
+      - USE_GPU=true
 EOF
 
     print_success "GPU docker-compose override created: docker-compose.gpu.yml"
@@ -315,10 +367,8 @@ get_compose_command() {
     local cmd="docker-compose -f docker-compose.yml"
 
     if [ "$USE_GPU" = true ]; then
-        # Generate GPU override if it doesn't exist
-        if [ ! -f "docker-compose.gpu.yml" ]; then
-            generate_gpu_compose >&2
-        fi
+        # Always regenerate GPU override to ensure latest configuration
+        generate_gpu_compose >&2
         cmd="$cmd -f docker-compose.gpu.yml"
     fi
 
@@ -372,9 +422,12 @@ deploy_service() {
     if [ "$build_flag" = "--build" ]; then
         print_info "Building $service..."
         $compose_cmd build "$service"
+        print_info "Deploying $service..."
+        $compose_cmd up -d --force-recreate "$service"
+    else
+        print_info "Deploying $service..."
+        $compose_cmd up -d "$service"
     fi
-
-    $compose_cmd up -d "$service"
 
     if [ $? -eq 0 ]; then
         print_success "$service deployed successfully"

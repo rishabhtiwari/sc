@@ -26,7 +26,7 @@ class DatabaseService:
         self.audio_library = self.news_db.audio_library
 
         self._ensure_indexes()
-    
+
     def _ensure_indexes(self):
         """Create necessary indexes"""
         try:
@@ -36,28 +36,28 @@ class DatabaseService:
                 ("user_id", ASCENDING),
                 ("type", ASCENDING)
             ])
-            
+
             # Index for asset_id lookups
             self.assets.create_index("asset_id", unique=True)
-            
+
             # Index for search
             self.assets.create_index([
                 ("metadata.title", "text"),
                 ("metadata.description", "text"),
                 ("metadata.tags", "text")
             ])
-            
+
             # Index for folder organization
             self.assets.create_index([
                 ("customer_id", ASCENDING),
                 ("metadata.folder", ASCENDING)
             ])
-            
+
             logger.info("Database indexes created successfully")
-            
+
         except PyMongoError as e:
             logger.error(f"Error creating indexes: {e}")
-    
+
     def create_asset(self, asset_data: Dict[str, Any]) -> str:
         """
         Create a new asset record
@@ -106,7 +106,7 @@ class DatabaseService:
         except PyMongoError as e:
             logger.error(f"Error creating audio library entry: {e}")
             raise
-    
+
     def get_asset(
         self,
         asset_id: str,
@@ -135,7 +135,7 @@ class DatabaseService:
         except PyMongoError as e:
             logger.error(f"Error getting asset: {e}")
             raise
-    
+
     def update_asset(
         self,
         asset_id: str,
@@ -169,7 +169,7 @@ class DatabaseService:
         except PyMongoError as e:
             logger.error(f"Error updating asset: {e}")
             raise
-    
+
     def delete_asset(
         self,
         asset_id: str,
@@ -228,6 +228,99 @@ class DatabaseService:
         except PyMongoError as e:
             logger.error(f"Error getting audio library entry: {e}")
             raise
+
+    def get_audio_by_id(
+        self,
+        audio_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific audio library entry by ID
+
+        Args:
+            audio_id: Audio ID
+            customer_id: Customer ID (required for multi-tenancy)
+            user_id: Optional user ID for additional filtering
+
+        Returns:
+            Audio library entry or None if not found
+        """
+        try:
+            query = {
+                "audio_id": audio_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            logger.info(f"Querying audio_library with: {query}")
+            audio = self.audio_library.find_one(query)
+
+            if audio:
+                logger.info(f"Found audio: {audio.get('audio_id')}")
+                audio['_id'] = str(audio['_id'])
+            else:
+                logger.warning(f"Audio not found with query: {query}")
+
+            return audio
+
+        except PyMongoError as e:
+            logger.error(f"Error getting audio by ID: {e}")
+            raise
+
+    def delete_audio_library_entry(
+        self,
+        audio_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """
+        Soft delete an audio library entry
+
+        Args:
+            audio_id: Audio ID
+            customer_id: Customer ID (required for multi-tenancy)
+            user_id: Optional user ID for additional filtering
+
+        Returns:
+            True if deleted successfully
+        """
+        try:
+            query = {
+                "audio_id": audio_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            logger.info(f"Soft deleting audio_library entry with query: {query}")
+
+            result = self.audio_library.update_one(
+                query,
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
+
+            if result.modified_count > 0:
+                logger.info(f"Successfully soft deleted audio: {audio_id}")
+                return True
+            else:
+                logger.warning(f"No audio found to delete with query: {query}")
+                return False
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting audio library entry: {e}")
+            raise
+
 
     def list_audio_library(
         self,
@@ -295,29 +388,29 @@ class DatabaseService:
                 "customer_id": customer_id,
                 "deleted_at": None
             }
-            
+
             if user_id:
                 query["user_id"] = user_id
-            
+
             if asset_type:
                 query["type"] = asset_type
-            
+
             if folder:
                 query["metadata.folder"] = folder
-            
+
             assets = list(
                 self.assets.find(query, {"_id": 0})
                 .sort("created_at", DESCENDING)
                 .skip(skip)
                 .limit(limit)
             )
-            
+
             return assets
-            
+
         except PyMongoError as e:
             logger.error(f"Error listing assets: {e}")
             raise
-    
+
     def search_assets(
         self,
         customer_id: str,
@@ -333,19 +426,19 @@ class DatabaseService:
                 "deleted_at": None,
                 "$text": {"$search": search_query}
             }
-            
+
             if asset_type:
                 query["type"] = asset_type
-            
+
             assets = list(
                 self.assets.find(query, {"_id": 0, "score": {"$meta": "textScore"}})
                 .sort([("score", {"$meta": "textScore"})])
                 .skip(skip)
                 .limit(limit)
             )
-            
+
             return assets
-            
+
         except PyMongoError as e:
             logger.error(f"Error searching assets: {e}")
             raise

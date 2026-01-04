@@ -159,6 +159,44 @@ async def get_library(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/library/{audio_id}/url")
+async def get_audio_url(
+    audio_id: str,
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """Get presigned URL for a specific audio library item"""
+    try:
+        logger.info(f"Getting URL for audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
+
+        # Get audio from library
+        audio = db_service.get_audio_by_id(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id  # Include user_id for proper filtering
+        )
+
+        if not audio:
+            logger.error(f"Audio not found: audio_id={audio_id}, customer={x_customer_id}")
+            raise HTTPException(status_code=404, detail="Audio not found")
+
+        logger.info(f"Found audio: {audio.get('audio_id')}, url={audio.get('url')}")
+
+        # Return the presigned URL
+        return {
+            "success": True,
+            "url": audio.get("url"),
+            "audio_id": audio_id,
+            "duration": audio.get("duration", 0.0)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting audio URL: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/library/{audio_id}")
 async def delete_from_library(
     audio_id: str,
@@ -167,24 +205,33 @@ async def delete_from_library(
 ):
     """Delete audio from library"""
     try:
-        # CRITICAL: Pass customer_id for multi-tenancy enforcement
-        asset = db_service.get_asset(audio_id, customer_id=x_customer_id)
+        logger.info(f"Deleting audio from library: audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
 
-        if not asset:
+        # Get audio from audio_library collection (not assets collection)
+        audio = db_service.get_audio_by_id(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id
+        )
+
+        if not audio:
+            logger.error(f"Audio not found: audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
             raise HTTPException(status_code=404, detail="Audio not found")
 
-        # Soft delete with multi-tenancy
-        db_service.delete_asset(
-            audio_id,
-            soft_delete=True,
-            customer_id=x_customer_id
+        # Soft delete from audio_library collection
+        db_service.delete_audio_library_entry(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id
         )
-        
+
+        logger.info(f"Successfully deleted audio: {audio_id}")
+
         return {
             "success": True,
             "message": "Audio deleted from library"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:

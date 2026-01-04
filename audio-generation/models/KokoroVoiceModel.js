@@ -70,15 +70,17 @@ export class KokoroVoiceModel extends BaseVoiceModel {
         }
 
         const voice = options.voice || this.defaultVoice;
+        const speed = options.speed || 1.0;
 
         if (!this.voices.includes(voice)) {
             throw new Error(`Voice '${voice}' not supported. Available voices: ${this.voices.join(', ')}`);
         }
 
         console.log(`🎭 Using voice: ${voice}`);
+        console.log(`⚡ Using speed: ${speed}x`);
 
         try {
-            console.log(`🔍 DEBUG: Starting TTS generation with text length: ${text.length}, voice: ${voice}`);
+            console.log(`🔍 DEBUG: Starting TTS generation with text length: ${text.length}, voice: ${voice}, speed: ${speed}`);
             console.log(`🔍 DEBUG: TTS object exists: ${!!this.tts}`);
             console.log(`🔍 DEBUG: TTS generate function exists: ${typeof this.tts.generate}`);
 
@@ -94,9 +96,10 @@ export class KokoroVoiceModel extends BaseVoiceModel {
             console.log(`🔍 DEBUG: Created temp file path: ${tempFilePath}`);
 
             // Simple generation exactly like the docs
-            console.log(`🔍 DEBUG: Calling tts.generate() with parameters:`, { text: text.substring(0, 50) + '...', voice });
+            console.log(`🔍 DEBUG: Calling tts.generate() with parameters:`, { text: text.substring(0, 50) + '...', voice, speed });
             const audio = await this.tts.generate(text, {
-                voice: voice
+                voice: voice,
+                speed: speed
             });
             console.log(`🔍 DEBUG: TTS generation completed. Audio object:`, typeof audio, audio ? Object.keys(audio) : 'null');
             console.log(`🔍 DEBUG: Audio save method exists: ${typeof audio?.save}`);

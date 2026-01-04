@@ -1,0 +1,11 @@
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Core dependencies from text_chunker.py
+spacy==3.7.2
+num2words==0.5.13
+
+# Additional testing utilities
+mock==5.1.0
+

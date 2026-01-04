@@ -6,7 +6,7 @@ API Server acts as a proxy with authentication - all business logic in microserv
 import logging
 import requests
 import os
-from flask import Blueprint, request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response, make_response
 from middleware.jwt_middleware import extract_user_context_from_headers
 
 # Create blueprint
@@ -22,6 +22,69 @@ ASSET_SERVICE_URL = os.getenv(
     'ASSET_SERVICE_URL',
     'http://ichat-asset-service:8099'
 )
+
+
+@audio_studio_bp.route('/audio-studio/preview/<audio_id>', methods=['GET'])
+def get_preview_audio(audio_id):
+    """
+    Proxy endpoint: Stream preview audio from asset service
+    This endpoint serves system-wide voice previews stored in MinIO
+    """
+    try:
+        # System previews use special customer/user IDs
+        SYSTEM_CUSTOMER_ID = 'system'
+        SYSTEM_USER_ID = 'voice-previews'
+
+        logger.info(f"🔊 Streaming preview audio: {audio_id}")
+
+        # Get the presigned URL from asset service
+        response = requests.get(
+            f"{ASSET_SERVICE_URL}/api/audio-studio/library/{audio_id}/url",
+            headers={
+                'x-customer-id': SYSTEM_CUSTOMER_ID,
+                'x-user-id': SYSTEM_USER_ID
+            },
+            timeout=30
+        )
+
+        logger.info(f"Asset service response: {response.status_code}")
+
+        if response.status_code == 200:
+            result = response.json()
+            presigned_url = result.get('url')
+
+            logger.info(f"Got presigned URL: {presigned_url[:100]}..." if presigned_url else "No URL")
+
+            if presigned_url:
+                # Download the audio file from MinIO
+                logger.info(f"Fetching audio from MinIO...")
+                audio_response = requests.get(presigned_url, timeout=30)
+
+                logger.info(f"MinIO response: {audio_response.status_code}, Content-Type: {audio_response.headers.get('Content-Type')}, Size: {audio_response.headers.get('Content-Length')}")
+
+                if audio_response.status_code == 200:
+                    # Create response with proper headers
+                    response = make_response(audio_response.content)
+                    response.headers['Content-Type'] = 'audio/wav'
+                    response.headers['Content-Length'] = str(len(audio_response.content))
+                    response.headers['Accept-Ranges'] = 'bytes'
+                    response.headers['Cache-Control'] = 'public, max-age=3600'
+
+                    logger.info(f"Returning audio: {len(audio_response.content)} bytes, Content-Type: audio/wav")
+                    return response
+                else:
+                    logger.error(f"MinIO returned {audio_response.status_code}")
+                    return jsonify({'error': 'Failed to fetch audio from storage', 'status': 'error'}), 500
+            else:
+                logger.error(f"No URL in response from asset service")
+                return jsonify({'error': 'No URL found', 'status': 'error'}), 500
+        else:
+            logger.error(f"Asset service returned {response.status_code}: {response.text}")
+            return jsonify({'error': 'Preview not found', 'status': 'error'}), response.status_code
+
+    except Exception as e:
+        logger.error(f"Error streaming preview audio: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @audio_studio_bp.route('/audio-studio/library', methods=['GET'])
@@ -308,6 +371,35 @@ def update_library_item(audio_id):
         }), 500
 
 
+@audio_studio_bp.route('/audio-studio/config', methods=['GET'])
+def get_audio_config():
+    """Get TTS configuration (models, voices, default settings)"""
+    try:
+        logger.info("🎛️  GET /audio-studio/config - Fetching TTS configuration")
+
+        # Call audio generation service config endpoint
+        response = requests.get(
+            f"{AUDIO_GENERATION_URL}/config",
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            return jsonify(response.json()), 200
+        else:
+            logger.error(f"Failed to get audio config: {response.status_code}")
+            return jsonify({
+                'success': False,
+                'error': 'Failed to get audio configuration'
+            }), response.status_code
+
+    except Exception as e:
+        logger.error(f"Error getting audio config: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @audio_studio_bp.route('/audio/generate', methods=['POST'])
 def generate_audio():
     """Generate audio using TTS service"""
@@ -322,12 +414,14 @@ def generate_audio():
             }), 400
 
         # Call audio generation service
+        # No defaults - let the service use its configured defaults
         response = requests.post(
             f"{AUDIO_GENERATION_URL}/tts",
             json={
                 'text': data.get('text'),
-                'model': data.get('model', 'kokoro-82m'),
-                'voice': data.get('voice', 'am_adam'),
+                'model': data.get('model'),  # Let service use default if not provided
+                'voice': data.get('voice'),  # Let service use default if not provided
+                'language': data.get('language'),  # Language code for multi-lingual models
                 'speed': data.get('speed', 1.0),
                 'format': data.get('format', 'wav')
             },
@@ -355,31 +449,63 @@ def generate_audio():
 
 @audio_studio_bp.route('/audio/preview', methods=['POST'])
 def preview_audio():
-    """Generate preview audio for voice selection"""
+    """
+    Generate preview audio for voice selection with caching
+    All heavy lifting (cache check, generation, storage) is done by audio-generation service
+    """
     try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+
         data = request.get_json()
-        text = data.get('text', 'Hello! This is a preview of how this voice sounds.')
-        model = data.get('model', 'kokoro-82m')
-        voice = data.get('voice', 'am_adam')
+        preview_text = 'Hello! This is a preview of how this voice sounds.'
+        text = data.get('text', preview_text)
+        model = data.get('model')  # No default - let service decide
+        voice = data.get('voice')  # No default - let service decide
         language = data.get('language', 'en')
 
-        logger.info(f"🎤 Generating preview audio - Model: {model}, Voice: {voice}, Language: {language}")
+        logger.info(f"🎤 Preview request - Model: {model}, Voice: {voice}, Language: {language}")
 
-        # Call audio generation service
+        # Call audio generation service preview endpoint (handles caching internally)
         response = requests.post(
-            f"{AUDIO_GENERATION_URL}/tts",
+            f"{AUDIO_GENERATION_URL}/preview",
             json={
                 'text': text,
                 'model': model,
                 'voice': voice,
-                'filename': f'preview_{voice}_{language}.wav'
+                'language': language
+            },
+            headers={
+                'x-customer-id': user_context.get('customer_id', 'default'),
+                'x-user-id': user_context.get('user_id', 'default')
             },
             timeout=600  # 10 minutes for model initialization on first run
         )
 
         if response.status_code == 200:
             result = response.json()
-            # Return relative URL for browser access
+
+            # If cached, return the MinIO URL directly
+            if result.get('cached'):
+                logger.info(f"✅ Using cached preview for {voice}")
+                return jsonify({
+                    'status': 'success',
+                    'audioUrl': result.get('audio_url'),
+                    'duration': result.get('duration', 0),
+                    'cached': True
+                }), 200
+
+            # If newly generated and saved to library, return MinIO URL
+            if result.get('audio_id'):
+                logger.info(f"✅ Preview generated and saved for {voice}")
+                return jsonify({
+                    'status': 'success',
+                    'audioUrl': result.get('audio_url'),
+                    'duration': result.get('duration', 0),
+                    'cached': False
+                }), 200
+
+            # Fallback: return temp URL with proxy
             audio_url = result.get('audio_url', '')
             if audio_url.startswith('/'):
                 audio_url = audio_url[1:]  # Remove leading slash
@@ -388,20 +514,22 @@ def preview_audio():
             proxy_url = f'/api/audio/proxy/{audio_url}'
 
             return jsonify({
-                'success': True,
-                'audio_url': proxy_url
+                'status': 'success',
+                'audioUrl': proxy_url,
+                'duration': result.get('duration', 0),
+                'cached': False
             }), 200
         else:
             logger.error(f"Preview generation failed: {response.text}")
             return jsonify({
-                'success': False,
+                'status': 'error',
                 'error': 'Preview generation failed'
             }), response.status_code
 
     except Exception as e:
         logger.error(f"Error generating preview: {str(e)}", exc_info=True)
         return jsonify({
-            'success': False,
+            'status': 'error',
             'error': str(e)
         }), 500
 

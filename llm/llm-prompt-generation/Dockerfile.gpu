@@ -1,5 +1,6 @@
 # Multi-stage build for LLM prompt generation service with GPU support
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
+# Use devel image instead of runtime to get nvcc compiler for building llama-cpp-python
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04 as base
 
 # Set timezone non-interactively
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     make \
     cmake \
     curl \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3.11 as default
@@ -38,25 +43,51 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     torchaudio==2.1.2+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# Install llama-cpp-python with CUDA support (requires CMAKE_ARGS)
-ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on"
-ENV FORCE_CMAKE=1
-RUN pip3 install --no-cache-dir --force-reinstall --no-binary :all: llama-cpp-python==0.2.20
+# Install numpy first (use binary wheel, not source) - MUST be <2.0 for compatibility
+RUN pip3 install --no-cache-dir "numpy>=1.20.0,<2.0"
 
-# Install other dependencies
+# Install llama-cpp-python with CUDA support (requires CMAKE_ARGS)
+# Set all necessary environment variables for CUDA compilation
+ENV CMAKE_ARGS="-DLLAMA_CUBLAS=on -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc"
+ENV FORCE_CMAKE=1
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+ENV CUDA_PATH=/usr/local/cuda
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+
+# Verify CUDA is available before building
+RUN nvcc --version && \
+    pip3 install --no-cache-dir --force-reinstall --verbose llama-cpp-python==0.2.20 2>&1 | tee /tmp/llama-build.log && \
+    echo "Build completed. Checking for CUDA support..." && \
+    python3 -c "from llama_cpp import Llama; print('llama-cpp-python installed successfully')"
+
+# Install other dependencies WITHOUT upgrading torch or numpy
+# Pin tokenizers to <0.19 as required by transformers 4.36.0
 RUN pip3 install --no-cache-dir --ignore-installed blinker \
-    transformers==4.36.0 \
-    accelerate==0.24.0 \
     sentencepiece==0.1.99 \
     protobuf==4.25.0 \
-    numpy==1.24.3 \
-    huggingface-hub==0.19.4 \
     Flask==3.0.0 \
     Flask-CORS==4.0.0 \
     requests==2.31.0 \
     python-dotenv==1.0.0 \
     Werkzeug==3.0.1 \
-    gunicorn==21.2.0
+    gunicorn==21.2.0 \
+    filelock \
+    packaging \
+    pyyaml \
+    regex \
+    "tokenizers>=0.14,<0.19" \
+    safetensors \
+    tqdm \
+    fsspec \
+    "typing-extensions>=3.7.4.3" \
+    psutil
+
+# Install transformers and accelerate WITHOUT their torch/numpy dependencies
+RUN pip3 install --no-cache-dir --no-deps \
+    transformers==4.36.0 \
+    accelerate==0.24.0 \
+    huggingface-hub==0.19.4
 
 # Copy application code
 COPY . .

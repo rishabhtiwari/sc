@@ -1,6 +1,17 @@
 /**
  * Audio Models Configuration
  * Centralized configuration for TTS models, voices, and languages
+ *
+ * @deprecated This file contains hardcoded model configurations.
+ * New components should fetch configuration from /api/audio/config instead.
+ * This ensures the frontend adapts to the actual models loaded on the backend
+ * (e.g., Bark on GPU, Kokoro on CPU).
+ *
+ * Migration guide:
+ * 1. Fetch config: const response = await api.get('/audio/config');
+ * 2. Use response.data.models for available models
+ * 3. Use response.data.default_model for the default model
+ * 4. Use model.voices for available voices per model
  */
 
 export const AUDIO_MODELS = {

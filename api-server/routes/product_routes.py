@@ -290,9 +290,9 @@ def generate_video(product_id):
     return jsonify(response_data), status_code
 
 
-@product_bp.route('/audio/preview', methods=['POST'])
-def preview_audio():
-    """Generate preview audio for voice selection"""
+@product_bp.route('/products/audio/preview', methods=['POST'])
+def preview_product_audio():
+    """Generate preview audio for product voice selection (legacy endpoint)"""
     try:
         data = request.get_json()
         text = data.get('text', 'Hello! This is a preview of how this voice sounds.')
@@ -305,7 +305,7 @@ def preview_audio():
         # Get API server URL for proxy
         API_SERVER_URL = os.getenv('API_SERVER_EXTERNAL_URL', 'http://localhost:8080')
 
-        logger.info(f"🎤 Generating preview audio - Model: {model}, Voice: {voice}, Language: {language}")
+        logger.info(f"🎤 Generating product preview audio - Model: {model}, Voice: {voice}, Language: {language}")
 
         # Call audio generation service
         response = requests.post(
@@ -332,7 +332,7 @@ def preview_audio():
             # Use relative URL for browser compatibility
             audio_url = f"/api/audio/proxy/{relative_audio_url}"
 
-            logger.info(f"✅ Generated preview audio, proxy URL: {audio_url}")
+            logger.info(f"✅ Generated product preview audio, proxy URL: {audio_url}")
 
             return jsonify({
                 'status': 'success',

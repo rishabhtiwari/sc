@@ -145,7 +145,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
       };
       console.log('Sending preview request:', requestBody);
 
-      const response = await fetch('http://localhost:8080/api/templates/preview', {
+      const response = await fetch('/api/templates/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -166,7 +166,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
         const videoPath = data.preview_url || data.video_path;
         const fullVideoUrl = videoPath.startsWith('http')
           ? videoPath
-          : `http://localhost:8080${videoPath}`;
+          : videoPath; // Use relative path, will go through frontend proxy
 
         console.log('Setting preview URL:', fullVideoUrl);
         setPreviewUrl(fullVideoUrl);
@@ -190,7 +190,7 @@ const TemplateWizard = ({ template, onClose, onSave }) => {
   // Cleanup preview video
   const cleanupPreview = async (videoUrl) => {
     try {
-      await fetch('http://localhost:8080/api/templates/preview/cleanup', {
+      await fetch('/api/templates/preview/cleanup', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -867,7 +867,7 @@ const MusicSection = ({ config, updateConfig }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8080/api/templates/upload/audio', {
+      const response = await fetch('/api/templates/upload/audio', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -1051,7 +1051,7 @@ const LogoSection = ({ config, updateConfig }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('http://localhost:8080/api/templates/upload/logo', {
+      const response = await fetch('/api/templates/upload/logo', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -1216,7 +1216,7 @@ const ThumbnailSection = ({ config, updateConfig, previewUrl }) => {
 
       console.log('🖼️ Generating thumbnail from video:', videoPath);
 
-      const response = await fetch('http://localhost:8080/api/templates/preview/thumbnail', {
+      const response = await fetch('/api/templates/preview/thumbnail', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1235,7 +1235,7 @@ const ThumbnailSection = ({ config, updateConfig, previewUrl }) => {
 
       if (data.status === 'success') {
         // Add cache buster to force reload
-        setThumbnailUrl(`http://localhost:8080${data.thumbnail_url}?t=${Date.now()}`);
+        setThumbnailUrl(`${data.thumbnail_url}?t=${Date.now()}`);
         setThumbnailError('');
       } else {
         setThumbnailError(data.error || 'Failed to generate thumbnail');
@@ -1994,8 +1994,8 @@ const LayerEditor = ({ layer, updateLayer }) => {
 
     try {
       const endpoint = layer.type === 'video'
-        ? 'http://localhost:8080/api/templates/upload/video'
-        : 'http://localhost:8080/api/templates/upload/image';
+        ? '/api/templates/upload/video'
+        : '/api/templates/upload/image';
 
       const uploadedFilenames = [];
 

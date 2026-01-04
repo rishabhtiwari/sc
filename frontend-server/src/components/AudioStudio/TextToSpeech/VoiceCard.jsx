@@ -24,10 +24,9 @@ const VoiceCard = ({ voice, isSelected, onSelect }) => {
     try {
       setIsPlaying(true);
 
-      // Generate preview audio
+      // Generate preview audio - let backend use its default model
       const response = await api.post('/audio/preview', {
         text: `Hello! I'm ${voice.name}. ${voice.description}`,
-        model: 'kokoro-82m',
         voice: voice.id,
         language: 'en'
       });

@@ -157,8 +157,8 @@ class NewsAudioService:
 
                 self.logger.info(f"🔊 Generating {field_name} audio for article {article_id}")
 
-                # Generate audio via audio-generation service with voice
-                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use)
+                # Generate audio via audio-generation service with voice and language
+                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use, language)
 
                 if audio_result['success']:
                     # Move generated file to our structure
@@ -319,11 +319,62 @@ class NewsAudioService:
         if lang_code in models:
             return models[lang_code]
 
-        # Fallback to hardcoded defaults if not in config
-        if lang_code == 'hi':
-            return self.config.HINDI_AUDIO_MODEL
+        # Fetch configuration from audio generation service (API-driven)
+        # This will automatically select the right model based on GPU availability
+        try:
+            config_url = f"{self.config.AUDIO_GENERATION_SERVICE_URL}/config"
+            self.logger.info(f"🔍 Fetching audio config from: {config_url}")
+            response = requests.get(config_url, timeout=10)
+            if response.status_code == 200:
+                audio_config = response.json()
+                available_models = audio_config.get('models', {})
+                gpu_enabled = audio_config.get('gpu_enabled', False)
+
+                self.logger.info(f"🎛️  Audio config received - GPU enabled: {gpu_enabled}")
+                self.logger.info(f"🎛️  Available models: {list(available_models.keys())}")
+
+                # Select model based on GPU availability
+                # Coqui XTTS v2 is a universal model that supports all languages
+                if gpu_enabled and 'coqui-xtts' in available_models:
+                    self.logger.info(f"✅ Using GPU model (universal): coqui-xtts for language: {lang_code}")
+                    return 'coqui-xtts'
+                elif gpu_enabled and 'coqui-en' in available_models:
+                    # Fallback to legacy coqui-en (also universal)
+                    self.logger.info(f"✅ Using GPU model (legacy): coqui-en for language: {lang_code}")
+                    return 'coqui-en'
+                else:
+                    # CPU models are language-specific
+                    if lang_code == 'hi':
+                        self.logger.info(f"✅ Using CPU model for Hindi: mms-tts-hin")
+                        return 'mms-tts-hin'
+                    else:
+                        self.logger.info(f"✅ Using CPU model for English: kokoro-82m")
+                        return 'kokoro-82m'
+        except Exception as e:
+            self.logger.warning(f"⚠️ Failed to fetch audio config from API: {str(e)}, using fallback")
+            import traceback
+            self.logger.warning(f"⚠️ Traceback: {traceback.format_exc()}")
+
+        # Fallback to hardcoded defaults if API call fails
+        # Check if GPU is enabled via environment variable
+        use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
+        self.logger.info(f"🔧 Fallback: USE_GPU={use_gpu}")
+
+        if use_gpu:
+            # GPU: Universal Coqui XTTS v2 model (supports all languages)
+            fallback_model = 'coqui-xtts'
+            self.logger.info(f"🔧 Fallback GPU model (universal): {fallback_model} for language: {lang_code}")
+            return fallback_model
         else:
-            return self.config.DEFAULT_AUDIO_MODEL
+            # CPU: Language-specific models
+            if lang_code == 'hi':
+                fallback_model = 'mms-tts-hin'
+                self.logger.info(f"🔧 Fallback CPU model for Hindi: {fallback_model}")
+                return fallback_model
+            else:
+                fallback_model = 'kokoro-82m'
+                self.logger.info(f"🔧 Fallback CPU model for English: {fallback_model}")
+                return fallback_model
 
     def _get_voice_config(self, customer_id: str = None) -> Dict[str, Any]:
         """
@@ -351,41 +402,46 @@ class NewsAudioService:
             config = voice_config_collection.find_one(query)
 
             if not config:
-                # Return default config if not found
+                # Return default config if not found - device-aware
                 self.logger.warning(
-                    f"No voice config found for customer {customer_id}, using defaults")
+                    f"No voice config found for customer {customer_id}, using device-aware defaults")
+
+                # Determine device type from USE_GPU environment variable
+                # (Don't call _get_audio_model_for_language to avoid recursion)
+                use_gpu = os.getenv('USE_GPU', 'false').lower() == 'true'
+
+                # Select models based on GPU availability
+                if use_gpu:
+                    # GPU: Universal Coqui XTTS v2 model (supports all languages)
+                    universal_model = 'coqui-xtts'
+                    en_voices = self._get_default_voices_for_model(universal_model, 'en')
+                    hi_voices = self._get_default_voices_for_model(universal_model, 'hi')
+                    self.logger.info(f"🎭 Device-aware defaults: Universal Model={universal_model}, USE_GPU={use_gpu}")
+                else:
+                    # CPU: Language-specific models
+                    en_model = 'kokoro-82m'
+                    hi_model = 'mms-tts-hin'
+                    en_voices = self._get_default_voices_for_model(en_model, 'en')
+                    hi_voices = self._get_default_voices_for_model(hi_model, 'hi')
+                    self.logger.info(f"🎭 Device-aware defaults: EN={en_model}, HI={hi_model}, USE_GPU={use_gpu}")
+
                 return {
                     'language': 'en',
-                    'models': {
-                        'en': 'kokoro-82m',
-                        'hi': 'mms-tts-hin'
-                    },
+                    'models': {},  # Empty - models will be selected based on GPU availability via API
                     'voices': {
-                        'en': {
-                            'defaultVoice': 'am_adam',
-                            'enableAlternation': True,
-                            'maleVoices': ['am_adam', 'am_michael'],
-                            'femaleVoices': ['af_bella', 'af_sarah']
-                        },
-                        'hi': {
-                            'defaultVoice': 'hi_default',
-                            'enableAlternation': False,  # MMS Hindi only has one voice
-                            'maleVoices': [],
-                            'femaleVoices': []
-                        }
+                        'en': en_voices,
+                        'hi': hi_voices
                     }
                 }
 
             return config
         except Exception as e:
             self.logger.error(f"Error loading voice config: {e}")
-            # Return default config on error
+            # Return safe CPU defaults on error (don't call API in exception handler to avoid recursion)
+            self.logger.warning("Using safe CPU defaults due to error")
             return {
                 'language': 'en',
-                'models': {
-                    'en': 'kokoro-82m',
-                    'hi': 'mms-tts-hin'
-                },
+                'models': {},  # Empty - models will be selected based on GPU availability via API
                 'voices': {
                     'en': {
                         'defaultVoice': 'am_adam',
@@ -402,9 +458,79 @@ class NewsAudioService:
                 }
             }
 
+    def _get_default_voices_for_model(self, model: str, lang_code: str) -> Dict[str, Any]:
+        """
+        Get default voice configuration based on model type (device-aware)
+
+        Args:
+            model: Model name (e.g., 'coqui-en', 'kokoro-82m', 'mms-tts-hin')
+            lang_code: Language code ('en' or 'hi')
+
+        Returns:
+            Voice configuration dict with defaultVoice, maleVoices, femaleVoices
+        """
+        # Coqui TTS models (GPU) - XTTS v2 with 58 speakers
+        if model.startswith('coqui'):
+            if lang_code == 'hi':
+                return {
+                    'defaultVoice': 'Damien Black',
+                    'enableAlternation': True,
+                    'maleVoices': ['Damien Black', 'Andrew Chipper', 'Badr Odhiambo'],
+                    'femaleVoices': ['Claribel Dervla', 'Daisy Studious', 'Gracie Wise']
+                }
+            else:  # English
+                return {
+                    'defaultVoice': 'Claribel Dervla',
+                    'enableAlternation': True,
+                    'maleVoices': ['Damien Black', 'Andrew Chipper', 'Craig Gutsy'],
+                    'femaleVoices': ['Claribel Dervla', 'Daisy Studious', 'Gracie Wise']
+                }
+        # Bark models (GPU) - Legacy support
+        elif model.startswith('bark'):
+            if lang_code == 'hi':
+                return {
+                    'defaultVoice': 'v2/hi_speaker_0',
+                    'enableAlternation': True,
+                    'maleVoices': ['v2/hi_speaker_0', 'v2/hi_speaker_1'],
+                    'femaleVoices': ['v2/hi_speaker_2', 'v2/hi_speaker_3']
+                }
+            else:  # English
+                return {
+                    'defaultVoice': 'v2/en_speaker_0',
+                    'enableAlternation': True,
+                    'maleVoices': ['v2/en_speaker_0', 'v2/en_speaker_1', 'v2/en_speaker_2'],
+                    'femaleVoices': ['v2/en_speaker_3', 'v2/en_speaker_4', 'v2/en_speaker_5']
+                }
+        # Kokoro model (CPU - English)
+        elif model == 'kokoro-82m':
+            return {
+                'defaultVoice': 'am_adam',
+                'enableAlternation': True,
+                'maleVoices': ['am_adam', 'am_michael'],
+                'femaleVoices': ['af_bella', 'af_sarah']
+            }
+        # MMS TTS (CPU - Hindi)
+        elif model == 'mms-tts-hin':
+            return {
+                'defaultVoice': 'hi_default',
+                'enableAlternation': False,  # MMS Hindi only has one voice
+                'maleVoices': [],
+                'femaleVoices': []
+            }
+        else:
+            # Unknown model, return safe defaults
+            self.logger.warning(f"Unknown model {model}, using Kokoro defaults")
+            return {
+                'defaultVoice': 'am_adam',
+                'enableAlternation': True,
+                'maleVoices': ['am_adam'],
+                'femaleVoices': ['af_bella']
+            }
+
     def _determine_voice(self, voice: str = None, language: str = 'en', customer_id: str = None) -> str:
         """
         Determine which voice to use based on language and customer config
+        Device-aware: uses different voices for Bark (GPU) vs Kokoro/MMS (CPU)
 
         Args:
             voice: Requested voice ('male', 'female', or specific voice name)
@@ -429,20 +555,11 @@ class NewsAudioService:
         lang_voice_config = voices.get(lang_code, {})
 
         if not lang_voice_config:
-            # Fallback to default language config
-            self.logger.warning(f"No voice config for language {lang_code}, using defaults")
-            if lang_code == 'hi':
-                lang_voice_config = {
-                    'defaultVoice': 'hi_default',
-                    'maleVoices': [],
-                    'femaleVoices': []
-                }
-            else:
-                lang_voice_config = {
-                    'defaultVoice': 'am_adam',
-                    'maleVoices': ['am_adam', 'am_michael'],
-                    'femaleVoices': ['af_bella', 'af_sarah']
-                }
+            # Fallback to device-aware defaults based on model
+            self.logger.warning(f"No voice config for language {lang_code}, fetching device-aware defaults")
+            model = self._get_audio_model_for_language(language, customer_id=customer_id)
+            lang_voice_config = self._get_default_voices_for_model(model, lang_code)
+            self.logger.info(f"🎭 Using device-aware defaults for model {model}: {lang_voice_config.get('defaultVoice')}")
 
         # Determine voice based on request
         if not voice:
@@ -487,21 +604,11 @@ class NewsAudioService:
         lang_voice_config = voices.get(lang_code, {})
 
         if not lang_voice_config:
-            # Fallback to defaults
-            if lang_code == 'hi':
-                lang_voice_config = {
-                    'defaultVoice': 'hi_default',
-                    'enableAlternation': False,  # MMS Hindi only has one voice
-                    'maleVoices': [],
-                    'femaleVoices': []
-                }
-            else:
-                lang_voice_config = {
-                    'defaultVoice': 'am_adam',
-                    'enableAlternation': True,
-                    'maleVoices': ['am_adam', 'am_michael'],
-                    'femaleVoices': ['af_bella', 'af_sarah']
-                }
+            # Fallback to device-aware defaults based on model
+            self.logger.warning(f"No voice config for language {lang_code}, fetching device-aware defaults")
+            model = self._get_audio_model_for_language(language, customer_id=customer_id)
+            lang_voice_config = self._get_default_voices_for_model(model, lang_code)
+            self.logger.info(f"🎭 Using device-aware defaults for model {model}: {lang_voice_config.get('defaultVoice')}")
 
         # Check if alternation is enabled for this language
         if not lang_voice_config.get('enableAlternation', True):
@@ -551,7 +658,7 @@ class NewsAudioService:
             self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default")
             return lang_voice_config.get('defaultVoice', 'am_adam')
 
-    def _call_audio_generation_service(self, text: str, model: str, voice: str = None) -> Dict[str, Any]:
+    def _call_audio_generation_service(self, text: str, model: str, voice: str = None, language: str = 'en') -> Dict[str, Any]:
         """
         Call the audio-generation service to generate TTS
 
@@ -559,6 +666,7 @@ class NewsAudioService:
             text: Text to convert to speech
             model: TTS model to use
             voice: Voice to use for generation (optional)
+            language: Language code for generation (e.g., 'en', 'hi', 'es') - used by universal models like Coqui XTTS
 
         Returns:
             Dictionary with generation results
@@ -569,15 +677,17 @@ class NewsAudioService:
                 'text': text,
                 'model': model,
                 'format': 'wav',
-                'voice': voice or self.config.DEFAULT_MALE_VOICE  # Use provided voice or default
+                'voice': voice or self.config.DEFAULT_MALE_VOICE,  # Use provided voice or default
+                'language': language  # Add language parameter for universal models
             }
 
             self.logger.info(f"🔊 Calling audio generation service: {url}")
-            self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}")
+            self.logger.info(f"📝 Text length: {len(text)} chars, Model: {model}, Language: {language}")
             self.logger.info(f"📦 Payload: {payload}")
 
-            # Use extended timeout for Kokoro model (10 minutes) as it takes longer to generate
-            timeout = 600 if model == 'kokoro-82m' else self.config.AUDIO_GENERATION_TIMEOUT
+            # Use extended timeout for CPU-based models (10 minutes) as they take longer to generate
+            # Kokoro on CPU is slow, Bark on GPU is fast
+            timeout = 600 if model in ['kokoro-82m', 'mms-tts-hin'] else self.config.AUDIO_GENERATION_TIMEOUT
             self.logger.info(f"⏱️ Using timeout: {timeout}s for model: {model}")
 
             response = requests.post(

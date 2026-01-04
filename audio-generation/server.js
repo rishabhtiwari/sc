@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import axios from 'axios';
 import { VoiceService } from './services/VoiceService.js';
 
 // ES module equivalent of __dirname
@@ -57,16 +58,33 @@ const voiceService = new VoiceService(path.join(__dirname, 'public'), cacheDir);
 // Initialize default models
 async function initializeModels() {
     console.log('Initializing voice models...');
+
+    // Detect if GPU is available by checking environment variable
+    const useGPU = process.env.USE_GPU === 'true' || process.env.CUDA_VISIBLE_DEVICES !== undefined;
+
     try {
-        // Load Kokoro-82M as primary English model (high quality)
-        await voiceService.loadModel('kokoro-82m', false);
-        console.log('✅ Kokoro-82M English model loaded successfully!');
+        if (useGPU) {
+            console.log('🎮 GPU detected - Loading Coqui TTS XTTS v2 (GPU-accelerated)');
 
-        // Load Hindi MMS model
-        await voiceService.loadModel('mms-tts-hin', false);
-        console.log('✅ Hindi MMS model loaded successfully!');
+            // Load Coqui TTS as the default model (single universal model supports all 17 languages)
+            await voiceService.loadModel('coqui-xtts', true);
+            console.log('✅ Coqui TTS XTTS v2 loaded successfully (default)!');
 
-        console.log('🎉 Voice model(s) initialized successfully!');
+            console.log('🎉 Coqui TTS XTTS v2 initialized successfully with GPU acceleration!');
+            console.log('🎭 Features: 58 universal speakers, 17 languages, voice cloning, fast generation');
+            console.log('🌐 Supported languages: English, Hindi, Spanish, French, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese, Korean, Hungarian');
+            console.log('📊 Available speakers: Claribel Dervla, Damien Black, and 56 more');
+            console.log('💡 All speakers can speak all languages - just specify language code in request (en, hi, es, fr, etc.)');
+        } else {
+            console.log('💻 CPU mode - Loading Kokoro-82M model (optimized for CPU)');
+
+            // Load Kokoro-82M as the default model for CPU (faster on CPU than Coqui)
+            await voiceService.loadModel('kokoro-82m', true);
+            console.log('✅ Kokoro-82M model loaded successfully (default)!');
+
+            console.log('🎉 Kokoro-82M model initialized successfully for CPU!');
+            console.log('💡 For GPU acceleration and multi-language support, deploy with --gpu flag');
+        }
     } catch (error) {
         console.error('Failed to initialize voice models:', error);
         process.exit(1);
@@ -81,7 +99,7 @@ app.get('/health', (req, res) => {
 // TTS endpoint - unified endpoint for all TTS models
 app.post('/tts', async (req, res) => {
     try {
-        const { text, model, voice, speed, format = 'wav', news_id, product_id, filename } = req.body;
+        const { text, model, voice, speed, format = 'wav', language, news_id, product_id, filename } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Text is required' });
@@ -90,6 +108,7 @@ app.post('/tts', async (req, res) => {
         console.log(`🎤 Generating speech for: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
         console.log(`🤖 Model: ${model || 'default'}`);
         if (voice) console.log(`🎭 Voice: ${voice}`);
+        if (language) console.log(`🌍 Language: ${language}`);
         if (speed) console.log(`⚡ Speed: ${speed}`);
         if (news_id) console.log(`📰 News ID: ${news_id}`);
         if (product_id) console.log(`🛍️ Product ID: ${product_id}`);
@@ -98,6 +117,7 @@ app.post('/tts', async (req, res) => {
         // Build options object
         const options = { model, format };
         if (voice) options.voice = voice;
+        if (language) options.language = language;
         if (speed) options.speed = speed;
         if (news_id) options.news_id = news_id;
         if (product_id) options.product_id = product_id;
@@ -179,6 +199,61 @@ app.get('/models/available', (req, res) => {
     });
 });
 
+// Get available speakers for Coqui TTS XTTS v2
+app.get('/speakers', async (req, res) => {
+    try {
+        const { CoquiVoiceModel } = await import('./models/CoquiVoiceModel.js');
+        const speakers = await CoquiVoiceModel.getAvailableSpeakers();
+
+        res.json({
+            total: speakers.length,
+            speakers: speakers,
+            model: 'Coqui TTS XTTS v2',
+            description: 'Pre-trained speakers supporting 16+ languages (dynamically loaded from server)'
+        });
+    } catch (error) {
+        console.error('Speakers error:', error);
+        res.status(500).json({ error: 'Failed to get speakers list' });
+    }
+});
+
+// Get TTS configuration (default model, available voices, etc.)
+app.get('/config', (req, res) => {
+    try {
+        const loadedModels = voiceService.getLoadedModels();
+        const availableModels = voiceService.getAvailableModels();
+        const defaultModel = loadedModels.default_model;
+
+        // Get voices/speakers for loaded models
+        const models = {};
+        for (const [modelKey, modelInfo] of Object.entries(loadedModels.loaded_models)) {
+            models[modelKey] = {
+                name: modelInfo.model_name || modelKey,
+                language: modelInfo.language || 'Unknown',
+                voices: modelInfo.availableSpeakers || modelInfo.voices || [],
+                voicesWithMetadata: modelInfo.voicesWithMetadata || [],  // Include gender metadata
+                default_voice: modelInfo.defaultSpeaker || (modelInfo.availableSpeakers && modelInfo.availableSpeakers[0]) || null,
+                supports_emotions: modelInfo.supportsEmotions || false,
+                supports_music: modelInfo.supportsMusic || false,
+                supports_voice_cloning: modelInfo.supportsVoiceCloning || false,
+                supported_languages: modelInfo.supportedLanguages || [],
+                supported_language_names: modelInfo.supportedLanguageNames || [],
+                sampleTexts: modelInfo.sampleTexts || {},  // Include language-specific sample texts
+                description: modelInfo.description || ''
+            };
+        }
+
+        res.json({
+            default_model: defaultModel,
+            models: models,
+            gpu_enabled: process.env.USE_GPU === 'true'
+        });
+    } catch (error) {
+        console.error('Config error:', error);
+        res.status(500).json({ error: 'Failed to get configuration' });
+    }
+});
+
 // Get models by language
 app.get('/models/language/:language', (req, res) => {
     const { language } = req.params;
@@ -186,6 +261,184 @@ app.get('/models/language/:language', (req, res) => {
         language: language,
         models: voiceService.getModelsByLanguage(language)
     });
+});
+
+// Preview endpoint with caching support
+app.post('/preview', async (req, res) => {
+    try {
+        const { text, model, voice, language } = req.body;
+
+        // System previews are shared globally, not per customer/user
+        const SYSTEM_CUSTOMER_ID = 'system';
+        const SYSTEM_USER_ID = 'voice-previews';
+
+        console.log(`\n${'='.repeat(80)}`);
+        console.log(`🎤 PREVIEW REQUEST RECEIVED`);
+        console.log(`   Model: ${model}, Voice: ${voice}, Language: ${language}`);
+        console.log(`   Storage: System-wide (shared across all users)`);
+        console.log(`   Text length: ${text?.length || 0} chars`);
+        console.log(`${'='.repeat(80)}\n`);
+
+        // Step 1: Check if preview already exists in database AND MinIO
+        const ASSET_SERVICE_URL = process.env.ASSET_SERVICE_URL || 'http://ichat-asset-service:8099';
+
+        try {
+            console.log(`🔍 Checking cache for: voice=${voice}, model=${model}, language=${language}`);
+
+            const checkResponse = await axios.get(`${ASSET_SERVICE_URL}/api/audio-studio/library`, {
+                params: {
+                    page: 1,
+                    page_size: 100,
+                    folder: 'voice-previews'
+                },
+                headers: {
+                    'x-customer-id': SYSTEM_CUSTOMER_ID,
+                    'x-user-id': SYSTEM_USER_ID
+                }
+            });
+
+            // Asset service returns 'audio_files' not 'items'
+            const audioFiles = checkResponse.data.audio_files || checkResponse.data.items || [];
+
+            if (checkResponse.data.success && audioFiles.length > 0) {
+                console.log(`📚 Found ${audioFiles.length} cached previews in database`);
+
+                // Find matching preview
+                const existingPreview = audioFiles.find(item => {
+                    const config = item.generation_config || {};
+                    const matches = config.voice === voice &&
+                                  config.model === model &&
+                                  (config.language === language || item.language === language);
+
+                    if (matches) {
+                        console.log(`🎯 Match found: ${item.audio_id}`);
+                    }
+                    return matches;
+                });
+
+                if (existingPreview && existingPreview.audio_id) {
+                    // Found cached preview - return proxy URL (no need to verify MinIO)
+                    // The proxy endpoint will handle fetching from MinIO with fresh presigned URL
+                    const proxyUrl = `/api/audio-studio/preview/${existingPreview.audio_id}`;
+
+                    console.log(`✅ Found cached preview for ${voice} (${language})`);
+                    console.log(`   Audio ID: ${existingPreview.audio_id}`);
+                    console.log(`   Proxy URL: ${proxyUrl}`);
+
+                    return res.json({
+                        success: true,
+                        audio_url: proxyUrl,
+                        duration: existingPreview.duration || 0,
+                        cached: true,
+                        audio_id: existingPreview.audio_id
+                    });
+                } else {
+                    console.log(`📝 No matching preview found in database`);
+                }
+            } else {
+                console.log(`📝 No cached previews found in database`);
+            }
+        } catch (error) {
+            console.warn(`⚠️ Could not check cache: ${error.message}`);
+            // Continue to generate new preview
+        }
+
+        // Step 2: Generate new preview audio
+        console.log(`🎙️ Generating new preview for ${voice} (${language})`);
+        console.log(`   Text length: ${text.length} characters`);
+
+        const options = {
+            model: model,
+            voice: voice,
+            language: language,
+            speed: 1.0
+        };
+
+        const result = await voiceService.generateAudioFile(text, options);
+        console.log(`✅ Audio generated: ${result.audio_url}`);
+
+        // Step 3: Save to audio library (asset service will handle MinIO upload)
+        try {
+            console.log(`\n💾 SAVING PREVIEW TO ASSET SERVICE`);
+            console.log(`   Asset Service URL: ${ASSET_SERVICE_URL}`);
+            console.log(`   Storage: System-wide (customer=${SYSTEM_CUSTOMER_ID}, user=${SYSTEM_USER_ID})`);
+            console.log(`   Audio URL: ${result.audio_url}`);
+            console.log(`   Voice: ${voice}, Model: ${model}, Language: ${language}`);
+
+            const saveResponse = await axios.post(
+                `${ASSET_SERVICE_URL}/api/audio-studio/library`,
+                {
+                    text: text,
+                    audioUrl: result.audio_url,  // Use camelCase for Pydantic validation_alias
+                    duration: result.duration || 0,
+                    voice: voice,
+                    voiceName: voice,  // Use camelCase for Pydantic validation_alias
+                    language: language,
+                    speed: 1.0,
+                    model: model,
+                    folder: 'voice-previews',
+                    tags: ['system-preview', model, language, voice]
+                },
+                {
+                    headers: {
+                        'x-customer-id': SYSTEM_CUSTOMER_ID,
+                        'x-user-id': SYSTEM_USER_ID,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (saveResponse.data.success) {
+                const audioId = saveResponse.data.audio_id || saveResponse.data.id;
+                const minioUrl = saveResponse.data.storage?.url || saveResponse.data.audio_url || saveResponse.data.url;
+
+                // Return proxy URL through API server instead of direct MinIO URL
+                // Format: /api/audio-studio/preview/{audio_id}
+                const proxyUrl = `/api/audio-studio/preview/${audioId}`;
+
+                console.log(`✅ Preview saved to MinIO + MongoDB`);
+                console.log(`   Audio ID: ${audioId}`);
+                console.log(`   MinIO URL: ${minioUrl}`);
+                console.log(`   Proxy URL: ${proxyUrl}`);
+
+                return res.json({
+                    success: true,
+                    audio_url: proxyUrl,
+                    duration: result.duration || 0,
+                    cached: false,
+                    audio_id: audioId
+                });
+            } else {
+                console.warn(`⚠️ Asset service returned success=false`);
+                console.warn(`   Response: ${JSON.stringify(saveResponse.data)}`);
+            }
+        } catch (error) {
+            console.error(`❌ Could not save to library: ${error.message}`);
+            if (error.response) {
+                console.error(`   Status: ${error.response.status}`);
+                console.error(`   Data: ${JSON.stringify(error.response.data)}`);
+            }
+            console.error(`   Stack: ${error.stack}`);
+            // Return temp URL if saving fails
+        }
+
+        // Step 4: Return temp URL if saving to library failed
+        console.log(`⚠️ Returning temp URL (not saved to MinIO)`);
+        res.json({
+            success: true,
+            audio_url: result.audio_url,
+            duration: result.duration || 0,
+            cached: false
+        });
+
+    } catch (error) {
+        console.error('Preview generation error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate preview',
+            details: error.message
+        });
+    }
 });
 
 // Load a new model
@@ -464,7 +717,27 @@ async function startServer() {
         console.log(`📊 Models info: GET http://localhost:${PORT}/models`);
         console.log(`📚 Available models: GET http://localhost:${PORT}/models/available`);
         console.log(`⚙️  Load model: POST http://localhost:${PORT}/models/load`);
-        console.log(`🌍 Supported Languages: English (kokoro-82m), Hindi (mms-tts-hin)`);
+
+        // Show default model info
+        const loadedModels = voiceService.getLoadedModels();
+        const defaultModel = loadedModels.default_model;
+
+        if (defaultModel && defaultModel.startsWith('coqui')) {
+            console.log(`🌍 Default Model: Coqui TTS XTTS v2 (${defaultModel})`);
+            console.log(`🎭 Features: 58 speakers, 17 languages, voice cloning, fast generation`);
+            console.log(`🌐 Languages: English, Hindi, Spanish, French, German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese, Korean, Hungarian`);
+            console.log(`💡 Specify language in request: { "language": "es" } for Spanish, { "language": "fr" } for French, etc.`);
+        } else if (defaultModel && defaultModel.startsWith('bark')) {
+            console.log(`🌍 Default Model: Bark (${defaultModel})`);
+            console.log(`🎭 Bark Features: Voice cloning, emotions, music, 13+ languages`);
+            console.log(`📝 Emotion tags: [laughs], [sighs], [gasps], [clears throat]`);
+            console.log(`🎵 Music: Wrap lyrics in ♪ symbols`);
+        } else if (defaultModel && defaultModel.startsWith('kokoro')) {
+            console.log(`🌍 Default Model: Kokoro (${defaultModel})`);
+            console.log(`🎭 Kokoro Features: Fast CPU inference, natural English voices`);
+        } else {
+            console.log(`🌍 Default Model: ${defaultModel || 'None'}`);
+        }
     });
 }
 

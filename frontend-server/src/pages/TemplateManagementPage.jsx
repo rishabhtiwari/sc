@@ -18,7 +18,8 @@ const TemplateManagementPage = () => {
     all: { label: 'All Templates', icon: '📋', color: 'gray' },
     news: { label: 'News Videos', icon: '📰', color: 'blue' },
     shorts: { label: 'YouTube Shorts', icon: '📱', color: 'purple' },
-    ecommerce: { label: 'E-commerce', icon: '🛍️', color: 'green' }
+    ecommerce: { label: 'E-commerce', icon: '🛍️', color: 'green' },
+    social: { label: 'Social Media', icon: '📱', color: 'pink' }
   };
 
   useEffect(() => {
@@ -321,7 +322,7 @@ const TableRowActions = ({ template, onEdit, onDelete }) => {
       const fullTemplate = await templateService.getTemplate(template.template_id);
       const templateData = fullTemplate.template || fullTemplate;
 
-      const response = await fetch('http://localhost:8080/api/templates/preview', {
+      const response = await fetch('/api/templates/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -339,7 +340,7 @@ const TableRowActions = ({ template, onEdit, onDelete }) => {
       }
 
       const data = await response.json();
-      const fullPreviewUrl = `http://localhost:8080${data.preview_url}`;
+      const fullPreviewUrl = data.preview_url;
       setPreviewUrl(fullPreviewUrl);
       setShowPreview(true);
     } catch (err) {
@@ -357,7 +358,7 @@ const TableRowActions = ({ template, onEdit, onDelete }) => {
       const fullTemplate = await templateService.getTemplate(template.template_id);
       const templateData = fullTemplate.template || fullTemplate;
 
-      const response = await fetch('http://localhost:8080/api/templates/preview', {
+      const response = await fetch('/api/templates/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -375,7 +376,7 @@ const TableRowActions = ({ template, onEdit, onDelete }) => {
       }
 
       const data = await response.json();
-      const fullPreviewUrl = `http://localhost:8080${data.preview_url}`;
+      const fullPreviewUrl = data.preview_url;
       setPreviewUrl(fullPreviewUrl);
       setShowPreview(true);
     } catch (err) {
@@ -493,7 +494,7 @@ const VideoTemplateCard = ({ template, categories, onEdit, onDelete }) => {
           logo: templateData.logo?.enabled || false
         });
 
-        const response = await fetch('http://localhost:8080/api/templates/preview', {
+        const response = await fetch('/api/templates/preview', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -512,7 +513,7 @@ const VideoTemplateCard = ({ template, categories, onEdit, onDelete }) => {
 
         const data = await response.json();
         console.log('✅ Preview generated:', data);
-        const fullPreviewUrl = `http://localhost:8080${data.preview_url}`;
+        const fullPreviewUrl = data.preview_url;
         setPreviewUrl(fullPreviewUrl);
         setShowPreview(true);
       } catch (err) {
@@ -537,7 +538,7 @@ const VideoTemplateCard = ({ template, categories, onEdit, onDelete }) => {
       const fullTemplate = await templateService.getTemplate(template.template_id);
       const templateData = fullTemplate.template || fullTemplate;
 
-      const response = await fetch('http://localhost:8080/api/templates/preview', {
+      const response = await fetch('/api/templates/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -556,7 +557,7 @@ const VideoTemplateCard = ({ template, categories, onEdit, onDelete }) => {
 
       const data = await response.json();
       console.log('✅ Preview recomputed:', data);
-      const fullPreviewUrl = `http://localhost:8080${data.preview_url}`;
+      const fullPreviewUrl = data.preview_url;
       setPreviewUrl(fullPreviewUrl);
       setShowPreview(true);
 
@@ -595,7 +596,7 @@ const VideoTemplateCard = ({ template, categories, onEdit, onDelete }) => {
           />
         ) : template.thumbnail?.source ? (
           <img
-            src={`http://localhost:8080/api/templates/files/${template.thumbnail.source}`}
+            src={`/api/templates/files/${template.thumbnail.source}`}
             alt={template.name}
             className="w-full h-full object-cover"
           />

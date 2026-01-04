@@ -4,14 +4,15 @@ import api from '../services/api';
 /**
  * Hook for audio generation
  * Handles TTS generation with different models and voices
+ * Configuration is fetched from API, no hardcoded defaults
  */
 export const useAudioGeneration = () => {
   const [generating, setGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioConfig, setAudioConfig] = useState({
-    model: 'kokoro-82m',
+    model: null,  // Will be set from API or component
     language: 'en',
-    voice: 'am_adam'
+    voice: null   // Will be set from API or component
   });
   const [error, setError] = useState(null);
 
@@ -141,9 +142,10 @@ export const useAudioGeneration = () => {
    * @param {string} options.text - Text to convert to speech
    * @param {string} options.model - TTS model
    * @param {string} options.voice - Voice ID
+   * @param {string} options.language - Language code (optional)
    * @param {number} options.speed - Speech speed
    */
-  const generateAudio = useCallback(async ({ text, model, voice, speed = 1.0 }) => {
+  const generateAudio = useCallback(async ({ text, model, voice, language, speed = 1.0 }) => {
     setGenerating(true);
     setError(null);
 
@@ -153,6 +155,7 @@ export const useAudioGeneration = () => {
         text,
         model,
         voice,
+        language,
         speed,
         format: 'wav'
       });
