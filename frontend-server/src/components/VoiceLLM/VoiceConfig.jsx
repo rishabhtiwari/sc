@@ -379,7 +379,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         </div>
 
         {/* Voice Cards Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
           {filteredVoices.map((voice) => {
             const isDefault = currentVoiceConfig.defaultVoice === voice.id;
             const isMaleVoice = (currentVoiceConfig.maleVoices || []).includes(voice.id);
@@ -389,16 +389,16 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
             return (
               <div
                 key={voice.id}
-                className={`p-3 rounded-lg border-2 transition-all ${
+                className={`p-2 rounded-lg border-2 transition-all ${
                   isDefault
                     ? 'border-green-500 bg-green-50'
                     : 'border-gray-200 bg-white hover:border-gray-300'
                 }`}
               >
-                <div className="mb-2">
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="text-lg">{genderIcon}</span>
-                    <h4 className="font-medium text-sm text-gray-900 truncate flex-1" title={voice.name || voice.id}>
+                <div className="mb-1.5">
+                  <div className="flex items-center gap-0.5 mb-0.5">
+                    <span className="text-sm">{genderIcon}</span>
+                    <h4 className="font-medium text-xs text-gray-900 truncate flex-1" title={voice.name || voice.id}>
                       {voice.name || voice.id}
                     </h4>
                   </div>
@@ -407,51 +407,51 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                       {voice.accent}
                     </p>
                   )}
-                  <div className="flex gap-1 mt-1 flex-wrap">
+                  <div className="flex gap-0.5 mt-0.5 flex-wrap">
                     {isDefault && (
-                      <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
-                        ⭐ Default
+                      <span className="inline-block px-1 py-0.5 bg-green-100 text-green-700 text-xs rounded">
+                        ⭐
                       </span>
                     )}
                     {isMaleVoice && (
-                      <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
-                        👨 Male
+                      <span className="inline-block px-1 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
+                        👨
                       </span>
                     )}
                     {isFemaleVoice && (
-                      <span className="inline-block px-2 py-0.5 bg-pink-100 text-pink-700 text-xs font-medium rounded">
-                        👩 Female
+                      <span className="inline-block px-1 py-0.5 bg-pink-100 text-pink-700 text-xs rounded">
+                        👩
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     onClick={() => handlePreview(voice.id)}
                     disabled={previewingVoice === voice.id}
-                    className="w-full text-xs py-1.5"
+                    className="w-full text-xs py-1"
                   >
                     {previewingVoice === voice.id ? (
                       <>
-                        <Spinner size="sm" /> Playing...
+                        <Spinner size="sm" />
                       </>
                     ) : (
-                      '🔊 Preview'
+                      '🔊'
                     )}
                   </Button>
 
                   <Button
                     type="button"
-                    variant="primary"
+                    variant={isDefault ? 'primary' : 'secondary'}
                     size="sm"
                     onClick={() => handleVoiceConfigChange('defaultVoice', voice.id)}
-                    className="w-full text-xs py-1.5"
+                    className="w-full text-xs py-1"
                   >
-                    {isDefault ? '⭐ Default' : 'Set Default'}
+                    {isDefault ? '⭐' : 'Default'}
                   </Button>
 
                   {/* Add to Male/Female for alternation */}
@@ -461,9 +461,9 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                       variant={isMaleVoice ? 'primary' : 'secondary'}
                       size="sm"
                       onClick={() => handleVoiceSelection(voice.id, 'male')}
-                      className="w-full text-xs py-1.5"
+                      className="w-full text-xs py-1"
                     >
-                      {isMaleVoice ? '✓ Male Voice' : '+ Add Male'}
+                      {isMaleVoice ? '✓ 👨' : '+ 👨'}
                     </Button>
                   )}
 
@@ -473,9 +473,9 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                       variant={isFemaleVoice ? 'primary' : 'secondary'}
                       size="sm"
                       onClick={() => handleVoiceSelection(voice.id, 'female')}
-                      className="w-full text-xs py-1.5"
+                      className="w-full text-xs py-1"
                     >
-                      {isFemaleVoice ? '✓ Female Voice' : '+ Add Female'}
+                      {isFemaleVoice ? '✓ 👩' : '+ 👩'}
                     </Button>
                   )}
                 </div>
