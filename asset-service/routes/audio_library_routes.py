@@ -205,24 +205,33 @@ async def delete_from_library(
 ):
     """Delete audio from library"""
     try:
-        # CRITICAL: Pass customer_id for multi-tenancy enforcement
-        asset = db_service.get_asset(audio_id, customer_id=x_customer_id)
+        logger.info(f"Deleting audio from library: audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
 
-        if not asset:
+        # Get audio from audio_library collection (not assets collection)
+        audio = db_service.get_audio_by_id(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id
+        )
+
+        if not audio:
+            logger.error(f"Audio not found: audio_id={audio_id}, customer={x_customer_id}, user={x_user_id}")
             raise HTTPException(status_code=404, detail="Audio not found")
 
-        # Soft delete with multi-tenancy
-        db_service.delete_asset(
-            audio_id,
-            soft_delete=True,
-            customer_id=x_customer_id
+        # Soft delete from audio_library collection
+        db_service.delete_audio_library_entry(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id
         )
-        
+
+        logger.info(f"Successfully deleted audio: {audio_id}")
+
         return {
             "success": True,
             "message": "Audio deleted from library"
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
