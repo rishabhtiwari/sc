@@ -714,6 +714,19 @@ def update_voice_config():
 
         data = request.get_json()
 
+        voice_generator_job.logger.info(f"📝 Updating voice config for customer: {customer_id}")
+        voice_generator_job.logger.info(f"   Language: {data.get('language')}")
+        voice_generator_job.logger.info(f"   Models: {data.get('models')}")
+
+        # Log voice configuration details
+        if 'voices' in data:
+            for lang, voice_config in data['voices'].items():
+                voice_generator_job.logger.info(f"   {lang.upper()} voices:")
+                voice_generator_job.logger.info(f"      Default: {voice_config.get('defaultVoice')}")
+                voice_generator_job.logger.info(f"      Alternation: {voice_config.get('enableAlternation')}")
+                voice_generator_job.logger.info(f"      Male: {voice_config.get('maleVoices', [])}")
+                voice_generator_job.logger.info(f"      Female: {voice_config.get('femaleVoices', [])}")
+
         # Build multi-tenant query
         base_query = {}
         query = build_multi_tenant_query(base_query, customer_id=customer_id)
@@ -751,6 +764,8 @@ def update_voice_config():
                 query,
                 {'$set': prepared_updates}
             )
+
+            voice_generator_job.logger.info(f"✅ Voice config updated successfully for customer: {customer_id}")
         else:
             # Create new config with default structure
             new_config = {
