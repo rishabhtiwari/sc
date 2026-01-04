@@ -24,6 +24,58 @@ ASSET_SERVICE_URL = os.getenv(
 )
 
 
+@audio_studio_bp.route('/audio-studio/preview/<audio_id>', methods=['GET'])
+def get_preview_audio(audio_id):
+    """
+    Proxy endpoint: Stream preview audio from asset service
+    This endpoint serves system-wide voice previews stored in MinIO
+    """
+    try:
+        # System previews use special customer/user IDs
+        SYSTEM_CUSTOMER_ID = 'system'
+        SYSTEM_USER_ID = 'voice-previews'
+
+        logger.info(f"🔊 Streaming preview audio: {audio_id}")
+
+        # Get the presigned URL from asset service
+        response = requests.get(
+            f"{ASSET_SERVICE_URL}/api/audio-studio/library/{audio_id}/url",
+            headers={
+                'x-customer-id': SYSTEM_CUSTOMER_ID,
+                'x-user-id': SYSTEM_USER_ID
+            },
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            presigned_url = result.get('url')
+
+            if presigned_url:
+                # Stream the audio file from MinIO
+                audio_response = requests.get(presigned_url, stream=True, timeout=30)
+
+                return Response(
+                    audio_response.iter_content(chunk_size=8192),
+                    status=audio_response.status_code,
+                    content_type=audio_response.headers.get('Content-Type', 'audio/wav'),
+                    headers={
+                        'Content-Length': audio_response.headers.get('Content-Length'),
+                        'Accept-Ranges': 'bytes'
+                    }
+                )
+            else:
+                logger.error(f"No URL in response from asset service")
+                return jsonify({'error': 'No URL found', 'status': 'error'}), 500
+        else:
+            logger.error(f"Asset service returned {response.status_code}")
+            return jsonify({'error': 'Preview not found', 'status': 'error'}), response.status_code
+
+    except Exception as e:
+        logger.error(f"Error streaming preview audio: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
 @audio_studio_bp.route('/audio-studio/library', methods=['GET'])
 def get_audio_library():
     """

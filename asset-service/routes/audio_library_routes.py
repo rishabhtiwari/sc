@@ -159,6 +159,39 @@ async def get_library(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/library/{audio_id}/url")
+async def get_audio_url(
+    audio_id: str,
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """Get presigned URL for a specific audio library item"""
+    try:
+        # Get audio from library
+        audio = db_service.get_audio_by_id(
+            audio_id=audio_id,
+            customer_id=x_customer_id,
+            user_id=x_user_id
+        )
+
+        if not audio:
+            raise HTTPException(status_code=404, detail="Audio not found")
+
+        # Return the presigned URL
+        return {
+            "success": True,
+            "url": audio.get("url"),
+            "audio_id": audio_id,
+            "duration": audio.get("duration", 0.0)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting audio URL: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/library/{audio_id}")
 async def delete_from_library(
     audio_id: str,

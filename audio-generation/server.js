@@ -267,13 +267,15 @@ app.get('/models/language/:language', (req, res) => {
 app.post('/preview', async (req, res) => {
     try {
         const { text, model, voice, language } = req.body;
-        const customerId = req.headers['x-customer-id'] || 'default';
-        const userId = req.headers['x-user-id'] || 'default';
+
+        // System previews are shared globally, not per customer/user
+        const SYSTEM_CUSTOMER_ID = 'system';
+        const SYSTEM_USER_ID = 'voice-previews';
 
         console.log(`\n${'='.repeat(80)}`);
         console.log(`🎤 PREVIEW REQUEST RECEIVED`);
         console.log(`   Model: ${model}, Voice: ${voice}, Language: ${language}`);
-        console.log(`   Customer: ${customerId}, User: ${userId}`);
+        console.log(`   Storage: System-wide (shared across all users)`);
         console.log(`   Text length: ${text?.length || 0} chars`);
         console.log(`${'='.repeat(80)}\n`);
 
@@ -290,8 +292,8 @@ app.post('/preview', async (req, res) => {
                     folder: 'voice-previews'
                 },
                 headers: {
-                    'x-customer-id': customerId,
-                    'x-user-id': userId
+                    'x-customer-id': SYSTEM_CUSTOMER_ID,
+                    'x-user-id': SYSTEM_USER_ID
                 }
             });
 
@@ -365,7 +367,7 @@ app.post('/preview', async (req, res) => {
         try {
             console.log(`\n💾 SAVING PREVIEW TO ASSET SERVICE`);
             console.log(`   Asset Service URL: ${ASSET_SERVICE_URL}`);
-            console.log(`   Customer: ${customerId}, User: ${userId}`);
+            console.log(`   Storage: System-wide (customer=${SYSTEM_CUSTOMER_ID}, user=${SYSTEM_USER_ID})`);
             console.log(`   Audio URL: ${result.audio_url}`);
             console.log(`   Voice: ${voice}, Model: ${model}, Language: ${language}`);
 
@@ -381,30 +383,33 @@ app.post('/preview', async (req, res) => {
                     speed: 1.0,
                     model: model,
                     folder: 'voice-previews',
-                    tags: ['preview', model, language, voice]
+                    tags: ['system-preview', model, language, voice]
                 },
                 {
                     headers: {
-                        'x-customer-id': customerId,
-                        'x-user-id': userId,
+                        'x-customer-id': SYSTEM_CUSTOMER_ID,
+                        'x-user-id': SYSTEM_USER_ID,
                         'Content-Type': 'application/json'
                     }
                 }
             );
 
             if (saveResponse.data.success) {
-                // Asset service returns the MinIO URL in storage.url
-                const savedUrl = saveResponse.data.storage?.url || saveResponse.data.audio_url || saveResponse.data.url;
                 const audioId = saveResponse.data.audio_id || saveResponse.data.id;
+                const minioUrl = saveResponse.data.storage?.url || saveResponse.data.audio_url || saveResponse.data.url;
+
+                // Return proxy URL through API server instead of direct MinIO URL
+                // Format: /api/audio-studio/preview/{audio_id}
+                const proxyUrl = `/api/audio-studio/preview/${audioId}`;
 
                 console.log(`✅ Preview saved to MinIO + MongoDB`);
                 console.log(`   Audio ID: ${audioId}`);
-                console.log(`   MinIO URL: ${savedUrl}`);
-                console.log(`   Full response: ${JSON.stringify(saveResponse.data)}`);
+                console.log(`   MinIO URL: ${minioUrl}`);
+                console.log(`   Proxy URL: ${proxyUrl}`);
 
                 return res.json({
                     success: true,
-                    audio_url: savedUrl,
+                    audio_url: proxyUrl,
                     duration: result.duration || 0,
                     cached: false,
                     audio_id: audioId

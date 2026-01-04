@@ -229,6 +229,44 @@ class DatabaseService:
             logger.error(f"Error getting audio library entry: {e}")
             raise
 
+    def get_audio_by_id(
+        self,
+        audio_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific audio library entry by ID
+
+        Args:
+            audio_id: Audio ID
+            customer_id: Customer ID (required for multi-tenancy)
+            user_id: Optional user ID for additional filtering
+
+        Returns:
+            Audio library entry or None if not found
+        """
+        try:
+            query = {
+                "audio_id": audio_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            audio = self.audio_library_collection.find_one(query)
+
+            if audio:
+                audio['_id'] = str(audio['_id'])
+
+            return audio
+
+        except PyMongoError as e:
+            logger.error(f"Error getting audio by ID: {e}")
+            raise
+
     def list_audio_library(
         self,
         customer_id: str,
