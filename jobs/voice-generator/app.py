@@ -557,28 +557,94 @@ def get_voice_config():
         config = voice_config_collection.find_one(query)
 
         if not config:
+            # Check if GPU is enabled
+            import os
+            import requests
+            gpu_enabled = os.getenv('USE_GPU', 'false').lower() == 'true'
+            audio_generation_url = os.getenv('AUDIO_GENERATION_URL', 'http://audio-generation-factory:3000')
+
+            # Fetch available models and voices from audio generation service
+            try:
+                config_response = requests.get(f'{audio_generation_url}/config', timeout=10)
+                audio_config = config_response.json() if config_response.status_code == 200 else {}
+            except Exception as e:
+                voice_generator_job.logger.warning(f"Failed to fetch audio config from service: {e}")
+                audio_config = {}
+
             # Create default configuration for this customer with new structure
-            default_config = {
-                'language': 'en',  # Primary language
-                'models': {
-                    'en': 'kokoro-82m',
-                    'hi': 'mms-tts-hin'
-                },
-                'voices': {
-                    'en': {
-                        'defaultVoice': 'am_adam',
-                        'enableAlternation': True,
-                        'maleVoices': ['am_adam', 'am_michael'],
-                        'femaleVoices': ['af_bella', 'af_sarah']
+            if gpu_enabled and audio_config:
+                # GPU configuration - use Coqui XTTS v2 (universal multi-lingual model)
+                # Fetch speakers from audio generation service
+                try:
+                    speakers_response = requests.get(f'{audio_generation_url}/speakers', timeout=10)
+                    speakers_data = speakers_response.json() if speakers_response.status_code == 200 else {}
+                    all_speakers = speakers_data.get('speakers', [])
+
+                    # Categorize speakers by gender (if metadata available)
+                    male_voices = [s for s in all_speakers if isinstance(s, dict) and s.get('gender') == 'male']
+                    female_voices = [s for s in all_speakers if isinstance(s, dict) and s.get('gender') == 'female']
+
+                    # If no gender metadata, use speaker names directly
+                    if not male_voices and not female_voices:
+                        # Use first 3 as male, next 3 as female
+                        male_voices = all_speakers[:3] if len(all_speakers) >= 3 else all_speakers
+                        female_voices = all_speakers[3:6] if len(all_speakers) >= 6 else all_speakers[:3]
+
+                    # Extract voice IDs
+                    male_voice_ids = [v.get('id', v) if isinstance(v, dict) else v for v in male_voices]
+                    female_voice_ids = [v.get('id', v) if isinstance(v, dict) else v for v in female_voices]
+                    default_voice = male_voice_ids[0] if male_voice_ids else 'Claribel Dervla'
+
+                except Exception as e:
+                    voice_generator_job.logger.warning(f"Failed to fetch speakers: {e}, using defaults")
+                    male_voice_ids = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
+                    female_voice_ids = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
+                    default_voice = 'Claribel Dervla'
+
+                default_config = {
+                    'language': 'en',  # Primary language
+                    'models': {
+                        'en': 'coqui-xtts',
+                        'hi': 'coqui-xtts'
                     },
-                    'hi': {
-                        'defaultVoice': 'hi_male',
-                        'enableAlternation': True,
-                        'maleVoices': ['hi_male'],
-                        'femaleVoices': ['hi_female']
+                    'voices': {
+                        'en': {
+                            'defaultVoice': default_voice,
+                            'enableAlternation': True,
+                            'maleVoices': male_voice_ids,
+                            'femaleVoices': female_voice_ids
+                        },
+                        'hi': {
+                            'defaultVoice': default_voice,
+                            'enableAlternation': True,
+                            'maleVoices': male_voice_ids,
+                            'femaleVoices': female_voice_ids
+                        }
                     }
                 }
-            }
+            else:
+                # CPU configuration - use language-specific models
+                default_config = {
+                    'language': 'en',  # Primary language
+                    'models': {
+                        'en': 'kokoro-82m',
+                        'hi': 'mms-tts-hin'
+                    },
+                    'voices': {
+                        'en': {
+                            'defaultVoice': 'am_adam',
+                            'enableAlternation': True,
+                            'maleVoices': ['am_adam', 'am_michael'],
+                            'femaleVoices': ['af_bella', 'af_sarah']
+                        },
+                        'hi': {
+                            'defaultVoice': 'hi_male',
+                            'enableAlternation': True,
+                            'maleVoices': ['hi_male'],
+                            'femaleVoices': ['hi_female']
+                        }
+                    }
+                }
 
             # Use prepare_insert_document to add multi-tenant fields
             prepared_config = prepare_insert_document(
@@ -835,50 +901,75 @@ def preview_voice():
             customer_id=customer_id
         )
 
-        # Generate audio using audio generation service
-        result = voice_generator_job.news_audio_service._call_audio_generation_service(
-            text=text,
-            model=model,
-            voice=voice
-        )
+        # Use audio generation service's /preview endpoint which has caching support
+        import requests
+        audio_generation_url = os.getenv('AUDIO_GENERATION_URL', 'http://audio-generation-factory:3000')
 
-        if not result.get('success'):
-            error_msg = result.get('error', 'Failed to generate preview audio')
+        try:
+            preview_response = requests.post(
+                f'{audio_generation_url}/preview',
+                json={
+                    'text': text,
+                    'model': model,
+                    'voice': voice,
+                    'language': language
+                },
+                timeout=60
+            )
 
-            # Check if error is due to model not being loaded
-            if 'not loaded' in error_msg.lower():
+            if preview_response.status_code != 200:
+                error_data = preview_response.json() if preview_response.headers.get('content-type') == 'application/json' else {}
+                error_msg = error_data.get('error', f'Preview generation failed with status {preview_response.status_code}')
+
+                # Check if error is due to model not being loaded
+                if 'not loaded' in error_msg.lower():
+                    return jsonify({
+                        'error': error_msg,
+                        'model_loading': True,
+                        'message': f'The {model} model is currently loading. This may take a few minutes on first use. Please try again in a moment.'
+                    }), 503  # Service Unavailable
+
+                return jsonify({'error': error_msg}), preview_response.status_code
+
+            result = preview_response.json()
+
+            # The audio generation service returns audio_url which could be:
+            # 1. A relative path like "/temp/kokoro_1234567890_abc.wav"
+            # 2. A presigned URL from MinIO (if cached)
+            audio_url = result.get('audio_url')
+            if not audio_url:
+                return jsonify({'error': 'No audio URL returned from generation service'}), 500
+
+            # If it's a presigned URL (starts with http), return it directly
+            if audio_url.startswith('http'):
                 return jsonify({
-                    'error': error_msg,
-                    'model_loading': True,
-                    'message': f'The {model} model is currently loading. This may take a few minutes on first use. Please try again in a moment.'
-                }), 503  # Service Unavailable
+                    'audioUrl': audio_url,
+                    'voice': voice,
+                    'model': model,
+                    'language': language,
+                    'cached': result.get('cached', False)
+                }), 200
+
+            # Otherwise, it's a relative path - proxy it through our endpoint
+            filename = os.path.basename(audio_url)
+            proxy_url = f'/api/voice/preview/audio/{filename}'
 
             return jsonify({
-                'error': error_msg
-            }), 500
+                'audioUrl': proxy_url,
+                'voice': voice,
+                'model': model,
+                'language': language,
+                'cached': result.get('cached', False)
+            }), 200
 
-        # The audio generation service returns audio_url which is a relative path
-        # Return a URL that the frontend can access via the API proxy
-        audio_url = result.get('audio_url')
-        if not audio_url:
-            error_msg = 'No audio URL returned from generation service'
-            return jsonify({'error': error_msg}), 500
-
-        # Return a URL that points to our proxy endpoint
-        # The audio_url is like "/temp/kokoro_1234567890_abc.wav"
-        # Extract just the filename
-        import os
-        filename = os.path.basename(audio_url)
-
-        # Return URL that will be proxied through API server
-        proxy_url = f'/api/voice/preview/audio/{filename}'
-
-        return jsonify({
-            'audioUrl': proxy_url,
-            'voice': voice,
-            'model': model,
-            'language': language
-        }), 200
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'error': 'Preview generation timed out. The model may be loading.',
+                'model_loading': True
+            }), 503
+        except requests.exceptions.RequestException as e:
+            voice_generator_job.logger.error(f"Error calling audio generation service: {e}")
+            return jsonify({'error': f'Failed to connect to audio generation service: {str(e)}'}), 500
 
     except Exception as e:
         voice_generator_job.logger.error(f"❌ Error previewing voice: {str(e)}")
