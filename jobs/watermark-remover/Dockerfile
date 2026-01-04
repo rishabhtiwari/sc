@@ -15,17 +15,14 @@ RUN pip install --no-cache-dir \
     numpy==1.24.3 \
     scipy==1.10.1
 
-# Install Flask and dependencies
+# Install Flask and other dependencies
 RUN pip install --no-cache-dir \
     Flask==3.0.0 \
     Werkzeug==3.0.1 \
     itsdangerous \
     click \
     Jinja2 \
-    MarkupSafe
-
-# Install other dependencies
-RUN pip install --no-cache-dir \
+    MarkupSafe \
     pymongo==4.6.0 \
     requests==2.31.0
 

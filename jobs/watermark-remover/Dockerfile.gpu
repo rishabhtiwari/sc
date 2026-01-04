@@ -39,17 +39,14 @@ RUN pip3 install --no-cache-dir \
     numpy==1.24.3 \
     scipy==1.10.1
 
-# Install Flask and dependencies
-RUN pip3 install --no-cache-dir \
+# Install Flask and dependencies (ignore pre-installed blinker)
+RUN pip3 install --no-cache-dir --ignore-installed blinker \
     Flask==3.0.0 \
     Werkzeug==3.0.1 \
     itsdangerous \
     click \
     Jinja2 \
-    MarkupSafe
-
-# Install other dependencies
-RUN pip3 install --no-cache-dir \
+    MarkupSafe \
     pymongo==4.6.0 \
     requests==2.31.0
 
