@@ -25,9 +25,9 @@ const getAuthHeaders = () => {
  */
 const listTemplates = async (category = null) => {
   try {
-    const url = new URL(`${API_BASE_URL}/templates`);
+    let url = `${API_BASE_URL}/templates`;
     if (category) {
-      url.searchParams.append('category', category);
+      url += `?category=${encodeURIComponent(category)}`;
     }
 
     const response = await fetch(url, {
