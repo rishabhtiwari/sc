@@ -558,7 +558,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             {
                 headers: formData.getHeaders(),
                 responseType: 'arraybuffer',
-                timeout: 120000 // 2 minutes timeout
+                timeout: 300000 // 5 minutes timeout
             }
         );
 
