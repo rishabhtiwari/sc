@@ -3,7 +3,9 @@
  * Handles API calls for template management
  */
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
+// Use relative path to go through frontend proxy server (server.js)
+// This ensures requests work from browser regardless of where frontend is accessed from
+const API_BASE_URL = '/api';
 
 /**
  * Get authentication headers

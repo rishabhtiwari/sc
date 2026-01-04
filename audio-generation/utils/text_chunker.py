@@ -73,9 +73,10 @@ def convert_numbers_to_words(text, language_code='en'):
         return text
 
     # Map language codes to num2words language codes
+    # Note: Hindi is NOT supported by num2words, so we skip it
     lang_map = {
         'en': 'en',
-        'hi': 'hi',  # Hindi
+        # 'hi': 'hi',  # Hindi - NOT SUPPORTED by num2words
         'es': 'es',  # Spanish
         'fr': 'fr',  # French
         'de': 'de',  # German
@@ -92,7 +93,12 @@ def convert_numbers_to_words(text, language_code='en'):
         'ko': 'ko',  # Korean
     }
 
-    num2words_lang = lang_map.get(language_code, 'en')
+    num2words_lang = lang_map.get(language_code)
+
+    # Skip number conversion for unsupported languages
+    if not num2words_lang:
+        print(f"⚠️ Number conversion not supported for language '{language_code}', skipping", file=sys.stderr)
+        return text
 
     def replace_number(match):
         """Replace a number with its word representation"""
@@ -464,7 +470,9 @@ def chunk_text(text, max_chars, language_code='en'):
                     combined_length = len(prev_chunk) + len(current_chunk) + 1
 
                     if combined_length <= MAX_COMBINED_SIZE:
-                        merged = prev_chunk + " " + current_chunk
+                        merged = (prev_chunk + " " + current_chunk).strip()
+                        # Normalize multiple spaces to single space
+                        merged = ' '.join(merged.split())
                         merged_chunks[-1] = merged
                         print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) backwards with previous chunk = {len(merged)} chars", file=sys.stderr)
                         merges_made = True
@@ -478,7 +486,9 @@ def chunk_text(text, max_chars, language_code='en'):
 
                     # Merge forward if combined size doesn't exceed limit
                     if combined_length <= MAX_COMBINED_SIZE:
-                        merged = current_chunk + " " + next_chunk
+                        merged = (current_chunk + " " + next_chunk).strip()
+                        # Normalize multiple spaces to single space
+                        merged = ' '.join(merged.split())
                         merged_chunks.append(merged)
                         print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
                         merges_made = True
@@ -494,7 +504,9 @@ def chunk_text(text, max_chars, language_code='en'):
 
                     # Merge if combined size doesn't exceed limit
                     if combined_length <= MAX_COMBINED_SIZE:
-                        merged = current_chunk + " " + next_chunk
+                        merged = (current_chunk + " " + next_chunk).strip()
+                        # Normalize multiple spaces to single space
+                        merged = ' '.join(merged.split())
                         merged_chunks.append(merged)
                         print(f"  [Pass {merge_pass}] ✓ Merged chunk {i+1} ({len(current_chunk)} chars) + chunk {i+2} ({len(next_chunk)} chars) = {len(merged)} chars", file=sys.stderr)
                         merges_made = True
