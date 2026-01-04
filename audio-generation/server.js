@@ -384,12 +384,14 @@ app.post('/preview', async (req, res) => {
             );
 
             if (saveResponse.data.success) {
-                const savedUrl = saveResponse.data.audio_url || saveResponse.data.url;
+                // Asset service returns the MinIO URL in storage.url
+                const savedUrl = saveResponse.data.storage?.url || saveResponse.data.audio_url || saveResponse.data.url;
                 const audioId = saveResponse.data.audio_id || saveResponse.data.id;
 
                 console.log(`✅ Preview saved to MinIO + MongoDB`);
                 console.log(`   Audio ID: ${audioId}`);
                 console.log(`   MinIO URL: ${savedUrl}`);
+                console.log(`   Full response: ${JSON.stringify(saveResponse.data)}`);
 
                 return res.json({
                     success: true,
@@ -408,6 +410,7 @@ app.post('/preview', async (req, res) => {
                 console.error(`   Status: ${error.response.status}`);
                 console.error(`   Data: ${JSON.stringify(error.response.data)}`);
             }
+            console.error(`   Stack: ${error.stack}`);
             // Return temp URL if saving fails
         }
 
