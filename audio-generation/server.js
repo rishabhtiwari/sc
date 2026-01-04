@@ -269,7 +269,12 @@ app.post('/preview', async (req, res) => {
         const customerId = req.headers['x-customer-id'] || 'default';
         const userId = req.headers['x-user-id'] || 'default';
 
-        console.log(`🎤 Preview request - Model: ${model}, Voice: ${voice}, Language: ${language}`);
+        console.log(`\n${'='.repeat(80)}`);
+        console.log(`🎤 PREVIEW REQUEST RECEIVED`);
+        console.log(`   Model: ${model}, Voice: ${voice}, Language: ${language}`);
+        console.log(`   Customer: ${customerId}, User: ${userId}`);
+        console.log(`   Text length: ${text?.length || 0} chars`);
+        console.log(`${'='.repeat(80)}\n`);
 
         // Step 1: Check if preview already exists in database AND MinIO
         const ASSET_SERVICE_URL = process.env.ASSET_SERVICE_URL || 'http://ichat-asset-service:8099';
@@ -357,8 +362,11 @@ app.post('/preview', async (req, res) => {
 
         // Step 3: Save to audio library (asset service will handle MinIO upload)
         try {
-            console.log(`💾 Saving preview to asset service...`);
+            console.log(`\n💾 SAVING PREVIEW TO ASSET SERVICE`);
+            console.log(`   Asset Service URL: ${ASSET_SERVICE_URL}`);
             console.log(`   Customer: ${customerId}, User: ${userId}`);
+            console.log(`   Audio URL: ${result.audio_url}`);
+            console.log(`   Voice: ${voice}, Model: ${model}, Language: ${language}`);
 
             const saveResponse = await axios.post(
                 `${ASSET_SERVICE_URL}/api/audio-library/`,
