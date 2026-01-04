@@ -557,48 +557,76 @@ def get_voice_config():
         config = voice_config_collection.find_one(query)
 
         if not config:
-            # Check if GPU is enabled
+            # Check if GPU is enabled via environment variable
             import os
             import requests
             gpu_enabled = os.getenv('USE_GPU', 'false').lower() == 'true'
             audio_generation_url = os.getenv('AUDIO_GENERATION_URL', 'http://audio-generation-factory:3000')
 
-            # Fetch available models and voices from audio generation service
+            voice_generator_job.logger.info(f"🔧 Creating default voice config - GPU enabled: {gpu_enabled}")
+
+            # Fetch available models and configuration from audio generation service
             try:
                 config_response = requests.get(f'{audio_generation_url}/config', timeout=10)
                 audio_config = config_response.json() if config_response.status_code == 200 else {}
+                voice_generator_job.logger.info(f"📡 Audio config fetched: GPU={audio_config.get('gpu_enabled')}, Default model={audio_config.get('default_model')}")
             except Exception as e:
-                voice_generator_job.logger.warning(f"Failed to fetch audio config from service: {e}")
+                voice_generator_job.logger.warning(f"⚠️ Failed to fetch audio config from service: {e}")
                 audio_config = {}
 
-            # Create default configuration for this customer with new structure
-            if gpu_enabled and audio_config:
+            # Create default configuration based on GPU availability
+            if gpu_enabled:
                 # GPU configuration - use Coqui XTTS v2 (universal multi-lingual model)
+                voice_generator_job.logger.info("🎮 GPU mode detected - fetching Coqui XTTS speakers")
+
                 # Fetch speakers from audio generation service
                 try:
                     speakers_response = requests.get(f'{audio_generation_url}/speakers', timeout=10)
                     speakers_data = speakers_response.json() if speakers_response.status_code == 200 else {}
                     all_speakers = speakers_data.get('speakers', [])
 
+                    voice_generator_job.logger.info(f"🎤 Fetched {len(all_speakers)} speakers from audio generation service")
+
                     # Categorize speakers by gender (if metadata available)
-                    male_voices = [s for s in all_speakers if isinstance(s, dict) and s.get('gender') == 'male']
-                    female_voices = [s for s in all_speakers if isinstance(s, dict) and s.get('gender') == 'female']
+                    male_voices = []
+                    female_voices = []
 
-                    # If no gender metadata, use speaker names directly
-                    if not male_voices and not female_voices:
-                        # Use first 3 as male, next 3 as female
-                        male_voices = all_speakers[:3] if len(all_speakers) >= 3 else all_speakers
-                        female_voices = all_speakers[3:6] if len(all_speakers) >= 6 else all_speakers[:3]
+                    for speaker in all_speakers:
+                        if isinstance(speaker, dict):
+                            speaker_id = speaker.get('id', speaker.get('name', ''))
+                            gender = speaker.get('gender', 'unknown')
 
-                    # Extract voice IDs
-                    male_voice_ids = [v.get('id', v) if isinstance(v, dict) else v for v in male_voices]
-                    female_voice_ids = [v.get('id', v) if isinstance(v, dict) else v for v in female_voices]
-                    default_voice = male_voice_ids[0] if male_voice_ids else 'Claribel Dervla'
+                            if gender == 'male':
+                                male_voices.append(speaker_id)
+                            elif gender == 'female':
+                                female_voices.append(speaker_id)
+                        else:
+                            # Speaker is just a string name
+                            # Try to infer gender from name or add to both lists
+                            # For now, add to male voices by default
+                            male_voices.append(speaker)
+
+                    # If no gender metadata found, distribute speakers evenly
+                    if not male_voices and not female_voices and all_speakers:
+                        voice_generator_job.logger.info("⚠️ No gender metadata found, distributing speakers evenly")
+                        mid_point = len(all_speakers) // 2
+                        male_voices = [s if isinstance(s, str) else s.get('id', s.get('name', '')) for s in all_speakers[:mid_point]]
+                        female_voices = [s if isinstance(s, str) else s.get('id', s.get('name', '')) for s in all_speakers[mid_point:]]
+
+                    # Ensure we have at least some voices
+                    if not male_voices:
+                        male_voices = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
+                    if not female_voices:
+                        female_voices = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
+
+                    default_voice = male_voices[0] if male_voices else 'Claribel Dervla'
+
+                    voice_generator_job.logger.info(f"✅ GPU voices configured - Male: {len(male_voices)}, Female: {len(female_voices)}, Default: {default_voice}")
 
                 except Exception as e:
-                    voice_generator_job.logger.warning(f"Failed to fetch speakers: {e}, using defaults")
-                    male_voice_ids = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
-                    female_voice_ids = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
+                    voice_generator_job.logger.warning(f"⚠️ Failed to fetch speakers: {e}, using fallback defaults")
+                    male_voices = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
+                    female_voices = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
                     default_voice = 'Claribel Dervla'
 
                 default_config = {
@@ -611,19 +639,21 @@ def get_voice_config():
                         'en': {
                             'defaultVoice': default_voice,
                             'enableAlternation': True,
-                            'maleVoices': male_voice_ids,
-                            'femaleVoices': female_voice_ids
+                            'maleVoices': male_voices,
+                            'femaleVoices': female_voices
                         },
                         'hi': {
                             'defaultVoice': default_voice,
                             'enableAlternation': True,
-                            'maleVoices': male_voice_ids,
-                            'femaleVoices': female_voice_ids
+                            'maleVoices': male_voices,
+                            'femaleVoices': female_voices
                         }
                     }
                 }
             else:
                 # CPU configuration - use language-specific models
+                voice_generator_job.logger.info("💻 CPU mode detected - using Kokoro (EN) and MMS (HI) models")
+
                 default_config = {
                     'language': 'en',  # Primary language
                     'models': {
