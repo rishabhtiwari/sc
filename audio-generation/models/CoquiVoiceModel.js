@@ -245,7 +245,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
 
                 // Generate audio for all chunks IN PARALLEL for faster processing
                 // Use concurrency limit to avoid overwhelming the TTS server
-                const MAX_CONCURRENT_REQUESTS = 5; // Process up to 5 chunks simultaneously
+                const MAX_CONCURRENT_REQUESTS = 10; // Process up to 10 chunks simultaneously
                 console.log(`🚀 Generating audio for ${chunks.length} chunks in parallel (max ${MAX_CONCURRENT_REQUESTS} concurrent)...`);
                 const parallelStartTime = Date.now();
 
