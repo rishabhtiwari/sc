@@ -1283,11 +1283,19 @@ def proxy_image(doc_id):
 
         image_url = doc['image']
 
-        # Download image
+        # Download image with proper headers to avoid 403 errors
         logger.info(f"📥 Proxying image from: {image_url}")
-        response = requests.get(image_url, timeout=30, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        })
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Referer': image_url,
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        }
+        response = requests.get(image_url, timeout=30, headers=headers)
         response.raise_for_status()
 
         # Return image with proper content type
