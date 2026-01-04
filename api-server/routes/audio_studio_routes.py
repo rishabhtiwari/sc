@@ -386,8 +386,14 @@ def generate_audio():
 
 @audio_studio_bp.route('/audio/preview', methods=['POST'])
 def preview_audio():
-    """Generate preview audio for voice selection"""
+    """
+    Generate preview audio for voice selection with caching
+    All heavy lifting (cache check, generation, storage) is done by audio-generation service
+    """
     try:
+        # Extract user context
+        user_context = extract_user_context_from_headers()
+
         data = request.get_json()
         preview_text = 'Hello! This is a preview of how this voice sounds.'
         text = data.get('text', preview_text)
@@ -395,24 +401,48 @@ def preview_audio():
         voice = data.get('voice')  # No default - let service decide
         language = data.get('language', 'en')
 
-        logger.info(f"🎤 Generating preview audio - Model: {model}, Voice: {voice}, Language: {language}")
+        logger.info(f"🎤 Preview request - Model: {model}, Voice: {voice}, Language: {language}")
 
-        # Call audio generation service
+        # Call audio generation service preview endpoint (handles caching internally)
         response = requests.post(
-            f"{AUDIO_GENERATION_URL}/tts",
+            f"{AUDIO_GENERATION_URL}/preview",
             json={
                 'text': text,
                 'model': model,
                 'voice': voice,
-                'language': language,  # Forward language parameter for multi-lingual models
-                'filename': f'preview_{voice or "default"}_{language}.wav'
+                'language': language
+            },
+            headers={
+                'x-customer-id': user_context.get('customer_id', 'default'),
+                'x-user-id': user_context.get('user_id', 'default')
             },
             timeout=600  # 10 minutes for model initialization on first run
         )
 
         if response.status_code == 200:
             result = response.json()
-            # Return relative URL for browser access
+
+            # If cached, return the MinIO URL directly
+            if result.get('cached'):
+                logger.info(f"✅ Using cached preview for {voice}")
+                return jsonify({
+                    'status': 'success',
+                    'audioUrl': result.get('audio_url'),
+                    'duration': result.get('duration', 0),
+                    'cached': True
+                }), 200
+
+            # If newly generated and saved to library, return MinIO URL
+            if result.get('audio_id'):
+                logger.info(f"✅ Preview generated and saved for {voice}")
+                return jsonify({
+                    'status': 'success',
+                    'audioUrl': result.get('audio_url'),
+                    'duration': result.get('duration', 0),
+                    'cached': False
+                }), 200
+
+            # Fallback: return temp URL with proxy
             audio_url = result.get('audio_url', '')
             if audio_url.startswith('/'):
                 audio_url = audio_url[1:]  # Remove leading slash
@@ -421,20 +451,22 @@ def preview_audio():
             proxy_url = f'/api/audio/proxy/{audio_url}'
 
             return jsonify({
-                'success': True,
-                'audio_url': proxy_url
+                'status': 'success',
+                'audioUrl': proxy_url,
+                'duration': result.get('duration', 0),
+                'cached': False
             }), 200
         else:
             logger.error(f"Preview generation failed: {response.text}")
             return jsonify({
-                'success': False,
+                'status': 'error',
                 'error': 'Preview generation failed'
             }), response.status_code
 
     except Exception as e:
         logger.error(f"Error generating preview: {str(e)}", exc_info=True)
         return jsonify({
-            'success': False,
+            'status': 'error',
             'error': str(e)
         }), 500
 

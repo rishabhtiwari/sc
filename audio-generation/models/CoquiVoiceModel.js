@@ -3,6 +3,11 @@ import fs from 'fs';
 import path from 'path';
 import FormData from 'form-data';
 import axios from 'axios';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /**
  * Coqui TTS XTTS v2 Voice Model
@@ -17,6 +22,24 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         this.language = config.language || 'en';
         this.initialized = false;
         this.cachedSpeakers = []; // Cache speakers list after initialization
+        this.speakersMetadata = null; // Speaker metadata (gender, description, etc.)
+        this._loadSpeakersMetadata();
+    }
+
+    /**
+     * Load speakers metadata from JSON file
+     * @private
+     */
+    _loadSpeakersMetadata() {
+        try {
+            const metadataPath = path.join(__dirname, '../data/coqui_speakers_metadata.json');
+            const metadataContent = fs.readFileSync(metadataPath, 'utf8');
+            this.speakersMetadata = JSON.parse(metadataContent);
+            console.log(`✅ Loaded metadata for ${Object.keys(this.speakersMetadata.speakers).length} speakers`);
+        } catch (error) {
+            console.warn(`⚠️ Failed to load speakers metadata: ${error.message}`);
+            this.speakersMetadata = { speakers: {}, sample_texts: {} };
+        }
     }
 
     /**
@@ -280,6 +303,34 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
+     * Get speakers with metadata (gender, description, etc.)
+     * @returns {Array} Array of speaker objects with metadata
+     */
+    getSpeakersWithMetadata() {
+        return this.cachedSpeakers.map(speakerName => {
+            const metadata = this.speakersMetadata?.speakers?.[speakerName] || {};
+            return {
+                id: speakerName,
+                name: speakerName,
+                gender: metadata.gender || 'unknown',
+                accent: metadata.accent || 'neutral',
+                description: metadata.description || `${speakerName} voice`
+            };
+        });
+    }
+
+    /**
+     * Get sample text for a language
+     * @param {string} language - Language code
+     * @returns {string} Sample text
+     */
+    getSampleText(language = 'en') {
+        return this.speakersMetadata?.sample_texts?.[language] ||
+               this.speakersMetadata?.sample_texts?.['en'] ||
+               'Hello! This is a sample text for voice preview.';
+    }
+
+    /**
      * Get model information
      */
     getModelInfo() {
@@ -312,12 +363,14 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             supportedLanguageNames: Object.values(languageMap),
             availableSpeakers: this.cachedSpeakers,
             voices: this.cachedSpeakers,
+            voicesWithMetadata: this.getSpeakersWithMetadata(),
             totalSpeakers: this.cachedSpeakers.length,
             supportsEmotions: false,
             supportsMusic: false,
             supportsVoiceCloning: true,
             description: 'Coqui TTS XTTS v2 - Multi-lingual TTS with 58 universal speakers supporting 17 languages',
-            speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.'
+            speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.',
+            sampleTexts: this.speakersMetadata?.sample_texts || {}
         };
     }
 

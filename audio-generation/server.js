@@ -230,12 +230,14 @@ app.get('/config', (req, res) => {
                 name: modelInfo.model_name || modelKey,
                 language: modelInfo.language || 'Unknown',
                 voices: modelInfo.availableSpeakers || modelInfo.voices || [],
+                voicesWithMetadata: modelInfo.voicesWithMetadata || [],  // Include gender metadata
                 default_voice: modelInfo.defaultSpeaker || (modelInfo.availableSpeakers && modelInfo.availableSpeakers[0]) || null,
                 supports_emotions: modelInfo.supportsEmotions || false,
                 supports_music: modelInfo.supportsMusic || false,
                 supports_voice_cloning: modelInfo.supportsVoiceCloning || false,
                 supported_languages: modelInfo.supportedLanguages || [],
                 supported_language_names: modelInfo.supportedLanguageNames || [],
+                sampleTexts: modelInfo.sampleTexts || {},  // Include language-specific sample texts
                 description: modelInfo.description || ''
             };
         }
@@ -258,6 +260,174 @@ app.get('/models/language/:language', (req, res) => {
         language: language,
         models: voiceService.getModelsByLanguage(language)
     });
+});
+
+// Preview endpoint with caching support
+app.post('/preview', async (req, res) => {
+    try {
+        const { text, model, voice, language } = req.body;
+        const customerId = req.headers['x-customer-id'] || 'default';
+        const userId = req.headers['x-user-id'] || 'default';
+
+        console.log(`🎤 Preview request - Model: ${model}, Voice: ${voice}, Language: ${language}`);
+
+        // Step 1: Check if preview already exists in database AND MinIO
+        const ASSET_SERVICE_URL = process.env.ASSET_SERVICE_URL || 'http://ichat-asset-service:8099';
+
+        try {
+            console.log(`🔍 Checking cache for: voice=${voice}, model=${model}, language=${language}`);
+
+            const checkResponse = await axios.get(`${ASSET_SERVICE_URL}/api/audio-library/`, {
+                params: {
+                    page: 1,
+                    page_size: 100,
+                    folder: 'voice-previews'
+                },
+                headers: {
+                    'x-customer-id': customerId,
+                    'x-user-id': userId
+                }
+            });
+
+            // Asset service returns 'audio_files' not 'items'
+            const audioFiles = checkResponse.data.audio_files || checkResponse.data.items || [];
+
+            if (checkResponse.data.success && audioFiles.length > 0) {
+                console.log(`📚 Found ${audioFiles.length} cached previews in database`);
+
+                // Find matching preview
+                const existingPreview = audioFiles.find(item => {
+                    const config = item.generation_config || {};
+                    const matches = config.voice === voice &&
+                                  config.model === model &&
+                                  (config.language === language || item.language === language);
+
+                    if (matches) {
+                        console.log(`🎯 Match found: ${item.audio_id}`);
+                    }
+                    return matches;
+                });
+
+                if (existingPreview && existingPreview.url) {
+                    // Verify the URL is accessible (MinIO check)
+                    try {
+                        const urlCheck = await axios.head(existingPreview.url, { timeout: 5000 });
+                        if (urlCheck.status === 200) {
+                            console.log(`✅ Found cached preview in DB + MinIO verified for ${voice} (${language})`);
+                            console.log(`   URL: ${existingPreview.url}`);
+                            return res.json({
+                                success: true,
+                                audio_url: existingPreview.url,
+                                duration: existingPreview.duration || 0,
+                                cached: true,
+                                audio_id: existingPreview.audio_id
+                            });
+                        } else {
+                            console.warn(`⚠️ Preview found in DB but MinIO returned status ${urlCheck.status}`);
+                        }
+                    } catch (urlError) {
+                        console.warn(`⚠️ Preview found in DB but MinIO verification failed: ${urlError.message}`);
+                        console.warn(`   URL: ${existingPreview.url}`);
+                        // Continue to regenerate if MinIO file is missing
+                    }
+                } else {
+                    console.log(`📝 No matching preview found in database`);
+                }
+            } else {
+                console.log(`📝 No cached previews found in database`);
+            }
+        } catch (error) {
+            console.warn(`⚠️ Could not check cache: ${error.message}`);
+            // Continue to generate new preview
+        }
+
+        // Step 2: Generate new preview audio
+        console.log(`🎙️ Generating new preview for ${voice} (${language})`);
+        console.log(`   Text length: ${text.length} characters`);
+
+        const options = {
+            model: model,
+            voice: voice,
+            language: language,
+            speed: 1.0
+        };
+
+        const result = await voiceService.generateAudioFile(text, options);
+        console.log(`✅ Audio generated: ${result.audio_url}`);
+
+        // Step 3: Save to audio library (asset service will handle MinIO upload)
+        try {
+            console.log(`💾 Saving preview to asset service...`);
+            console.log(`   Customer: ${customerId}, User: ${userId}`);
+
+            const saveResponse = await axios.post(
+                `${ASSET_SERVICE_URL}/api/audio-library/`,
+                {
+                    text: text,
+                    audio_url: result.audio_url,
+                    duration: result.duration || 0,
+                    voice: voice,
+                    voice_name: voice,
+                    language: language,
+                    speed: 1.0,
+                    model: model,
+                    folder: 'voice-previews',
+                    tags: ['preview', model, language, voice]
+                },
+                {
+                    headers: {
+                        'x-customer-id': customerId,
+                        'x-user-id': userId,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (saveResponse.data.success) {
+                const savedUrl = saveResponse.data.audio_url || saveResponse.data.url;
+                const audioId = saveResponse.data.audio_id || saveResponse.data.id;
+
+                console.log(`✅ Preview saved to MinIO + MongoDB`);
+                console.log(`   Audio ID: ${audioId}`);
+                console.log(`   MinIO URL: ${savedUrl}`);
+
+                return res.json({
+                    success: true,
+                    audio_url: savedUrl,
+                    duration: result.duration || 0,
+                    cached: false,
+                    audio_id: audioId
+                });
+            } else {
+                console.warn(`⚠️ Asset service returned success=false`);
+                console.warn(`   Response: ${JSON.stringify(saveResponse.data)}`);
+            }
+        } catch (error) {
+            console.error(`❌ Could not save to library: ${error.message}`);
+            if (error.response) {
+                console.error(`   Status: ${error.response.status}`);
+                console.error(`   Data: ${JSON.stringify(error.response.data)}`);
+            }
+            // Return temp URL if saving fails
+        }
+
+        // Step 4: Return temp URL if saving to library failed
+        console.log(`⚠️ Returning temp URL (not saved to MinIO)`);
+        res.json({
+            success: true,
+            audio_url: result.audio_url,
+            duration: result.duration || 0,
+            cached: false
+        });
+
+    } catch (error) {
+        console.error('Preview generation error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to generate preview',
+            details: error.message
+        });
+    }
 });
 
 // Load a new model

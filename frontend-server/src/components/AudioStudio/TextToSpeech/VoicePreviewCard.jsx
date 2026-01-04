@@ -4,17 +4,18 @@ import api from '../../../services/api';
 /**
  * Voice Preview Card Component
  * Enhanced card for voice preview page with larger layout
+ * Supports preview caching to avoid regenerating the same audio
  */
-const VoicePreviewCard = ({ voice, modelId, language }) => {
+const VoicePreviewCard = ({ voice, modelId, language, sampleText }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [cachedAudioUrl, setCachedAudioUrl] = useState(null);
   const audioRef = useRef(null);
 
-  // Sample texts for preview
-  const sampleTexts = {
-    en: `Hello! I'm ${voice.name}. I can help you create professional voiceovers for your videos and presentations.`,
-    hi: `नमस्ते! मैं ${voice.name} हूं। मैं आपके वीडियो और प्रस्तुतियों के लिए पेशेवर वॉयसओवर बनाने में आपकी मदद कर सकता हूं।`
-  };
+  // Use provided sample text or fallback to default
+  const previewText = sampleText || (language === 'hi'
+    ? `नमस्ते! मैं ${voice.name} हूं। यह आवाज़ का पूर्वावलोकन है।`
+    : `Hello! I'm ${voice.name}. This is a voice preview.`);
 
   const handlePreview = async () => {
     // Stop if already playing
@@ -28,9 +29,10 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
     try {
       setIsLoading(true);
 
-      // Generate preview audio
+      // Call preview endpoint - backend handles all caching logic
+      console.log('Requesting preview...');
       const response = await api.post('/audio/preview', {
-        text: sampleTexts[language] || sampleTexts.en,
+        text: previewText,
         model: modelId,
         voice: voice.id,
         language: language
@@ -39,7 +41,19 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
       console.log('Preview response:', response.data);
 
       if (response.data.status === 'success' && response.data.audioUrl) {
-        // Fetch the audio file with authentication
+        const audioUrl = response.data.audioUrl;
+        const isCached = response.data.cached;
+
+        // Update cached state if this was from cache
+        if (isCached && !cachedAudioUrl) {
+          setCachedAudioUrl(audioUrl);
+          console.log('✅ Using cached preview');
+        } else if (!isCached) {
+          setCachedAudioUrl(audioUrl);
+          console.log('✅ Preview generated and cached');
+        }
+
+        // Play the audio
         const token = localStorage.getItem('auth_token');
         if (!token) {
           console.error('No auth token found');
@@ -48,14 +62,14 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
         }
 
         // Construct full URL for the audio
-        const audioUrl = response.data.audioUrl.startsWith('http')
-          ? response.data.audioUrl
-          : `http://localhost:3002${response.data.audioUrl}`;
+        const fullAudioUrl = audioUrl.startsWith('http')
+          ? audioUrl
+          : `http://localhost:3002${audioUrl}`;
 
-        console.log('Fetching authenticated audio from:', audioUrl);
+        console.log('Fetching audio from:', fullAudioUrl);
 
         // Fetch audio with authentication
-        const audioResponse = await fetch(audioUrl, {
+        const audioResponse = await fetch(fullAudioUrl, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -69,14 +83,11 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
         const blob = await audioResponse.blob();
         const blobUrl = URL.createObjectURL(blob);
 
-        console.log('Created blob URL:', blobUrl);
-
         const audio = new Audio(blobUrl);
         audioRef.current = audio;
 
         audio.onended = () => {
           setIsPlaying(false);
-          // Clean up blob URL
           URL.revokeObjectURL(blobUrl);
         };
 
@@ -84,12 +95,10 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
           console.error('Audio playback error:', e);
           setIsPlaying(false);
           setIsLoading(false);
-          // Clean up blob URL
           URL.revokeObjectURL(blobUrl);
         };
 
         audio.oncanplay = () => {
-          console.log('Audio can play');
           setIsLoading(false);
         };
 
@@ -106,10 +115,10 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
     }
   };
 
-  // Get icon based on category
+  // Get icon based on gender
   const getVoiceIcon = () => {
-    if (voice.category === 'male') return '👨';
-    if (voice.category === 'female') return '👩';
+    if (voice.gender === 'male') return '👨';
+    if (voice.gender === 'female') return '👩';
     return '🎤';
   };
 
@@ -144,12 +153,21 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
         <div className="space-y-2 mb-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-500">Gender:</span>
-            <span className="font-medium text-gray-900 capitalize">{voice.category}</span>
+            <span className="font-medium text-gray-900 capitalize">{voice.gender || 'Unknown'}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-500">Language:</span>
-            <span className="font-medium text-gray-900">{language === 'en' ? 'English' : 'Hindi'}</span>
+            <span className="font-medium text-gray-900">{language === 'en' ? 'English' : language === 'hi' ? 'Hindi' : language.toUpperCase()}</span>
           </div>
+          {cachedAudioUrl && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Status:</span>
+              <span className="font-medium text-green-600 flex items-center gap-1">
+                <span>✓</span>
+                <span>Cached</span>
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Preview Button */}
@@ -188,7 +206,7 @@ const VoicePreviewCard = ({ voice, modelId, language }) => {
         <div className="mt-4 p-3 bg-gray-50 rounded-lg">
           <p className="text-xs text-gray-500 mb-1">Sample Text:</p>
           <p className="text-xs text-gray-700 italic line-clamp-2">
-            "{sampleTexts[language] || sampleTexts.en}"
+            "{previewText.substring(0, 100)}..."
           </p>
         </div>
       </div>

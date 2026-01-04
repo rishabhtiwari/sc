@@ -12,7 +12,8 @@ const VoicePreviewPage = () => {
   const [ttsConfig, setTtsConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedModel, setSelectedModel] = useState(null);
-  const [filter, setFilter] = useState('all'); // all, male, female
+  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [genderFilter, setGenderFilter] = useState('all'); // all, male, female
 
   // Fetch TTS configuration from API
   useEffect(() => {
@@ -25,6 +26,10 @@ const VoicePreviewPage = () => {
         if (config.default_model) {
           setSelectedModel(config.default_model);
         }
+        // Set default language from model
+        if (config.models[config.default_model]?.language) {
+          setSelectedLanguage(config.models[config.default_model].language);
+        }
       } catch (error) {
         console.error('Failed to fetch TTS config:', error);
       } finally {
@@ -34,18 +39,35 @@ const VoicePreviewPage = () => {
     fetchConfig();
   }, []);
 
-  // Get all voices for selected model
+  // Get all voices for selected model with metadata
   const allVoices = selectedModel && ttsConfig
-    ? (ttsConfig.models[selectedModel]?.voices || []).map(voiceId => ({
+    ? (ttsConfig.models[selectedModel]?.voicesWithMetadata ||
+       ttsConfig.models[selectedModel]?.voices?.map(voiceId => ({
         id: voiceId,
         name: voiceId,
         description: `${ttsConfig.models[selectedModel]?.name} voice`,
-        category: 'default' // Bark doesn't have male/female categories
-      }))
+        gender: 'unknown'
+      })) || [])
     : [];
 
-  // Filter voices (for now, just return all since Bark doesn't have gender categories)
-  const filteredVoices = allVoices;
+  // Filter voices by gender
+  const filteredVoices = allVoices.filter(voice => {
+    if (genderFilter === 'all') return true;
+    return voice.gender === genderFilter;
+  });
+
+  // Get available languages from selected model
+  const availableLanguages = selectedModel && ttsConfig
+    ? (ttsConfig.models[selectedModel]?.supported_languages ||
+       ttsConfig.models[selectedModel]?.supportedLanguages ||
+       ['en'])
+    : ['en'];
+
+  // Count voices by gender
+  const genderCounts = allVoices.reduce((acc, voice) => {
+    acc[voice.gender] = (acc[voice.gender] || 0) + 1;
+    return acc;
+  }, {});
 
   // Loading state
   if (loading) {
@@ -108,7 +130,7 @@ const VoicePreviewPage = () => {
       {/* Model Selector */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             {/* Model Selection */}
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-700">Model:</label>
@@ -116,7 +138,13 @@ const VoicePreviewPage = () => {
                 {Object.entries(ttsConfig.models).map(([modelKey, model]) => (
                   <button
                     key={modelKey}
-                    onClick={() => setSelectedModel(modelKey)}
+                    onClick={() => {
+                      setSelectedModel(modelKey);
+                      // Update language when model changes
+                      if (model.language) {
+                        setSelectedLanguage(model.language);
+                      }
+                    }}
                     className={`
                       px-4 py-2 rounded-lg font-medium transition-colors text-sm
                       ${selectedModel === modelKey
@@ -125,7 +153,7 @@ const VoicePreviewPage = () => {
                       }
                     `}
                   >
-                    {model.name} - {model.language}
+                    {model.name}
                     {model.supports_emotions && ' 🎭'}
                     {model.supports_music && ' 🎵'}
                   </button>
@@ -133,10 +161,77 @@ const VoicePreviewPage = () => {
               </div>
             </div>
 
+            {/* Language Selection */}
+            {availableLanguages.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700">Language:</label>
+                <div className="flex gap-2">
+                  {availableLanguages.map((lang) => (
+                    <button
+                      key={lang}
+                      onClick={() => setSelectedLanguage(lang)}
+                      className={`
+                        px-4 py-2 rounded-lg font-medium transition-colors text-sm
+                        ${selectedLanguage === lang
+                          ? 'bg-green-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }
+                      `}
+                    >
+                      {lang === 'en' ? '🇺🇸 English' : lang === 'hi' ? '🇮🇳 Hindi' : lang.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Gender Filter */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700">Gender:</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setGenderFilter('all')}
+                  className={`
+                    px-4 py-2 rounded-lg font-medium transition-colors text-sm
+                    ${genderFilter === 'all'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }
+                  `}
+                >
+                  All ({allVoices.length})
+                </button>
+                <button
+                  onClick={() => setGenderFilter('male')}
+                  className={`
+                    px-4 py-2 rounded-lg font-medium transition-colors text-sm
+                    ${genderFilter === 'male'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }
+                  `}
+                >
+                  👨 Male ({genderCounts.male || 0})
+                </button>
+                <button
+                  onClick={() => setGenderFilter('female')}
+                  className={`
+                    px-4 py-2 rounded-lg font-medium transition-colors text-sm
+                    ${genderFilter === 'female'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }
+                  `}
+                >
+                  👩 Female ({genderCounts.female || 0})
+                </button>
+              </div>
+            </div>
+
             {/* Voice Count */}
             <div className="ml-auto">
               <span className="text-sm text-gray-600">
-                {allVoices.length} {allVoices.length === 1 ? 'voice' : 'voices'} available
+                Showing {filteredVoices.length} of {allVoices.length} voices
               </span>
             </div>
           </div>
@@ -152,7 +247,8 @@ const VoicePreviewPage = () => {
                 key={voice.id}
                 voice={voice}
                 modelId={selectedModel}
-                language={ttsConfig.models[selectedModel]?.language || 'en'}
+                language={selectedLanguage}
+                sampleText={ttsConfig.models[selectedModel]?.sampleTexts?.[selectedLanguage]}
               />
             ))}
           </div>
@@ -165,7 +261,7 @@ const VoicePreviewPage = () => {
                 No voices found
               </h3>
               <p className="text-gray-600">
-                Try selecting a different model
+                Try selecting a different gender filter or model
               </p>
             </div>
           )}
