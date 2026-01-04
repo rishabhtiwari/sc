@@ -465,10 +465,10 @@ class NewsFetcherJob(BaseJob):
 
     def get_seed_url(self, partner_id: str, customer_id: str = None) -> Dict[str, Any]:
         """
-        Get a single seed URL by partner_id
+        Get a single seed URL by partner_id or MongoDB _id
 
         Args:
-            partner_id: Partner ID of the seed URL to retrieve
+            partner_id: Partner ID or MongoDB _id of the seed URL to retrieve
             customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
@@ -476,12 +476,22 @@ class NewsFetcherJob(BaseJob):
         """
         try:
             from common.utils.multi_tenant_db import build_multi_tenant_query
+            from bson import ObjectId
 
-            # Build query with multi-tenant filter
+            # Try to find by partner_id first
             base_query = {'partner_id': partner_id}
             query = build_multi_tenant_query(base_query, customer_id=customer_id)
-
             seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
+
+            # If not found by partner_id, try by MongoDB _id
+            if not seed_url:
+                try:
+                    if ObjectId.is_valid(partner_id):
+                        base_query = {'_id': ObjectId(partner_id)}
+                        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                        seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
+                except Exception as e:
+                    self.logger.debug(f"Could not parse partner_id as ObjectId: {str(e)}")
 
             if not seed_url:
                 return {
@@ -511,10 +521,10 @@ class NewsFetcherJob(BaseJob):
 
     def update_seed_url(self, partner_id: str, update_data: Dict[str, Any], customer_id: str = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Update an existing seed URL by partner_id
+        Update an existing seed URL by partner_id or MongoDB _id
 
         Args:
-            partner_id: Partner ID of the seed URL to update
+            partner_id: Partner ID or MongoDB _id of the seed URL to update
             update_data: Dictionary containing fields to update
             customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
             user_id: Optional user ID for audit tracking
@@ -524,6 +534,7 @@ class NewsFetcherJob(BaseJob):
         """
         try:
             from common.utils.multi_tenant_db import build_multi_tenant_query, prepare_update_document
+            from bson import ObjectId
 
             # Prepare update data
             update_fields = {}
@@ -551,6 +562,16 @@ class NewsFetcherJob(BaseJob):
                 base_query = {'partner_id': partner_id}
                 query = build_multi_tenant_query(base_query, customer_id=customer_id)
                 existing_seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
+
+                # If not found by partner_id, try by MongoDB _id
+                if not existing_seed_url:
+                    try:
+                        if ObjectId.is_valid(partner_id):
+                            base_query = {'_id': ObjectId(partner_id)}
+                            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                            existing_seed_url = self.news_fetcher_service.seed_urls_collection.find_one(query)
+                    except Exception as e:
+                        self.logger.debug(f"Could not parse partner_id as ObjectId: {str(e)}")
 
                 if existing_seed_url:
                     parameters = existing_seed_url.get('parameters', {})
@@ -584,13 +605,26 @@ class NewsFetcherJob(BaseJob):
             prepare_update_document(update_fields, user_id=user_id or 'system')
 
             # Update the document with customer_id filter
+            # Try by partner_id first
             base_query = {'partner_id': partner_id}
             query = build_multi_tenant_query(base_query, customer_id=customer_id)
-
             result = self.news_fetcher_service.seed_urls_collection.update_one(
                 query,
                 {'$set': update_fields}
             )
+
+            # If not found by partner_id, try by MongoDB _id
+            if result.matched_count == 0:
+                try:
+                    if ObjectId.is_valid(partner_id):
+                        base_query = {'_id': ObjectId(partner_id)}
+                        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                        result = self.news_fetcher_service.seed_urls_collection.update_one(
+                            query,
+                            {'$set': update_fields}
+                        )
+                except Exception as e:
+                    self.logger.debug(f"Could not parse partner_id as ObjectId: {str(e)}")
 
             if result.matched_count > 0:
                 return {
@@ -612,10 +646,10 @@ class NewsFetcherJob(BaseJob):
 
     def delete_seed_url(self, partner_id: str, customer_id: str = None) -> Dict[str, Any]:
         """
-        Delete a seed URL by partner_id
+        Delete a seed URL by partner_id or MongoDB _id
 
         Args:
-            partner_id: Partner ID of the seed URL to delete
+            partner_id: Partner ID or MongoDB _id of the seed URL to delete
             customer_id: Customer ID for multi-tenant filtering (uses SYSTEM_CUSTOMER_ID if None)
 
         Returns:
@@ -623,12 +657,23 @@ class NewsFetcherJob(BaseJob):
         """
         try:
             from common.utils.multi_tenant_db import build_multi_tenant_query
+            from bson import ObjectId
 
-            # Build query with multi-tenant filter
+            # Try to delete by partner_id first
             base_query = {'partner_id': partner_id}
             query = build_multi_tenant_query(base_query, customer_id=customer_id)
-
             result = self.news_fetcher_service.seed_urls_collection.delete_one(query)
+
+            # If not found by partner_id, try by MongoDB _id
+            if result.deleted_count == 0:
+                try:
+                    # Check if partner_id is a valid ObjectId
+                    if ObjectId.is_valid(partner_id):
+                        base_query = {'_id': ObjectId(partner_id)}
+                        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                        result = self.news_fetcher_service.seed_urls_collection.delete_one(query)
+                except Exception as e:
+                    self.logger.debug(f"Could not parse partner_id as ObjectId: {str(e)}")
 
             if result.deleted_count > 0:
                 return {
