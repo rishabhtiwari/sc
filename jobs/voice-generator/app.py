@@ -831,11 +831,91 @@ def get_available_models():
         if not config:
             return jsonify({'error': 'Voice configuration not found'}), 404
 
-        # Return models and voices directly from database
-        return jsonify({
-            'models': config.get('models', {}),
-            'voices': config.get('voices', {})
-        }), 200
+        # Transform database format to frontend format
+        db_models = config.get('models', {})
+        db_voices = config.get('voices', {})
+
+        # Build models object for frontend
+        models = {}
+
+        # Get unique model IDs and their supported languages from database
+        model_languages = {}
+        for lang, model_id in db_models.items():
+            if model_id not in model_languages:
+                model_languages[model_id] = []
+            model_languages[model_id].append(lang)
+
+        for model_id, supported_languages in model_languages.items():
+            if model_id == 'coqui-xtts':
+                # Get voices from the first language that uses coqui-xtts
+                lang_with_coqui = supported_languages[0]
+                voice_config = db_voices.get(lang_with_coqui, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                # Build voicesWithMetadata for Coqui
+                voices_with_metadata = []
+                for v in male_voices:
+                    voices_with_metadata.append({'id': v, 'name': v, 'gender': 'male'})
+                for v in female_voices:
+                    voices_with_metadata.append({'id': v, 'name': v, 'gender': 'female'})
+
+                models['coqui-xtts'] = {
+                    'id': 'coqui-xtts',
+                    'name': 'Coqui XTTS v2',
+                    'description': 'Multi-lingual neural TTS with voice cloning (GPU-accelerated)',
+                    'languages': supported_languages,
+                    'voices': {
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    },
+                    'voicesWithMetadata': voices_with_metadata
+                }
+
+            elif model_id == 'kokoro-82m':
+                # Get voices from the first language that uses kokoro
+                lang_with_kokoro = supported_languages[0]
+                voice_config = db_voices.get(lang_with_kokoro, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                models['kokoro-82m'] = {
+                    'id': 'kokoro-82m',
+                    'name': 'Kokoro TTS',
+                    'description': 'High-quality English text-to-speech with multiple voices',
+                    'languages': supported_languages,
+                    'voices': {
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    }
+                }
+
+            elif model_id == 'mms-tts-hin':
+                # Get voices from the first language that uses mms
+                lang_with_mms = supported_languages[0]
+                voice_config = db_voices.get(lang_with_mms, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                # MMS typically has a default voice, not gender-specific
+                default_voices = []
+                if not male_voices and not female_voices:
+                    default_voices = [{'id': 'hi_default', 'name': 'Hindi Voice (Default)'}]
+
+                models['mms-tts-hin'] = {
+                    'id': 'mms-tts-hin',
+                    'name': 'MMS Hindi TTS',
+                    'description': 'Hindi text-to-speech model (single voice only)',
+                    'languages': supported_languages,
+                    'voices': {
+                        'default': default_voices,
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    },
+                    'note': 'MMS Hindi model only supports one voice. Male/female alternation is not available for this model.'
+                }
+
+        return jsonify({'models': models}), 200
     except Exception as e:
         voice_generator_job.logger.error(f"Error fetching available models: {e}")
         return jsonify({'error': str(e)}), 500
