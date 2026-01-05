@@ -815,10 +815,11 @@ def get_available_models():
     """Get list of available TTS models with their supported languages and voices from database config"""
     try:
         from flask import request
-        from common.utils.multi_tenant_db import get_customer_id_from_request
+        from common.utils.multi_tenant_db import extract_user_context_from_headers
 
-        # Get customer context
-        customer_id = get_customer_id_from_request(request)
+        # Get customer context from request headers
+        context = extract_user_context_from_headers(request.headers)
+        customer_id = context['customer_id']
 
         # Fetch voice config from database
         voice_config_collection = voice_generator_job.news_audio_service.news_db['voice_config']
