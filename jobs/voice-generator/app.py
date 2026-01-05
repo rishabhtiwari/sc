@@ -812,46 +812,29 @@ def update_voice_config():
 
 @voice_generator_job.app.route('/api/voice/available-models', methods=['GET'])
 def get_available_models():
-    """Get list of available TTS models with their supported languages and voices"""
+    """Get list of available TTS models with their supported languages and voices from database config"""
     try:
-        models = {
-            'kokoro-82m': {
-                'id': 'kokoro-82m',
-                'name': 'Kokoro TTS',
-                'description': 'High-quality English text-to-speech with multiple voices',
-                'languages': ['en'],
-                'voices': {
-                    'male': [
-                        {'id': 'am_adam', 'name': 'Adam (American Male)'},
-                        {'id': 'am_michael', 'name': 'Michael (American Male)'},
-                        {'id': 'bm_george', 'name': 'George (British Male)'},
-                        {'id': 'bm_lewis', 'name': 'Lewis (British Male)'},
-                    ],
-                    'female': [
-                        {'id': 'af_bella', 'name': 'Bella (American Female)'},
-                        {'id': 'af_sarah', 'name': 'Sarah (American Female)'},
-                        {'id': 'bf_emma', 'name': 'Emma (British Female)'},
-                        {'id': 'bf_isabella', 'name': 'Isabella (British Female)'},
-                    ]
-                }
-            },
-            'mms-tts-hin': {
-                'id': 'mms-tts-hin',
-                'name': 'MMS Hindi TTS',
-                'description': 'Hindi text-to-speech model (single voice only)',
-                'languages': ['hi'],
-                'voices': {
-                    'default': [
-                        {'id': 'hi_default', 'name': 'Hindi Voice (Default)'},
-                    ],
-                    'male': [],
-                    'female': []
-                },
-                'note': 'MMS Hindi model only supports one voice. Male/female alternation is not available for this model.'
-            }
-        }
+        from flask import request
+        from common.utils.multi_tenant_db import get_customer_id_from_request
 
-        return jsonify({'models': models}), 200
+        # Get customer context
+        customer_id = get_customer_id_from_request(request)
+
+        # Fetch voice config from database
+        voice_config_collection = voice_generator_job.news_audio_service.news_db['voice_config']
+        config = voice_config_collection.find_one({
+            'customer_id': customer_id,
+            'is_deleted': False
+        })
+
+        if not config:
+            return jsonify({'error': 'Voice configuration not found'}), 404
+
+        # Return models and voices directly from database
+        return jsonify({
+            'models': config.get('models', {}),
+            'voices': config.get('voices', {})
+        }), 200
     except Exception as e:
         voice_generator_job.logger.error(f"Error fetching available models: {e}")
         return jsonify({'error': str(e)}), 500
