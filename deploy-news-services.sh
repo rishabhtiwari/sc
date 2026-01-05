@@ -357,6 +357,11 @@ services:
   job-voice-generator:
     environment:
       - USE_GPU=true
+
+  # MongoDB with GPU environment variable for migrations
+  ichat-mongodb:
+    environment:
+      - USE_GPU=true
 EOF
 
     print_success "GPU docker-compose override created: docker-compose.gpu.yml"
