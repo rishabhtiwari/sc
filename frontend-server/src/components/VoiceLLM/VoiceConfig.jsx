@@ -112,22 +112,34 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         language: selectedLanguage
       });
 
+      console.log('📦 Full preview response:', response.data);
       const audioUrl = response.data.audio_url || response.data.audioUrl;
       console.log('✅ Preview audio URL:', audioUrl);
 
       // If it's a presigned URL (starts with http), use it directly
       if (audioUrl.startsWith('http')) {
+        console.log('🌐 Using direct URL:', audioUrl);
         const audio = new Audio(audioUrl);
         audio.play();
       } else {
         // Otherwise, fetch through proxy with auth
+        console.log('🔄 Fetching through proxy:', audioUrl);
         const token = localStorage.getItem('auth_token');
-        const audioResponse = await fetch(audioUrl, {
+        const fullUrl = audioUrl.startsWith('/') ? audioUrl : `/api/${audioUrl}`;
+        console.log('📡 Full fetch URL:', fullUrl);
+
+        const audioResponse = await fetch(fullUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
+        console.log('📡 Response status:', audioResponse.status, audioResponse.statusText);
+        console.log('📡 Response headers:', {
+          contentType: audioResponse.headers.get('content-type'),
+          contentLength: audioResponse.headers.get('content-length')
+        });
+
         if (!audioResponse.ok) {
-          throw new Error(`Failed to fetch audio: ${audioResponse.status}`);
+          throw new Error(`Failed to fetch audio: ${audioResponse.status} ${audioResponse.statusText}`);
         }
 
         const blob = await audioResponse.blob();
