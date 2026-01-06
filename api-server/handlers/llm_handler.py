@@ -81,15 +81,17 @@ class LLMHandler:
     def handle_text_generation() -> Dict[str, Any]:
         """
         Handle text generation request
-        
+
         Expected JSON payload:
         {
-            "prompt": "Text prompt",
-            "max_tokens": 128,
+            "query": "Text query",
+            "use_rag": false,
+            "detect_code": false,
+            "max_tokens": 4096,
             "temperature": 0.7,
             "top_p": 0.95
         }
-        
+
         Returns:
             JSON response with generated text
         """
@@ -104,21 +106,18 @@ class LLMHandler:
 
             data = request.get_json()
 
-            # Accept both 'query' and 'prompt' for backward compatibility
-            query = data.get('query') or data.get('prompt')
-
             # Validate required fields
+            query = data.get('query')
             if not query or not query.strip():
                 return jsonify({
                     "status": "error",
-                    "error": "Query or prompt is required",
+                    "error": "Query is required",
                     "timestamp": int(request.environ.get('REQUEST_TIME', 0) * 1000)
                 }), 400
 
             query = query.strip()
             use_rag = data.get('use_rag', False)
             detect_code = data.get('detect_code', False)
-            context = data.get('context')
             max_tokens = data.get('max_tokens')
             temperature = data.get('temperature')
             top_p = data.get('top_p')
@@ -128,7 +127,6 @@ class LLMHandler:
                 query=query,
                 use_rag=use_rag,
                 detect_code=detect_code,
-                context=context,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p
