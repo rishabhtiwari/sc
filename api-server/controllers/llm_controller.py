@@ -114,16 +114,16 @@ class LLMController:
             Dict containing generated text
         """
         try:
-            # Set reasonable defaults - don't limit max_tokens too much
+            # Set reasonable defaults
             if max_tokens is None:
-                max_tokens = 4096  # Use 4k default
+                max_tokens = 8192  # Use 8k default
             if temperature is None:
                 temperature = 0.7
             if top_p is None:
                 top_p = 0.95
 
-            # Validate parameters - allow up to 8k tokens
-            max_tokens = min(max_tokens, 4096)
+            # Validate parameters - allow up to 8k tokens for output
+            max_tokens = min(max_tokens, 8192)
             temperature = max(0.1, min(temperature, 2.0))
             top_p = max(0.1, min(top_p, 1.0))
 
