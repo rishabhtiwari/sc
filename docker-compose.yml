@@ -260,8 +260,8 @@ services:
       - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
       # Hugging Face Authentication
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-      # Context Window Configuration - Mistral 7B supports up to 32k tokens
-      - N_CTX=32768
+      # Context Window Configuration - 8k context window
+      - N_CTX=8192
       - N_BATCH=512
       - LLM_MAX_NEW_TOKENS=8192
       - ENABLE_CONTINUATION=true
