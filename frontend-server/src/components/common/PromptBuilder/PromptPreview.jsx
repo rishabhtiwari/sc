@@ -86,7 +86,9 @@ const PromptPreview = ({ data, onFinish }) => {
       const result = response.data;
 
       if (result.status === 'success') {
-        setLlmResponse(result.response || 'No response generated');
+        // Response can be in result.response or result.data.response
+        const responseText = result.response || result.data?.response || 'No response generated';
+        setLlmResponse(responseText);
       } else {
         setLlmError(result.error || 'Failed to generate response from LLM');
       }
