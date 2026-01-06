@@ -40,7 +40,7 @@ class Config:
 
     # Generation Parameters
     MAX_LENGTH = int(os.getenv('LLM_MAX_LENGTH', 512))
-    MAX_NEW_TOKENS = int(os.getenv('LLM_MAX_NEW_TOKENS', 2048))
+    MAX_NEW_TOKENS = int(os.getenv('LLM_MAX_NEW_TOKENS', 4096))  # Default 4k tokens
     TEMPERATURE = float(os.getenv('LLM_TEMPERATURE', 0.7))
     TOP_P = float(os.getenv('LLM_TOP_P', 0.9))
     TOP_K = int(os.getenv('LLM_TOP_K', 50))

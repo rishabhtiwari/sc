@@ -101,25 +101,34 @@ class LLMHandler:
                     "error": "Request must be JSON",
                     "timestamp": int(request.environ.get('REQUEST_TIME', 0) * 1000)
                 }), 400
-            
+
             data = request.get_json()
-            
+
+            # Accept both 'query' and 'prompt' for backward compatibility
+            query = data.get('query') or data.get('prompt')
+
             # Validate required fields
-            if 'prompt' not in data or not data['prompt'].strip():
+            if not query or not query.strip():
                 return jsonify({
                     "status": "error",
-                    "error": "Prompt is required",
+                    "error": "Query or prompt is required",
                     "timestamp": int(request.environ.get('REQUEST_TIME', 0) * 1000)
                 }), 400
-            
-            prompt = data['prompt'].strip()
+
+            query = query.strip()
+            use_rag = data.get('use_rag', False)
+            detect_code = data.get('detect_code', False)
+            context = data.get('context')
             max_tokens = data.get('max_tokens')
             temperature = data.get('temperature')
             top_p = data.get('top_p')
-            
+
             # Generate text
             result = LLMController.generate_text(
-                prompt=prompt,
+                query=query,
+                use_rag=use_rag,
+                detect_code=detect_code,
+                context=context,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p

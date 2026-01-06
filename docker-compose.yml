@@ -263,7 +263,7 @@ services:
       # Context Window Configuration
       - N_CTX=4096
       - N_BATCH=512
-      - LLM_MAX_NEW_TOKENS=2048
+      - LLM_MAX_NEW_TOKENS=4096
       - ENABLE_CONTINUATION=true
       - SLIDING_WINDOW_TOKENS=300
       # Streaming Configuration

@@ -5,6 +5,7 @@ import time
 import os
 from typing import Dict, List, Any, Optional
 from .base_model import BaseLLMModel
+from config.settings import Config
 
 try:
     from llama_cpp import Llama
@@ -98,9 +99,9 @@ class MistralGGUFModel(BaseLLMModel):
                 return {"status": "error", "error": "Model not loaded"}
 
             # Generation parameters
-            max_tokens = kwargs.get('max_tokens', 512)
-            temperature = kwargs.get('temperature', 0.7)
-            top_p = kwargs.get('top_p', 0.9)
+            max_tokens = kwargs.get('max_tokens', Config.MAX_NEW_TOKENS)
+            temperature = kwargs.get('temperature', Config.TEMPERATURE)
+            top_p = kwargs.get('top_p', Config.TOP_P)
 
             # Generate response
             response = self.llm(
@@ -137,9 +138,9 @@ class MistralGGUFModel(BaseLLMModel):
                 return
 
             # Generation parameters
-            max_tokens = kwargs.get('max_tokens', 512)
-            temperature = kwargs.get('temperature', 0.7)
-            top_p = kwargs.get('top_p', 0.9)
+            max_tokens = kwargs.get('max_tokens', Config.MAX_NEW_TOKENS)
+            temperature = kwargs.get('temperature', Config.TEMPERATURE)
+            top_p = kwargs.get('top_p', Config.TOP_P)
 
             # Generate response with streaming
             response_stream = self.llm(
