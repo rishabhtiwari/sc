@@ -179,6 +179,19 @@ const OutputSchemaBuilder = ({ fields = [], onChange }) => {
           isNew={editingIndex === -1}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, index: null, field: null })}
+        onConfirm={confirmDelete}
+        title="Delete Output Field"
+        message={
+          deleteDialog.field
+            ? `Are you sure you want to delete the "${deleteDialog.field.name}" field?`
+            : 'Are you sure you want to delete this field?'
+        }
+      />
     </div>
   );
 };
@@ -362,24 +375,6 @@ const OutputFieldForm = ({ editForm, setEditForm, fieldTypes, onSave, onCancel, 
           </Button>
         </div>
       </div>
-
-      {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, index: null, field: null })}
-        onConfirm={confirmDelete}
-        title="Delete Output Field"
-        description="Remove field from output schema"
-        message={
-          deleteDialog.field
-            ? `Are you sure you want to delete the "${deleteDialog.field.name}" field?`
-            : ''
-        }
-        warningMessage="This will remove the field from the output schema. The AI will no longer generate this field in its response."
-        confirmText="Delete Field"
-        cancelText="Cancel"
-        variant="danger"
-      />
     </div>
   );
 };
