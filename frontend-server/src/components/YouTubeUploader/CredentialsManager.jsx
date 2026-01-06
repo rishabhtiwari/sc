@@ -14,6 +14,7 @@ const CredentialsManager = () => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authCode, setAuthCode] = useState('');
   const [authenticatingCredentialId, setAuthenticatingCredentialId] = useState(null);
+  const [submittingAuthCode, setSubmittingAuthCode] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, credential: null });
   const { showToast } = useToast();
 
@@ -135,6 +136,7 @@ const CredentialsManager = () => {
     }
 
     try {
+      setSubmittingAuthCode(true);
       const callbackResponse = await api.post('/youtube/oauth-callback', {
         code: authCode.trim(),
         credential_id: authenticatingCredentialId
@@ -153,7 +155,10 @@ const CredentialsManager = () => {
       }
     } catch (error) {
       console.error('Error completing authentication:', error);
-      showToast('Error completing authentication', 'error');
+      const errorMessage = error.response?.data?.error || error.message || 'Error completing authentication';
+      showToast(errorMessage, 'error');
+    } finally {
+      setSubmittingAuthCode(false);
     }
   };
 
@@ -513,15 +518,23 @@ const CredentialsManager = () => {
               <Button
                 variant="secondary"
                 onClick={handleCancelAuth}
+                disabled={submittingAuthCode}
               >
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 onClick={handleSubmitAuthCode}
-                disabled={!authCode.trim()}
+                disabled={!authCode.trim() || submittingAuthCode}
               >
-                Submit
+                {submittingAuthCode ? (
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    <span>Processing...</span>
+                  </span>
+                ) : (
+                  'Submit'
+                )}
               </Button>
             </div>
           </div>

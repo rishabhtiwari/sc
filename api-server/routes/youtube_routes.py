@@ -154,13 +154,14 @@ def oauth_callback():
         # Use the same HTTP method as the incoming request
         if request.method == 'POST':
             # For POST requests, also forward the body
+            logger.info("📝 Proxying OAuth callback to YouTube service...")
             response = requests.post(
                 f'{YOUTUBE_SERVICE_URL}/api/oauth-callback',
                 params=params,
                 json=request.get_json() if request.is_json else None,
                 data=request.form if request.form else None,
                 headers=headers,
-                timeout=30
+                timeout=60  # Increased timeout for OAuth token exchange
             )
         else:
             # For GET requests
@@ -168,12 +169,17 @@ def oauth_callback():
                 f'{YOUTUBE_SERVICE_URL}/api/oauth-callback',
                 params=params,
                 headers=headers,
-                timeout=30
+                timeout=60  # Increased timeout for OAuth token exchange
             )
+
+        logger.info(f"✅ OAuth callback response: {response.status_code}")
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except requests.exceptions.Timeout:
+        logger.error("⏱️ OAuth callback timed out")
+        return jsonify({'error': 'OAuth callback timed out. Please try again.', 'status': 'error'}), 504
     except Exception as e:
         logger.error(f"Error proxying to YouTube oauth-callback: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
 @youtube_bp.route('/youtube/auth/start', methods=['POST'])
