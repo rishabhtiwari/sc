@@ -101,7 +101,7 @@ def replace_image():
             f'{IOPAINT_SERVICE_URL}/api/replace-image',
             json=request.get_json(),
             headers=headers,
-            timeout=60
+            timeout=300
         )
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
@@ -120,7 +120,7 @@ def skip_image():
             f'{IOPAINT_SERVICE_URL}/api/skip',
             json=request.get_json(),
             headers=headers,
-            timeout=30
+            timeout=300
         )
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
@@ -137,7 +137,7 @@ def get_cleaned_image(filename):
         response = requests.get(
             f'{IOPAINT_SERVICE_URL}/api/cleaned-image/{filename}',
             headers=headers,
-            timeout=60,
+            timeout=300,
             stream=True
         )
         return Response(
@@ -182,7 +182,7 @@ def proxy_image_by_id(doc_id):
         response = requests.get(
             f'{IOPAINT_SERVICE_URL}/api/proxy-image/{doc_id}',
             headers=headers,
-            timeout=60,
+            timeout=300,
             stream=True
         )
         return Response(
