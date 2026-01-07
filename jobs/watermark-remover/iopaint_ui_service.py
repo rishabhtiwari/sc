@@ -1295,7 +1295,7 @@ def proxy_image(doc_id):
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1'
         }
-        response = requests.get(image_url, timeout=30, headers=headers)
+        response = requests.get(image_url, timeout=300, headers=headers)
         response.raise_for_status()
 
         # Return image with proper content type

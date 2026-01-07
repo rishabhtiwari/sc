@@ -22,7 +22,7 @@ def get_image_stats():
     """Get IOPaint processing statistics"""
     try:
         headers = get_request_headers_with_context()
-        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/stats', headers=headers, timeout=30)
+        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/stats', headers=headers, timeout=300)
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to IOPaint stats: {str(e)}")
@@ -35,7 +35,7 @@ def get_images():
     """Get list of images"""
     try:
         headers = get_request_headers_with_context()
-        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/images', headers=headers, timeout=30)
+        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/images', headers=headers, timeout=300)
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to IOPaint images: {str(e)}")
@@ -48,7 +48,7 @@ def get_next_image():
     """Get next image to process"""
     try:
         headers = get_request_headers_with_context()
-        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/next-image', headers=headers, timeout=30)
+        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/next-image', headers=headers, timeout=300)
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
         logger.error(f"Error proxying to IOPaint next-image: {str(e)}")
@@ -65,7 +65,7 @@ def process_image():
             f'{IOPAINT_SERVICE_URL}/api/process',
             json=request.get_json(),
             headers=headers,
-            timeout=120
+            timeout=300
         )
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
@@ -83,7 +83,7 @@ def save_image():
             f'{IOPAINT_SERVICE_URL}/api/save',
             json=request.get_json(),
             headers=headers,
-            timeout=60
+            timeout=300
         )
         return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
     except Exception as e:
@@ -161,7 +161,7 @@ def proxy_image():
             f'{IOPAINT_SERVICE_URL}/api/proxy-image',
             params=params,
             headers=headers,
-            timeout=60,
+            timeout=300,
             stream=True
         )
         return Response(
