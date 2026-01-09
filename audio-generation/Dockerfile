@@ -33,7 +33,12 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     transformers \
     git+https://github.com/suno-ai/bark.git
 
-RUN /app/venv/bin/pip install --no-cache-dir num2words
+# Install text processing dependencies
+# - num2words: Convert numbers to words for better TTS
+# - semantic-text-splitter: V2 chunker (Rust-based, fast, no duplication)
+RUN /app/venv/bin/pip install --no-cache-dir \
+    num2words \
+    semantic-text-splitter
 
 # Set environment variables for Bark optimization
 ENV SUNO_OFFLOAD_CPU=False

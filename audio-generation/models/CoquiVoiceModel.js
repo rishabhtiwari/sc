@@ -23,6 +23,11 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         this.initialized = false;
         this.cachedSpeakers = []; // Cache speakers list after initialization
         this.speakersMetadata = null; // Speaker metadata (gender, description, etc.)
+
+        // Text chunker version: 'v1' (spaCy) or 'v2' (semantic_text_splitter)
+        // v2 is recommended for better performance and no duplication issues
+        this.chunkerVersion = config.chunkerVersion || process.env.TEXT_CHUNKER_VERSION || 'v2';
+
         this._loadSpeakersMetadata();
     }
 
@@ -454,17 +459,23 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     }
 
     /**
-     * Chunk text using Python spaCy
+     * Chunk text using Python text chunker
+     * Supports v1 (spaCy) and v2 (semantic_text_splitter)
      * @private
      */
     async _chunkText(text, maxChars, language) {
         const { spawn } = await import('child_process');
 
-        console.log(`📝 Calling text_chunker.py with language: ${language}, max_chars: ${maxChars}`);
+        // Choose chunker script based on version
+        const chunkerScript = this.chunkerVersion === 'v1'
+            ? '/app/utils/text_chunker.py'
+            : '/app/utils/text_chunker_v2.py';
+
+        console.log(`📝 Calling ${this.chunkerVersion} text chunker with language: ${language}, max_chars: ${maxChars}`);
 
         return new Promise((resolve, reject) => {
             const pythonProcess = spawn('/app/venv/bin/python', [
-                '/app/utils/text_chunker.py',
+                chunkerScript,
                 maxChars.toString(),
                 language
             ]);
@@ -480,21 +491,21 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 const stderrText = data.toString();
                 stderr += stderrText;
                 // Print Python script logs in real-time
-                console.log(`   [text_chunker] ${stderrText.trim()}`);
+                console.log(`   [${this.chunkerVersion}_chunker] ${stderrText.trim()}`);
             });
 
             pythonProcess.on('close', (code) => {
                 if (code !== 0) {
-                    console.error(`❌ Text chunker failed with code ${code}`);
+                    console.error(`❌ Text chunker ${this.chunkerVersion} failed with code ${code}`);
                     console.error(`   Error: ${stderr}`);
-                    reject(new Error(`Text chunker failed: ${stderr}`));
+                    reject(new Error(`Text chunker ${this.chunkerVersion} failed: ${stderr}`));
                     return;
                 }
 
                 try {
                     const result = JSON.parse(stdout);
                     if (result.success) {
-                        console.log(`✅ Text chunker returned ${result.chunk_count} chunks`);
+                        console.log(`✅ Text chunker ${this.chunkerVersion} returned ${result.chunk_count} chunks`);
                         resolve(result.chunks);
                     } else {
                         reject(new Error(result.error));
