@@ -276,12 +276,12 @@ def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     print(f"   Min chars: {min_chars}, Max chars: {max_chars}", file=sys.stderr)
     print(f"   Input text length: {len(text)} chars", file=sys.stderr)
 
-    # Initialize the splitter with trim_chunks to remove extra whitespace
-    splitter = TextSplitter(max_chars)
+    # Initialize the splitter (default uses character count)
+    splitter = TextSplitter()
 
     # Generate chunks with capacity range (150-230 is optimal for XTTS stability)
     # The library will try to fill up to max_chars while staying above min_chars
-    chunks = list(splitter.chunks(text))
+    chunks = list(splitter.chunks(text, chunk_capacity=(min_chars, max_chars)))
 
     print(f"✅ Created {len(chunks)} chunks", file=sys.stderr)
 
