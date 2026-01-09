@@ -69,11 +69,11 @@ def proxy_to_inventory_service(path, method='GET', json_data=None, files=None):
         logger.info(f"🔄 Proxying {method} {url}")
 
         # Use longer timeout for audio/video generation and AI prompt generation endpoints
-        # - 10 minutes for audio/video generation
+        # - 15 minutes for audio/video generation (long texts with chunking)
         # - 2 minutes for AI prompt generation (LLM can take 50-60 seconds)
         # - 30 seconds for other endpoints
         if any(x in path for x in ['/generate-audio', '/generate-video', '/generate-summary']):
-            timeout = 600
+            timeout = 900
         elif any(x in path for x in ['/prompt-templates/generate', '/content/generate']):
             timeout = 120
         else:
@@ -316,7 +316,7 @@ def preview_product_audio():
                 'voice': voice,
                 'filename': f'preview_{voice}_{language}.wav'
             },
-            timeout=600  # 10 minutes for model initialization on first run
+            timeout=900  # 15 minutes for model initialization and generation
         )
 
         if response.status_code == 200:

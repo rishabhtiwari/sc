@@ -425,7 +425,7 @@ def generate_audio():
                 'speed': data.get('speed', 1.0),
                 'format': data.get('format', 'wav')
             },
-            timeout=600  # 10 minutes for model initialization
+            timeout=900  # 15 minutes for long texts with chunking
         )
 
         if response.status_code == 200:
@@ -479,7 +479,7 @@ def preview_audio():
                 'x-customer-id': user_context.get('customer_id', 'default'),
                 'x-user-id': user_context.get('user_id', 'default')
             },
-            timeout=600  # 10 minutes for model initialization on first run
+            timeout=900  # 15 minutes for model initialization and generation
         )
 
         if response.status_code == 200:

@@ -65,6 +65,8 @@ RUN /app/venv/bin/pip install --no-cache-dir \
 RUN /app/venv/bin/python -m spacy download en_core_web_sm && \
     /app/venv/bin/python -m spacy download xx_sent_ud_sm
 
+RUN /app/venv/bin/pip install --no-cache-dir indic-numtowords
+
 # Create data directory for model caching
 RUN mkdir -p /app/data/models /app/public && \
     chmod 777 /app/data /app/public

@@ -34,10 +34,12 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     git+https://github.com/suno-ai/bark.git
 
 # Install text processing dependencies
-# - num2words: Convert numbers to words for better TTS
+# - num2words: Convert numbers to words for better TTS (English, Spanish, etc.)
+# - indic-numtowords: Convert numbers to words for Hindi and other Indic languages
 # - semantic-text-splitter: V2 chunker (Rust-based, fast, no duplication)
 RUN /app/venv/bin/pip install --no-cache-dir \
     num2words \
+    indic-numtowords \
     semantic-text-splitter
 
 # Set environment variables for Bark optimization

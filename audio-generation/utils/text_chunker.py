@@ -66,17 +66,59 @@ def convert_numbers_to_words(text, language_code='en'):
     """
     import re
 
+    if not text:
+        return ""
+
+    # Try to import required libraries
+    num2words_available = False
+    indic_num2words_available = False
+
     try:
         from num2words import num2words
+        num2words_available = True
     except ImportError:
-        print("⚠️ num2words not installed, skipping number conversion", file=sys.stderr)
+        pass
+
+    try:
+        from indic_numtowords import num2words as indic_num2words
+        indic_num2words_available = True
+    except ImportError:
+        pass
+
+    # If no libraries available, skip conversion
+    if not num2words_available and not indic_num2words_available:
+        print("⚠️ num2words and indic-numtowords not installed, skipping number conversion", file=sys.stderr)
+        return text
+
+    # Handle Hindi with indic-numtowords
+    if language_code == 'hi':
+        if not indic_num2words_available:
+            print("⚠️ indic-numtowords not installed, skipping Hindi number conversion", file=sys.stderr)
+            return text
+
+        def replace_hindi_number(match):
+            """Replace a number with its Hindi word representation"""
+            number_str = match.group(0)
+            try:
+                # indic_num2words expects language as 'hi' for Hindi
+                # It returns Devanagari text (e.g., "एक सौ तेईस" for 123)
+                return indic_num2words(int(number_str), lang='hi')
+            except Exception as e:
+                print(f"⚠️ Could not convert Hindi number '{number_str}': {e}", file=sys.stderr)
+                return number_str
+
+        # Replace standalone numbers (not part of words)
+        text = re.sub(r'\b\d+\b', replace_hindi_number, text)
+        return text
+
+    # Handle other languages with num2words
+    if not num2words_available:
+        print(f"⚠️ num2words not installed, skipping number conversion for '{language_code}'", file=sys.stderr)
         return text
 
     # Map language codes to num2words language codes
-    # Note: Hindi is NOT supported by num2words, so we skip it
     lang_map = {
         'en': 'en',
-        # 'hi': 'hi',  # Hindi - NOT SUPPORTED by num2words
         'es': 'es',  # Spanish
         'fr': 'fr',  # French
         'de': 'de',  # German
