@@ -42,6 +42,9 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     indic-numtowords \
     semantic-text-splitter
 
+# Verify semantic-text-splitter installation
+RUN /app/venv/bin/python -c "from semantic_text_splitter import TextSplitter; print('✓ semantic-text-splitter installed successfully')"
+
 # Set environment variables for Bark optimization
 ENV SUNO_OFFLOAD_CPU=False
 ENV SUNO_USE_SMALL_MODELS=False
@@ -57,6 +60,9 @@ RUN npm install
 
 # Copy application code
 COPY . .
+
+# Make Python scripts executable
+RUN chmod +x /app/utils/text_chunker.py /app/utils/text_chunker_v2.py /app/utils/audio_merger.py 2>/dev/null || true
 
 # Create volume mount point for persistent model storage
 VOLUME ["/app/data"]

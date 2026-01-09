@@ -21,7 +21,7 @@ import re
 import unicodedata
 
 try:
-    from semantic_text_splitter import CharacterTextSplitter
+    from semantic_text_splitter import TextSplitter
 except ImportError:
     print(json.dumps({
         'success': False,
@@ -277,11 +277,11 @@ def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     print(f"   Input text length: {len(text)} chars", file=sys.stderr)
 
     # Initialize the splitter with trim_chunks to remove extra whitespace
-    splitter = CharacterTextSplitter(trim_chunks=True)
+    splitter = TextSplitter(max_chars)
 
     # Generate chunks with capacity range (150-230 is optimal for XTTS stability)
     # The library will try to fill up to max_chars while staying above min_chars
-    chunks = list(splitter.chunks(text, chunk_capacity=(min_chars, max_chars)))
+    chunks = list(splitter.chunks(text))
 
     print(f"✅ Created {len(chunks)} chunks", file=sys.stderr)
 
