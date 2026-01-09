@@ -111,22 +111,22 @@ def clean_text_for_tts(text, language_code='en'):
     return text
 
 
-def chunk_text_v2(text, min_chars=150, max_chars=200, language_code='en'):
+def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     """
     Split text into chunks using semantic_text_splitter
-    
+
     This library uses a Rust-based implementation that:
     - Respects sentence boundaries
-    - Ensures chunks are within the specified range
+    - Ensures chunks are within the specified range (150-230 chars optimal for XTTS)
     - Guarantees no word duplication
     - Works efficiently for all languages
-    
+
     Args:
         text: Text to split
         min_chars: Minimum characters per chunk (default: 150)
-        max_chars: Maximum characters per chunk (default: 200)
+        max_chars: Maximum characters per chunk (default: 230)
         language_code: Language code ('en', 'hi', etc.)
-    
+
     Returns:
         List of text chunks
     """
@@ -137,7 +137,7 @@ def chunk_text_v2(text, min_chars=150, max_chars=200, language_code='en'):
     # Initialize the splitter with trim_chunks to remove extra whitespace
     splitter = CharacterTextSplitter(trim_chunks=True)
 
-    # Generate chunks with capacity range
+    # Generate chunks with capacity range (150-230 is optimal for XTTS stability)
     # The library will try to fill up to max_chars while staying above min_chars
     chunks = list(splitter.chunks(text, chunk_capacity=(min_chars, max_chars)))
 
@@ -162,20 +162,23 @@ def main():
             'error': 'Usage: text_chunker_v2.py <max_chars> <language_code> [text from stdin]'
         }))
         sys.exit(1)
-    
+
     max_chars = int(sys.argv[1])
     language_code = sys.argv[2]
-    
-    # Calculate min_chars as 75% of max_chars for good quality chunks
-    min_chars = int(max_chars * 0.75)
-    
+
+    # For XTTS optimal range: 150-230 characters
+    # Calculate min_chars to ensure chunks are substantial
+    # If max_chars is 230, min_chars will be ~150 (65% of max)
+    # If max_chars is 200, min_chars will be ~130 (65% of max)
+    min_chars = max(100, int(max_chars * 0.65))
+
     # Read text from stdin
     text = sys.stdin.read().strip()
-    
+
     if not text:
         print(json.dumps({'error': 'No text provided'}))
         sys.exit(1)
-    
+
     try:
         chunks = chunk_text_v2(text, min_chars, max_chars, language_code)
         print(json.dumps({

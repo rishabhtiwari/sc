@@ -237,16 +237,18 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         try {
             // Character limit per chunk (150 chars with smart merging for chunks < 100 chars)
             // Small chunks will be merged with previous chunks up to 250 chars max
-            const CHAR_LIMIT = 150;
+            // XTTS optimal chunk size: 150-230 characters
+            // Using 230 as max to allow chunker to create chunks in the 150-230 range
+            const CHAR_LIMIT = 230;
 
             let audioData;
 
             // Check if text needs chunking
             if (text.length > CHAR_LIMIT) {
                 console.log(`📝 Text length: ${text.length} chars (exceeds ${CHAR_LIMIT} limit)`);
-                console.log(`🔪 Chunking text using spaCy...`);
+                console.log(`🔪 Chunking text using ${this.chunkerVersion} chunker...`);
 
-                // Get chunks using Python spaCy
+                // Get chunks using Python text chunker (v1=spaCy, v2=semantic_text_splitter)
                 const chunks = await this._chunkText(text, CHAR_LIMIT, language);
                 console.log(`📦 Split into ${chunks.length} chunks`);
 
