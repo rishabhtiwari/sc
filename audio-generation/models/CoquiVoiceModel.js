@@ -255,8 +255,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                     chunks,
                     speaker,
                     language,
-                    MAX_CONCURRENT_REQUESTS,
-                    speed
+                    MAX_CONCURRENT_REQUESTS
                 );
 
                 const parallelTime = Date.now() - parallelStartTime;
@@ -269,12 +268,17 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                     silenceMs: 200,      // Natural breathing pause
                     crossfadeMs: 50,     // Smooth transitions
                     normalize: true,     // Consistent volume
-                    denoise: false,      // Set to true if background noise is present
-                    speed: speed         // Speed adjustment (0.5-2.0)
+                    denoise: false       // Set to true if background noise is present
                 });
             } else {
                 console.log(`📝 Text length: ${text.length} chars (within limit, no chunking needed)`);
-                audioData = await this._generateSingleChunk(text, speaker, language, speed);
+                audioData = await this._generateSingleChunk(text, speaker, language);
+            }
+
+            // Apply speed adjustment if needed (using ffmpeg post-processing)
+            if (speed !== 1.0) {
+                console.log(`🎛️ Applying speed adjustment: ${speed}x`);
+                audioData = await this._applySpeedAdjustment(audioData, speed);
             }
 
             // Save the audio file
@@ -510,7 +514,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
      * Generate audio for multiple chunks with concurrency control
      * @private
      */
-    async _generateChunksWithConcurrency(chunks, speaker, language, maxConcurrent = 5, speed = 1.0) {
+    async _generateChunksWithConcurrency(chunks, speaker, language, maxConcurrent = 5) {
         const results = new Array(chunks.length);
         let currentIndex = 0;
         let completedCount = 0;
@@ -524,7 +528,7 @@ export class CoquiVoiceModel extends BaseVoiceModel {
                 console.log(`🔊 [Worker ${workerIndex}] Processing chunk ${chunkIndex + 1}/${chunks.length} (${chunk.length} chars)`);
 
                 try {
-                    const audio = await this._generateSingleChunk(chunk, speaker, language, speed);
+                    const audio = await this._generateSingleChunk(chunk, speaker, language);
                     results[chunkIndex] = audio;
                     completedCount++;
                     console.log(`✅ [Worker ${workerIndex}] Completed chunk ${chunkIndex + 1}/${chunks.length} (${completedCount}/${chunks.length} total)`);
@@ -549,13 +553,14 @@ export class CoquiVoiceModel extends BaseVoiceModel {
     /**
      * Generate audio for a single chunk
      * @private
+     * Note: Speed parameter is NOT sent to Coqui TTS server (not supported by the API)
+     * Speed adjustment is applied as post-processing using ffmpeg at the final audio level
      */
-    async _generateSingleChunk(text, speaker, language, speed = 1.0) {
+    async _generateSingleChunk(text, speaker, language) {
         const formData = new FormData();
         formData.append('text', text);
         formData.append('speaker_id', speaker);
         formData.append('language_id', language);
-        formData.append('speed', speed.toString());
 
         const response = await axios.post(
             `${this.coquiServerUrl}/api/tts`,
@@ -568,6 +573,120 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         );
 
         return response.data;
+    }
+
+    /**
+     * Apply speed adjustment to audio using ffmpeg
+     * @private
+     * @param {Buffer} audioBuffer - Input audio buffer (WAV format)
+     * @param {number} speed - Speed factor (0.5 = half speed, 2.0 = double speed)
+     * @returns {Promise<Buffer>} - Speed-adjusted audio buffer
+     */
+    async _applySpeedAdjustment(audioBuffer, speed) {
+        const { spawn } = await import('child_process');
+        const fs = await import('fs');
+        const path = await import('path');
+        const os = await import('os');
+
+        return new Promise((resolve, reject) => {
+            // Create temporary files
+            const tempDir = os.tmpdir();
+            const inputFile = path.join(tempDir, `input_${Date.now()}.wav`);
+            const outputFile = path.join(tempDir, `output_${Date.now()}.wav`);
+
+            try {
+                // Write input buffer to temp file
+                fs.writeFileSync(inputFile, audioBuffer);
+
+                // ffmpeg atempo filter has a range of 0.5 to 2.0
+                // For speeds outside this range, we need to chain multiple atempo filters
+                let atempoFilters = [];
+                let remainingSpeed = speed;
+
+                // Build atempo filter chain
+                while (remainingSpeed > 2.0) {
+                    atempoFilters.push('atempo=2.0');
+                    remainingSpeed /= 2.0;
+                }
+                while (remainingSpeed < 0.5) {
+                    atempoFilters.push('atempo=0.5');
+                    remainingSpeed /= 0.5;
+                }
+                if (remainingSpeed !== 1.0) {
+                    atempoFilters.push(`atempo=${remainingSpeed.toFixed(2)}`);
+                }
+
+                const filterComplex = atempoFilters.join(',');
+
+                console.log(`   🎛️ Applying speed adjustment: ${speed}x (filter: ${filterComplex})`);
+
+                // Run ffmpeg
+                const ffmpeg = spawn('ffmpeg', [
+                    '-i', inputFile,
+                    '-filter:a', filterComplex,
+                    '-y', // Overwrite output file
+                    outputFile
+                ]);
+
+                let stderr = '';
+
+                ffmpeg.stderr.on('data', (data) => {
+                    stderr += data.toString();
+                });
+
+                ffmpeg.on('close', (code) => {
+                    // Clean up input file
+                    try {
+                        fs.unlinkSync(inputFile);
+                    } catch (e) {
+                        console.warn(`Failed to delete temp input file: ${e.message}`);
+                    }
+
+                    if (code !== 0) {
+                        console.error(`❌ ffmpeg failed with code ${code}`);
+                        console.error(`   Error: ${stderr}`);
+                        reject(new Error(`ffmpeg speed adjustment failed: ${stderr}`));
+                        return;
+                    }
+
+                    try {
+                        // Read output file
+                        const outputBuffer = fs.readFileSync(outputFile);
+
+                        // Clean up output file
+                        fs.unlinkSync(outputFile);
+
+                        console.log(`   ✅ Speed adjustment applied successfully`);
+                        resolve(outputBuffer);
+                    } catch (e) {
+                        reject(new Error(`Failed to read speed-adjusted audio: ${e.message}`));
+                    }
+                });
+
+                ffmpeg.on('error', (error) => {
+                    // Clean up temp files
+                    try {
+                        fs.unlinkSync(inputFile);
+                    } catch (e) {}
+                    try {
+                        fs.unlinkSync(outputFile);
+                    } catch (e) {}
+
+                    reject(new Error(`ffmpeg process error: ${error.message}`));
+                });
+
+            } catch (error) {
+                // Clean up temp files on error
+                try {
+                    fs.unlinkSync(inputFile);
+                } catch (e) {}
+                try {
+                    fs.unlinkSync(outputFile);
+                } catch (e) {}
+
+                reject(error);
+            }
+        });
     }
 
     /**
