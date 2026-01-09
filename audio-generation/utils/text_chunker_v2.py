@@ -276,14 +276,14 @@ def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     print(f"   Min chars: {min_chars}, Max chars: {max_chars}", file=sys.stderr)
     print(f"   Input text length: {len(text)} chars", file=sys.stderr)
 
-    # Initialize the splitter with trim enabled
-    # In v0.29.0+, 'trim=True' removes whitespace from chunks
-    splitter = TextSplitter(trim=True)
-
-    # Generate chunks with capacity range (min_chars, max_chars)
-    # The tuple (min, max) tells the splitter to fill up to max but consider it full at min
+    # Initialize the splitter with capacity range and trim enabled
+    # In v0.29.0+, capacity can be a tuple (min, max) for a range
+    # The splitter will fill chunks up to max but consider them full once they reach min
     # This ensures chunks are in the optimal range for XTTS (150-230 characters)
-    chunks = list(splitter.chunks(text, (min_chars, max_chars)))
+    splitter = TextSplitter(capacity=(min_chars, max_chars), trim=True)
+
+    # Generate chunks
+    chunks = list(splitter.chunks(text))
 
     print(f"✅ Created {len(chunks)} chunks", file=sys.stderr)
 
