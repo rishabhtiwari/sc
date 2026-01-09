@@ -276,14 +276,43 @@ def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     print(f"   Min chars: {min_chars}, Max chars: {max_chars}", file=sys.stderr)
     print(f"   Input text length: {len(text)} chars", file=sys.stderr)
 
-    # Initialize the splitter (default uses character count)
-    splitter = TextSplitter()
+    # Initialize the splitter with max capacity
+    # In v0.29.0+, capacity is required during initialization
+    # Note: The library will create chunks up to max_chars, but may create smaller chunks
+    # at semantic boundaries. We'll handle merging small chunks after splitting.
+    splitter = TextSplitter(capacity=max_chars)
 
-    # Generate chunks with capacity range (150-230 is optimal for XTTS stability)
-    # The library will try to fill up to max_chars while staying above min_chars
-    chunks = list(splitter.chunks(text, chunk_capacity=(min_chars, max_chars)))
+    # Generate chunks
+    raw_chunks = list(splitter.chunks(text))
+    print(f"✅ Created {len(raw_chunks)} raw chunks", file=sys.stderr)
 
-    print(f"✅ Created {len(chunks)} chunks", file=sys.stderr)
+    # Merge small chunks to meet minimum size requirement
+    # This ensures chunks are between min_chars and max_chars for optimal TTS
+    chunks = []
+    current_chunk = ""
+
+    for i, chunk in enumerate(raw_chunks):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+
+        # If adding this chunk would exceed max_chars, save current and start new
+        if current_chunk and len(current_chunk) + len(chunk) + 1 > max_chars:
+            chunks.append(current_chunk)
+            current_chunk = chunk
+        # If current chunk is empty or small, merge with this chunk
+        elif not current_chunk or len(current_chunk) < min_chars:
+            current_chunk = (current_chunk + " " + chunk).strip() if current_chunk else chunk
+        # Current chunk is good size, save it and start new
+        else:
+            chunks.append(current_chunk)
+            current_chunk = chunk
+
+    # Don't forget the last chunk
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    print(f"✅ After merging: {len(chunks)} chunks (min: {min_chars}, max: {max_chars})", file=sys.stderr)
 
     # Clean each chunk for TTS
     print(f"🔧 Cleaning chunks for TTS model...", file=sys.stderr)
