@@ -6,6 +6,7 @@ These routes are used across different features (products, videos, audio, text g
 from flask import Blueprint, jsonify, request
 import requests
 import logging
+import os
 
 from middleware.jwt_middleware import get_request_headers_with_context
 
@@ -14,26 +15,29 @@ prompt_template_bp = Blueprint('prompt_template', __name__)
 logger = logging.getLogger(__name__)
 
 # Service URLs
-INVENTORY_SERVICE_URL = 'http://ichat-inventory-service:8082'
+INVENTORY_CREATION_SERVICE_URL = os.getenv(
+    'INVENTORY_CREATION_SERVICE_URL',
+    'http://ichat-inventory-creation-service:5001'
+)
 
 
 def proxy_to_inventory_service(path, method='GET', json_data=None, params=None):
     """
-    Proxy requests to inventory service with proper timeout handling
-    
+    Proxy requests to inventory creation service with proper timeout handling
+
     Args:
-        path: API path to call on inventory service
+        path: API path to call on inventory creation service
         method: HTTP method (GET, POST, PUT, DELETE)
         json_data: JSON data for POST/PUT requests
         params: Query parameters
-    
+
     Returns:
         tuple: (response_data, status_code)
     """
     try:
         headers = get_request_headers_with_context()
         headers['Content-Type'] = 'application/json'
-        
+
         # Set timeout based on endpoint
         # - 2 minutes for generation endpoints (LLM can take time)
         # - 30 seconds for CRUD operations
@@ -41,8 +45,8 @@ def proxy_to_inventory_service(path, method='GET', json_data=None, params=None):
             timeout = 120
         else:
             timeout = 30
-        
-        url = f'{INVENTORY_SERVICE_URL}{path}'
+
+        url = f'{INVENTORY_CREATION_SERVICE_URL}{path}'
         
         kwargs = {
             'headers': headers,
@@ -69,13 +73,13 @@ def proxy_to_inventory_service(path, method='GET', json_data=None, params=None):
         return response.json(), response.status_code
         
     except requests.exceptions.Timeout:
-        logger.error(f"Timeout calling inventory service: {path}")
+        logger.error(f"❌ Timeout calling inventory creation service: {path}")
         return {'status': 'error', 'message': 'Request timeout'}, 504
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error calling inventory service: {str(e)}")
+        logger.error(f"❌ Error calling inventory creation service: {str(e)}")
         return {'status': 'error', 'message': str(e)}, 500
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"❌ Unexpected error: {str(e)}")
         return {'status': 'error', 'message': str(e)}, 500
 
 
