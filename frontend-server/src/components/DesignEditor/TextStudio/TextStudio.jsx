@@ -195,123 +195,167 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
           </div>
         </div>
 
-        {/* Main Content - Two Column Layout like Audio Studio */}
+        {/* Main Content - Three Column Layout */}
         <div className="flex flex-1 min-h-0 bg-gray-50">
-          {/* Left Panel - Main Content (2/3 width) */}
+          {/* Left Sidebar - Template Selection (w-80) */}
+          <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  📋 Templates
+                </h3>
+                <button
+                  onClick={() => window.open('/prompt-templates', '_blank')}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Browse All
+                </button>
+              </div>
+
+              {loadingTemplates ? (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="animate-spin text-3xl mb-2">⏳</div>
+                  <p className="text-sm">Loading...</p>
+                </div>
+              ) : promptTemplates.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <div className="text-4xl mb-2">📝</div>
+                  <p className="text-sm">No templates</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {promptTemplates.map((template) => (
+                    <button
+                      key={template.template_id}
+                      onClick={() => setSelectedTemplate(template)}
+                      className={`w-full p-3 border-2 rounded-lg text-left transition-all ${
+                        selectedTemplate?.template_id === template.template_id
+                          ? 'border-blue-500 bg-blue-50 shadow-md'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <div className="text-2xl">📝</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-gray-900 truncate">
+                            {template.name}
+                          </div>
+                          <div className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            {template.description}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Middle Section - Main Content Area */}
           <div className="flex-1 overflow-y-auto">
             {activeSection === 'generate' ? (
-              <div className="p-6">
-                {/* Template Selection */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    📋 Select Template
-                  </h3>
-                  {loadingTemplates ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <div className="animate-spin text-3xl mb-2">⏳</div>
-                      <p>Loading templates...</p>
+              <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
+                {/* Header with Info */}
+                <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">✨ AI Text Generation</h2>
+                      <p className="text-sm text-gray-600">
+                        {selectedTemplate
+                          ? `Using template: ${selectedTemplate.name}`
+                          : 'Select a template to get started'}
+                      </p>
                     </div>
-                  ) : promptTemplates.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <div className="text-4xl mb-2">📝</div>
-                      <p>No templates available</p>
+                    <button
+                      onClick={() => window.open('/prompt-templates', '_blank')}
+                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                    >
+                      📋 Browse All Templates
+                    </button>
+                  </div>
+                </div>
+
+                {/* Preview/Output Area */}
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+                  {!generatedText ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <div className="text-6xl mb-4">📝</div>
+                        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                          Ready to Generate Text
+                        </h3>
+                        <p className="text-gray-600 max-w-md">
+                          {selectedTemplate
+                            ? `Click Generate to create: ${selectedTemplate.description}`
+                            : 'Select a template from the left sidebar and click Generate to create professional text content.'}
+                        </p>
+                      </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      {promptTemplates.map((template) => (
-                        <button
-                          key={template.template_id}
-                          onClick={() => setSelectedTemplate(template)}
-                          className={`p-4 border-2 rounded-lg text-left transition-all ${
-                            selectedTemplate?.template_id === template.template_id
-                              ? 'border-blue-500 bg-blue-50 shadow-md'
-                              : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="text-3xl">📝</div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-gray-900">
-                                {template.name}
-                              </div>
-                              <div className="text-sm text-gray-600 mt-1">
-                                {template.description}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900">Generated Text</h3>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveToLibrary}
+                            className="px-3 py-1.5 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors text-sm font-medium"
+                          >
+                            💾 Save
+                          </button>
+                          <button
+                            onClick={handleDone}
+                            className="px-3 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
+                          >
+                            ✓ Add to Canvas
+                          </button>
+                        </div>
+                      </div>
+                      <div className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
+                        {generatedText}
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* Generate Button & Preview */}
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    ✨ Generate & Preview
-                  </h3>
-
-                  {/* Generate Button */}
-                  <button
-                    onClick={handleGenerateText}
-                    disabled={generating || !selectedTemplate}
-                    className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg transition-all mb-6"
-                  >
-                    {generating ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Generating...
-                      </span>
-                    ) : (
-                      '✨ Generate Text'
-                    )}
-                  </button>
-
-                  {/* Preview Area */}
-                  <div>
-                    <h4 className="text-sm font-semibold text-gray-700 mb-2">Preview</h4>
-                    <div className="min-h-[300px] border-2 border-gray-300 rounded-lg p-6 bg-gray-50 overflow-y-auto">
-                      {generatedText ? (
-                        <div className="text-gray-900 text-base leading-relaxed whitespace-pre-wrap">
-                          {generatedText}
-                        </div>
-                      ) : (
-                        <div className="h-full flex items-center justify-center text-gray-400">
-                          <div className="text-center">
-                            <div className="text-6xl mb-4">📄</div>
-                            <div className="text-base">
-                              Select a template and click Generate Text
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                {/* Input Bar - Fixed at Bottom */}
+                <div className="bg-white border-t border-gray-200 px-6 py-4 flex-shrink-0">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder={selectedTemplate ? "Add context or leave empty for default generation..." : "Select a template first..."}
+                        disabled={!selectedTemplate}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      />
                     </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 mt-6">
                     <button
-                      onClick={handleSaveToLibrary}
-                      disabled={!generatedText}
-                      className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                      onClick={handleGenerateText}
+                      disabled={generating || !selectedTemplate}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all"
                     >
-                      💾 Save to Library
-                    </button>
-                    <button
-                      onClick={handleDone}
-                      disabled={!generatedText}
-                      className="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-                    >
-                      ✓ Add to Canvas
+                      {generating ? (
+                        <span className="flex items-center gap-2">
+                          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Generating...
+                        </span>
+                      ) : (
+                        '✨ Generate'
+                      )}
                     </button>
                   </div>
+                  {selectedTemplate && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Template: {selectedTemplate.description}
+                    </p>
+                  )}
                 </div>
               </div>
             ) : (
-              // Text Library View
+              // Text Library Full View
               <div className="p-6">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
