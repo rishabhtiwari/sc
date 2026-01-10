@@ -1,13 +1,16 @@
-// Migration: Create default text generation prompt templates
-// Date: 2026-01-10
-// Description: Add default templates for AI text generation in Design Editor
+/**
+ * Migration: Create default text generation prompt templates
+ * Version: 052
+ * Date: 2026-01-10
+ *
+ * This migration adds default text generation templates to the prompt_templates collection.
+ * Requires migration 051 to be run first (adds text_generation category to schema).
+ */
 
-print('========================================');
-print('Migration: Create Text Generation Templates');
-print('========================================');
+print('🔄 Starting migration: 052_create_text_generation_templates');
 
-// Use the ichat_db database
-db = db.getSiblingDB('ichat_db');
+// Use the news database (same as all other prompt templates)
+db = db.getSiblingDB('news');
 
 // Text generation templates
 const textTemplates = [
@@ -173,6 +176,5 @@ textTemplates.forEach(template => {
     }
 });
 
-print('✅ Text generation templates migration complete!');
-print('========================================');
+print('✓ Migration 052_create_text_generation_templates completed successfully');
 
