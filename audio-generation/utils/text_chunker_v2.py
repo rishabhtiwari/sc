@@ -283,9 +283,34 @@ def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
     splitter = TextSplitter(capacity=(min_chars, max_chars), trim=True)
 
     # Generate chunks
-    chunks = list(splitter.chunks(text))
+    raw_chunks = list(splitter.chunks(text))
+    print(f"✅ Created {len(raw_chunks)} raw chunks", file=sys.stderr)
 
-    print(f"✅ Created {len(chunks)} chunks", file=sys.stderr)
+    # Post-process to merge chunks that are below min_chars
+    # The library may create smaller chunks at semantic boundaries
+    chunks = []
+    i = 0
+    while i < len(raw_chunks):
+        current = raw_chunks[i].strip()
+
+        # Try to merge with next chunks if current is too small
+        while i + 1 < len(raw_chunks) and len(current) < min_chars:
+            next_chunk = raw_chunks[i + 1].strip()
+            merged = (current + " " + next_chunk).strip()
+
+            # Only merge if it doesn't exceed max
+            if len(merged) <= max_chars:
+                current = merged
+                i += 1
+            else:
+                # Can't merge, break
+                break
+
+        if current:
+            chunks.append(current)
+        i += 1
+
+    print(f"✅ After merging: {len(chunks)} chunks (target: {min_chars}-{max_chars} chars)", file=sys.stderr)
 
     # Clean each chunk for TTS
     print(f"🔧 Cleaning chunks for TTS model...", file=sys.stderr)
