@@ -69,52 +69,53 @@ const AIToolsPanel = ({ onAddElement }) => {
 
   return (
     <>
-    <div className="space-y-6">
-      {/* AI Image Generation */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">Generate Image with AI</h3>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe the image you want to create..."
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-          rows={4}
-        />
-        <button
-          onClick={handleGenerateImage}
-          disabled={generating}
-          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {generating ? 'Generating...' : 'Generate Image'}
-        </button>
-      </div>
-
-      {/* AI Tools Grid */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">AI Tools</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {aiTools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => handleToolClick(tool)}
-              className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
-            >
-              <div className="text-2xl mb-2">{tool.icon}</div>
-              <div className="text-sm font-medium text-gray-900">{tool.name}</div>
-              <div className="text-xs text-gray-500 mt-1">{tool.description}</div>
-            </button>
-          ))}
+      <div className="space-y-6">
+        {/* AI Image Generation */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">Generate Image with AI</h3>
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe the image you want to create..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+            rows={4}
+          />
+          <button
+            onClick={handleGenerateImage}
+            disabled={generating}
+            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generating ? 'Generating...' : 'Generate Image'}
+          </button>
         </div>
-      </div>
 
-      {/* Quick Tips */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 Tips</h4>
-        <ul className="text-xs text-blue-800 space-y-1">
-          <li>• Be specific in your prompts for better results</li>
-          <li>• Try different styles: realistic, cartoon, 3D</li>
-          <li>• Use AI tools to enhance your designs</li>
-        </ul>
+        {/* AI Tools Grid */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">AI Tools</h3>
+          <div className="grid grid-cols-2 gap-3">
+            {aiTools.map((tool) => (
+              <button
+                key={tool.id}
+                onClick={() => handleToolClick(tool)}
+                className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+              >
+                <div className="text-2xl mb-2">{tool.icon}</div>
+                <div className="text-sm font-medium text-gray-900">{tool.name}</div>
+                <div className="text-xs text-gray-500 mt-1">{tool.description}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick Tips */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 Tips</h4>
+          <ul className="text-xs text-blue-800 space-y-1">
+            <li>• Be specific in your prompts for better results</li>
+            <li>• Try different styles: realistic, cartoon, 3D</li>
+            <li>• Use AI tools to enhance your designs</li>
+          </ul>
+        </div>
       </div>
 
       {/* Text Studio Modal */}
