@@ -34,13 +34,25 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
     torchaudio==2.1.2+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# Install IOPaint and other dependencies
+# Fix numpy and scipy versions to avoid compatibility issues
+RUN pip3 install --no-cache-dir \
+    numpy==1.24.3 \
+    scipy==1.10.1
+
+# Install Flask and dependencies (ignore pre-installed blinker)
 RUN pip3 install --no-cache-dir --ignore-installed blinker \
     Flask==3.0.0 \
     Werkzeug==3.0.1 \
-    iopaint[all]==1.5.3 \
+    itsdangerous \
+    click \
+    Jinja2 \
+    MarkupSafe \
     pymongo==4.6.0 \
     requests==2.31.0
+
+# Install iopaint - it will use the already installed numpy/scipy
+RUN pip3 install --no-cache-dir \
+    iopaint[all]==1.5.3
 
 # Copy common utilities
 COPY common /app/common

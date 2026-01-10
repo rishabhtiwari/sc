@@ -10,13 +10,25 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-# Install IOPaint with all models support
+# Fix numpy and scipy versions to avoid compatibility issues
+RUN pip install --no-cache-dir \
+    numpy==1.24.3 \
+    scipy==1.10.1
+
+# Install Flask and other dependencies
 RUN pip install --no-cache-dir \
     Flask==3.0.0 \
     Werkzeug==3.0.1 \
-    iopaint[all]==1.5.3 \
+    itsdangerous \
+    click \
+    Jinja2 \
+    MarkupSafe \
     pymongo==4.6.0 \
     requests==2.31.0
+
+# Install iopaint - it will use the already installed numpy/scipy
+RUN pip install --no-cache-dir \
+    iopaint[all]==1.5.3
 
 # Copy common utilities
 COPY common /app/common

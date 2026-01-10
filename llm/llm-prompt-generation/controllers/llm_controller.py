@@ -46,10 +46,12 @@ class LLMController:
             query = data.get('query', '').strip()
             if not query:
                 return self.error_response("Query is required", 400)
-            
+
             use_rag = data.get('use_rag', True)
             context = data.get('context', None)
             detect_code = data.get('detect_code', False)  # Default to False
+            max_tokens = data.get('max_tokens')
+            temperature = data.get('temperature')
 
             # Validate parameters
             if not isinstance(use_rag, bool):
@@ -61,14 +63,16 @@ class LLMController:
             if not isinstance(detect_code, bool):
                 return self.error_response("detect_code must be a boolean", 400)
 
-            self.logger.info(f"Generate request: query='{query[:50]}...', use_rag={use_rag}, detect_code={detect_code}")
+            self.logger.info(f"Generate request: query='{query[:50]}...', use_rag={use_rag}, detect_code={detect_code}, max_tokens={max_tokens}, temperature={temperature}")
 
             # Generate response
             result = self.llm_service.generate_response(
                 query=query,
                 use_rag=use_rag,
                 context=context,
-                detect_code=detect_code
+                detect_code=detect_code,
+                max_tokens=max_tokens,
+                temperature=temperature
             )
             
             return self.success_response(result), 200

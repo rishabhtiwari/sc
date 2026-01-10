@@ -197,7 +197,7 @@ class LLMServiceClient:
 
     def generate_text(
         self,
-        prompt: str,
+        query: str,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         top_p: Optional[float] = None
@@ -206,7 +206,7 @@ class LLMServiceClient:
         Generate text using LLM service
 
         Args:
-            prompt: Text prompt
+            query: Query text
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature
             top_p: Top-p sampling parameter
@@ -216,7 +216,7 @@ class LLMServiceClient:
         """
         try:
             payload = {
-                "prompt": prompt
+                "query": query
             }
 
             if max_tokens is not None:
@@ -226,7 +226,7 @@ class LLMServiceClient:
             if top_p is not None:
                 payload["top_p"] = top_p
 
-            self.logger.info(f"Sending generation request to LLM service: {prompt[:50]}...")
+            self.logger.info(f"Sending generation request to LLM service: {query[:50]}...")
 
             response = requests.post(
                 f"{self.base_url}/llm/generate",

@@ -260,10 +260,10 @@ services:
       - RETRIEVER_SERVICE_URL=http://ichat-retriever-service:8086
       # Hugging Face Authentication
       - HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-      # Context Window Configuration
-      - N_CTX=4096
+      # Context Window Configuration - 8k context window
+      - N_CTX=8192
       - N_BATCH=512
-      - LLM_MAX_NEW_TOKENS=2048
+      - LLM_MAX_NEW_TOKENS=8192
       - ENABLE_CONTINUATION=true
       - SLIDING_WINDOW_TOKENS=300
       # Streaming Configuration

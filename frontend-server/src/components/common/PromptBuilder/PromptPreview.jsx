@@ -76,29 +76,26 @@ const PromptPreview = ({ data, onFinish }) => {
       // Format the prompt with sample data
       const formattedPrompt = getFormattedPrompt();
 
-      // Call LLM service directly (uses 'query' field)
-      const response = await fetch('http://localhost:8083/llm/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: formattedPrompt,
-          use_rag: false,
-          detect_code: false
-        })
+      // Call LLM service via API proxy
+      const response = await api.post('/llm/generate', {
+        query: formattedPrompt,
+        use_rag: false,
+        detect_code: false
       });
 
-      const result = await response.json();
+      const result = response.data;
 
       if (result.status === 'success') {
-        setLlmResponse(result.response || 'No response generated');
+        // Response can be in result.response or result.data.response
+        const responseText = result.response || result.data?.response || 'No response generated';
+        setLlmResponse(responseText);
       } else {
         setLlmError(result.error || 'Failed to generate response from LLM');
       }
     } catch (error) {
       console.error('Error testing prompt with LLM:', error);
-      setLlmError(error.message || 'Failed to test prompt');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to test prompt';
+      setLlmError(errorMessage);
     } finally {
       setIsGenerating(false);
     }

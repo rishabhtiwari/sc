@@ -97,11 +97,7 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
       return;
     }
 
-    if (text.length > 5000) {
-      showToast('Text is too long. Maximum 5000 characters allowed.', 'error');
-      return;
-    }
-
+    // No character limit - chunking will handle long texts automatically
     const userText = text.trim();
     setText(''); // Clear input immediately
 
@@ -325,7 +321,7 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
 
           {/* Character Count */}
           <div className="ml-auto text-sm text-gray-600 whitespace-nowrap">
-            {text.length} / 5000
+            {text.length} characters
           </div>
         </div>
 
@@ -340,7 +336,6 @@ const TextToSpeechPanel = ({ onAudioGenerated }) => {
               placeholder="Type your text here... (Press Enter to generate, Shift+Enter for new line)"
               className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none break-words"
               rows={2}
-              maxLength={5000}
               style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
             />
             {text.length > 0 && (

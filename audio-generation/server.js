@@ -202,14 +202,31 @@ app.get('/models/available', (req, res) => {
 // Get available speakers for Coqui TTS XTTS v2
 app.get('/speakers', async (req, res) => {
     try {
-        const { CoquiVoiceModel } = await import('./models/CoquiVoiceModel.js');
-        const speakers = await CoquiVoiceModel.getAvailableSpeakers();
+        // Get the active Coqui model instance
+        const coquiModel = getModelInstance('coqui-xtts');
+
+        if (!coquiModel) {
+            // Fallback: try to get speakers statically
+            const { CoquiVoiceModel } = await import('./models/CoquiVoiceModel.js');
+            const speakers = await CoquiVoiceModel.getAvailableSpeakers();
+
+            res.json({
+                total: speakers.length,
+                speakers: speakers.map(name => ({ id: name, name, gender: 'unknown' })),
+                model: 'Coqui TTS XTTS v2',
+                description: 'Pre-trained speakers supporting 16+ languages (dynamically loaded from server)'
+            });
+            return;
+        }
+
+        // Get speakers with metadata (gender, accent, description)
+        const speakersWithMetadata = coquiModel.getSpeakersWithMetadata();
 
         res.json({
-            total: speakers.length,
-            speakers: speakers,
+            total: speakersWithMetadata.length,
+            speakers: speakersWithMetadata,
             model: 'Coqui TTS XTTS v2',
-            description: 'Pre-trained speakers supporting 16+ languages (dynamically loaded from server)'
+            description: 'Pre-trained speakers supporting 16+ languages with gender metadata'
         });
     } catch (error) {
         console.error('Speakers error:', error);

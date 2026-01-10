@@ -33,7 +33,17 @@ RUN /app/venv/bin/pip install --no-cache-dir \
     transformers \
     git+https://github.com/suno-ai/bark.git
 
-RUN /app/venv/bin/pip install --no-cache-dir num2words
+# Install text processing dependencies
+# - num2words: Convert numbers to words for better TTS (English, Spanish, etc.)
+# - indic-numtowords: Convert numbers to words for Hindi and other Indic languages
+# - semantic-text-splitter: V2 chunker (Rust-based, fast, no duplication)
+RUN /app/venv/bin/pip install --no-cache-dir \
+    num2words \
+    indic-numtowords \
+    semantic-text-splitter
+
+# Verify semantic-text-splitter installation
+RUN /app/venv/bin/python -c "from semantic_text_splitter import TextSplitter; print('✓ semantic-text-splitter installed successfully')"
 
 # Set environment variables for Bark optimization
 ENV SUNO_OFFLOAD_CPU=False
@@ -50,6 +60,9 @@ RUN npm install
 
 # Copy application code
 COPY . .
+
+# Make Python scripts executable
+RUN chmod +x /app/utils/text_chunker.py /app/utils/text_chunker_v2.py /app/utils/audio_merger.py 2>/dev/null || true
 
 # Create volume mount point for persistent model storage
 VOLUME ["/app/data"]

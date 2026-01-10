@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Spinner } from '../common';
-import { getAvailableModels } from '../../services/voiceService';
+import api from '../../services/api';
 
 /**
- * Voice Configuration Component - Configure voice settings with model selection
+ * Voice Configuration Component - Configure voice settings for automation
+ * Automatically detects GPU/CPU mode and shows appropriate voices
  */
 const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
-  const [availableModels, setAvailableModels] = useState(null);
+  const [audioConfig, setAudioConfig] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState(config?.language || 'en');
+  const [previewingVoice, setPreviewingVoice] = useState(null);
+  const [genderFilter, setGenderFilter] = useState('all'); // 'all', 'male', 'female'
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Initialize form data from config (new nested structure)
   const [formData, setFormData] = useState({
@@ -22,27 +26,25 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
       },
       hi: {
         defaultVoice: 'hi_default',
-        enableAlternation: false,  // MMS Hindi only has one voice
+        enableAlternation: false,
         maleVoices: [],
         femaleVoices: [],
       },
     },
   });
 
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewAudio, setPreviewAudio] = useState(null);
-
-  // Fetch available models on mount
+  // Fetch audio generation service configuration on mount
   useEffect(() => {
-    const fetchModels = async () => {
+    const fetchAudioConfig = async () => {
       try {
-        const response = await getAvailableModels();
-        setAvailableModels(response.models);
+        const response = await api.get('/audio-studio/config');
+        setAudioConfig(response.data);
+        console.log('Audio config loaded:', response.data);
       } catch (error) {
-        console.error('Failed to fetch available models:', error);
+        console.error('Failed to fetch audio config:', error);
       }
     };
-    fetchModels();
+    fetchAudioConfig();
   }, []);
 
   // Update form data when config changes
@@ -60,17 +62,6 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
   // Get current language voice config
   const getCurrentVoiceConfig = () => {
     return formData.voices[selectedLanguage] || {};
-  };
-
-  // Update model for a language
-  const handleModelChange = (language, modelId) => {
-    setFormData((prev) => ({
-      ...prev,
-      models: {
-        ...prev.models,
-        [language]: modelId,
-      },
-    }));
   };
 
   // Update voice config for current language
@@ -101,7 +92,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
   };
 
   const handlePreview = async (voiceId) => {
-    setPreviewLoading(true);
+    setPreviewingVoice(voiceId);
     try {
       console.log('🎵 Starting preview for voice:', voiceId);
 
@@ -111,91 +102,66 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         hi: 'यह समाचार वाचन के लिए चयनित आवाज का पूर्वावलोकन है।'
       };
 
-      // Determine language from voice ID (hi_ prefix = Hindi, else English)
-      const language = voiceId.startsWith('hi_') ? 'hi' : 'en';
-      const previewText = previewTexts[language];
+      const previewText = previewTexts[selectedLanguage] || previewTexts.en;
 
-      let audioUrl;
-      try {
-        audioUrl = await onPreview(voiceId, previewText);
-      } catch (err) {
-        // Check if error is due to model loading
-        if (err.model_loading) {
-          alert(`⏳ ${err.message}\n\nThe TTS model is being downloaded and initialized. This happens only on first use and may take 2-5 minutes. Please wait and try again.`);
-          return;
-        }
-        throw err;
-      }
-
-      console.log('✅ Preview API returned audio URL:', audioUrl);
-      setPreviewAudio(audioUrl);
-
-      // Fetch the audio file with authentication headers
-      // The audioUrl is a relative path like /api/voice/preview/audio/kokoro_123.wav
-      const token = localStorage.getItem('auth_token');
-      console.log('🔑 Token exists:', !!token);
-
-      console.log('📥 Fetching audio from:', audioUrl);
-      const response = await fetch(audioUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      // Use the audio generation service's preview endpoint with caching
+      const response = await api.post('/audio/preview', {
+        text: previewText,
+        model: formData.models[selectedLanguage],
+        voice: voiceId,
+        language: selectedLanguage
       });
 
-      console.log('📡 Response status:', response.status, response.statusText);
-      console.log('📡 Response headers:', {
-        contentType: response.headers.get('Content-Type'),
-        contentLength: response.headers.get('Content-Length')
-      });
+      console.log('📦 Full preview response:', response.data);
+      const audioUrl = response.data.audio_url || response.data.audioUrl;
+      console.log('✅ Preview audio URL:', audioUrl);
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
-      }
+      // If it's a presigned URL (starts with http), use it directly
+      if (audioUrl.startsWith('http')) {
+        console.log('🌐 Using direct URL:', audioUrl);
+        const audio = new Audio(audioUrl);
+        audio.play();
+      } else {
+        // Otherwise, fetch through proxy with auth
+        console.log('🔄 Fetching through proxy:', audioUrl);
+        const token = localStorage.getItem('auth_token');
+        const fullUrl = audioUrl.startsWith('/') ? audioUrl : `/api/${audioUrl}`;
+        console.log('📡 Full fetch URL:', fullUrl);
 
-      // Create a blob URL from the response
-      const blob = await response.blob();
-      console.log('📦 Blob created:', { size: blob.size, type: blob.type });
-
-      const blobUrl = URL.createObjectURL(blob);
-      console.log('🔗 Blob URL created:', blobUrl);
-
-      // Play audio using the blob URL
-      const audio = new Audio(blobUrl);
-      console.log('🔊 Audio element created, attempting to play...');
-
-      audio.play().then(() => {
-        console.log('✅ Audio playback started successfully');
-      }).catch(err => {
-        console.error('❌ Failed to play audio:', err);
-        console.error('Error details:', {
-          name: err.name,
-          message: err.message,
-          stack: err.stack
+        const audioResponse = await fetch(fullUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
         });
-        alert('Failed to play audio preview. Please check browser console for details.');
-      });
 
-      // Clean up blob URL after audio finishes or errors
-      audio.onended = () => {
-        console.log('🏁 Audio playback ended');
-        URL.revokeObjectURL(blobUrl);
-      };
-      audio.onerror = (e) => {
-        console.error('❌ Audio element error:', e);
-        console.error('Audio error details:', {
-          error: audio.error,
-          networkState: audio.networkState,
-          readyState: audio.readyState
+        console.log('📡 Response status:', audioResponse.status, audioResponse.statusText);
+        console.log('📡 Response headers:', {
+          contentType: audioResponse.headers.get('content-type'),
+          contentLength: audioResponse.headers.get('content-length')
         });
-        URL.revokeObjectURL(blobUrl);
-      };
+
+        if (!audioResponse.ok) {
+          throw new Error(`Failed to fetch audio: ${audioResponse.status} ${audioResponse.statusText}`);
+        }
+
+        const blob = await audioResponse.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio(blobUrl);
+
+        audio.play();
+        audio.onended = () => URL.revokeObjectURL(blobUrl);
+        audio.onerror = () => URL.revokeObjectURL(blobUrl);
+      }
 
     } catch (error) {
       console.error('❌ Preview failed:', error);
-      console.error('Error stack:', error.stack);
-      alert(`Preview failed: ${error.message || 'Unknown error'}`);
+
+      // Check if error is due to model loading
+      if (error.response?.status === 503 || error.response?.data?.model_loading) {
+        alert(`⏳ The TTS model is loading. This may take a few minutes on first use. Please try again in a moment.`);
+      } else {
+        alert(`Preview failed: ${error.message || 'Unknown error'}`);
+      }
     } finally {
-      setPreviewLoading(false);
+      setPreviewingVoice(null);
     }
   };
 
@@ -204,20 +170,102 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
     onSave(formData);
   };
 
-  // Get available voices for selected model
+  // Get available voices from audio config
   const getAvailableVoices = () => {
-    if (!availableModels) return { male: [], female: [] };
+    if (!audioConfig) return { male: [], female: [], all: [] };
+
     const modelId = formData.models[selectedLanguage];
-    const model = availableModels[modelId];
-    if (!model) return { male: [], female: [] };
-    return model.voices;
+    const model = audioConfig.models?.[modelId];
+
+    if (!model) return { male: [], female: [], all: [] };
+
+    // Check if model has voicesWithMetadata (Coqui XTTS)
+    if (model.voicesWithMetadata && Array.isArray(model.voicesWithMetadata)) {
+      const male = model.voicesWithMetadata.filter(v => v.gender === 'male');
+      const female = model.voicesWithMetadata.filter(v => v.gender === 'female');
+      return { male, female, all: model.voicesWithMetadata };
+    }
+
+    // Fallback to structured voices (Kokoro, MMS)
+    if (model.voices) {
+      const male = (model.voices.male || []).map(v => ({
+        id: v.id || v,
+        name: v.name || v.id || v,
+        gender: 'male'
+      }));
+      const female = (model.voices.female || []).map(v => ({
+        id: v.id || v,
+        name: v.name || v.id || v,
+        gender: 'female'
+      }));
+      const defaultVoices = (model.voices.default || []).map(v => ({
+        id: v.id || v,
+        name: v.name || v.id || v,
+        gender: 'unknown'
+      }));
+
+      return {
+        male,
+        female,
+        default: defaultVoices,
+        all: [...male, ...female, ...defaultVoices]
+      };
+    }
+
+    return { male: [], female: [], all: [] };
+  };
+
+  // Filter voices based on gender filter and search query
+  const getFilteredVoices = () => {
+    const voices = getAvailableVoices();
+    let filtered = voices.all;
+
+    // Apply gender filter
+    if (genderFilter === 'male') {
+      filtered = voices.male;
+    } else if (genderFilter === 'female') {
+      filtered = voices.female;
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(v =>
+        (v.name || v.id).toLowerCase().includes(query) ||
+        (v.accent && v.accent.toLowerCase().includes(query))
+      );
+    }
+
+    return filtered;
   };
 
   const currentVoiceConfig = getCurrentVoiceConfig();
   const availableVoices = getAvailableVoices();
+  const filteredVoices = getFilteredVoices();
+  const isGpuMode = audioConfig?.gpu_enabled || false;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* System Info Banner */}
+      {audioConfig && (
+        <div className={`p-4 rounded-lg ${isGpuMode ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'}`}>
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{isGpuMode ? '🎮' : '💻'}</span>
+            <div>
+              <h4 className="font-semibold text-gray-900">
+                {isGpuMode ? 'GPU Mode Active' : 'CPU Mode Active'}
+              </h4>
+              <p className="text-sm text-gray-600">
+                {isGpuMode
+                  ? `Using ${audioConfig.default_model} - Universal multi-lingual model with ${availableVoices.all.length} speakers`
+                  : `Using language-specific models - ${availableVoices.all.length} voices available`
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Primary Language Selection */}
       <Card title="Primary Language">
         <div className="space-y-4">
@@ -233,8 +281,8 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="en">English</option>
-              <option value="hi">Hindi</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="hi">🇮🇳 Hindi</option>
             </select>
           </div>
         </div>
@@ -242,7 +290,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
 
       {/* Language Tabs for Configuration */}
       <Card title="Voice Configuration by Language">
-        <div className="mb-4">
+        <div className="mb-6">
           <div className="flex gap-2 border-b">
             <button
               type="button"
@@ -253,7 +301,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              English
+              🇬🇧 English
             </button>
             <button
               type="button"
@@ -264,33 +312,12 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Hindi
+              🇮🇳 Hindi
             </button>
           </div>
         </div>
 
-        {/* Model Selection for Current Language */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            TTS Model for {selectedLanguage === 'en' ? 'English' : 'Hindi'}
-          </label>
-          <select
-            value={formData.models[selectedLanguage] || ''}
-            onChange={(e) => handleModelChange(selectedLanguage, e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            {availableModels &&
-              Object.values(availableModels)
-                .filter((model) => model.languages.includes(selectedLanguage))
-                .map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name} - {model.description}
-                  </option>
-                ))}
-          </select>
-        </div>
-
-        {/* Voice Alternation for Current Language */}
+        {/* Voice Alternation Toggle */}
         <div className="flex items-center justify-between mb-6 p-4 bg-gray-50 rounded-lg">
           <div>
             <h4 className="text-sm font-medium text-gray-900">Enable Voice Alternation</h4>
@@ -310,77 +337,173 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
         </div>
       </Card>
 
-      {/* Male Voices */}
-      {availableVoices.male && availableVoices.male.length > 0 && (
-        <Card title="Male Voices">
-          <div className="space-y-3">
-            {availableVoices.male.map((voice) => (
-              <div
-                key={voice.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={(currentVoiceConfig.maleVoices || []).includes(voice.id)}
-                    onChange={() => handleVoiceSelection(voice.id, 'male')}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{voice.name}</p>
-                    <p className="text-xs text-gray-500">ID: {voice.id}</p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handlePreview(voice.id)}
-                  disabled={previewLoading}
-                >
-                  {previewLoading ? <Spinner size="sm" /> : 'Preview'}
-                </Button>
-              </div>
-            ))}
+      {/* Browse Voices */}
+      <Card title="🎤 Browse Voices">
+        {/* Filters */}
+        <div className="mb-4 space-y-3">
+          {/* Search */}
+          <div>
+            <input
+              type="text"
+              placeholder="Search voices by name or accent..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
-        </Card>
-      )}
 
-      {/* Female Voices */}
-      {availableVoices.female && availableVoices.female.length > 0 && (
-        <Card title="Female Voices">
-          <div className="space-y-3">
-            {availableVoices.female.map((voice) => (
+          {/* Gender Filter */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setGenderFilter('all')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All ({availableVoices.all.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenderFilter('male')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'male'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              👨 Male ({availableVoices.male.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGenderFilter('female')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                genderFilter === 'female'
+                  ? 'bg-pink-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              👩 Female ({availableVoices.female.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Voice List - Simple Design */}
+        <div className="space-y-2">
+          {filteredVoices.map((voice) => {
+            const isDefault = currentVoiceConfig.defaultVoice === voice.id;
+            const isMaleVoice = (currentVoiceConfig.maleVoices || []).includes(voice.id);
+            const isFemaleVoice = (currentVoiceConfig.femaleVoices || []).includes(voice.id);
+            const genderIcon = voice.gender === 'male' ? '👨' : voice.gender === 'female' ? '👩' : '🎭';
+
+            return (
               <div
                 key={voice.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                className={`flex items-center justify-between p-4 rounded-lg border transition-all ${
+                  isDefault
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                }`}
               >
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    checked={(currentVoiceConfig.femaleVoices || []).includes(voice.id)}
-                    onChange={() => handleVoiceSelection(voice.id, 'female')}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{voice.name}</p>
-                    <p className="text-xs text-gray-500">ID: {voice.id}</p>
+                {/* Speaker Info */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-2xl flex-shrink-0">{genderIcon}</span>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-gray-900 truncate" title={voice.name || voice.id}>
+                      {voice.name || voice.id}
+                    </h4>
+                    {voice.accent && voice.accent !== 'neutral' && (
+                      <p className="text-sm text-gray-500 truncate" title={voice.accent}>
+                        {voice.accent}
+                      </p>
+                    )}
                   </div>
+                  {isDefault && (
+                    <span className="flex-shrink-0 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                      ⭐ Default
+                    </span>
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handlePreview(voice.id)}
-                  disabled={previewLoading}
-                >
-                  {previewLoading ? <Spinner size="sm" /> : 'Preview'}
-                </Button>
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                  {/* Preview Button */}
+                  <button
+                    type="button"
+                    onClick={() => handlePreview(voice.id)}
+                    disabled={previewingVoice === voice.id}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Preview voice"
+                  >
+                    {previewingVoice === voice.id ? (
+                      <>
+                        <Spinner size="sm" />
+                        <span className="text-sm font-medium">Playing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-lg">▶️</span>
+                        <span className="text-sm font-medium">Preview</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Set Default Button */}
+                  {!isDefault && (
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceConfigChange('defaultVoice', voice.id)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                      title="Set as default speaker"
+                    >
+                      Set as Default
+                    </button>
+                  )}
+
+                  {/* Add to Alternation Pool (if enabled) */}
+                  {currentVoiceConfig.enableAlternation && voice.gender === 'male' && (
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceSelection(voice.id, 'male')}
+                      className={`px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                        isMaleVoice
+                          ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      title={isMaleVoice ? 'Remove from male voices pool' : 'Add to male voices pool'}
+                    >
+                      {isMaleVoice ? '✓ Male Pool' : '+ Male Pool'}
+                    </button>
+                  )}
+
+                  {currentVoiceConfig.enableAlternation && voice.gender === 'female' && (
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceSelection(voice.id, 'female')}
+                      className={`px-3 py-2 rounded-lg transition-colors text-sm font-medium ${
+                        isFemaleVoice
+                          ? 'bg-pink-100 text-pink-700 border border-pink-300'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                      title={isFemaleVoice ? 'Remove from female voices pool' : 'Add to female voices pool'}
+                    >
+                      {isFemaleVoice ? '✓ Female Pool' : '+ Female Pool'}
+                    </button>
+                  )}
+                </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        {filteredVoices.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <p>No voices found matching your filters.</p>
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* Default Voices (for models with single voice like Hindi MMS) */}
       {availableVoices.default && availableVoices.default.length > 0 && (
@@ -389,71 +512,126 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
             <p className="text-sm text-gray-600 mb-3">
               This model only supports a single voice. Voice alternation is not available.
             </p>
-            {availableVoices.default.map((voice) => (
-              <div
-                key={voice.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{voice.name}</p>
-                    <p className="text-xs text-gray-500">ID: {voice.id}</p>
+            {availableVoices.default.map((voice) => {
+              const isDefault = currentVoiceConfig.defaultVoice === voice.id;
+
+              return (
+                <div
+                  key={voice.id}
+                  className={`flex items-center justify-between p-4 rounded-lg border transition-all ${
+                    isDefault
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    <span className="text-2xl">🎤</span>
+                    <div>
+                      <p className="font-semibold text-gray-900">{voice.name}</p>
+                      <p className="text-sm text-gray-500">ID: {voice.id}</p>
+                    </div>
+                    {isDefault && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded ml-2">
+                        ⭐ Default
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePreview(voice.id)}
+                      disabled={previewingVoice === voice.id}
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {previewingVoice === voice.id ? (
+                        <>
+                          <Spinner size="sm" />
+                          <span className="text-sm font-medium">Playing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-lg">▶️</span>
+                          <span className="text-sm font-medium">Preview</span>
+                        </>
+                      )}
+                    </button>
+                    {!isDefault && (
+                      <button
+                        type="button"
+                        onClick={() => handleVoiceConfigChange('defaultVoice', voice.id)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-sm font-medium"
+                      >
+                        Set as Default
+                      </button>
+                    )}
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handlePreview(voice.id)}
-                  disabled={previewLoading}
-                >
-                  {previewLoading ? <Spinner size="sm" /> : 'Preview'}
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       )}
 
-      {/* Default Voice Selection */}
-      <Card title="Default Voice">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Select Default Voice for {selectedLanguage === 'en' ? 'English' : 'Hindi'}
-          </label>
-          <select
-            value={currentVoiceConfig.defaultVoice || ''}
-            onChange={(e) => handleVoiceConfigChange('defaultVoice', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            {availableVoices.default && availableVoices.default.length > 0 && (
-              <optgroup label="Default Voice">
-                {availableVoices.default.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {availableVoices.male && availableVoices.male.length > 0 && (
-              <optgroup label="Male Voices">
-                {availableVoices.male.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {availableVoices.female && availableVoices.female.length > 0 && (
-              <optgroup label="Female Voices">
-                {availableVoices.female.map((voice) => (
-                  <option key={voice.id} value={voice.id}>
-                    {voice.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
+
+
+      {/* Automation Summary */}
+      <Card title="📋 Automation Summary">
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 mb-2">
+              {selectedLanguage === 'en' ? '🇬🇧 English' : '🇮🇳 Hindi'} News Articles
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Model:</span>
+                <span className="text-gray-700">{formData.models[selectedLanguage]}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Default Voice:</span>
+                <span className="text-gray-700">{currentVoiceConfig.defaultVoice || 'Not set'}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 font-medium min-w-[120px]">Alternation:</span>
+                <span className={`font-semibold ${currentVoiceConfig.enableAlternation ? 'text-green-600' : 'text-gray-600'}`}>
+                  {currentVoiceConfig.enableAlternation ? '✅ Enabled' : '❌ Disabled'}
+                </span>
+              </div>
+              {currentVoiceConfig.enableAlternation && (
+                <>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600 font-medium min-w-[120px]">Male Voices:</span>
+                    <span className="text-gray-700">
+                      {(currentVoiceConfig.maleVoices || []).length > 0
+                        ? currentVoiceConfig.maleVoices.join(', ')
+                        : 'None selected'}
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-blue-600 font-medium min-w-[120px]">Female Voices:</span>
+                    <span className="text-gray-700">
+                      {(currentVoiceConfig.femaleVoices || []).length > 0
+                        ? currentVoiceConfig.femaleVoices.join(', ')
+                        : 'None selected'}
+                    </span>
+                  </div>
+                  <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                    <p className="text-xs text-gray-600">
+                      <strong>How it works:</strong> When generating audio for news articles, the system will automatically
+                      alternate between the first male voice and the first female voice from your selected lists.
+                      This creates variety in your automated news narration.
+                    </p>
+                  </div>
+                </>
+              )}
+              {!currentVoiceConfig.enableAlternation && (
+                <div className="mt-3 p-3 bg-white rounded border border-blue-200">
+                  <p className="text-xs text-gray-600">
+                    <strong>How it works:</strong> All news articles will use the default voice: <strong>{currentVoiceConfig.defaultVoice}</strong>
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </Card>
 

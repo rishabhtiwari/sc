@@ -557,28 +557,124 @@ def get_voice_config():
         config = voice_config_collection.find_one(query)
 
         if not config:
-            # Create default configuration for this customer with new structure
-            default_config = {
-                'language': 'en',  # Primary language
-                'models': {
-                    'en': 'kokoro-82m',
-                    'hi': 'mms-tts-hin'
-                },
-                'voices': {
-                    'en': {
-                        'defaultVoice': 'am_adam',
-                        'enableAlternation': True,
-                        'maleVoices': ['am_adam', 'am_michael'],
-                        'femaleVoices': ['af_bella', 'af_sarah']
+            # Check if GPU is enabled via environment variable
+            import os
+            import requests
+            gpu_enabled = os.getenv('USE_GPU', 'false').lower() == 'true'
+            audio_generation_url = os.getenv('AUDIO_GENERATION_URL', 'http://audio-generation-factory:3000')
+
+            voice_generator_job.logger.info(f"🔧 Creating default voice config - GPU enabled: {gpu_enabled}")
+
+            # Fetch available models and configuration from audio generation service
+            try:
+                config_response = requests.get(f'{audio_generation_url}/config', timeout=10)
+                audio_config = config_response.json() if config_response.status_code == 200 else {}
+                voice_generator_job.logger.info(f"📡 Audio config fetched: GPU={audio_config.get('gpu_enabled')}, Default model={audio_config.get('default_model')}")
+            except Exception as e:
+                voice_generator_job.logger.warning(f"⚠️ Failed to fetch audio config from service: {e}")
+                audio_config = {}
+
+            # Create default configuration based on GPU availability
+            if gpu_enabled:
+                # GPU configuration - use Coqui XTTS v2 (universal multi-lingual model)
+                voice_generator_job.logger.info("🎮 GPU mode detected - fetching Coqui XTTS speakers")
+
+                # Fetch speakers from audio generation service
+                try:
+                    speakers_response = requests.get(f'{audio_generation_url}/speakers', timeout=10)
+                    speakers_data = speakers_response.json() if speakers_response.status_code == 200 else {}
+                    all_speakers = speakers_data.get('speakers', [])
+
+                    voice_generator_job.logger.info(f"🎤 Fetched {len(all_speakers)} speakers from audio generation service")
+
+                    # Categorize speakers by gender (if metadata available)
+                    male_voices = []
+                    female_voices = []
+
+                    for speaker in all_speakers:
+                        if isinstance(speaker, dict):
+                            speaker_id = speaker.get('id', speaker.get('name', ''))
+                            gender = speaker.get('gender', 'unknown')
+
+                            if gender == 'male':
+                                male_voices.append(speaker_id)
+                            elif gender == 'female':
+                                female_voices.append(speaker_id)
+                        else:
+                            # Speaker is just a string name
+                            # Try to infer gender from name or add to both lists
+                            # For now, add to male voices by default
+                            male_voices.append(speaker)
+
+                    # If no gender metadata found, distribute speakers evenly
+                    if not male_voices and not female_voices and all_speakers:
+                        voice_generator_job.logger.info("⚠️ No gender metadata found, distributing speakers evenly")
+                        mid_point = len(all_speakers) // 2
+                        male_voices = [s if isinstance(s, str) else s.get('id', s.get('name', '')) for s in all_speakers[:mid_point]]
+                        female_voices = [s if isinstance(s, str) else s.get('id', s.get('name', '')) for s in all_speakers[mid_point:]]
+
+                    # Ensure we have at least some voices
+                    if not male_voices:
+                        male_voices = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
+                    if not female_voices:
+                        female_voices = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
+
+                    default_voice = male_voices[0] if male_voices else 'Claribel Dervla'
+
+                    voice_generator_job.logger.info(f"✅ GPU voices configured - Male: {len(male_voices)}, Female: {len(female_voices)}, Default: {default_voice}")
+
+                except Exception as e:
+                    voice_generator_job.logger.warning(f"⚠️ Failed to fetch speakers: {e}, using fallback defaults")
+                    male_voices = ['Claribel Dervla', 'Dionisio Schuyler', 'Royston Min']
+                    female_voices = ['Ana Florence', 'Annmarie Nele', 'Asya Anara']
+                    default_voice = 'Claribel Dervla'
+
+                default_config = {
+                    'language': 'en',  # Primary language
+                    'models': {
+                        'en': 'coqui-xtts',
+                        'hi': 'coqui-xtts'
                     },
-                    'hi': {
-                        'defaultVoice': 'hi_male',
-                        'enableAlternation': True,
-                        'maleVoices': ['hi_male'],
-                        'femaleVoices': ['hi_female']
+                    'voices': {
+                        'en': {
+                            'defaultVoice': default_voice,
+                            'enableAlternation': True,
+                            'maleVoices': male_voices,
+                            'femaleVoices': female_voices
+                        },
+                        'hi': {
+                            'defaultVoice': default_voice,
+                            'enableAlternation': True,
+                            'maleVoices': male_voices,
+                            'femaleVoices': female_voices
+                        }
                     }
                 }
-            }
+            else:
+                # CPU configuration - use language-specific models
+                voice_generator_job.logger.info("💻 CPU mode detected - using Kokoro (EN) and MMS (HI) models")
+
+                default_config = {
+                    'language': 'en',  # Primary language
+                    'models': {
+                        'en': 'kokoro-82m',
+                        'hi': 'mms-tts-hin'
+                    },
+                    'voices': {
+                        'en': {
+                            'defaultVoice': 'am_adam',
+                            'enableAlternation': True,
+                            'maleVoices': ['am_adam', 'am_michael'],
+                            'femaleVoices': ['af_bella', 'af_sarah']
+                        },
+                        'hi': {
+                            'defaultVoice': 'hi_male',
+                            'enableAlternation': True,
+                            'maleVoices': ['hi_male'],
+                            'femaleVoices': ['hi_female']
+                        }
+                    }
+                }
 
             # Use prepare_insert_document to add multi-tenant fields
             prepared_config = prepare_insert_document(
@@ -618,6 +714,19 @@ def update_voice_config():
 
         data = request.get_json()
 
+        voice_generator_job.logger.info(f"📝 Updating voice config for customer: {customer_id}")
+        voice_generator_job.logger.info(f"   Language: {data.get('language')}")
+        voice_generator_job.logger.info(f"   Models: {data.get('models')}")
+
+        # Log voice configuration details
+        if 'voices' in data:
+            for lang, voice_config in data['voices'].items():
+                voice_generator_job.logger.info(f"   {lang.upper()} voices:")
+                voice_generator_job.logger.info(f"      Default: {voice_config.get('defaultVoice')}")
+                voice_generator_job.logger.info(f"      Alternation: {voice_config.get('enableAlternation')}")
+                voice_generator_job.logger.info(f"      Male: {voice_config.get('maleVoices', [])}")
+                voice_generator_job.logger.info(f"      Female: {voice_config.get('femaleVoices', [])}")
+
         # Build multi-tenant query
         base_query = {}
         query = build_multi_tenant_query(base_query, customer_id=customer_id)
@@ -655,6 +764,8 @@ def update_voice_config():
                 query,
                 {'$set': prepared_updates}
             )
+
+            voice_generator_job.logger.info(f"✅ Voice config updated successfully for customer: {customer_id}")
         else:
             # Create new config with default structure
             new_config = {
@@ -701,44 +812,108 @@ def update_voice_config():
 
 @voice_generator_job.app.route('/api/voice/available-models', methods=['GET'])
 def get_available_models():
-    """Get list of available TTS models with their supported languages and voices"""
+    """Get list of available TTS models with their supported languages and voices from database config"""
     try:
-        models = {
-            'kokoro-82m': {
-                'id': 'kokoro-82m',
-                'name': 'Kokoro TTS',
-                'description': 'High-quality English text-to-speech with multiple voices',
-                'languages': ['en'],
-                'voices': {
-                    'male': [
-                        {'id': 'am_adam', 'name': 'Adam (American Male)'},
-                        {'id': 'am_michael', 'name': 'Michael (American Male)'},
-                        {'id': 'bm_george', 'name': 'George (British Male)'},
-                        {'id': 'bm_lewis', 'name': 'Lewis (British Male)'},
-                    ],
-                    'female': [
-                        {'id': 'af_bella', 'name': 'Bella (American Female)'},
-                        {'id': 'af_sarah', 'name': 'Sarah (American Female)'},
-                        {'id': 'bf_emma', 'name': 'Emma (British Female)'},
-                        {'id': 'bf_isabella', 'name': 'Isabella (British Female)'},
-                    ]
+        from flask import request
+        from common.utils.multi_tenant_db import extract_user_context_from_headers
+
+        # Get customer context from request headers
+        context = extract_user_context_from_headers(request.headers)
+        customer_id = context['customer_id']
+
+        # Fetch voice config from database
+        voice_config_collection = voice_generator_job.news_audio_service.news_db['voice_config']
+        config = voice_config_collection.find_one({
+            'customer_id': customer_id,
+            'is_deleted': False
+        })
+
+        if not config:
+            return jsonify({'error': 'Voice configuration not found'}), 404
+
+        # Transform database format to frontend format
+        db_models = config.get('models', {})
+        db_voices = config.get('voices', {})
+
+        # Build models object for frontend
+        models = {}
+
+        # Get unique model IDs and their supported languages from database
+        model_languages = {}
+        for lang, model_id in db_models.items():
+            if model_id not in model_languages:
+                model_languages[model_id] = []
+            model_languages[model_id].append(lang)
+
+        for model_id, supported_languages in model_languages.items():
+            if model_id == 'coqui-xtts':
+                # Get voices from the first language that uses coqui-xtts
+                lang_with_coqui = supported_languages[0]
+                voice_config = db_voices.get(lang_with_coqui, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                # Build voicesWithMetadata for Coqui
+                voices_with_metadata = []
+                for v in male_voices:
+                    voices_with_metadata.append({'id': v, 'name': v, 'gender': 'male'})
+                for v in female_voices:
+                    voices_with_metadata.append({'id': v, 'name': v, 'gender': 'female'})
+
+                models['coqui-xtts'] = {
+                    'id': 'coqui-xtts',
+                    'name': 'Coqui XTTS v2',
+                    'description': 'Multi-lingual neural TTS with voice cloning (GPU-accelerated)',
+                    'languages': supported_languages,
+                    'voices': {
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    },
+                    'voicesWithMetadata': voices_with_metadata
                 }
-            },
-            'mms-tts-hin': {
-                'id': 'mms-tts-hin',
-                'name': 'MMS Hindi TTS',
-                'description': 'Hindi text-to-speech model (single voice only)',
-                'languages': ['hi'],
-                'voices': {
-                    'default': [
-                        {'id': 'hi_default', 'name': 'Hindi Voice (Default)'},
-                    ],
-                    'male': [],
-                    'female': []
-                },
-                'note': 'MMS Hindi model only supports one voice. Male/female alternation is not available for this model.'
-            }
-        }
+
+            elif model_id == 'kokoro-82m':
+                # Get voices from the first language that uses kokoro
+                lang_with_kokoro = supported_languages[0]
+                voice_config = db_voices.get(lang_with_kokoro, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                models['kokoro-82m'] = {
+                    'id': 'kokoro-82m',
+                    'name': 'Kokoro TTS',
+                    'description': 'High-quality English text-to-speech with multiple voices',
+                    'languages': supported_languages,
+                    'voices': {
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    }
+                }
+
+            elif model_id == 'mms-tts-hin':
+                # Get voices from the first language that uses mms
+                lang_with_mms = supported_languages[0]
+                voice_config = db_voices.get(lang_with_mms, {})
+                male_voices = voice_config.get('maleVoices', [])
+                female_voices = voice_config.get('femaleVoices', [])
+
+                # MMS typically has a default voice, not gender-specific
+                default_voices = []
+                if not male_voices and not female_voices:
+                    default_voices = [{'id': 'hi_default', 'name': 'Hindi Voice (Default)'}]
+
+                models['mms-tts-hin'] = {
+                    'id': 'mms-tts-hin',
+                    'name': 'MMS Hindi TTS',
+                    'description': 'Hindi text-to-speech model (single voice only)',
+                    'languages': supported_languages,
+                    'voices': {
+                        'default': default_voices,
+                        'male': [{'id': v, 'name': v} for v in male_voices],
+                        'female': [{'id': v, 'name': v} for v in female_voices]
+                    },
+                    'note': 'MMS Hindi model only supports one voice. Male/female alternation is not available for this model.'
+                }
 
         return jsonify({'models': models}), 200
     except Exception as e:
@@ -835,50 +1010,75 @@ def preview_voice():
             customer_id=customer_id
         )
 
-        # Generate audio using audio generation service
-        result = voice_generator_job.news_audio_service._call_audio_generation_service(
-            text=text,
-            model=model,
-            voice=voice
-        )
+        # Use audio generation service's /preview endpoint which has caching support
+        import requests
+        audio_generation_url = os.getenv('AUDIO_GENERATION_URL', 'http://audio-generation-factory:3000')
 
-        if not result.get('success'):
-            error_msg = result.get('error', 'Failed to generate preview audio')
+        try:
+            preview_response = requests.post(
+                f'{audio_generation_url}/preview',
+                json={
+                    'text': text,
+                    'model': model,
+                    'voice': voice,
+                    'language': language
+                },
+                timeout=60
+            )
 
-            # Check if error is due to model not being loaded
-            if 'not loaded' in error_msg.lower():
+            if preview_response.status_code != 200:
+                error_data = preview_response.json() if preview_response.headers.get('content-type') == 'application/json' else {}
+                error_msg = error_data.get('error', f'Preview generation failed with status {preview_response.status_code}')
+
+                # Check if error is due to model not being loaded
+                if 'not loaded' in error_msg.lower():
+                    return jsonify({
+                        'error': error_msg,
+                        'model_loading': True,
+                        'message': f'The {model} model is currently loading. This may take a few minutes on first use. Please try again in a moment.'
+                    }), 503  # Service Unavailable
+
+                return jsonify({'error': error_msg}), preview_response.status_code
+
+            result = preview_response.json()
+
+            # The audio generation service returns audio_url which could be:
+            # 1. A relative path like "/temp/kokoro_1234567890_abc.wav"
+            # 2. A presigned URL from MinIO (if cached)
+            audio_url = result.get('audio_url')
+            if not audio_url:
+                return jsonify({'error': 'No audio URL returned from generation service'}), 500
+
+            # If it's a presigned URL (starts with http), return it directly
+            if audio_url.startswith('http'):
                 return jsonify({
-                    'error': error_msg,
-                    'model_loading': True,
-                    'message': f'The {model} model is currently loading. This may take a few minutes on first use. Please try again in a moment.'
-                }), 503  # Service Unavailable
+                    'audioUrl': audio_url,
+                    'voice': voice,
+                    'model': model,
+                    'language': language,
+                    'cached': result.get('cached', False)
+                }), 200
+
+            # Otherwise, it's a relative path - proxy it through our endpoint
+            filename = os.path.basename(audio_url)
+            proxy_url = f'/api/voice/preview/audio/{filename}'
 
             return jsonify({
-                'error': error_msg
-            }), 500
+                'audioUrl': proxy_url,
+                'voice': voice,
+                'model': model,
+                'language': language,
+                'cached': result.get('cached', False)
+            }), 200
 
-        # The audio generation service returns audio_url which is a relative path
-        # Return a URL that the frontend can access via the API proxy
-        audio_url = result.get('audio_url')
-        if not audio_url:
-            error_msg = 'No audio URL returned from generation service'
-            return jsonify({'error': error_msg}), 500
-
-        # Return a URL that points to our proxy endpoint
-        # The audio_url is like "/temp/kokoro_1234567890_abc.wav"
-        # Extract just the filename
-        import os
-        filename = os.path.basename(audio_url)
-
-        # Return URL that will be proxied through API server
-        proxy_url = f'/api/voice/preview/audio/{filename}'
-
-        return jsonify({
-            'audioUrl': proxy_url,
-            'voice': voice,
-            'model': model,
-            'language': language
-        }), 200
+        except requests.exceptions.Timeout:
+            return jsonify({
+                'error': 'Preview generation timed out. The model may be loading.',
+                'model_loading': True
+            }), 503
+        except requests.exceptions.RequestException as e:
+            voice_generator_job.logger.error(f"Error calling audio generation service: {e}")
+            return jsonify({'error': f'Failed to connect to audio generation service: {str(e)}'}), 500
 
     except Exception as e:
         voice_generator_job.logger.error(f"❌ Error previewing voice: {str(e)}")

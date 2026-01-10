@@ -418,7 +418,7 @@ app.use('/api', async (req, res) => {
             url: targetUrl,
             headers: headers,
             params: req.query,
-            timeout: 600000, // 10 minutes for long-running operations (audio/video generation)
+            timeout: 900000, // 15 minutes for long-running operations (audio/video generation with chunking)
             validateStatus: () => true // Don't throw on any status code
         };
 

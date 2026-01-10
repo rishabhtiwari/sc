@@ -151,7 +151,8 @@ class LLMService:
             raise e
     
     def generate_response(self, query: str, use_rag: bool = True,
-                         context: str = None, detect_code: bool = False) -> Dict[str, Any]:
+                         context: str = None, detect_code: bool = False,
+                         max_tokens: int = None, temperature: float = None) -> Dict[str, Any]:
         """
         Generate response using LLM with optional RAG context
 
@@ -160,7 +161,9 @@ class LLMService:
             use_rag: Whether to use RAG (retrieve context)
             context: Pre-provided context (optional)
             detect_code: Whether to detect and handle code generation requests (default: True)
-            
+            max_tokens: Maximum tokens to generate (optional)
+            temperature: Sampling temperature (optional)
+
         Returns:
             Dictionary containing generated response
         """
@@ -203,10 +206,17 @@ class LLMService:
             # Generate response using appropriate method
             if hasattr(self, 'model_instance') and self.model_instance:
                 # Use factory model instance
+                # Prepare kwargs for model generation
+                model_kwargs = {}
+                if max_tokens is not None:
+                    model_kwargs['max_tokens'] = max_tokens
+                if temperature is not None:
+                    model_kwargs['temperature'] = temperature
+
                 if context and context.strip():
-                    result = self.model_instance.generate_with_context(query, context)
+                    result = self.model_instance.generate_with_context(query, context, **model_kwargs)
                 else:
-                    result = self.model_instance.generate_response(prompt)
+                    result = self.model_instance.generate_response(prompt, **model_kwargs)
 
                 if result.get('status') == 'success':
                     response_text = result.get('response', '').strip()

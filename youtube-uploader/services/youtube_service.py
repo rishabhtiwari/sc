@@ -233,16 +233,25 @@ class YouTubeService:
             self.logger.info(f"🏷️ Tags ({len(tags or self.config.DEFAULT_TAGS)}): {tags or self.config.DEFAULT_TAGS}")
             
             # Execute upload with retry logic
+            media = None
             for attempt in range(self.config.MAX_RETRIES):
                 try:
-                    # Recreate media upload for each retry attempt
-                    if attempt > 0:
-                        self.logger.info(f"🔄 Recreating media upload for retry attempt {attempt + 1}")
-                        media = MediaFileUpload(
-                            video_path,
-                            chunksize=self.config.CHUNK_SIZE,
-                            resumable=True
-                        )
+                    # Clean up previous media object if it exists
+                    if media is not None:
+                        try:
+                            if hasattr(media, '_fd') and media._fd:
+                                media._fd.close()
+                        except:
+                            pass
+                        media = None
+
+                    # Create new media upload for each attempt
+                    self.logger.info(f"📁 Creating media upload (attempt {attempt + 1}/{self.config.MAX_RETRIES})")
+                    media = MediaFileUpload(
+                        video_path,
+                        chunksize=self.config.CHUNK_SIZE,
+                        resumable=True
+                    )
 
                     request = self.youtube.videos().insert(
                         part='snippet,status',
@@ -282,6 +291,14 @@ class YouTubeService:
                         else:
                             self.logger.warning("⚠️ Thumbnail upload failed, but video was uploaded successfully")
 
+                    # Clean up media object before returning
+                    if media is not None:
+                        try:
+                            if hasattr(media, '_fd') and media._fd:
+                                media._fd.close()
+                        except:
+                            pass
+
                     return {
                         'status': 'success',
                         'video_id': video_id,
@@ -309,13 +326,34 @@ class YouTubeService:
                         raise
             
             self.logger.error(f"❌ Upload failed after {self.config.MAX_RETRIES} attempts")
+            # Clean up media object
+            if media is not None:
+                try:
+                    if hasattr(media, '_fd') and media._fd:
+                        media._fd.close()
+                except:
+                    pass
             return None
-            
+
         except HttpError as e:
             self.logger.error(f"❌ YouTube API error: {e.resp.status} - {e.content}")
+            # Clean up media object
+            if media is not None:
+                try:
+                    if hasattr(media, '_fd') and media._fd:
+                        media._fd.close()
+                except:
+                    pass
             return None
         except Exception as e:
             self.logger.error(f"❌ Upload failed: {str(e)}")
+            # Clean up media object
+            if media is not None:
+                try:
+                    if hasattr(media, '_fd') and media._fd:
+                        media._fd.close()
+                except:
+                    pass
             return None
 
     def upload_thumbnail(self, video_id: str, thumbnail_path: str) -> bool:

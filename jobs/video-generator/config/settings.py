@@ -143,7 +143,7 @@ class Config:
 
     # IOPaint Watermark Remover Service Configuration
     IOPAINT_SERVICE_URL = os.getenv('IOPAINT_SERVICE_URL', 'http://iopaint:8096')
-    IOPAINT_TIMEOUT = int(os.getenv('IOPAINT_TIMEOUT', 30))  # 30 seconds timeout
+    IOPAINT_TIMEOUT = int(os.getenv('IOPAINT_TIMEOUT', 300))  # 5 minutes timeout
 
     # Channel Subscription Tagline Configuration
     CHANNEL_TAGLINE_TEXT = "Smash the like button, hit subscribe, and turn on notifications — CNI News keeps you updated 24/7!"

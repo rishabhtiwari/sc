@@ -326,6 +326,7 @@ services:
       - CUDA_VISIBLE_DEVICES=0
       - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
       - COQUI_TTS_URL=http://coqui-tts:5002
+      - TEXT_CHUNKER_VERSION=v2  # v1=spaCy, v2=semantic_text_splitter (recommended)
     depends_on:
       coqui-tts:
         condition: service_healthy
@@ -355,6 +356,11 @@ services:
 
   # Voice Generator Job with GPU awareness
   job-voice-generator:
+    environment:
+      - USE_GPU=true
+
+  # MongoDB with GPU environment variable for migrations
+  ichat-mongodb:
     environment:
       - USE_GPU=true
 EOF

@@ -522,11 +522,14 @@ class NewsFetcherService:
 
             for seed_url in seed_urls:
                 status = {
-                    'partner_id': seed_url['partner_id'],
-                    'partner_name': seed_url['partner_name'],
-                    'is_active': seed_url['is_active'],
-                    'frequency_minutes': seed_url['frequency_minutes'],
-                    'last_run': seed_url.get('last_run'),
+                    'partner_id': seed_url.get('partner_id', str(seed_url.get('_id', 'unknown'))),
+                    'partner_name': seed_url.get('partner_name', seed_url.get('name', 'unknown')),
+                    'name': seed_url.get('name', seed_url.get('partner_name', 'unknown')),
+                    'provider': seed_url.get('provider', 'unknown'),
+                    'category': seed_url.get('category', 'general'),
+                    'is_active': seed_url.get('is_active', False),
+                    'frequency_minutes': seed_url.get('frequency_minutes', seed_url.get('frequency_hours', 1) * 60),
+                    'last_run': seed_url.get('last_run', seed_url.get('last_fetched_at')),
                     'is_due': self._is_seed_url_due(seed_url)
                 }
 
