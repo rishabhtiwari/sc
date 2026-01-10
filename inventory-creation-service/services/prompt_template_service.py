@@ -626,6 +626,7 @@ def delete_prompt_template(template_id):
 def generate_content_with_template(template_id):
     """Generate content using a prompt template"""
     try:
+        import os
         from common.prompt_template_handler import PromptTemplateHandler
 
         customer_id = request.headers.get('X-Customer-ID', 'default')
@@ -634,9 +635,13 @@ def generate_content_with_template(template_id):
 
         logger.info(f"Generating content with template: {template_id}")
 
+        # Get LLM service URL
+        llm_service_url = os.getenv('LLM_SERVICE_URL', 'http://ichat-llm-service:8083')
+
         # Initialize handler
         handler = PromptTemplateHandler(
-            prompt_templates_collection=prompt_template_bp.prompt_templates_collection
+            prompt_templates_collection=prompt_template_bp.prompt_templates_collection,
+            llm_service_url=llm_service_url
         )
 
         # Get template
