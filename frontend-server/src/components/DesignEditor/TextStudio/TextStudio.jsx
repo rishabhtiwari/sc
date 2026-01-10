@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import api from '../../../services/api';
-import { AiEditor } from 'aieditor';
-import 'aieditor/dist/style.css';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
 
 /**
  * Text Studio - Full-screen modal for AI text generation
@@ -21,8 +22,22 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [textLibrary, setTextLibrary] = useState([]);
   const { showToast } = useToast();
-  const editorRef = useRef(null);
-  const aiEditorInstance = useRef(null);
+
+  // Tiptap editor instance
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder: 'Generated content will appear here...',
+      }),
+    ],
+    content: '',
+    editorProps: {
+      attributes: {
+        class: 'prose prose-lg max-w-none focus:outline-none min-h-[400px] p-6',
+      },
+    },
+  });
 
   // Load templates when studio opens
   useEffect(() => {
@@ -32,29 +47,13 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     }
   }, [isOpen]);
 
-  // Initialize AIEditor when generated text changes
+  // Update Tiptap editor content when generated text changes
   useEffect(() => {
-    if (generatedText && editorRef.current && !aiEditorInstance.current) {
-      aiEditorInstance.current = new AiEditor({
-        element: editorRef.current,
-        placeholder: 'Generated content will appear here...',
-        content: generatedText,
-        editable: true,
-        toolbarKeys: ['undo', 'redo', '|', 'bold', 'italic', 'underline', '|', 'heading', 'bulletList', 'orderedList', '|', 'link'],
-      });
-    } else if (generatedText && aiEditorInstance.current) {
-      // Update content if editor already exists
-      aiEditorInstance.current.setContent(generatedText);
+    if (editor && generatedText) {
+      // Set content as HTML (Tiptap will parse markdown-style formatting)
+      editor.commands.setContent(generatedText);
     }
-
-    // Cleanup on unmount
-    return () => {
-      if (aiEditorInstance.current) {
-        aiEditorInstance.current.destroy();
-        aiEditorInstance.current = null;
-      }
-    };
-  }, [generatedText]);
+  }, [generatedText, editor]);
 
   // Fetch all templates and extract categories
   const fetchAllTemplates = async () => {
@@ -188,10 +187,10 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       return;
     }
 
-    // Get content from AIEditor if it exists, otherwise use generatedText
+    // Get content from Tiptap editor (plain text without HTML tags)
     let finalText = generatedText;
-    if (aiEditorInstance.current) {
-      finalText = aiEditorInstance.current.getMarkdown() || aiEditorInstance.current.getText() || generatedText;
+    if (editor) {
+      finalText = editor.getText() || generatedText;
     }
 
     // Add text to canvas
@@ -212,11 +211,8 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     // Reset state
     setGeneratedText('');
     setSelectedTemplate(null);
-
-    // Cleanup editor
-    if (aiEditorInstance.current) {
-      aiEditorInstance.current.destroy();
-      aiEditorInstance.current = null;
+    if (editor) {
+      editor.commands.clearContent();
     }
   };
 
@@ -227,23 +223,21 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     }
 
     try {
-      // Get content from AIEditor if it exists
+      // Get content from Tiptap editor (plain text)
       let contentToSave = generatedText;
-      if (aiEditorInstance.current) {
-        contentToSave = aiEditorInstance.current.getMarkdown() || aiEditorInstance.current.getText() || generatedText;
+      if (editor) {
+        contentToSave = editor.getText() || generatedText;
       }
 
-      const blob = new Blob([contentToSave], { type: 'text/plain' });
       const formData = new FormData();
+      const blob = new Blob([contentToSave], { type: 'text/plain' });
       formData.append('file', blob, `text_${Date.now()}.txt`);
-      formData.append('asset_type', 'document');
+      formData.append('asset_type', 'document');  // Required field
       formData.append('folder', 'text-library');
       formData.append('title', `Generated Text - ${new Date().toLocaleString()}`);
       formData.append('description', `Template: ${selectedTemplate?.name || 'Custom'}`);
 
-      const response = await api.post('/assets/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const response = await api.post('/assets/upload', formData);
 
       if (response.data.success) {
         showToast('Text saved to library', 'success');
@@ -503,30 +497,22 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
                     </div>
                   ) : (
                     <div className="max-w-4xl mx-auto">
-                      {/* AIEditor for Rich Text Display */}
+                      {/* Tiptap Editor for Rich Text Display */}
                       <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
-                        <div
-                          ref={editorRef}
-                          className="min-h-[400px]"
-                          style={{
-                            padding: '20px',
-                            fontSize: '16px',
-                            lineHeight: '1.6'
-                          }}
-                        />
+                        <EditorContent editor={editor} />
                       </div>
 
                       {/* Action Buttons */}
                       <div className="flex justify-center gap-3">
                         <button
                           onClick={handleSaveToLibrary}
-                          className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium shadow-sm"
+                          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors font-medium"
                         >
-                          💾 Save to Text Library
+                          💾 Save to Library
                         </button>
                         <button
                           onClick={handleDone}
-                          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold shadow-sm"
+                          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors font-medium"
                         >
                           ✓ Add to Canvas
                         </button>

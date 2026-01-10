@@ -20,7 +20,9 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.1",
     "socket.io-client": "^4.7.2",
-    "aieditor": "^1.2.0"
+    "@tiptap/react": "^2.1.13",
+    "@tiptap/starter-kit": "^2.1.13",
+    "@tiptap/extension-placeholder": "^2.1.13"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
