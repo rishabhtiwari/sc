@@ -1,0 +1,107 @@
+import React, { useState } from 'react';
+import AIToolsPanel from './AIToolsPanel';
+import ImagesPanel from './ImagesPanel';
+import TextPanel from './TextPanel';
+import MediaPanel from './MediaPanel';
+import ElementsPanel from './ElementsPanel';
+
+/**
+ * Sidebar Component - Tool Selection
+ * Similar to Veed.io sidebar with AI Tools, Images, Text, Media, Elements
+ */
+const Sidebar = ({ selectedTool, onSelectTool, onAddElement }) => {
+  const [expandedPanel, setExpandedPanel] = useState(null);
+
+  const tools = [
+    {
+      id: 'ai-tools',
+      name: 'AI Tools',
+      icon: '🤖',
+      description: 'AI-powered tools',
+      panel: AIToolsPanel
+    },
+    {
+      id: 'images',
+      name: 'Images',
+      icon: '🖼️',
+      description: 'Add images',
+      panel: ImagesPanel
+    },
+    {
+      id: 'text',
+      name: 'Text',
+      icon: '📝',
+      description: 'Add text',
+      panel: TextPanel
+    },
+    {
+      id: 'media',
+      name: 'Media',
+      icon: '🎬',
+      description: 'Videos & Audio',
+      panel: MediaPanel
+    },
+    {
+      id: 'elements',
+      name: 'Elements',
+      icon: '⭐',
+      description: 'Shapes & Icons',
+      panel: ElementsPanel
+    }
+  ];
+
+  const handleToolClick = (toolId) => {
+    if (expandedPanel === toolId) {
+      setExpandedPanel(null);
+      onSelectTool(null);
+    } else {
+      setExpandedPanel(toolId);
+      onSelectTool(toolId);
+    }
+  };
+
+  const activeTool = tools.find(t => t.id === expandedPanel);
+  const ActivePanel = activeTool?.panel;
+
+  return (
+    <div className="flex h-full bg-white border-r border-gray-200">
+      {/* Tool Icons Bar */}
+      <div className="w-20 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-2">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            onClick={() => handleToolClick(tool.id)}
+            className={`
+              w-14 h-14 rounded-lg flex flex-col items-center justify-center gap-1
+              transition-all duration-200
+              ${expandedPanel === tool.id
+                ? 'bg-blue-100 text-blue-600 shadow-sm'
+                : 'hover:bg-gray-100 text-gray-600'
+              }
+            `}
+            title={tool.description}
+          >
+            <span className="text-2xl">{tool.icon}</span>
+            <span className="text-xs font-medium">{tool.name.split(' ')[0]}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Expanded Tool Panel */}
+      {expandedPanel && ActivePanel && (
+        <div className="w-80 bg-white overflow-y-auto">
+          <div className="p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">{activeTool.name}</h2>
+            <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
+          </div>
+          <div className="p-4">
+            <ActivePanel onAddElement={onAddElement} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Sidebar;
+

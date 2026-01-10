@@ -1,0 +1,44 @@
+import React from 'react';
+import DesignEditor from '../components/DesignEditor/DesignEditor';
+
+/**
+ * Design Editor Page - Canva/Veed.io style editor
+ * 
+ * Features:
+ * - Canvas editor with drag & drop
+ * - AI Tools (image generation, background removal, etc.)
+ * - Media library (images, videos, audio)
+ * - Text editor with fonts and effects
+ * - Elements (shapes, icons, stickers)
+ * - Export to image/video
+ */
+const DesignEditorPage = () => {
+  return (
+    <div className="h-screen flex flex-col bg-gray-50">
+      {/* Page Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <h1 className="text-xl font-bold text-gray-900">Design Editor</h1>
+          <span className="text-sm text-gray-500">Create stunning visuals with AI</span>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            Save Draft
+          </button>
+          <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+            Export
+          </button>
+        </div>
+      </div>
+
+      {/* Design Editor Component */}
+      <div className="flex-1 overflow-hidden">
+        <DesignEditor />
+      </div>
+    </div>
+  );
+};
+
+export default DesignEditorPage;
+
