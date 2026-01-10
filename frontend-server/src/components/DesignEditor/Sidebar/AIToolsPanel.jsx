@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useToast } from '../../../hooks/useToast';
+import TextStudio from '../TextStudio/TextStudio';
 
 /**
  * AI Tools Panel
- * Features: Image Generation, Background Removal, Image Enhancement, etc.
+ * Features: Image Generation, Background Removal, Image Enhancement, AI Text Generation
  */
 const AIToolsPanel = ({ onAddElement }) => {
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
+  const [isTextStudioOpen, setIsTextStudioOpen] = useState(false);
   const { showToast } = useToast();
 
   const aiTools = [
@@ -41,6 +43,14 @@ const AIToolsPanel = ({ onAddElement }) => {
     }
   ];
 
+  const handleToolClick = (tool) => {
+    if (tool.id === 'generate-text') {
+      setIsTextStudioOpen(true);
+    } else {
+      showToast(`${tool.name} coming soon!`, 'info');
+    }
+  };
+
   const handleGenerateImage = async () => {
     if (!prompt.trim()) {
       showToast('Please enter a prompt', 'error');
@@ -49,17 +59,7 @@ const AIToolsPanel = ({ onAddElement }) => {
 
     setGenerating(true);
     try {
-      // TODO: Integrate with your AI image generation API
       showToast('AI image generation coming soon!', 'info');
-      
-      // Example: Add generated image to canvas
-      // const response = await api.post('/api/ai/generate-image', { prompt });
-      // onAddElement({
-      //   type: 'image',
-      //   src: response.data.image_url,
-      //   width: 400,
-      //   height: 400
-      // });
     } catch (error) {
       showToast('Failed to generate image', 'error');
     } finally {
@@ -68,6 +68,7 @@ const AIToolsPanel = ({ onAddElement }) => {
   };
 
   return (
+    <>
     <div className="space-y-6">
       {/* AI Image Generation */}
       <div className="space-y-3">
@@ -95,7 +96,7 @@ const AIToolsPanel = ({ onAddElement }) => {
           {aiTools.map((tool) => (
             <button
               key={tool.id}
-              onClick={() => showToast(`${tool.name} coming soon!`, 'info')}
+              onClick={() => handleToolClick(tool)}
               className="p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
             >
               <div className="text-2xl mb-2">{tool.icon}</div>
@@ -115,7 +116,14 @@ const AIToolsPanel = ({ onAddElement }) => {
           <li>• Use AI tools to enhance your designs</li>
         </ul>
       </div>
-    </div>
+
+      {/* Text Studio Modal */}
+      <TextStudio
+        isOpen={isTextStudioOpen}
+        onClose={() => setIsTextStudioOpen(false)}
+        onAddToCanvas={onAddElement}
+      />
+    </>
   );
 };
 

@@ -110,6 +110,7 @@ def create_app():
     from routes.product_routes import product_bp
     from routes.audio_studio_routes import audio_studio_bp
     from routes.asset_routes import asset_bp
+    from routes.prompt_template_routes import prompt_template_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -140,6 +141,7 @@ def create_app():
     app.register_blueprint(product_bp, url_prefix='/api')
     app.register_blueprint(audio_studio_bp, url_prefix='/api')
     app.register_blueprint(asset_bp, url_prefix='/api')
+    app.register_blueprint(prompt_template_bp, url_prefix='/api')
 
     # Initialize Socket.IO for real-time updates
     socketio = init_socketio(app)

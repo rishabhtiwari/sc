@@ -621,3 +621,71 @@ def delete_prompt_template(template_id):
         logger.error(f"Error deleting prompt template: {str(e)}", exc_info=True)
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+
+@prompt_template_bp.route('/<template_id>/generate', methods=['POST'])
+def generate_content_with_template(template_id):
+    """Generate content using a prompt template"""
+    try:
+        from common.prompt_template_handler import PromptTemplateHandler
+
+        customer_id = request.headers.get('X-Customer-ID', 'default')
+        data = request.get_json() or {}
+        context = data.get('context', {})
+
+        logger.info(f"Generating content with template: {template_id}")
+
+        # Initialize handler
+        handler = PromptTemplateHandler(
+            prompt_templates_collection=prompt_template_bp.prompt_templates_collection
+        )
+
+        # Get template
+        template = handler.get_template(template_id, customer_id)
+        if not template:
+            return jsonify({
+                'status': 'error',
+                'message': 'Template not found'
+            }), 404
+
+        # Generate content
+        result = handler.generate_with_json_output(
+            template=template,
+            context=context,
+            max_retries=3,
+            temperature=0.7,
+            max_tokens=2000
+        )
+
+        if result['status'] == 'success':
+            # Convert JSON to text if needed
+            content = result['data']
+            if isinstance(content, dict):
+                # Try to extract a 'content' field or convert to text
+                if 'content' in content:
+                    text_content = content['content']
+                else:
+                    text_content = handler.convert_json_to_text(content)
+            else:
+                text_content = str(content)
+
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'content': text_content,
+                    'raw_data': content,
+                    'template_id': template_id
+                }
+            }), 200
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': result.get('message', 'Failed to generate content')
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Error generating content: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+

@@ -2,13 +2,20 @@
 LLM Routes - API endpoints for LLM service integration
 """
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from datetime import datetime
+import requests
+import logging
 
 from handlers.llm_handler import LLMHandler
+from middleware.jwt_middleware import get_request_headers_with_context
 
 # Create LLM blueprint
 llm_bp = Blueprint('llm', __name__)
+logger = logging.getLogger(__name__)
+
+# Service URLs
+INVENTORY_SERVICE_URL = 'http://ichat-inventory-service:8082'
 
 
 @llm_bp.route('/llm/chat', methods=['POST'])
@@ -90,10 +97,10 @@ def get_conversation_history(conversation_id):
 def clear_conversation(conversation_id):
     """
     DELETE /api/llm/conversation/<id> - Clear conversation history
-    
+
     Args:
         conversation_id: Conversation ID
-    
+
     Returns:
         JSON response with operation result
     """
