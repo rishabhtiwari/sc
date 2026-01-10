@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import api from '../../../services/api';
+import { AiEditor } from 'aieditor';
+import 'aieditor/dist/style.css';
 
 /**
  * Text Studio - Full-screen modal for AI text generation
@@ -19,6 +21,8 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [textLibrary, setTextLibrary] = useState([]);
   const { showToast } = useToast();
+  const editorRef = useRef(null);
+  const aiEditorInstance = useRef(null);
 
   // Load templates when studio opens
   useEffect(() => {
@@ -27,6 +31,30 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       fetchTextLibrary();
     }
   }, [isOpen]);
+
+  // Initialize AIEditor when generated text changes
+  useEffect(() => {
+    if (generatedText && editorRef.current && !aiEditorInstance.current) {
+      aiEditorInstance.current = new AiEditor({
+        element: editorRef.current,
+        placeholder: 'Generated content will appear here...',
+        content: generatedText,
+        editable: true,
+        toolbarKeys: ['undo', 'redo', '|', 'bold', 'italic', 'underline', '|', 'heading', 'bulletList', 'orderedList', '|', 'link'],
+      });
+    } else if (generatedText && aiEditorInstance.current) {
+      // Update content if editor already exists
+      aiEditorInstance.current.setContent(generatedText);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (aiEditorInstance.current) {
+        aiEditorInstance.current.destroy();
+        aiEditorInstance.current = null;
+      }
+    };
+  }, [generatedText]);
 
   // Fetch all templates and extract categories
   const fetchAllTemplates = async () => {
@@ -160,10 +188,16 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       return;
     }
 
+    // Get content from AIEditor if it exists, otherwise use generatedText
+    let finalText = generatedText;
+    if (aiEditorInstance.current) {
+      finalText = aiEditorInstance.current.getMarkdown() || aiEditorInstance.current.getText() || generatedText;
+    }
+
     // Add text to canvas
     onAddToCanvas({
       type: 'text',
-      text: generatedText,
+      text: finalText,
       fontSize: 24,
       fontWeight: 'normal',
       color: '#000000',
@@ -171,13 +205,19 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     });
 
     showToast('Text added to canvas', 'success');
-    
+
     // Close the studio
     onClose();
-    
+
     // Reset state
     setGeneratedText('');
     setSelectedTemplate(null);
+
+    // Cleanup editor
+    if (aiEditorInstance.current) {
+      aiEditorInstance.current.destroy();
+      aiEditorInstance.current = null;
+    }
   };
 
   const handleSaveToLibrary = async () => {
@@ -187,7 +227,13 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     }
 
     try {
-      const blob = new Blob([generatedText], { type: 'text/plain' });
+      // Get content from AIEditor if it exists
+      let contentToSave = generatedText;
+      if (aiEditorInstance.current) {
+        contentToSave = aiEditorInstance.current.getMarkdown() || aiEditorInstance.current.getText() || generatedText;
+      }
+
+      const blob = new Blob([contentToSave], { type: 'text/plain' });
       const formData = new FormData();
       formData.append('file', blob, `text_${Date.now()}.txt`);
       formData.append('asset_type', 'document');
@@ -457,13 +503,17 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
                     </div>
                   ) : (
                     <div className="max-w-4xl mx-auto">
-                      {/* Generated Text Display */}
-                      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-4">
-                        <div className="prose prose-lg max-w-none">
-                          <div className="text-gray-900 leading-relaxed whitespace-pre-wrap">
-                            {generatedText}
-                          </div>
-                        </div>
+                      {/* AIEditor for Rich Text Display */}
+                      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4">
+                        <div
+                          ref={editorRef}
+                          className="min-h-[400px]"
+                          style={{
+                            padding: '20px',
+                            fontSize: '16px',
+                            lineHeight: '1.6'
+                          }}
+                        />
                       </div>
 
                       {/* Action Buttons */}
