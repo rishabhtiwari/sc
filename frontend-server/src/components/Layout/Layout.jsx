@@ -9,6 +9,13 @@ const Layout = ({ children, user, onLogout }) => {
   const navigate = useNavigate();
   const userMenuRef = useRef(null);
 
+  // Auto-collapse sidebar when navigating to Design Editor
+  useEffect(() => {
+    if (location.pathname === '/design-editor') {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
   const navItems = [
     { path: '/', icon: '📊', label: 'Dashboard' },
     { path: '/news-fetcher', icon: '📰', label: 'News Fetcher' },
