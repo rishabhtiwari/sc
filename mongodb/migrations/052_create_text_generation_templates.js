@@ -236,18 +236,21 @@ Generate ONLY the quote text, nothing else.`,
     }
 ];
 
-// Insert templates
-print('Inserting text generation templates...');
+// Insert or replace templates (upsert)
+print('Inserting/updating text generation templates...');
 textTemplates.forEach(template => {
-    const existing = db.prompt_templates.findOne({
-        template_id: template.template_id,
-        customer_id: template.customer_id
-    });
-    
-    if (existing) {
-        print(`  ⚠ Template ${template.template_id} already exists, skipping`);
+    const result = db.prompt_templates.replaceOne(
+        {
+            template_id: template.template_id,
+            customer_id: template.customer_id
+        },
+        template,
+        { upsert: true }
+    );
+
+    if (result.matchedCount > 0) {
+        print(`  ✓ Updated template: ${template.name}`);
     } else {
-        db.prompt_templates.insertOne(template);
         print(`  ✓ Created template: ${template.name}`);
     }
 });
