@@ -240,7 +240,12 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       formData.append('title', `Generated Text - ${new Date().toLocaleString()}`);
       formData.append('description', `Template: ${selectedTemplate?.name || 'Custom'}`);
 
-      const response = await api.post('/assets/upload', formData);
+      // Important: Let browser set Content-Type with boundary for multipart/form-data
+      const response = await api.post('/assets/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
 
       if (response.data.success) {
         showToast('Text saved to library', 'success');
