@@ -46,12 +46,12 @@ const NewsFetcherPage = () => {
     loadFiltersData();
   }, []);
 
-  // Auto-refresh stats every 10 seconds when on overview tab
+  // Auto-refresh stats every 5 minutes when on overview tab
   useEffect(() => {
     if (activeTab === 'overview') {
       const intervalId = setInterval(() => {
         fetchStats();
-      }, 10000); // Refresh every 10 seconds
+      }, 300000); // Refresh every 5 minutes (300000ms)
 
       return () => clearInterval(intervalId);
     }
@@ -64,12 +64,12 @@ const NewsFetcherPage = () => {
     }
   }, [activeTab, filters]);
 
-  // Auto-refresh news data every 10 seconds when on news tab
+  // Auto-refresh news data every 5 minutes when on news tab
   useEffect(() => {
     if (activeTab === 'news') {
       const intervalId = setInterval(() => {
         fetchNews(filters);
-      }, 10000); // Refresh every 10 seconds
+      }, 300000); // Refresh every 5 minutes (300000ms)
 
       return () => clearInterval(intervalId);
     }
@@ -115,6 +115,16 @@ const NewsFetcherPage = () => {
   const handleRefreshStats = () => {
     fetchStats();
     showToast('Statistics refreshed', 'success');
+  };
+
+  const handleRefreshNews = () => {
+    fetchNews(filters);
+    showToast('News list refreshed', 'success');
+  };
+
+  const handleRefreshSeeds = () => {
+    fetchSeeds();
+    showToast('Seed URLs refreshed', 'success');
   };
 
   const handleViewArticle = (article) => {
@@ -289,7 +299,19 @@ const NewsFetcherPage = () => {
 
       {/* News Records Tab */}
       {activeTab === 'news' && (
-        <Card title="News Records">
+        <Card
+          title="News Records"
+          action={
+            <Button
+              variant="outline"
+              icon="🔄"
+              onClick={handleRefreshNews}
+              size="sm"
+            >
+              Refresh
+            </Button>
+          }
+        >
           <NewsFilters
             filters={filters}
             categories={categories}
@@ -337,9 +359,14 @@ const NewsFetcherPage = () => {
         <Card
           title="Seed URLs"
           actions={
-            <Button variant="primary" icon="➕" onClick={handleAddSeed}>
-              Add Seed URL
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" icon="🔄" onClick={handleRefreshSeeds} size="sm">
+                Refresh
+              </Button>
+              <Button variant="primary" icon="➕" onClick={handleAddSeed}>
+                Add Seed URL
+              </Button>
+            </div>
           }
         >
           <SeedUrlsTable

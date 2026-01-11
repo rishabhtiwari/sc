@@ -16,6 +16,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
   // Initialize form data from config (new nested structure)
   const [formData, setFormData] = useState({
     language: config?.language || 'en',
+    speed: config?.speed || 1.2, // Default speed for news: 1.2x (20% faster)
     models: config?.models || { en: 'kokoro-82m', hi: 'mms-tts-hin' },
     voices: config?.voices || {
       en: {
@@ -52,6 +53,7 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
     if (config) {
       setFormData({
         language: config.language || 'en',
+        speed: config.speed || 1.2,
         models: config.models || { en: 'kokoro-82m', hi: 'mms-tts-hin' },
         voices: config.voices || formData.voices,
       });
@@ -284,6 +286,40 @@ const VoiceConfig = ({ config, onSave, onPreview, loading }) => {
               <option value="en">🇬🇧 English</option>
               <option value="hi">🇮🇳 Hindi</option>
             </select>
+          </div>
+        </div>
+      </Card>
+
+      {/* Speech Speed Control */}
+      <Card title="⚡ Speech Speed">
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-medium text-gray-700">
+                Playback Speed for News Audio
+              </label>
+              <span className="text-lg font-semibold text-blue-600">
+                {formData.speed.toFixed(1)}x
+              </span>
+            </div>
+            <input
+              type="range"
+              min="0.8"
+              max="1.5"
+              step="0.1"
+              value={formData.speed}
+              onChange={(e) => setFormData((prev) => ({ ...prev, speed: parseFloat(e.target.value) }))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-2">
+              <span>0.8x (Slower)</span>
+              <span>1.0x (Normal)</span>
+              <span>1.2x (Recommended)</span>
+              <span>1.5x (Faster)</span>
+            </div>
+            <p className="text-sm text-gray-600 mt-3">
+              💡 <strong>Recommended: 1.2x</strong> - Optimal speed for news narration (20% faster than normal speech)
+            </p>
           </div>
         </div>
       </Card>
