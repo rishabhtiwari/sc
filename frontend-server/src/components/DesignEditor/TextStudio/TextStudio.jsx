@@ -235,12 +235,18 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       const formData = new FormData();
       const blob = new Blob([contentToSave], { type: 'text/plain' });
       formData.append('file', blob, `text_${Date.now()}.txt`);
-      formData.append('asset_type', 'document');  // Required field
+      formData.append('asset_type', 'document');
       formData.append('folder', 'text-library');
       formData.append('title', `Generated Text - ${new Date().toLocaleString()}`);
       formData.append('description', `Template: ${selectedTemplate?.name || 'Custom'}`);
 
-      // Important: Don't set Content-Type header - let browser set it with boundary
+      console.log('📤 Uploading text to library:', {
+        blobSize: blob.size,
+        blobType: blob.type,
+        contentLength: contentToSave.length
+      });
+
+      // Let axios automatically detect FormData and set correct Content-Type with boundary
       const response = await api.post('/assets/upload', formData);
 
       if (response.data.success) {

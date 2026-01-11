@@ -21,16 +21,20 @@ def upload_asset():
     """Upload asset file"""
     try:
         headers = get_request_headers_with_context()
-        
+
         # Forward multipart/form-data request
         files = {}
         if 'file' in request.files:
             file = request.files['file']
             files['file'] = (file.filename, file.stream, file.content_type)
-        
+
         # Get form data
         data = request.form.to_dict()
-        
+
+        # Remove Content-Type header to let requests library set it with boundary
+        if 'Content-Type' in headers:
+            del headers['Content-Type']
+
         response = requests.post(
             f'{ASSET_SERVICE_URL}/api/assets/upload',
             headers=headers,
