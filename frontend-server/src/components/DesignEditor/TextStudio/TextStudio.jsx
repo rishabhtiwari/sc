@@ -4,6 +4,7 @@ import api from '../../../services/api';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import { marked } from 'marked';
 
 /**
  * Text Studio - Full-screen modal for AI text generation
@@ -50,8 +51,10 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
   // Update Tiptap editor content when generated text changes
   useEffect(() => {
     if (editor && generatedText) {
-      // Set content as HTML (Tiptap will parse markdown-style formatting)
-      editor.commands.setContent(generatedText);
+      // Convert Markdown to HTML using marked
+      const htmlContent = marked.parse(generatedText);
+      // Set HTML content in Tiptap editor
+      editor.commands.setContent(htmlContent);
     }
   }, [generatedText, editor]);
 
