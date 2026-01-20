@@ -28,6 +28,23 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         // v2 is recommended for better performance and no duplication issues
         this.chunkerVersion = config.chunkerVersion || process.env.TEXT_CHUNKER_VERSION || 'v2';
 
+        // TTS Generation Parameters (to reduce hallucinations and improve quality)
+        // Based on research: https://github.com/coqui-ai/TTS/issues/3277
+        // Lower temperature = more consistent, less creative (reduces weird sounds)
+        this.temperature = parseFloat(config.temperature || process.env.COQUI_TEMPERATURE || '0.75');
+
+        // Length penalty: controls output length (1.0 = neutral, >1.0 = longer, <1.0 = shorter)
+        this.lengthPenalty = parseFloat(config.lengthPenalty || process.env.COQUI_LENGTH_PENALTY || '1.0');
+
+        // Repetition penalty: prevents repetition (higher = less repetition, reduces artifacts)
+        this.repetitionPenalty = parseFloat(config.repetitionPenalty || process.env.COQUI_REPETITION_PENALTY || '2.0');
+
+        // Top-k sampling: limits to top k most probable tokens
+        this.topK = parseInt(config.topK || process.env.COQUI_TOP_K || '50');
+
+        // Top-p (nucleus) sampling: limits to tokens with cumulative probability <= top_p
+        this.topP = parseFloat(config.topP || process.env.COQUI_TOP_P || '0.85');
+
         this._loadSpeakersMetadata();
     }
 
@@ -456,7 +473,15 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             supportsVoiceCloning: true,
             description: 'Coqui TTS XTTS v2 - Multi-lingual TTS with 58 universal speakers supporting 17 languages',
             speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.',
-            sampleTexts: this.speakersMetadata?.sample_texts || {}
+            sampleTexts: this.speakersMetadata?.sample_texts || {},
+            // Generation parameters (for reducing hallucinations)
+            generationParams: {
+                temperature: this.temperature,
+                lengthPenalty: this.lengthPenalty,
+                repetitionPenalty: this.repetitionPenalty,
+                topK: this.topK,
+                topP: this.topP
+            }
         };
     }
 
@@ -574,6 +599,14 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         formData.append('text', text);
         formData.append('speaker_id', speaker);
         formData.append('language_id', language);
+
+        // Add generation parameters to reduce hallucinations
+        // These parameters are supported by xtts-api-server
+        formData.append('temperature', this.temperature.toString());
+        formData.append('length_penalty', this.lengthPenalty.toString());
+        formData.append('repetition_penalty', this.repetitionPenalty.toString());
+        formData.append('top_k', this.topK.toString());
+        formData.append('top_p', this.topP.toString());
 
         const response = await axios.post(
             `${this.coquiServerUrl}/api/tts`,

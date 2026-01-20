@@ -261,6 +261,10 @@ def clean_text_for_tts(text, language_code='en'):
         text = text.replace('\u200b', '')
         text = text.replace('\ufeff', '')
 
+        # Fix acronym pronunciation: "US" (uppercase) = country, "us" (lowercase) = pronoun
+        # Replace uppercase "US" with phonetic spelling to ensure correct pronunciation
+        text = re.sub(r'\bUS\b', 'U.S.', text)  # US → U.S. (pronounced as "you-ess")
+
         # For English, keep exclamations but normalize multiples
         text = re.sub(r'!{2,}', '!', text)  # !! → !
         text = re.sub(r'\?{2,}', '?', text)  # ?? → ?

@@ -237,6 +237,10 @@ def clean_text_for_tts(text, language_code='en'):
         text = text.replace('\u200b', '')
         text = text.replace('\ufeff', '')
 
+        # Fix acronym pronunciation: "US" (uppercase) = country, "us" (lowercase) = pronoun
+        # Replace uppercase "US" with phonetic spelling to ensure correct pronunciation
+        text = re.sub(r'\bUS\b', 'U.S.', text)  # US → U.S. (pronounced as "you-ess")
+
         # For English, keep exclamations but normalize multiples
         text = re.sub(r'!{2,}', '!', text)  # !! → !
         text = re.sub(r'\?{2,}', '?', text)  # ?? → ?
@@ -249,6 +253,12 @@ def clean_text_for_tts(text, language_code='en'):
         # Remove multiple spaces
         text = re.sub(r'\s+', ' ', text)
         text = text.strip()
+
+        # CRITICAL FIX: Ensure text ends with punctuation to prevent XTTS-v2 hallucinations
+        # XTTS-v2 adds weird sounds ("aah", "yee", breathing) when text doesn't end with punctuation
+        # This is a known issue: https://github.com/coqui-ai/TTS/issues/3277
+        if text and not text.endswith(('.', '!', '?', '_')):
+            text = text + '.'  # Add period if missing
 
     return text
 
