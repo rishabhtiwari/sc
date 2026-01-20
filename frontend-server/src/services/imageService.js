@@ -86,6 +86,24 @@ export const getCleanedImage = (docId) => {
   });
 };
 
+/**
+ * Get image cleaning configuration
+ * @returns {Promise} API response with config { auto_mark_cleaned: boolean }
+ */
+export const getImageConfig = () => {
+  return api.get('/image/config');
+};
+
+/**
+ * Update image cleaning configuration
+ * @param {Object} config - Configuration object
+ * @param {boolean} config.auto_mark_cleaned - Whether to auto-mark images as cleaned
+ * @returns {Promise} API response
+ */
+export const updateImageConfig = (config) => {
+  return api.put('/image/config', config);
+};
+
 export default {
   getStats,
   listImages,
@@ -95,5 +113,7 @@ export default {
   replaceImage,
   skipImage,
   getCleanedImage,
+  getImageConfig,
+  updateImageConfig,
 };
 

@@ -941,6 +941,47 @@ services:
         reservations:
           memory: 2G
 
+  # Image Auto-Marker Job - BaseJob implementation for automatic image marking
+  job-image-auto-marker:
+    build:
+      context: ./jobs
+      dockerfile: ./image-auto-marker/Dockerfile
+    container_name: ichat-image-auto-marker
+    ports:
+      - "8102:8102"
+    environment:
+      - FLASK_PORT=8102
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      - JOB_INTERVAL_MINUTES=5  # Run every 5 minutes
+      - AUTO_MARK_BATCH_SIZE=50  # Process 50 images per run
+      - OUTPUT_DIR=/app/output  # Directory to save downloaded images
+      - LOG_FILE=/var/log/image-auto-marker.log
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./jobs/image-auto-marker/logs:/var/log
+      - ./jobs/watermark-remover/public:/app/output  # Share output dir with IOPaint
+    networks:
+      - ichat-network
+    depends_on:
+      - ichat-mongodb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8102/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    labels:
+      - "com.news-automation.service=image-auto-marker"
+      - "com.news-automation.version=1.0.0"
+      - "com.news-automation.description=Automatic Image Marking Job (BaseJob)"
+
   # YouTube Uploader Service
   youtube-uploader:
     build:

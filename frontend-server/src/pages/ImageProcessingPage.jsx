@@ -6,6 +6,7 @@ import StatsDisplay from '../components/ImageCleaning/StatsDisplay';
 import ImageCanvas from '../components/ImageCleaning/ImageCanvas';
 import ControlPanel from '../components/ImageCleaning/ControlPanel';
 import ReplaceImageModal from '../components/ImageCleaning/ReplaceImageModal';
+import AuthenticatedImage from '../components/common/AuthenticatedImage';
 
 /**
  * Image Processing Page - Remove watermarks from news images and view all images
@@ -37,7 +38,52 @@ const ImageProcessingPage = () => {
   // Replace image modal state
   const [showReplaceModal, setShowReplaceModal] = useState(false);
 
+  // Image config state
+  const [imageConfig, setImageConfig] = useState({ auto_mark_cleaned: false });
+  const [configLoading, setConfigLoading] = useState(false);
+
   const { showToast } = useToast();
+
+  // Load image configuration
+  const loadImageConfig = async () => {
+    setConfigLoading(true);
+    try {
+      const response = await imageService.getImageConfig();
+      const data = response.data?.data || response.data;
+      setImageConfig({
+        auto_mark_cleaned: data.auto_mark_cleaned || false,
+      });
+    } catch (error) {
+      console.error('Failed to load image config:', error);
+      showToast('Failed to load image settings', 'error');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  // Toggle auto-mark cleaned setting
+  const toggleAutoMarkCleaned = async () => {
+    const newValue = !imageConfig.auto_mark_cleaned;
+
+    try {
+      setConfigLoading(true);
+      await imageService.updateImageConfig({ auto_mark_cleaned: newValue });
+      setImageConfig({ auto_mark_cleaned: newValue });
+      showToast(
+        newValue
+          ? 'Auto-mark enabled: Images will be marked as cleaned automatically'
+          : 'Auto-mark disabled: Manual watermark removal required',
+        'success'
+      );
+      // Reload stats as this might affect pending count
+      loadStats();
+    } catch (error) {
+      console.error('Failed to update image config:', error);
+      showToast('Failed to update settings', 'error');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
 
   // Load stats
   const loadStats = async () => {
@@ -377,6 +423,7 @@ const ImageProcessingPage = () => {
 
   // Load initial data
   useEffect(() => {
+    loadImageConfig();
     loadStats();
   }, []);
 
@@ -397,6 +444,39 @@ const ImageProcessingPage = () => {
 
       {/* Statistics */}
       <StatsDisplay stats={stats} loading={statsLoading} />
+
+      {/* Settings Toggle */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <div className="flex-1">
+            <h3 className="text-sm font-medium text-gray-900 mb-1">
+              Auto-Mark Images as Cleaned
+            </h3>
+            <p className="text-sm text-gray-500">
+              {imageConfig.auto_mark_cleaned
+                ? 'Images are automatically marked as cleaned without watermark removal'
+                : 'Manual watermark removal required for each image'}
+            </p>
+          </div>
+          <button
+            onClick={toggleAutoMarkCleaned}
+            disabled={configLoading}
+            className={`
+              relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+              ${configLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              ${imageConfig.auto_mark_cleaned ? 'bg-blue-600' : 'bg-gray-200'}
+            `}
+          >
+            <span
+              className={`
+                inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                ${imageConfig.auto_mark_cleaned ? 'translate-x-6' : 'translate-x-1'}
+              `}
+            />
+          </button>
+        </div>
+      </Card>
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -427,7 +507,27 @@ const ImageProcessingPage = () => {
       {/* Tab Content */}
       {activeTab === 'editor' ? (
         // Editor Tab
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <>
+          {/* Auto-Mark Mode Notice */}
+          {imageConfig.auto_mark_cleaned && (
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <span className="text-2xl">⚠️</span>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-800 font-medium">
+                    Auto-Mark Mode Active
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Images will be marked as cleaned without watermark removal. Click "Save & Next" to mark the current image as cleaned and proceed to the next one.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Canvas Area */}
           <div className="lg:col-span-2">
             <Card title="Image Editor">
@@ -472,10 +572,12 @@ const ImageProcessingPage = () => {
                 onSkip={handleSkip}
                 loading={loading}
                 processing={processing}
+                autoMarkMode={imageConfig.auto_mark_cleaned}
               />
             </Card>
           </div>
-        </div>
+          </div>
+        </>
       ) : (
         // Gallery Tab
         <div className="space-y-4">
@@ -528,7 +630,7 @@ const ImageProcessingPage = () => {
                     >
                       {/* Image */}
                       <div className="relative aspect-video bg-gray-100">
-                        <img
+                        <AuthenticatedImage
                           src={image.status === 'cleaned' && image.cleaned_image_url ? image.cleaned_image_url : image.image_url}
                           alt={image.title}
                           className="w-full h-full object-cover"

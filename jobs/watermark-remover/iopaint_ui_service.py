@@ -50,17 +50,27 @@ _model = None
 _device = None
 _mongo_client = None
 _news_collection = None
+_image_config_collection = None
 
 
 def get_mongo_client():
     """Get MongoDB client (lazy loaded)"""
-    global _mongo_client, _news_collection
+    global _mongo_client, _news_collection, _image_config_collection
 
     if _mongo_client is None:
         try:
             logger.info(f"🔌 Connecting to MongoDB: {MONGODB_URL}")
             _mongo_client = MongoClient(MONGODB_URL)
-            _news_collection = _mongo_client.get_database().news_document
+            db = _mongo_client.get_database()
+            _news_collection = db.news_document
+            _image_config_collection = db.image_config
+
+            # Create indexes for image_config collection
+            _image_config_collection.create_index(
+                [('customer_id', 1)],
+                unique=True
+            )
+
             # Test connection
             _mongo_client.admin.command('ping')
             logger.info("✅ MongoDB connected successfully!")
@@ -71,8 +81,77 @@ def get_mongo_client():
     return _news_collection
 
 
+def get_image_config_collection():
+    """Get image_config collection"""
+    global _image_config_collection
+
+    if _image_config_collection is None:
+        get_mongo_client()
+
+    return _image_config_collection
+
+
+def get_or_create_image_config(customer_id):
+    """
+    Get or create image configuration for a customer
+
+    Args:
+        customer_id: Customer ID
+
+    Returns:
+        dict: Image configuration with auto_mark_cleaned flag
+    """
+    try:
+        collection = get_image_config_collection()
+
+        # Try to find existing config
+        config = collection.find_one({'customer_id': customer_id})
+
+        if config:
+            return config
+
+        # Create default config if not exists
+        default_config = {
+            'customer_id': customer_id,
+            'auto_mark_cleaned': True,  # Default: auto-mark enabled (skip manual cleaning)
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+
+        collection.insert_one(default_config)
+        logger.info(f"✅ Created default image config for customer: {customer_id} (auto_mark_cleaned: True)")
+
+        return default_config
+
+    except Exception as e:
+        logger.error(f"❌ Error getting/creating image config: {e}")
+        # Return default config on error
+        return {
+            'customer_id': customer_id,
+            'auto_mark_cleaned': True,  # Default: auto-mark enabled
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+
+
+def log_gpu_memory():
+    """Log current GPU memory usage"""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated(0) / 1024**3
+            reserved = torch.cuda.memory_reserved(0) / 1024**3
+            total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+            logger.info(
+                f"💾 GPU Memory: {allocated:.2f}GB allocated, "
+                f"{reserved:.2f}GB reserved, {total:.2f}GB total"
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Could not log GPU memory: {e}")
+
+
 def get_model():
-    """Lazy load IOPaint model"""
+    """Lazy load IOPaint model with GPU optimizations"""
     global _model, _device
 
     if _model is None:
@@ -88,7 +167,21 @@ def get_model():
             # Log GPU info if available
             if torch.cuda.is_available():
                 logger.info(f"🎮 GPU: {torch.cuda.get_device_name(0)}")
-                logger.info(f"💾 GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+                gpu_props = torch.cuda.get_device_properties(0)
+                logger.info(f"💾 GPU Memory: {gpu_props.total_memory / 1024**3:.2f} GB")
+                logger.info(f"🔢 GPU Compute Capability: {gpu_props.major}.{gpu_props.minor}")
+
+                # GPU optimizations
+                torch.backends.cudnn.benchmark = True  # Enable cuDNN auto-tuner for faster convolutions
+                torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 for faster matrix operations on Ampere+ GPUs
+                torch.backends.cudnn.allow_tf32 = True
+
+                # Set memory allocation strategy for better GPU memory management
+                if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
+                    # Reserve 90% of GPU memory for this process
+                    torch.cuda.set_per_process_memory_fraction(0.9, 0)
+
+                logger.info("✅ GPU optimizations enabled (cuDNN benchmark, TF32)")
             else:
                 logger.warning("⚠️  CUDA not available, using CPU (will be slower)")
 
@@ -98,6 +191,32 @@ def get_model():
 
             lama_class = models["lama"]
             _model = lama_class(device=_device)
+
+            # Move model to eval mode for inference (disables dropout, batch norm training)
+            if hasattr(_model, 'eval'):
+                _model.eval()
+
+            # Enable inference mode optimizations
+            if torch.cuda.is_available():
+                # Warm up the model with a dummy inference to optimize CUDA kernels
+                logger.info("🔥 Warming up GPU with dummy inference...")
+                dummy_image = np.zeros((512, 512, 3), dtype=np.uint8)
+                dummy_mask = np.zeros((512, 512), dtype=np.uint8)
+                dummy_mask[100:200, 100:200] = 255
+
+                from iopaint.schema import InpaintRequest, HDStrategy
+                warmup_config = InpaintRequest(
+                    hd_strategy=HDStrategy.ORIGINAL,
+                    hd_strategy_resize_limit=512,
+                )
+
+                with torch.inference_mode():  # Faster than torch.no_grad()
+                    _ = _model(dummy_image, dummy_mask, warmup_config)
+
+                # Clear GPU cache after warmup
+                torch.cuda.empty_cache()
+                logger.info("✅ GPU warmup complete")
+
             logger.info("✅ IOPaint LaMa model loaded successfully!")
 
         except Exception as e:
@@ -109,7 +228,7 @@ def get_model():
 
 def remove_watermark(image_np, mask_np):
     """
-    Remove watermark using IOPaint
+    Remove watermark using IOPaint with GPU optimizations
 
     Args:
         image_np: numpy array of image (RGB, uint8)
@@ -119,9 +238,12 @@ def remove_watermark(image_np, mask_np):
         numpy array of cleaned image (RGB, uint8)
     """
     try:
+        import torch
         model = get_model()
 
         from iopaint.schema import InpaintRequest, HDStrategy
+
+        start_time = time.time()
 
         # Ensure proper data types
         if image_np.dtype != np.uint8:
@@ -133,56 +255,99 @@ def remove_watermark(image_np, mask_np):
         # Ensure mask is binary (0 or 255)
         mask_np = np.where(mask_np > 127, 255, 0).astype(np.uint8)
 
-        # Dilate the mask very slightly to include edge pixels
+        # Dilate the mask slightly to include edge pixels
         # This helps the model understand the surrounding background better
-        kernel_size = 3  # Minimal dilation to capture immediate edge context
+        kernel_size = 3  # Minimal dilation for edge context
         kernel = np.ones((kernel_size, kernel_size), np.uint8)
         mask_np = cv2.dilate(mask_np, kernel, iterations=1)
 
-        logger.info(f"🔧 Input - Image shape: {image_np.shape}, dtype: {image_np.dtype}")
-        logger.info(
-            f"🔧 Input - Mask shape: {mask_np.shape}, dtype: {mask_np.dtype}, unique values: {np.unique(mask_np)}")
+        logger.info(f"🔧 Input - Image: {image_np.shape}, Mask: {mask_np.shape}")
+        logger.info(f"🎭 Mask coverage: {np.count_nonzero(mask_np)} pixels")
 
-        # Save debug mask to verify the area being processed
-        try:
-            debug_mask_path = f"/app/output/debug_mask_dilated_{int(time.time())}.png"
-            Image.fromarray(mask_np).save(debug_mask_path)
-            logger.info(f"💾 Debug mask saved to: {debug_mask_path}")
-        except Exception as e:
-            logger.warning(f"⚠️ Could not save debug mask: {e}")
+        # Save debug mask (optional, can be disabled for performance)
+        debug_enabled = os.getenv('DEBUG_MASKS', 'false').lower() == 'true'
+        if debug_enabled:
+            try:
+                debug_path = f"/app/output/debug_mask_{int(time.time())}.png"
+                Image.fromarray(mask_np).save(debug_path)
+                logger.info(f"💾 Debug mask: {debug_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Debug mask save failed: {e}")
 
-        # Configure IOPaint for LaMa model (context-aware inpainting)
-        # LaMa doesn't use ldm_steps/ldm_sampler - those are for diffusion models
+        # Optimize configuration based on image size
+        h, w = image_np.shape[:2]
+        image_size = max(h, w)
+
+        # Dynamic strategy selection for better GPU utilization
+        if image_size > 1500:
+            # Large images: use CROP strategy to reduce memory usage
+            strategy = HDStrategy.CROP
+            crop_margin = 256
+            crop_trigger = 1200
+            resize_limit = 2048
+        elif image_size > 800:
+            # Medium images: use CROP with smaller margins
+            strategy = HDStrategy.CROP
+            crop_margin = 192
+            crop_trigger = 800
+            resize_limit = 1536
+        else:
+            # Small images: process directly without cropping
+            strategy = HDStrategy.ORIGINAL
+            crop_margin = 128
+            crop_trigger = 512
+            resize_limit = 1024
+
         config = InpaintRequest(
-            hd_strategy=HDStrategy.CROP,  # Crop strategy for better local context
-            hd_strategy_crop_margin=256,  # Larger margin to capture more background context
-            hd_strategy_crop_trigger_size=800,  # Process larger areas with cropping
-            hd_strategy_resize_limit=2048,
+            hd_strategy=strategy,
+            hd_strategy_crop_margin=crop_margin,
+            hd_strategy_crop_trigger_size=crop_trigger,
+            hd_strategy_resize_limit=resize_limit,
         )
 
-        # Process with IOPaint (LaMa model)
-        logger.info("🎨 Running LaMa inpainting with background context awareness...")
-        result_np = model(image_np, mask_np, config)
+        logger.info(f"🎨 Running LaMa inpainting (strategy: {strategy.value})...")
 
-        logger.info(f"🔧 Output - Result shape: {result_np.shape}, dtype: {result_np.dtype}")
+        # Use inference mode for faster GPU processing
+        with torch.inference_mode():
+            result_np = model(image_np, mask_np, config)
+
+        inference_time = time.time() - start_time
+        logger.info(f"⚡ Inference completed in {inference_time:.2f}s")
 
         # Ensure result is uint8
         if result_np.dtype != np.uint8:
             result_np = np.clip(result_np, 0, 255).astype(np.uint8)
 
         # Apply Gaussian blur to mask edges for smoother blending
-        mask_blurred = cv2.GaussianBlur(mask_np, (5, 5), 0)
+        # Use smaller kernel for faster processing
+        blur_kernel = (5, 5) if image_size > 1000 else (3, 3)
+        mask_blurred = cv2.GaussianBlur(mask_np, blur_kernel, 0)
         mask_3ch_smooth = np.stack([mask_blurred] * 3, axis=2) / 255.0
 
-        # Blend: use inpainted result where mask is white, original image where mask is black
-        final_result = (result_np * mask_3ch_smooth + image_np * (1 - mask_3ch_smooth)).astype(np.uint8)
+        # Blend: use inpainted result where mask is white, original where black
+        final_result = (
+            result_np * mask_3ch_smooth +
+            image_np * (1 - mask_3ch_smooth)
+        ).astype(np.uint8)
 
-        logger.info(f"✅ Watermark removal complete! Final shape: {final_result.shape}")
+        total_time = time.time() - start_time
+        logger.info(f"✅ Watermark removal complete in {total_time:.2f}s")
+
+        # Clear GPU cache periodically to prevent memory fragmentation
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return final_result
 
     except Exception as e:
         logger.error(f"❌ Error in watermark removal: {e}", exc_info=True)
+        # Clear GPU cache on error
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except:
+            pass
         raise
 
 
@@ -915,6 +1080,97 @@ def index():
     return render_template_string(HTML_TEMPLATE)
 
 
+@app.route('/api/image-config', methods=['GET'])
+def get_image_config():
+    """Get image cleaning configuration for current customer"""
+    try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({'error': 'Customer ID required'}), 400
+
+        # Get or create config
+        config = get_or_create_image_config(customer_id)
+
+        return jsonify({
+            'customer_id': config['customer_id'],
+            'auto_mark_cleaned': config.get('auto_mark_cleaned', True),  # Default: True
+            'created_at': config.get('created_at').isoformat() if config.get('created_at') else None,
+            'updated_at': config.get('updated_at').isoformat() if config.get('updated_at') else None
+        }), 200
+
+    except Exception as e:
+        logger.error(f"❌ Error getting image config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/image-config', methods=['PUT'])
+def update_image_config():
+    """Update image cleaning configuration for current customer"""
+    try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        if not customer_id:
+            return jsonify({'error': 'Customer ID required'}), 400
+
+        data = request.json
+        auto_mark_cleaned = data.get('auto_mark_cleaned')
+
+        if auto_mark_cleaned is None:
+            return jsonify({'error': 'auto_mark_cleaned field required'}), 400
+
+        if not isinstance(auto_mark_cleaned, bool):
+            return jsonify({'error': 'auto_mark_cleaned must be boolean'}), 400
+
+        collection = get_image_config_collection()
+
+        # Prepare update document with multi-tenant metadata
+        update_doc = prepare_update_document(
+            {
+                'auto_mark_cleaned': auto_mark_cleaned,
+                'updated_at': datetime.utcnow()
+            },
+            user_id=user_id
+        )
+
+        # Update or insert config
+        result = collection.update_one(
+            {'customer_id': customer_id},
+            {
+                '$set': update_doc,
+                '$setOnInsert': {
+                    'customer_id': customer_id,
+                    'created_at': datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+
+        logger.info(
+            f"✅ Updated image config for customer {customer_id}: "
+            f"auto_mark_cleaned={auto_mark_cleaned}"
+        )
+
+        # Get updated config
+        config = collection.find_one({'customer_id': customer_id})
+
+        return jsonify({
+            'customer_id': config['customer_id'],
+            'auto_mark_cleaned': config.get('auto_mark_cleaned', True),  # Default: True
+            'created_at': config.get('created_at').isoformat() if config.get('created_at') else None,
+            'updated_at': config.get('updated_at').isoformat() if config.get('updated_at') else None
+        }), 200
+
+    except Exception as e:
+        logger.error(f"❌ Error updating image config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Get statistics about images (only counts images with valid short_summary)"""
@@ -1315,19 +1571,54 @@ def proxy_image(doc_id):
 def process_image():
     """Process image to remove watermark"""
     try:
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
         data = request.json
         doc_id = data['doc_id']
-        image_data = data['image_data']
         mask_data = data['mask_data']
+
+        # Support both image_url (preferred) and image_data (legacy)
+        image_url = data.get('image_url')
+        image_data = data.get('image_data')
 
         logger.info(f"🔄 Processing image for doc_id: {doc_id}")
 
-        # Decode base64 images
-        image_bytes = base64.b64decode(image_data.split(',')[1])
-        mask_bytes = base64.b64decode(mask_data.split(',')[1])
+        # Load image from URL or base64 data
+        if image_url:
+            logger.info(f"📥 Loading image from URL: {image_url}")
+            # If it's a proxy URL, fetch from database
+            if '/api/proxy-image/' in image_url:
+                collection = get_mongo_client()
+                base_query = {'_id': ObjectId(doc_id)}
+                query = build_multi_tenant_query(base_query, customer_id=customer_id)
+                doc = collection.find_one(query)
+                if not doc or 'image' not in doc:
+                    return jsonify({'error': 'Image not found'}), 404
+                actual_url = doc['image']
+            else:
+                actual_url = image_url
 
-        # Load images
-        image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+            # Download image
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+            }
+            response = requests.get(actual_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            image = Image.open(io.BytesIO(response.content)).convert('RGB')
+            logger.info(f"✅ Image loaded from URL, size: {image.size}")
+        elif image_data:
+            logger.info(f"📥 Loading image from base64 data")
+            # Decode base64 image (legacy support)
+            image_bytes = base64.b64decode(image_data.split(',')[1])
+            image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+        else:
+            return jsonify({'error': 'Either image_url or image_data is required'}), 400
+
+        # Decode mask (always base64)
+        mask_bytes = base64.b64decode(mask_data.split(',')[1])
         mask_img = Image.open(io.BytesIO(mask_bytes)).convert('RGBA')
 
         logger.info(f"📐 Image size: {image.size}, Mask size: {mask_img.size}")
@@ -1406,7 +1697,7 @@ def process_image():
 
 @app.route('/api/save', methods=['POST'])
 def save_image():
-    """Save cleaned image and update MongoDB"""
+    """Save cleaned image and update MongoDB (or auto-mark if config enabled)"""
     try:
         # Extract user context from headers for multi-tenancy
         user_context = extract_user_context_from_headers(request.headers)
@@ -1415,52 +1706,97 @@ def save_image():
 
         data = request.json
         doc_id = data['doc_id']
-        image_data = data['image_data']
+        image_data = data.get('image_data')
 
-        # Decode base64 image
-        image_bytes = base64.b64decode(image_data.split(',')[1])
-        image = Image.open(io.BytesIO(image_bytes))
+        # Check if auto_mark_cleaned is enabled
+        config = get_or_create_image_config(customer_id)
+        auto_mark_cleaned = config.get('auto_mark_cleaned', False)
 
-        # Ensure output directory exists
-        try:
-            os.makedirs(OUTPUT_DIR, exist_ok=True)
-            logger.info(f"📁 Output directory ensured: {OUTPUT_DIR}")
-        except Exception as dir_error:
-            logger.error(f"❌ Failed to create output directory {OUTPUT_DIR}: {dir_error}")
-            raise
-
-        # Save to file
-        filename = f"{doc_id}_cleaned.png"
-        filepath = os.path.join(OUTPUT_DIR, filename)
-
-        try:
-            image.save(filepath, 'PNG')
-            logger.info(f"💾 Image saved to: {filepath}")
-        except Exception as save_error:
-            logger.error(f"❌ Failed to save image to {filepath}: {save_error}")
-            raise
-
-        # Update MongoDB with multi-tenant filter
         collection = get_mongo_client()
 
-        # Prepare update data with audit tracking
-        update_data = {
-            'clean_image': filepath,
-            'clean_image_updated_at': datetime.utcnow()
-        }
-        prepare_update_document(update_data, user_id=user_id or 'system')
+        if auto_mark_cleaned:
+            # Auto-mark mode: Just mark as cleaned without processing
+            logger.info(f"🔄 Auto-mark mode enabled for customer {customer_id}")
+            logger.info(f"📝 Marking image {doc_id} as cleaned without watermark removal")
 
-        base_query = {'_id': ObjectId(doc_id)}
-        query = build_multi_tenant_query(base_query, customer_id=customer_id)
+            # Get the original image URL from the document
+            base_query = {'_id': ObjectId(doc_id)}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+            doc = collection.find_one(query)
 
-        collection.update_one(query, {'$set': update_data})
+            if not doc:
+                return jsonify({'error': 'Document not found'}), 404
 
-        logger.info(f"✅ Saved cleaned image and updated MongoDB: {filepath}")
+            original_image_url = doc.get('image')
 
-        return jsonify({
-            'success': True,
-            'filepath': filepath
-        })
+            # Mark as cleaned by setting clean_image to original image URL
+            update_data = {
+                'clean_image': original_image_url,
+                'clean_image_updated_at': datetime.utcnow(),
+                'auto_marked_cleaned': True  # Flag to indicate auto-marking
+            }
+            prepare_update_document(update_data, user_id=user_id or 'system')
+
+            collection.update_one(query, {'$set': update_data})
+
+            logger.info(f"✅ Auto-marked image as cleaned: {doc_id}")
+
+            return jsonify({
+                'success': True,
+                'auto_marked': True,
+                'message': 'Image marked as cleaned (auto-mark mode)'
+            })
+
+        else:
+            # Manual cleaning mode: Save the processed image
+            if not image_data:
+                return jsonify({'error': 'image_data required for manual cleaning'}), 400
+
+            # Decode base64 image
+            image_bytes = base64.b64decode(image_data.split(',')[1])
+            image = Image.open(io.BytesIO(image_bytes))
+
+            # Ensure output directory exists
+            try:
+                os.makedirs(OUTPUT_DIR, exist_ok=True)
+                logger.info(f"📁 Output directory ensured: {OUTPUT_DIR}")
+            except Exception as dir_error:
+                logger.error(f"❌ Failed to create output directory {OUTPUT_DIR}: {dir_error}")
+                raise
+
+            # Save to file
+            filename = f"{doc_id}_cleaned.png"
+            filepath = os.path.join(OUTPUT_DIR, filename)
+
+            try:
+                image.save(filepath, 'PNG')
+                logger.info(f"💾 Image saved to: {filepath}")
+            except Exception as save_error:
+                logger.error(f"❌ Failed to save image to {filepath}: {save_error}")
+                raise
+
+            # Update MongoDB with multi-tenant filter
+            # Prepare update data with audit tracking
+            update_data = {
+                'clean_image': filepath,
+                'clean_image_updated_at': datetime.utcnow(),
+                'auto_marked_cleaned': False  # Flag to indicate manual cleaning
+            }
+            prepare_update_document(update_data, user_id=user_id or 'system')
+
+            base_query = {'_id': ObjectId(doc_id)}
+            query = build_multi_tenant_query(base_query, customer_id=customer_id)
+
+            collection.update_one(query, {'$set': update_data})
+
+            logger.info(f"✅ Saved cleaned image and updated MongoDB: {filepath}")
+
+            return jsonify({
+                'success': True,
+                'filepath': filepath,
+                'auto_marked': False
+            })
+
     except Exception as e:
         logger.error(f"❌ Error saving image: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
@@ -1599,20 +1935,42 @@ def get_cleaned_image(doc_id):
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check endpoint with GPU status"""
     try:
+        import torch
+
         # Check MongoDB
         get_mongo_client()
 
         # Check model
         get_model()
 
+        # Gather GPU info
+        gpu_info = {}
+        if torch.cuda.is_available():
+            gpu_info = {
+                'available': True,
+                'device_name': torch.cuda.get_device_name(0),
+                'memory_allocated_gb': round(
+                    torch.cuda.memory_allocated(0) / 1024**3, 2
+                ),
+                'memory_reserved_gb': round(
+                    torch.cuda.memory_reserved(0) / 1024**3, 2
+                ),
+                'memory_total_gb': round(
+                    torch.cuda.get_device_properties(0).total_memory / 1024**3, 2
+                ),
+            }
+        else:
+            gpu_info = {'available': False}
+
         return jsonify({
             'status': 'healthy',
             'service': 'iopaint-ui',
             'model': 'lama',
             'device': str(_device) if _device else 'not_loaded',
-            'mongodb': 'connected'
+            'mongodb': 'connected',
+            'gpu': gpu_info
         }), 200
     except Exception as e:
         logger.error(f"Health check failed: {e}")

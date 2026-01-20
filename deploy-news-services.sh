@@ -5,19 +5,22 @@
 #
 # This script deploys all news-related services in the correct order:
 # 1. MongoDB (database)
-# 2. Auth Service (authentication and user management)
-# 3. Template Service (video templates management)
-# 4. News Fetcher Job (fetches news articles)
-# 5. LLM Service (generates summaries)
-# 6. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
-# 7. Voice Generator Job (generates audio from news)
-# 8. IOPaint Watermark Remover (removes watermarks from images)
-# 9. Video Generator Job (creates videos from news + audio)
-# 10. YouTube Uploader (uploads videos to YouTube)
-# 11. Cleanup Job (cleans up old files and MongoDB records)
-# 12. E-commerce Service (manages e-commerce products and video generation)
-# 13. API Server (serves news data to frontend)
-# 14. News Automation Frontend (React UI for managing news automation)
+# 2. MinIO (object storage)
+# 3. Auth Service (authentication and user management)
+# 4. Template Service (video templates management)
+# 5. Asset Service (asset management with MinIO)
+# 6. News Fetcher Job (fetches news articles)
+# 7. LLM Service (generates summaries)
+# 8. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
+# 9. Voice Generator Job (generates audio from news)
+# 10. IOPaint Watermark Remover (removes watermarks from images - GPU)
+# 11. Image Auto-Marker Job (automatically marks images as cleaned)
+# 12. Video Generator Job (creates videos from news + audio)
+# 13. YouTube Uploader (uploads videos to YouTube)
+# 14. Cleanup Job (cleans up old files and MongoDB records)
+# 15. E-commerce Service (manages e-commerce products and video generation)
+# 16. API Server (serves news data to frontend)
+# 17. News Automation Frontend (React UI for managing news automation)
 #
 # Usage:
 #   ./deploy-news-services.sh [options] [service_name]
@@ -67,6 +70,7 @@ SERVICES=(
     "audio-generation-factory"
     "job-voice-generator"
     "iopaint"
+    "job-image-auto-marker"
     "job-video-generator"
     "youtube-uploader"
     "job-cleanup"
@@ -224,6 +228,7 @@ create_directories() {
         "jobs/cleanup/logs"
         "jobs/watermark-remover/public"
         "jobs/watermark-remover/models"
+        "jobs/image-auto-marker/logs"
         "audio-generation/data"
         "audio-generation/public"
     )
@@ -617,82 +622,87 @@ deploy_all_services() {
     echo ""
     
     # 1. MongoDB
-    print_header "Step 1/16: MongoDB Database"
+    print_header "Step 1/17: MongoDB Database"
     deploy_service "ichat-mongodb" "$build_flag"
     # wait_for_health "ichat-mongodb" 60
 
     # 2. MinIO Object Storage
-    print_header "Step 2/16: MinIO Object Storage"
+    print_header "Step 2/17: MinIO Object Storage"
     deploy_service "minio" "$build_flag"
     # wait_for_health "ichat-minio" 60
 
     # 3. Auth Service
-    print_header "Step 3/16: Auth Service (Authentication & User Management)"
+    print_header "Step 3/17: Auth Service (Authentication & User Management)"
     deploy_service "auth-service" "$build_flag"
     # wait_for_health "ichat-auth-service" 60
 
     # 4. Template Service
-    print_header "Step 4/16: Template Service (Video Templates)"
+    print_header "Step 4/17: Template Service (Video Templates)"
     deploy_service "template-service" "$build_flag"
     # wait_for_health "ichat-template-service" 60
 
     # 5. Asset Service
-    print_header "Step 5/16: Asset Service (Asset Management with MinIO)"
+    print_header "Step 5/17: Asset Service (Asset Management with MinIO)"
     deploy_service "asset-service" "$build_flag"
     # wait_for_health "ichat-asset-service" 60
 
     # 6. News Fetcher
-    print_header "Step 6/16: News Fetcher Job"
+    print_header "Step 6/17: News Fetcher Job"
     deploy_service "job-news-fetcher" "$build_flag"
     # wait_for_health "ichat-news-fetcher" 60
 
     # 7. LLM Service
-    print_header "Step 7/16: LLM Service"
+    print_header "Step 7/17: LLM Service"
     deploy_service "llm-service" "$build_flag"
     # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
 
     # 8. Audio Generation Factory
-    print_header "Step 8/16: Audio Generation Factory (Kokoro + Veena TTS)"
+    print_header "Step 8/17: Audio Generation Factory (Kokoro + Veena TTS)"
     deploy_service "audio-generation-factory" "$build_flag"
     # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
 
     # 9. Voice Generator Job
-    print_header "Step 9/16: Voice Generator Job"
+    print_header "Step 9/17: Voice Generator Job"
     deploy_service "job-voice-generator" "$build_flag"
     # wait_for_health "ichat-voice-generator" 60
 
     # 10. IOPaint Watermark Remover
-    print_header "Step 10/16: IOPaint Watermark Remover"
+    print_header "Step 10/17: IOPaint Watermark Remover"
     deploy_service "iopaint" "$build_flag"
     # wait_for_health "ichat-iopaint" 60
 
-    # 11. Video Generator Job
-    print_header "Step 11/16: Video Generator Job"
+    # 11. Image Auto-Marker Job
+    print_header "Step 11/17: Image Auto-Marker Job"
+    deploy_service "job-image-auto-marker" "$build_flag"
+    # wait_for_health "ichat-image-auto-marker" 60
+
+    # 12. Video Generator Job
+    print_header "Step 12/17: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
     # wait_for_health "ichat-video-generator" 60
 
-    # 12. YouTube Uploader
-    print_header "Step 12/16: YouTube Uploader"
+    # 13. YouTube Uploader
+    print_header "Step 13/17: YouTube Uploader"
     deploy_service "youtube-uploader" "$build_flag"
     # wait_for_health "ichat-youtube-uploader" 60
 
-    # 13. Cleanup Job
-    print_header "Step 13/16: Cleanup Job"
+    # 14. Cleanup Job
+    print_header "Step 14/17: Cleanup Job"
     deploy_service "job-cleanup" "$build_flag"
     # wait_for_health "ichat-cleanup" 60
 
-    # 14. Inventory Creation Service
-    print_header "Step 14/16: Inventory Creation Service (Generic Content Generation)"
+    # 15. Inventory Creation Service
+    print_header "Step 15/17: Inventory Creation Service (Generic Content Generation)"
     deploy_service "inventory-creation-service" "$build_flag"
     # wait_for_health "ichat-inventory-creation-service" 60
 
-    # 15. API Server
-    print_header "Step 15/16: API Server"
+    # 16. API Server
+    print_header "Step 16/17: API Server"
     deploy_service "ichat-api" "$build_flag"
     # wait_for_health "ichat-api-server" 60
 
-    # 16. News Automation Frontend
-    print_header "Step 16/16: News Automation Frontend"
+    # 17. News Automation Frontend
+    print_header "Step 17/17: News Automation Frontend"
     deploy_service "news-automation-frontend" "$build_flag"
     # wait_for_health "news-automation-frontend" 60
     
@@ -717,6 +727,7 @@ deploy_all_services() {
     echo "  • Audio Generation:     http://localhost:3000"
     echo "  • Voice Generator:      http://localhost:8094"
     echo "  • Watermark Remover:    http://localhost:8096"
+    echo "  • Image Auto-Marker:    http://localhost:8102"
     echo "  • Video Generator:      http://localhost:8095"
     echo "  • YouTube Uploader:     http://localhost:8097"
     echo "  • Cleanup Job:          http://localhost:8100"
@@ -750,12 +761,13 @@ This script manages deployment of all news-related services:
   8. Audio Generation Factory (TTS: Kokoro English + Veena Hindi) ${MAGENTA}[GPU capable]${NC}
   9. Voice Generator Job (generates audio from news)
   10. IOPaint Watermark Remover (removes watermarks from images) ${MAGENTA}[GPU capable]${NC}
-  11. Video Generator Job (creates videos from news + audio)
-  12. YouTube Uploader (uploads videos to YouTube)
-  13. Cleanup Job (cleans up old files and MongoDB records)
-  14. E-commerce Service (manages e-commerce products and video generation)
-  15. API Server (serves news data to frontend)
-  16. News Automation Frontend (React UI for managing news automation)
+  11. Image Auto-Marker Job (automatically marks images as cleaned)
+  12. Video Generator Job (creates videos from news + audio)
+  13. YouTube Uploader (uploads videos to YouTube)
+  14. Cleanup Job (cleans up old files and MongoDB records)
+  15. E-commerce Service (manages e-commerce products and video generation)
+  16. API Server (serves news data to frontend)
+  17. News Automation Frontend (React UI for managing news automation)
 
 ${YELLOW}Usage:${NC}
   ./deploy-news-services.sh [options] [service_name]

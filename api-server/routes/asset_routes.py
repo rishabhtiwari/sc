@@ -20,6 +20,11 @@ ASSET_SERVICE_URL = 'http://ichat-asset-service:8099'
 def upload_asset():
     """Upload asset file"""
     try:
+        logger.info("📤 Asset upload request received")
+        logger.info(f"Request files: {list(request.files.keys())}")
+        logger.info(f"Request form: {request.form.to_dict()}")
+        logger.info(f"Request Content-Type: {request.content_type}")
+
         headers = get_request_headers_with_context()
 
         # Forward multipart/form-data request
@@ -27,13 +32,20 @@ def upload_asset():
         if 'file' in request.files:
             file = request.files['file']
             files['file'] = (file.filename, file.stream, file.content_type)
+            logger.info(f"📎 File to forward: filename={file.filename}, content_type={file.content_type}")
+        else:
+            logger.error("❌ No 'file' in request.files!")
 
         # Get form data
         data = request.form.to_dict()
 
         # Remove Content-Type header to let requests library set it with boundary
         if 'Content-Type' in headers:
+            logger.info(f"Removing Content-Type header: {headers['Content-Type']}")
             del headers['Content-Type']
+
+        logger.info(f"Headers to forward: {headers}")
+        logger.info(f"Data to forward: {data}")
 
         response = requests.post(
             f'{ASSET_SERVICE_URL}/api/assets/upload',
@@ -42,7 +54,11 @@ def upload_asset():
             data=data,
             timeout=120
         )
-        
+
+        logger.info(f"Asset service response: status={response.status_code}")
+        if response.status_code != 200:
+            logger.error(f"Asset service error response: {response.text}")
+
         return Response(
             response.content,
             status=response.status_code,

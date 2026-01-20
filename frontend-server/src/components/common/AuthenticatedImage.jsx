@@ -20,7 +20,12 @@ const AuthenticatedImage = ({
   useEffect(() => {
     // If src is not an API URL (e.g., blob:, data:, or external URL), use it directly
     // Check for both relative /api/ and absolute http://localhost:8080/api/ URLs
-    const isApiUrl = src && (src.includes('/api/ecommerce/') || src.startsWith('/api/'));
+    const isApiUrl = src && (
+      src.startsWith('/api/') ||
+      src.includes('/api/ecommerce/') ||
+      src.includes('/api/cleaned-image/') ||
+      src.includes('/api/image/cleaned/')
+    );
 
     if (!src || !isApiUrl) {
       setBlobUrl(src);
