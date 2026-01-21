@@ -1,18 +1,34 @@
 import React, { useState } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import TextStudio from '../TextStudio/TextStudio';
+import AudioStudio from '../AudioStudio/AudioStudio';
 
 /**
  * AI Tools Panel
- * Features: Image Generation, Background Removal, Image Enhancement, AI Text Generation
+ * Features: Image Generation, Background Removal, Image Enhancement, AI Text Generation, AI Audio Generation
  */
 const AIToolsPanel = ({ onAddElement }) => {
   const [generating, setGenerating] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [isTextStudioOpen, setIsTextStudioOpen] = useState(false);
+  const [isAudioStudioOpen, setIsAudioStudioOpen] = useState(false);
   const { showToast } = useToast();
 
   const aiTools = [
+    {
+      id: 'generate-text',
+      name: 'Text Studio',
+      icon: '📝',
+      description: 'Generate text with AI',
+      action: 'generate-text'
+    },
+    {
+      id: 'generate-audio',
+      name: 'Audio Studio',
+      icon: '🎙️',
+      description: 'Generate voiceovers with AI',
+      action: 'generate-audio'
+    },
     {
       id: 'generate-image',
       name: 'Generate Image',
@@ -33,19 +49,14 @@ const AIToolsPanel = ({ onAddElement }) => {
       icon: '✨',
       description: 'Improve image quality',
       action: 'enhance'
-    },
-    {
-      id: 'generate-text',
-      name: 'AI Text',
-      icon: '📝',
-      description: 'Generate text with AI',
-      action: 'generate-text'
     }
   ];
 
   const handleToolClick = (tool) => {
     if (tool.id === 'generate-text') {
       setIsTextStudioOpen(true);
+    } else if (tool.id === 'generate-audio') {
+      setIsAudioStudioOpen(true);
     } else {
       showToast(`${tool.name} coming soon!`, 'info');
     }
@@ -122,6 +133,13 @@ const AIToolsPanel = ({ onAddElement }) => {
       <TextStudio
         isOpen={isTextStudioOpen}
         onClose={() => setIsTextStudioOpen(false)}
+        onAddToCanvas={onAddElement}
+      />
+
+      {/* Audio Studio Modal */}
+      <AudioStudio
+        isOpen={isAudioStudioOpen}
+        onClose={() => setIsAudioStudioOpen(false)}
         onAddToCanvas={onAddElement}
       />
     </>
