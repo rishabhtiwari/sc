@@ -290,6 +290,28 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
     }
   };
 
+  const handleDownloadText = async (item, event) => {
+    // Prevent triggering the parent onClick (load)
+    event.stopPropagation();
+
+    try {
+      const response = await api.get(`/assets/${item.asset_id}/download`);
+      const blob = new Blob([response.data], { type: 'text/plain' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = item.name || 'text.txt';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      showToast('Text downloaded', 'success');
+    } catch (error) {
+      console.error('Error downloading text:', error);
+      showToast('Failed to download text', 'error');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -612,55 +634,109 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
             )}
           </div>
 
-          {/* Right Panel - Text Library Sidebar (1/3 width) - Similar to Audio Studio */}
+          {/* Right Panel - Text Library Sidebar - Matching Audio Studio Style */}
           <div className="w-96 border-l border-gray-200 bg-white overflow-y-auto">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                📚 Text Library
-              </h3>
+            <div className="p-4">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-base font-semibold text-gray-900">
+                  📚 Text Library
+                </h3>
+                <button
+                  onClick={() => setActiveSection('library')}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  View All →
+                </button>
+              </div>
+
+              {/* Categories */}
+              <div className="mb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-blue-50 rounded-lg border border-blue-200">
+                    <span>📄 All Texts ({textLibrary.length})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recents Section */}
+              <div className="mb-3">
+                <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  <span>🕒</span>
+                  <span>Recents</span>
+                </div>
+              </div>
+
+              {/* Text Items */}
               {textLibrary.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-2">📝</div>
-                  <p className="text-sm text-gray-600">No saved texts yet</p>
+                <div className="text-center py-12">
+                  <div className="text-5xl mb-3">📝</div>
+                  <p className="text-sm text-gray-600 font-medium">No saved texts yet</p>
                   <p className="text-xs text-gray-500 mt-1">
-                    Generate text to see it here
+                    Generate and save texts to build your library
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {textLibrary.map((item) => (
+                  {textLibrary.slice(0, 10).map((item) => (
                     <div
                       key={item.asset_id}
-                      className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-all group"
+                      className="group relative bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-300 transition-all"
                     >
-                      <div
-                        className="cursor-pointer"
-                        onClick={() => handleLoadFromLibrary(item)}
-                      >
-                        <div className="font-medium text-gray-900 text-sm mb-1">
-                          {item.title}
+                      {/* Text Icon & Preview */}
+                      <div className="flex gap-3 mb-2">
+                        <div className="flex-shrink-0 w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-xl">
+                          📝
                         </div>
-                        {/* Show text preview if available in metadata */}
-                        {item.metadata?.preview && (
-                          <div className="text-xs text-gray-700 mb-2 line-clamp-2 bg-gray-50 p-2 rounded border border-gray-100">
-                            "{item.metadata.preview}"
+                        <div className="flex-1 min-w-0">
+                          {/* Preview Text */}
+                          {item.metadata?.preview && (
+                            <div className="text-xs text-gray-700 line-clamp-2 mb-1 leading-relaxed">
+                              "{item.metadata.preview}"
+                            </div>
+                          )}
+                          {/* Template info */}
+                          <div className="text-xs text-gray-500 truncate">
+                            {item.metadata?.description || 'Custom text'}
                           </div>
-                        )}
-                        <div className="text-xs text-gray-600 line-clamp-1">
-                          {item.description}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-2">
-                          {new Date(item.created_at).toLocaleDateString()}
                         </div>
                       </div>
 
-                      {/* Delete button - shows on hover */}
+                      {/* Date */}
+                      <div className="text-xs text-gray-400 mb-2">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleLoadFromLibrary(item)}
+                          className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors font-medium"
+                        >
+                          📄 Load
+                        </button>
+                        <button
+                          onClick={(e) => handleDownloadText(item, e)}
+                          className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors"
+                          title="Download"
+                        >
+                          ⬇️
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteFromLibrary(item, e)}
+                          className="px-3 py-1.5 bg-red-50 text-red-600 text-xs rounded-md hover:bg-red-100 transition-colors"
+                          title="Delete"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+
+                      {/* More Options Menu (3 dots) */}
                       <button
-                        onClick={(e) => handleDeleteFromLibrary(item, e)}
-                        className="mt-2 w-full px-2 py-1.5 bg-red-50 text-red-600 text-xs rounded hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100"
-                        title="Delete this text"
+                        className="absolute top-2 right-2 p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="More options"
                       >
-                        🗑️ Delete
+                        ⋮
                       </button>
                     </div>
                   ))}
