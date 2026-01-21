@@ -193,15 +193,18 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
 
     setGenerating(true);
     try {
-      // Use a generic LLM endpoint for custom prompts
+      // Use the LLM generate endpoint - expects 'query' parameter
       const response = await api.post('/llm/generate', {
-        prompt: customPrompt,
-        max_tokens: 500,
-        temperature: 0.7
+        query: customPrompt,
+        use_rag: false,
+        detect_code: false,
+        max_tokens: 5000,
+        temperature: 0.7,
+        top_p: 0.95
       });
 
       if (response.data.status === 'success' && response.data.data) {
-        const content = response.data.data.content || response.data.data.text || response.data.data;
+        const content = response.data.data.response || response.data.data.content || response.data.data.text || response.data.data;
         setGeneratedText(content);
         setSelectedTemplate(null); // Clear template selection
         showToast('Text generated successfully!', 'success');
