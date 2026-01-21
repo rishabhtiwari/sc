@@ -263,12 +263,17 @@ def clean_text_for_tts(text, language_code='en'):
         text = re.sub(r'!{2,}', '!', text)  # !! → !
         text = re.sub(r'\?{2,}', '?', text)  # ?? → ?
 
-        # 4. Normalize spacing
-        text = re.sub(r'\s+([,.;!?])', r'\1', text)  # Remove space before punctuation
-        text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)  # Add space after punctuation
-
-        # Remove multiple spaces
+        # 4. Normalize spacing (COMPREHENSIVE CLEANUP)
+        # First: Remove ALL multiple spaces (collapse to single space)
         text = re.sub(r'\s+', ' ', text)
+
+        # Second: Remove space before punctuation
+        text = re.sub(r'\s+([,.;!?])', r'\1', text)
+
+        # Third: Add single space after punctuation (if not already there)
+        text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)
+
+        # Fourth: Remove any trailing/leading whitespace
         text = text.strip()
 
         # CRITICAL FIX: Ensure text ends with punctuation to prevent XTTS-v2 hallucinations
@@ -450,45 +455,22 @@ def chunk_text_v2(text, min_chars=175, max_chars=250, language_code='en', max_it
         # This prevents XTTS-v2 from adding weird sounds when chunks end mid-sentence
         # Issue: https://github.com/coqui-ai/TTS/issues/3277
 
-        # XTTS-SPECIFIC IMPROVEMENTS:
-        # 1. THE "BREATH MARKER" (Space-Period Trick)
-        #    Adding a space before the period forces XTTS to finish the word
-        #    and trail off naturally into silence (prevents clipping)
-        # 2. Strong Stop Signals
-        #    Use " ." (space period) for natural breath
-        #    Use " _" for hard stop after acronyms
-
         if cleaned:
             # Remove any trailing whitespace first
             cleaned = cleaned.rstrip()
 
             # Check if already ends with sentence-ending punctuation
-            if cleaned and cleaned[-1] in ('!', '?'):
-                # Strong punctuation: Add space before for natural breath
-                punc = cleaned[-1]
-                cleaned = cleaned[:-1].rstrip() + f" {punc}"
+            if cleaned and cleaned[-1] in ('!', '?', '.'):
+                # Already has proper punctuation - keep it as is
+                pass
 
             elif cleaned and cleaned[-1] == '_':
                 # Already has underscore stop signal - keep it
                 pass
 
-            elif cleaned and cleaned[-1] == '.':
-                # Ends with period - check if it's part of an acronym or sentence ending
-                tail = cleaned[-10:] if len(cleaned) >= 10 else cleaned
-
-                # Check for acronyms (U.S., U.K., etc.)
-                if re.search(r'\b[A-Z]\.$', tail):
-                    # Ends with acronym like "U.S." - add hard stop
-                    # Use " _" to force XTTS to stop cleanly without adding sounds
-                    cleaned = cleaned + " _"
-                else:
-                    # Regular period: Apply the "Breath Marker" trick
-                    # Change "word." to "word ." for natural trailing
-                    cleaned = cleaned[:-1].rstrip() + " ."
-
             else:
-                # No punctuation at end - add the "Breath Marker"
-                cleaned = cleaned + " ."
+                # No punctuation at end - add period
+                cleaned = cleaned + '.'
 
         chunk_len = len(cleaned)
 
