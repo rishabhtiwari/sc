@@ -35,6 +35,7 @@ class AssetMetadata(BaseModel):
     description: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     folder: Optional[str] = None
+    preview: Optional[str] = None  # Text preview for documents (first 150 chars)
     custom: Dict[str, Any] = Field(default_factory=dict)
 
 
