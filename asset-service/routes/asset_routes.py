@@ -138,7 +138,19 @@ async def upload_asset(
         
         # Parse tags
         tag_list = [tag.strip() for tag in tags.split(",")] if tags else []
-        
+
+        # For text documents, extract preview (first 150 chars)
+        text_preview = None
+        if asset_type_enum == AssetType.DOCUMENT and mime_type == 'text/plain':
+            try:
+                text_content = file_content.decode('utf-8')
+                # Get first 150 chars, strip whitespace
+                text_preview = text_content[:150].strip()
+                if len(text_content) > 150:
+                    text_preview += "..."
+            except Exception as e:
+                logger.warning(f"Failed to extract text preview: {e}")
+
         # Create asset document
         asset_data = {
             "asset_id": asset_id,
@@ -161,6 +173,7 @@ async def upload_asset(
                 "description": description,
                 "tags": tag_list,
                 "folder": folder,
+                "preview": text_preview,  # Add text preview for documents
                 "custom": {}
             },
             "versions": []
