@@ -280,7 +280,7 @@ def clean_text_for_tts(text, language_code='en'):
     return text
 
 
-def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_iterations=30):
+def chunk_text_v2(text, min_chars=175, max_chars=250, language_code='en', max_iterations=100):
     """
     Split text into chunks using semantic_text_splitter with iterative optimization
 
@@ -288,19 +288,19 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
     where ALL chunks fall within acceptable ranges without any merging logic.
 
     Strategy:
-    1. Try different capacity values (20-30 iterations)
+    1. Try different capacity values (up to 100 iterations for optimal results)
     2. For each iteration, evaluate chunks:
-       - Violation: chunk < 100 chars or chunk > max_chars
-       - Acceptable: 100 <= chunk < min_chars (below target but OK)
+       - Violation: chunk < 150 chars or chunk > max_chars
+       - Acceptable: 150 <= chunk < min_chars (below target but OK)
        - Target: min_chars <= chunk <= max_chars (ideal)
     3. If perfect solution found (0 violations), return immediately
     4. Otherwise, return best result (fewest violations) after max_iterations
 
     Constraints:
-    - capacity_min is constrained to [130, 240] range
-    - capacity_max is constrained to [130, 240] range
+    - capacity_min is constrained to [150, 300] range
+    - capacity_max is constrained to [150, 300] range
     - These limits ensure optimal TTS quality for XTTS model
-    - Chunks >= 100 chars are acceptable (not counted as violations)
+    - Chunks >= 150 chars are acceptable (not counted as violations)
 
     Args:
         text: Text to split
@@ -338,10 +338,10 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
             capacity_max = max_chars + offset * 5
 
         # Apply hard constraints
-        # capacity_min must be >= 130 (minimum for good TTS quality)
-        # capacity_max must be <= 240 (maximum for XTTS model)
-        capacity_min = max(130, min(capacity_min, 240))
-        capacity_max = max(130, min(capacity_max, 240))
+        # capacity_min must be >= 150 (minimum for good TTS quality)
+        # capacity_max must be <= 300 (maximum for XTTS model)
+        capacity_min = max(150, min(capacity_min, 300))
+        capacity_max = max(150, min(capacity_max, 300))
 
         # Ensure min < max
         if capacity_min >= capacity_max:
@@ -355,16 +355,16 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
             chunks = [chunk.strip() for chunk in splitter.chunks(text) if chunk.strip()]
 
             # Evaluate this configuration
-            # Only count as violation if chunk is < 100 chars or > max_chars
-            # Chunks between 100 and min_chars are acceptable (not violations)
+            # Only count as violation if chunk is < 150 chars or > max_chars
+            # Chunks between 150 and min_chars are acceptable (not violations)
             violations = 0
-            too_small = 0  # < 100 chars (actual violation)
-            below_target = 0  # 100-150 chars (acceptable but below target)
+            too_small = 0  # < 150 chars (actual violation)
+            below_target = 0  # 150-175 chars (acceptable but below target)
             too_large = 0  # > max_chars (violation)
 
             for chunk in chunks:
                 chunk_len = len(chunk)
-                if chunk_len < 100:
+                if chunk_len < 150:
                     violations += 1
                     too_small += 1
                 elif chunk_len < min_chars:
@@ -401,8 +401,8 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
     if best_chunks is None:
         # Fallback: Use default parameters with constraints
         print(f"⚠️  No valid chunking found, using fallback", file=sys.stderr)
-        fallback_min = max(130, min(min_chars, 240))
-        fallback_max = max(130, min(max_chars, 240))
+        fallback_min = max(150, min(min_chars, 300))
+        fallback_max = max(150, min(max_chars, 300))
         if fallback_min >= fallback_max:
             fallback_max = fallback_min + 10
         splitter = TextSplitter(capacity=(fallback_min, fallback_max), trim=True)
@@ -415,13 +415,13 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
 
     # Detailed chunk analysis BEFORE cleaning
     in_range = 0  # min_chars to max_chars
-    below_target = 0  # 100 to min_chars (acceptable)
-    too_small = 0  # < 100 (violation)
+    below_target = 0  # 150 to min_chars (acceptable)
+    too_small = 0  # < 150 (violation)
     too_large = 0  # > max_chars (violation)
 
     for i, chunk in enumerate(chunks):
         chunk_len = len(chunk)
-        if chunk_len < 100:
+        if chunk_len < 150:
             too_small += 1
         elif chunk_len < min_chars:
             below_target += 1
@@ -433,9 +433,9 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
     print(f"\n📊 Chunk Statistics (before cleaning):", file=sys.stderr)
     print(f"   ✓ In target range [{min_chars}-{max_chars}]: {in_range}/{len(chunks)} ({in_range*100//len(chunks) if len(chunks) > 0 else 0}%)", file=sys.stderr)
     if below_target > 0:
-        print(f"   ℹ️  Below target (100-{min_chars}): {below_target} chunks (acceptable)", file=sys.stderr)
+        print(f"   ℹ️  Below target (150-{min_chars}): {below_target} chunks (acceptable)", file=sys.stderr)
     if too_small > 0:
-        print(f"   ⚠️  Too small (< 100): {too_small} chunks (violation)", file=sys.stderr)
+        print(f"   ⚠️  Too small (< 150): {too_small} chunks (violation)", file=sys.stderr)
     if too_large > 0:
         print(f"   ⚠️  Too large (> {max_chars}): {too_large} chunks (violation)", file=sys.stderr)
 
@@ -493,7 +493,7 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
         chunk_len = len(cleaned)
 
         # Status indicator
-        if chunk_len < 100:
+        if chunk_len < 150:
             status = "⚠️ TOO SMALL"
         elif chunk_len < min_chars:
             status = "ℹ️ BELOW TARGET"
@@ -527,11 +527,11 @@ def main():
     max_chars = int(sys.argv[1])
     language_code = sys.argv[2]
 
-    # For XTTS optimal range: 150-230 characters
+    # For XTTS optimal range: 175-250 characters
     # Calculate min_chars to ensure chunks are substantial
-    # If max_chars is 230, min_chars will be ~150 (65% of max)
-    # If max_chars is 200, min_chars will be ~130 (65% of max)
-    min_chars = max(100, int(max_chars * 0.65))
+    # If max_chars is 250, min_chars will be ~175 (70% of max)
+    # If max_chars is 230, min_chars will be ~161 (70% of max)
+    min_chars = max(150, int(max_chars * 0.70))
 
     # Read text from stdin
     text = sys.stdin.read().strip()
