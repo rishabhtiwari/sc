@@ -141,6 +141,7 @@ async def upload_asset(
 
         # For text documents, extract preview (first 150 chars)
         text_preview = None
+        logger.info(f"Checking for text preview: asset_type={asset_type_enum}, mime_type={mime_type}")
         if asset_type_enum == AssetType.DOCUMENT and mime_type == 'text/plain':
             try:
                 text_content = file_content.decode('utf-8')
@@ -148,8 +149,11 @@ async def upload_asset(
                 text_preview = text_content[:150].strip()
                 if len(text_content) > 150:
                     text_preview += "..."
+                logger.info(f"✅ Text preview extracted: {text_preview[:50]}...")
             except Exception as e:
                 logger.warning(f"Failed to extract text preview: {e}")
+        else:
+            logger.info(f"Skipping preview extraction (not a text document)")
 
         # Create asset document
         asset_data = {
