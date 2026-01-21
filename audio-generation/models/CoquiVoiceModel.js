@@ -35,7 +35,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         this.temperature = parseFloat(config.temperature || process.env.COQUI_TEMPERATURE || '0.6');
 
         // Length penalty: controls output length (1.0 = neutral, >1.0 = longer, <1.0 = shorter)
-        this.lengthPenalty = parseFloat(config.lengthPenalty || process.env.COQUI_LENGTH_PENALTY || '1.0');
+        // Higher value = stricter control, prevents model from adding extra sounds
+        this.lengthPenalty = parseFloat(config.lengthPenalty || process.env.COQUI_LENGTH_PENALTY || '1.5');
 
         // Repetition penalty: prevents repetition (higher = less repetition, reduces artifacts)
         this.repetitionPenalty = parseFloat(config.repetitionPenalty || process.env.COQUI_REPETITION_PENALTY || '2.0');

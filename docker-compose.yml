@@ -772,7 +772,8 @@ services:
       # Recommended range: 0.6-0.7 for minimal hallucinations
       - COQUI_TEMPERATURE=0.6
       # Length penalty: 1.0 = neutral, >1.0 = longer, <1.0 = shorter
-      - COQUI_LENGTH_PENALTY=1.0
+      # Higher value = stricter control, prevents adding extra sounds
+      - COQUI_LENGTH_PENALTY=1.5
       # Repetition penalty: higher = less repetition (reduces artifacts)
       - COQUI_REPETITION_PENALTY=2.0
       # Top-k sampling: limits to top k most probable tokens
