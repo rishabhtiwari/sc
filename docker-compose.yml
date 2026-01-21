@@ -780,6 +780,9 @@ services:
       - COQUI_TOP_K=50
       # Top-p (nucleus) sampling: limits to tokens with cumulative probability <= top_p
       - COQUI_TOP_P=0.85
+      # VAD (Voice Activity Detection) trimming: automatically removes trailing artifacts
+      # Set to 'false' to disable (enabled by default)
+      - ENABLE_VAD_TRIMMING=true
     networks:
       - ichat-network
     healthcheck:

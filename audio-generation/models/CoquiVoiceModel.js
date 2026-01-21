@@ -5,6 +5,11 @@ import FormData from 'form-data';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { spawn } from 'child_process';
+import { promisify } from 'util';
+
+const writeFile = promisify(fs.writeFile);
+const unlink = promisify(fs.unlink);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -620,7 +625,93 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             }
         );
 
-        return response.data;
+        let audioBuffer = response.data;
+
+        // Apply VAD trimming to remove trailing artifacts (breathing, weird sounds)
+        // This is enabled by default and can be disabled via environment variable
+        const enableVAD = process.env.ENABLE_VAD_TRIMMING !== 'false';
+        if (enableVAD) {
+            try {
+                audioBuffer = await this._trimAudioWithVAD(audioBuffer);
+            } catch (error) {
+                console.warn('⚠️  VAD trimming failed, using original audio:', error.message);
+                // Continue with original audio if VAD fails
+            }
+        }
+
+        return audioBuffer;
+    }
+
+    /**
+     * Trim audio using VAD (Voice Activity Detection) to remove trailing artifacts
+     * @private
+     */
+    async _trimAudioWithVAD(audioBuffer) {
+        return new Promise((resolve, reject) => {
+            // Create temporary files
+            const tempDir = path.join(__dirname, '..', 'public');
+            const tempInput = path.join(tempDir, `vad_input_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.wav`);
+            const tempOutput = path.join(tempDir, `vad_output_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.wav`);
+
+            // Write audio buffer to temp file
+            fs.writeFileSync(tempInput, audioBuffer);
+
+            // Call Python VAD trimmer
+            const pythonPath = process.env.PYTHON_PATH || '/app/venv/bin/python';
+            const vadScript = path.join(__dirname, '..', 'utils', 'vad_trimmer.py');
+
+            const vadProcess = spawn(pythonPath, [vadScript, tempInput, tempOutput]);
+
+            let stdout = '';
+            let stderr = '';
+
+            vadProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            vadProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            vadProcess.on('close', (code) => {
+                try {
+                    if (code !== 0) {
+                        // Cleanup temp files
+                        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                        return reject(new Error(`VAD process exited with code ${code}: ${stderr}`));
+                    }
+
+                    // Parse result
+                    const result = JSON.parse(stdout);
+
+                    if (!result.success) {
+                        // Cleanup temp files
+                        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                        return reject(new Error(result.error || 'VAD trimming failed'));
+                    }
+
+                    // Read trimmed audio
+                    const trimmedBuffer = fs.readFileSync(tempOutput);
+
+                    // Cleanup temp files
+                    if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                    if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+
+                    if (result.trimmed) {
+                        console.log(`✂️  VAD trimmed ${result.removed_ms.toFixed(0)}ms of trailing audio`);
+                    }
+
+                    resolve(trimmedBuffer);
+                } catch (error) {
+                    // Cleanup temp files on error
+                    if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                    if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                    reject(error);
+                }
+            });
+        });
     }
 
     /**
