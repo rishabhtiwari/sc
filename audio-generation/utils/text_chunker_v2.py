@@ -428,6 +428,32 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
     cleaned_chunks = []
     for i, chunk in enumerate(chunks):
         cleaned = clean_text_for_tts(chunk, language_code)
+
+        # CRITICAL FIX: Ensure EACH chunk ends with sentence-ending punctuation
+        # This prevents XTTS-v2 from adding weird sounds when chunks end mid-sentence
+        # Issue: https://github.com/coqui-ai/TTS/issues/3277
+
+        # Check if chunk ends with proper sentence-ending punctuation
+        # We need to detect acronyms like "U. S." and add punctuation after them
+        needs_punctuation = False
+        if cleaned:
+            # Check last 10 characters for common acronym patterns
+            tail = cleaned[-10:] if len(cleaned) >= 10 else cleaned
+
+            # Patterns that indicate acronym at end (need punctuation):
+            # "U. S." or "U.S." or "U. K." etc.
+            acronym_pattern = r'[A-Z]\.\s?[A-Z]\.$'
+
+            if re.search(acronym_pattern, tail):
+                # Ends with acronym like "U. S." - needs punctuation
+                needs_punctuation = True
+            elif not cleaned[-1] in ('.', '!', '?', '_'):
+                # Doesn't end with any punctuation - needs it
+                needs_punctuation = True
+
+        if needs_punctuation:
+            cleaned = cleaned + '.'
+
         chunk_len = len(cleaned)
 
         # Status indicator
