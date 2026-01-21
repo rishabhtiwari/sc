@@ -22,6 +22,7 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
   const [generating, setGenerating] = useState(false);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [textLibrary, setTextLibrary] = useState([]);
+  const [customPrompt, setCustomPrompt] = useState('');
   const { showToast } = useToast();
 
   // Tiptap editor instance
@@ -178,6 +179,35 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
       }
     } catch (error) {
       console.error('Error generating text:', error);
+      showToast('Failed to generate text', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleCustomPromptGenerate = async () => {
+    if (!customPrompt.trim()) {
+      showToast('Please enter a prompt', 'error');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      // Use a generic LLM endpoint for custom prompts
+      const response = await api.post('/llm/generate', {
+        prompt: customPrompt,
+        max_tokens: 500,
+        temperature: 0.7
+      });
+
+      if (response.data.status === 'success' && response.data.data) {
+        const content = response.data.data.content || response.data.data.text || response.data.data;
+        setGeneratedText(content);
+        setSelectedTemplate(null); // Clear template selection
+        showToast('Text generated successfully!', 'success');
+      }
+    } catch (error) {
+      console.error('Error generating from custom prompt:', error);
       showToast('Failed to generate text', 'error');
     } finally {
       setGenerating(false);
@@ -366,6 +396,50 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
           {/* Left Sidebar - Categories, Templates & Variables (w-80) */}
           <div className="w-80 border-r border-gray-200 bg-white overflow-y-auto">
             <div className="p-4">
+              {/* Custom Prompt Section */}
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                  💬 Ask AI Anything
+                </h3>
+                <div className="space-y-2">
+                  <textarea
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="Type your question or prompt here... (e.g., 'Write a product description for wireless headphones')"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={4}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        handleCustomPromptGenerate();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleCustomPromptGenerate}
+                    disabled={generating || !customPrompt.trim()}
+                    className="w-full px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm transition-all shadow-sm"
+                  >
+                    {generating ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                        Generating...
+                      </span>
+                    ) : (
+                      '✨ Generate with AI'
+                    )}
+                  </button>
+                  <p className="text-xs text-gray-500 text-center">
+                    Or use templates below ↓
+                  </p>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-200 mb-6"></div>
+
               {/* Categories Section */}
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">
