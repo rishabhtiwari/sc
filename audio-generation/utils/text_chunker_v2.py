@@ -433,26 +433,34 @@ def chunk_text_v2(text, min_chars=150, max_chars=240, language_code='en', max_it
         # This prevents XTTS-v2 from adding weird sounds when chunks end mid-sentence
         # Issue: https://github.com/coqui-ai/TTS/issues/3277
 
-        # Check if chunk ends with proper sentence-ending punctuation
-        # We need to detect acronyms like "U. S." and add punctuation after them
-        needs_punctuation = False
+        # Strategy: Use underscore suffix for chunks that end mid-sentence
+        # XTTS-v2 treats underscore as a strong stop signal (better than period)
         if cleaned:
-            # Check last 10 characters for common acronym patterns
-            tail = cleaned[-10:] if len(cleaned) >= 10 else cleaned
+            # Remove any trailing whitespace first
+            cleaned = cleaned.rstrip()
 
-            # Patterns that indicate acronym at end (need punctuation):
-            # "U. S." or "U.S." or "U. K." etc.
-            acronym_pattern = r'[A-Z]\.\s?[A-Z]\.$'
+            # Check if already ends with sentence-ending punctuation
+            if cleaned and cleaned[-1] in ('!', '?'):
+                # Already has strong sentence ending - keep it
+                pass
+            elif cleaned and cleaned[-1] == '_':
+                # Already has underscore stop signal - keep it
+                pass
+            elif cleaned and cleaned[-1] == '.':
+                # Ends with period - check if it's part of an acronym or sentence ending
+                tail = cleaned[-10:] if len(cleaned) >= 10 else cleaned
+                acronym_pattern = r'[A-Z]\.\s?[A-Z]\.$'
 
-            if re.search(acronym_pattern, tail):
-                # Ends with acronym like "U. S." - needs punctuation
-                needs_punctuation = True
-            elif not cleaned[-1] in ('.', '!', '?', '_'):
-                # Doesn't end with any punctuation - needs it
-                needs_punctuation = True
-
-        if needs_punctuation:
-            cleaned = cleaned + '.'
+                if re.search(acronym_pattern, tail):
+                    # Ends with acronym like "U. S." - add underscore as stop signal
+                    # This tells XTTS-v2 to stop cleanly without adding sounds
+                    cleaned = cleaned + '_'
+                else:
+                    # Ends with regular period (sentence ending) - keep it
+                    pass
+            else:
+                # No punctuation at end - add period
+                cleaned = cleaned + '.'
 
         chunk_len = len(cleaned)
 
