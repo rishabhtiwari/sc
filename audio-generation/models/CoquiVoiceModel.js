@@ -31,7 +31,8 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         // TTS Generation Parameters (to reduce hallucinations and improve quality)
         // Based on research: https://github.com/coqui-ai/TTS/issues/3277
         // Lower temperature = more consistent, less creative (reduces weird sounds)
-        this.temperature = parseFloat(config.temperature || process.env.COQUI_TEMPERATURE || '0.75');
+        // Recommended: 0.6-0.7 for minimal hallucinations
+        this.temperature = parseFloat(config.temperature || process.env.COQUI_TEMPERATURE || '0.6');
 
         // Length penalty: controls output length (1.0 = neutral, >1.0 = longer, <1.0 = shorter)
         this.lengthPenalty = parseFloat(config.lengthPenalty || process.env.COQUI_LENGTH_PENALTY || '1.0');

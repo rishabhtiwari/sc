@@ -769,7 +769,8 @@ services:
       - MODEL_CACHE_DIR=/app/data/models
       # Coqui XTTS-v2 Generation Parameters (to reduce hallucinations)
       # Lower temperature = more consistent, less creative (reduces weird sounds at end)
-      - COQUI_TEMPERATURE=0.75
+      # Recommended range: 0.6-0.7 for minimal hallucinations
+      - COQUI_TEMPERATURE=0.6
       # Length penalty: 1.0 = neutral, >1.0 = longer, <1.0 = shorter
       - COQUI_LENGTH_PENALTY=1.0
       # Repetition penalty: higher = less repetition (reduces artifacts)
