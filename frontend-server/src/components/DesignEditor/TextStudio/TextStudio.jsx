@@ -355,50 +355,91 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
   // Main content component (shared between modal and page modes)
   const studioContent = (
     <>
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">📝</span>
-            <h1 className="text-2xl font-bold text-gray-900">Text Studio</h1>
+      {/* Header - Only show in modal mode */}
+      {mode === 'modal' && (
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">📝</span>
+              <h1 className="text-2xl font-bold text-gray-900">Text Studio</h1>
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="text-gray-600 hover:text-gray-900 text-2xl font-bold transition-colors"
+              >
+                ✕
+              </button>
+            )}
           </div>
-          {mode === 'modal' && onClose && (
-            <button
-              onClick={onClose}
-              className="text-gray-600 hover:text-gray-900 text-2xl font-bold transition-colors"
-            >
-              ✕
-            </button>
-          )}
         </div>
-      </div>
+      )}
 
-        {/* Tabs - Similar to Audio Studio */}
-        <div className="bg-white border-b border-gray-200 flex-shrink-0">
-          <div className="flex px-6">
-            <button
-              onClick={() => setActiveSection('generate')}
-              className={`px-6 py-3 font-medium border-b-2 transition-all ${
-                activeSection === 'generate'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <span className="mr-2">✨</span>
-              Generate AI Text
-            </button>
-            <button
-              onClick={() => setActiveSection('library')}
-              className={`px-6 py-3 font-medium border-b-2 transition-all ${
-                activeSection === 'library'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <span className="mr-2">📚</span>
-              Text Library
-            </button>
-          </div>
+        {/* Tabs - Matching Audio Studio Style */}
+        <div className="flex border-b border-gray-200 flex-shrink-0">
+          <button
+            onClick={() => setActiveSection('generate')}
+            className={`
+              relative flex-1 px-6 py-4 text-left transition-all
+              ${activeSection === 'generate'
+                ? 'bg-white border-b-2 border-blue-600'
+                : 'bg-gray-50 hover:bg-gray-100'
+              }
+              cursor-pointer
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">✨</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`
+                    font-semibold
+                    ${activeSection === 'generate' ? 'text-blue-600' : 'text-gray-900'}
+                  `}>
+                    Generate AI Text
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Create content with AI templates
+                </p>
+              </div>
+            </div>
+            {activeSection === 'generate' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveSection('library')}
+            className={`
+              relative flex-1 px-6 py-4 text-left transition-all
+              ${activeSection === 'library'
+                ? 'bg-white border-b-2 border-blue-600'
+                : 'bg-gray-50 hover:bg-gray-100'
+              }
+              cursor-pointer
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📚</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={`
+                    font-semibold
+                    ${activeSection === 'library' ? 'text-blue-600' : 'text-gray-900'}
+                  `}>
+                    Text Library
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Browse saved text content
+                </p>
+              </div>
+            </div>
+            {activeSection === 'library' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+            )}
+          </button>
         </div>
 
         {/* Main Content - Three Column Layout */}
