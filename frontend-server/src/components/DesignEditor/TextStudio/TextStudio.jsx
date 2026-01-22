@@ -7,10 +7,15 @@ import Placeholder from '@tiptap/extension-placeholder';
 import { marked } from 'marked';
 
 /**
- * Text Studio - Full-screen modal for AI text generation
- * Similar to Audio Studio but for text content
+ * Text Studio - AI text generation component
+ * Can be used as a modal popup OR as a full page
+ *
+ * @param {boolean} isOpen - Whether the studio is open (for modal mode)
+ * @param {function} onClose - Close handler (for modal mode)
+ * @param {function} onAddToCanvas - Callback when adding text to canvas
+ * @param {string} mode - 'modal' (default) or 'page' - determines rendering style
  */
-const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
+const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) => {
   const [activeSection, setActiveSection] = useState('generate'); // 'generate' or 'library'
   const [allTemplates, setAllTemplates] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -347,24 +352,26 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-2xl w-[95%] h-[95%] flex flex-col overflow-hidden">
-        {/* Header - Similar to Audio Studio */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">📝</span>
-              <h1 className="text-2xl font-bold text-gray-900">Text Studio</h1>
-            </div>
+  // Main content component (shared between modal and page modes)
+  const studioContent = (
+    <>
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-3xl">📝</span>
+            <h1 className="text-2xl font-bold text-gray-900">Text Studio</h1>
+          </div>
+          {mode === 'modal' && onClose && (
             <button
               onClick={onClose}
               className="text-gray-600 hover:text-gray-900 text-2xl font-bold transition-colors"
             >
               ✕
             </button>
-          </div>
+          )}
         </div>
+      </div>
 
         {/* Tabs - Similar to Audio Studio */}
         <div className="bg-white border-b border-gray-200 flex-shrink-0">
@@ -822,6 +829,24 @@ const TextStudio = ({ isOpen, onClose, onAddToCanvas }) => {
             </div>
           </div>
         </div>
+    </>
+  );
+
+  // Render based on mode
+  if (mode === 'page') {
+    // Full page mode (for standalone route)
+    return (
+      <div className="-m-6 flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
+        {studioContent}
+      </div>
+    );
+  }
+
+  // Modal mode (for Design Editor popup)
+  return (
+    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-2xl w-[95%] h-[95%] flex flex-col overflow-hidden">
+        {studioContent}
       </div>
     </div>
   );
