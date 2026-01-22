@@ -34,16 +34,16 @@ def load_silero_vad():
         return None, None
 
 
-def trim_audio_with_vad(audio_path, output_path=None, threshold=0.5, min_silence_duration_ms=300):
+def trim_audio_with_vad(audio_path, output_path=None, threshold=0.3, min_silence_duration_ms=100):
     """
     Trim audio using VAD to remove trailing artifacts
-    
+
     Args:
         audio_path: Path to input audio file
         output_path: Path to save trimmed audio (optional, defaults to overwriting input)
-        threshold: VAD confidence threshold (0.0-1.0, default: 0.5)
-        min_silence_duration_ms: Minimum silence duration to consider as end (default: 300ms)
-    
+        threshold: VAD confidence threshold (0.0-1.0, default: 0.3 - more aggressive)
+        min_silence_duration_ms: Minimum silence duration to consider as end (default: 100ms - more aggressive)
+
     Returns:
         dict with success status and trimmed audio path
     """
@@ -88,9 +88,10 @@ def trim_audio_with_vad(audio_path, output_path=None, threshold=0.5, min_silence
         
         # Calculate trim point (convert from 16kHz to native sample rate)
         trim_point = int(last_speech_end * sample_rate / 16000)
-        
-        # Add small padding (100ms) to avoid cutting off the last word
-        padding_samples = int(0.1 * sample_rate)
+
+        # Add minimal padding (50ms) to avoid cutting off the last word
+        # Reduced from 100ms to be more aggressive at removing trailing artifacts
+        padding_samples = int(0.05 * sample_rate)
         trim_point = min(trim_point + padding_samples, waveform.shape[1])
         
         # Trim the audio
