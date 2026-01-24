@@ -57,6 +57,9 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
               lineHeight: element.lineHeight || 1.4,
               letterSpacing: element.letterSpacing,
               whiteSpace: 'pre-wrap',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word',
+              overflow: 'hidden',
               cursor: 'move'
             }}
           >
@@ -73,6 +76,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
               color: element.color,
               fontFamily: element.fontFamily,
               width: element.width || 'auto',
+              lineHeight: element.lineHeight || 1.5,
               cursor: 'move'
             }}
           >
@@ -82,13 +86,15 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  marginBottom: element.spacing || 20
+                  marginBottom: element.spacing || 20,
+                  wordWrap: 'break-word',
+                  overflowWrap: 'break-word'
                 }}
               >
-                <span style={{ marginRight: 10, flexShrink: 0 }}>
+                <span style={{ marginRight: 10, flexShrink: 0, fontSize: '1.2em' }}>
                   {element.bulletStyle || '•'}
                 </span>
-                <span>{bullet}</span>
+                <span style={{ flex: 1 }}>{bullet}</span>
               </div>
             ))}
           </div>

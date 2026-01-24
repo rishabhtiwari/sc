@@ -22,15 +22,15 @@ export const slideTemplates = {
         {
           type: 'text',
           role: 'title',
-          fontSize: 72,
+          fontSize: 54,
           fontWeight: '800',
           color: '#ffffff',
           textAlign: 'center',
-          position: { x: 10, y: 40 }, // percentage
+          position: { x: 10, y: 42 }, // percentage
           width: 80,
           fontFamily: 'Inter, -apple-system, sans-serif',
-          lineHeight: 1.2,
-          letterSpacing: '-0.02em'
+          lineHeight: 1.3,
+          letterSpacing: '-0.01em'
         }
       ]
     }
@@ -56,31 +56,31 @@ export const slideTemplates = {
           fill: '#667eea',
           position: { x: 0, y: 0 },
           width: 100,
-          height: 2
+          height: 0.5
         },
         {
           type: 'text',
           role: 'title',
-          fontSize: 56,
+          fontSize: 42,
           fontWeight: '700',
           color: '#1e293b',
           textAlign: 'left',
-          position: { x: 8, y: 12 },
-          width: 84,
+          position: { x: 6, y: 8 },
+          width: 88,
           fontFamily: 'Inter, -apple-system, sans-serif',
-          lineHeight: 1.2,
-          letterSpacing: '-0.02em'
+          lineHeight: 1.3,
+          letterSpacing: '-0.01em'
         },
         {
           type: 'text',
           role: 'body',
-          fontSize: 28,
+          fontSize: 22,
           fontWeight: '400',
           color: '#475569',
           textAlign: 'left',
-          position: { x: 8, y: 32 },
-          width: 84,
-          lineHeight: 1.7,
+          position: { x: 6, y: 22 },
+          width: 88,
+          lineHeight: 1.6,
           fontFamily: 'Inter, -apple-system, sans-serif'
         }
       ]
@@ -103,26 +103,26 @@ export const slideTemplates = {
         {
           type: 'text',
           role: 'title',
-          fontSize: 52,
+          fontSize: 40,
           fontWeight: '700',
           color: '#0f172a',
           textAlign: 'left',
-          position: { x: 8, y: 10 },
-          width: 84,
+          position: { x: 6, y: 8 },
+          width: 88,
           fontFamily: 'Inter, -apple-system, sans-serif',
-          lineHeight: 1.2
+          lineHeight: 1.3
         },
         {
           type: 'bullets',
           role: 'bullets',
-          fontSize: 32,
+          fontSize: 24,
           fontWeight: '400',
           color: '#334155',
           textAlign: 'left',
-          position: { x: 10, y: 28 },
-          width: 80,
+          position: { x: 8, y: 22 },
+          width: 84,
           bulletStyle: '✓',
-          spacing: 32,
+          spacing: 24,
           fontFamily: 'Inter, -apple-system, sans-serif',
           lineHeight: 1.5
         }
