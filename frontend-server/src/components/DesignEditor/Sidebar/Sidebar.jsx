@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import AIToolsPanel from './AIToolsPanel';
-import ImagesPanel from './ImagesPanel';
+import SlidesPanel from './SlidesPanel';
 import TextPanel from './TextPanel';
+import ImagesPanel from './ImagesPanel';
 import MediaPanel from './MediaPanel';
 import ElementsPanel from './ElementsPanel';
 
 /**
  * Sidebar Component - Tool Selection
- * Similar to Veed.io sidebar with AI Tools, Images, Text, Media, Elements
+ * Organized sections: AI, Slides, Text, Images, Audio, Video, Elements
  */
 const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages }) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
@@ -15,10 +16,24 @@ const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages 
   const tools = [
     {
       id: 'ai-tools',
-      name: 'AI Tools',
+      name: 'AI',
       icon: '🤖',
       description: 'AI-powered tools',
       panel: AIToolsPanel
+    },
+    {
+      id: 'slides',
+      name: 'Slides',
+      icon: '📊',
+      description: 'Create slides from text',
+      panel: SlidesPanel
+    },
+    {
+      id: 'text',
+      name: 'Text',
+      icon: '📝',
+      description: 'Add text elements',
+      panel: TextPanel
     },
     {
       id: 'images',
@@ -28,17 +43,17 @@ const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages 
       panel: ImagesPanel
     },
     {
-      id: 'text',
-      name: 'Text',
-      icon: '📝',
-      description: 'Add text',
-      panel: TextPanel
+      id: 'audio',
+      name: 'Audio',
+      icon: '🎵',
+      description: 'Add audio',
+      panel: MediaPanel
     },
     {
-      id: 'media',
-      name: 'Media',
+      id: 'video',
+      name: 'Video',
       icon: '🎬',
-      description: 'Videos & Audio',
+      description: 'Add videos',
       panel: MediaPanel
     },
     {
