@@ -22,7 +22,7 @@ const DesignEditor = () => {
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   /**
-   * Handle adding element to canvas
+   * Handle adding element to canvas (adds to current page)
    */
   const handleAddElement = (element) => {
     const newElement = {
@@ -31,7 +31,20 @@ const DesignEditor = () => {
       x: element.x || 100,
       y: element.y || 100,
     };
-    setCanvasElements([...canvasElements, newElement]);
+
+    // Update current page's elements
+    const updatedPages = pages.map((page, index) => {
+      if (index === currentPageIndex) {
+        return {
+          ...page,
+          elements: [...(page.elements || []), newElement]
+        };
+      }
+      return page;
+    });
+
+    setPages(updatedPages);
+    setCanvasElements([...canvasElements, newElement]); // Keep for backward compatibility
     setSelectedElement(newElement);
   };
 
@@ -39,7 +52,13 @@ const DesignEditor = () => {
    * Handle adding multiple pages (for slide generation)
    */
   const handleAddMultiplePages = (slidePages) => {
-    if (!slidePages || slidePages.length === 0) return;
+    console.log('📄 DesignEditor: handleAddMultiplePages called with', slidePages?.length, 'slides');
+    console.log('📄 DesignEditor: Slide pages:', slidePages);
+
+    if (!slidePages || slidePages.length === 0) {
+      console.warn('⚠️ DesignEditor: No slide pages provided');
+      return;
+    }
 
     const newPages = slidePages.map((slide, index) => ({
       id: slide.id || `page-${Date.now()}-${index}`,
@@ -50,8 +69,16 @@ const DesignEditor = () => {
       transition: slide.transition || 'fade'
     }));
 
-    setPages([...pages, ...newPages]);
+    console.log('📄 DesignEditor: Created new pages:', newPages);
+    console.log('📄 DesignEditor: Current pages before update:', pages);
+
+    const updatedPages = [...pages, ...newPages];
+    console.log('📄 DesignEditor: Updated pages:', updatedPages);
+
+    setPages(updatedPages);
     setCurrentPageIndex(pages.length); // Switch to first new page
+
+    console.log('✅ DesignEditor: Pages state updated, new page index:', pages.length);
   };
 
   /**
@@ -62,26 +89,58 @@ const DesignEditor = () => {
   };
 
   /**
-   * Handle element update
+   * Handle element update (updates element in current page)
    */
   const handleUpdateElement = (elementId, updates) => {
-    setCanvasElements(canvasElements.map(el => 
+    // Update in pages
+    const updatedPages = pages.map((page, index) => {
+      if (index === currentPageIndex) {
+        return {
+          ...page,
+          elements: page.elements.map(el =>
+            el.id === elementId ? { ...el, ...updates } : el
+          )
+        };
+      }
+      return page;
+    });
+
+    setPages(updatedPages);
+    setCanvasElements(canvasElements.map(el =>
       el.id === elementId ? { ...el, ...updates } : el
     ));
+
     if (selectedElement?.id === elementId) {
       setSelectedElement({ ...selectedElement, ...updates });
     }
   };
 
   /**
-   * Handle element deletion
+   * Handle element deletion (deletes from current page)
    */
   const handleDeleteElement = (elementId) => {
+    // Delete from pages
+    const updatedPages = pages.map((page, index) => {
+      if (index === currentPageIndex) {
+        return {
+          ...page,
+          elements: page.elements.filter(el => el.id !== elementId)
+        };
+      }
+      return page;
+    });
+
+    setPages(updatedPages);
     setCanvasElements(canvasElements.filter(el => el.id !== elementId));
+
     if (selectedElement?.id === elementId) {
       setSelectedElement(null);
     }
   };
+
+  // Get current page
+  const currentPage = pages[currentPageIndex] || pages[0];
+  const currentPageElements = currentPage?.elements || canvasElements;
 
   return (
     <div className="flex h-full bg-gray-50">
@@ -95,12 +154,41 @@ const DesignEditor = () => {
 
       {/* Main Canvas Area */}
       <div className="flex-1 flex flex-col">
+        {/* Page Navigation */}
+        {pages.length > 1 && (
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
+                disabled={currentPageIndex === 0}
+                className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ← Previous
+              </button>
+              <span className="text-sm font-medium text-gray-700">
+                Page {currentPageIndex + 1} of {pages.length}
+              </span>
+              <button
+                onClick={() => setCurrentPageIndex(Math.min(pages.length - 1, currentPageIndex + 1))}
+                disabled={currentPageIndex === pages.length - 1}
+                className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next →
+              </button>
+            </div>
+            <div className="text-sm text-gray-600">
+              {currentPage?.name || `Page ${currentPageIndex + 1}`}
+            </div>
+          </div>
+        )}
+
         <Canvas
-          elements={canvasElements}
+          elements={currentPageElements}
           selectedElement={selectedElement}
           onSelectElement={handleSelectElement}
           onUpdateElement={handleUpdateElement}
           onDeleteElement={handleDeleteElement}
+          background={currentPage?.background}
         />
       </div>
 
