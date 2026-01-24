@@ -79,8 +79,8 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
       // Read file content
       const text = await file.text();
 
-      // Auto-generate slides with default 'content' template
-      const slides = generateSlidesFromText(text, 'content');
+      // Auto-generate slides with default 'title' template (modern)
+      const slides = generateSlidesFromText(text, 'title');
 
       if (slides.length > 0 && onAddMultiplePages) {
         onAddMultiplePages(slides);
@@ -101,8 +101,8 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
       return;
     }
 
-    // Auto-generate slides with default 'content' template
-    const slides = generateSlidesFromText(pastedText, 'content');
+    // Auto-generate slides with default 'title' template (modern)
+    const slides = generateSlidesFromText(pastedText, 'title');
 
     if (slides.length > 0 && onAddMultiplePages) {
       onAddMultiplePages(slides);
@@ -118,8 +118,8 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
   const handleAddAIText = (textData) => {
     const text = textData.text || textData;
 
-    // Auto-generate slides with default 'content' template
-    const slides = generateSlidesFromText(text, 'content');
+    // Auto-generate slides with default 'title' template (modern)
+    const slides = generateSlidesFromText(text, 'title');
 
     if (slides.length > 0 && onAddMultiplePages) {
       onAddMultiplePages(slides);
@@ -184,51 +184,187 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
   return (
     <>
       <div className="space-y-4">
-        {/* Professional Blue Buttons */}
-        <div className="space-y-3">
-          {/* Upload Text File */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <span>📤</span>
-            Upload Text File
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
+        {/* Create Slides from Text */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">📄 Create Slides</h3>
+          <div className="space-y-2">
+            {/* Upload Text File */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+            >
+              <span>📤</span>
+              Upload Text File
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
 
-          {/* Paste Text */}
-          <button
-            onClick={() => setIsPasteModalOpen(true)}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <span>📋</span>
-            Paste Text
-          </button>
+            {/* Paste Text */}
+            <button
+              onClick={() => setIsPasteModalOpen(true)}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+            >
+              <span>📋</span>
+              Paste Text
+            </button>
 
-          {/* Generate with AI */}
-          <button
-            onClick={() => setIsTextStudioOpen(true)}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <span>✨</span>
-            Generate with AI
-          </button>
+            {/* Generate with AI */}
+            <button
+              onClick={() => setIsTextStudioOpen(true)}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+            >
+              <span>✨</span>
+              Generate with AI
+            </button>
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="border-t border-gray-200"></div>
+
+        {/* Add Text Elements */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">✏️ Add Text</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {textPresets.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => handleAddText(preset)}
+                className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+              >
+                <div
+                  style={{
+                    fontSize: `${Math.min(preset.fontSize / 2, 20)}px`,
+                    fontWeight: preset.fontWeight,
+                    color: preset.color
+                  }}
+                >
+                  {preset.text}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">{preset.name}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Text Effects */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">🎨 Text Effects</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleAddText({
+                text: 'Gradient Text',
+                fontSize: 48,
+                fontWeight: 'bold',
+                color: '#667eea',
+                gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              })}
+              className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+            >
+              <div className="text-2xl mb-1">🌈</div>
+              <div className="text-xs font-medium">Gradient</div>
+            </button>
+            <button
+              onClick={() => handleAddText({
+                text: 'Shadow Text',
+                fontSize: 48,
+                fontWeight: 'bold',
+                color: '#1f2937',
+                textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+              })}
+              className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+            >
+              <div className="text-2xl mb-1">💫</div>
+              <div className="text-xs font-medium">Shadow</div>
+            </button>
+            <button
+              onClick={() => handleAddText({
+                text: 'Glow Text',
+                fontSize: 48,
+                fontWeight: 'bold',
+                color: '#ffffff',
+                textShadow: '0 0 10px #667eea, 0 0 20px #667eea'
+              })}
+              className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+            >
+              <div className="text-2xl mb-1">✨</div>
+              <div className="text-xs font-medium">Glow</div>
+            </button>
+            <button
+              onClick={() => handleAddText({
+                text: 'Outline Text',
+                fontSize: 48,
+                fontWeight: 'bold',
+                color: 'transparent',
+                textStroke: '2px #1f2937'
+              })}
+              className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+            >
+              <div className="text-2xl mb-1">🎨</div>
+              <div className="text-xs font-medium">Outline</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Font Styles */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">🔤 Font Styles</h3>
+          <div className="space-y-2">
+            <button
+              onClick={() => handleAddText({
+                text: 'Modern Sans',
+                fontSize: 32,
+                fontWeight: '600',
+                color: '#1f2937',
+                fontFamily: 'Inter, -apple-system, sans-serif'
+              })}
+              className="w-full p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+            >
+              <div className="font-semibold text-base">Modern Sans</div>
+              <div className="text-xs text-gray-500">Clean and professional</div>
+            </button>
+            <button
+              onClick={() => handleAddText({
+                text: 'Classic Serif',
+                fontSize: 32,
+                fontWeight: '600',
+                color: '#1f2937',
+                fontFamily: 'Georgia, serif'
+              })}
+              className="w-full p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+            >
+              <div className="font-serif font-semibold text-base">Classic Serif</div>
+              <div className="text-xs text-gray-500">Elegant and timeless</div>
+            </button>
+            <button
+              onClick={() => handleAddText({
+                text: 'Tech Mono',
+                fontSize: 28,
+                fontWeight: '500',
+                color: '#1f2937',
+                fontFamily: 'Monaco, monospace'
+              })}
+              className="w-full p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+            >
+              <div className="font-mono font-medium text-base">Tech Mono</div>
+              <div className="text-xs text-gray-500">Modern and technical</div>
+            </button>
+          </div>
         </div>
 
         {/* Info Box */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-          <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 How it works</h4>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-blue-900 mb-2">💡 Tips</h4>
           <ul className="text-xs text-blue-800 space-y-1">
-            <li>• Upload or paste your text</li>
-            <li>• Slides are auto-generated with professional templates</li>
-            <li>• Navigate between slides using page controls</li>
-            <li>• Edit text directly on canvas</li>
+            <li>• Create slides from text files or AI</li>
+            <li>• Add individual text elements with styles</li>
+            <li>• Apply effects like gradient, shadow, glow</li>
+            <li>• Double-click text on canvas to edit</li>
           </ul>
         </div>
       </div>

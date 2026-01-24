@@ -45,25 +45,41 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
   const renderElement = () => {
     switch (element.type) {
       case 'text':
+        const textStyle = {
+          fontSize: (element.fontSize || 16) * zoom,
+          fontWeight: element.fontWeight,
+          color: element.color,
+          fontFamily: element.fontFamily,
+          textAlign: element.textAlign || 'left',
+          width: element.width ? element.width * zoom : 'auto',
+          maxWidth: element.width ? element.width * zoom : 'none',
+          lineHeight: element.lineHeight || 1.4,
+          letterSpacing: element.letterSpacing,
+          whiteSpace: 'pre-wrap',
+          wordWrap: 'break-word',
+          overflowWrap: 'break-word',
+          overflow: 'hidden',
+          cursor: 'move'
+        };
+
+        // Add text effects
+        if (element.gradient) {
+          textStyle.background = element.gradient;
+          textStyle.WebkitBackgroundClip = 'text';
+          textStyle.WebkitTextFillColor = 'transparent';
+          textStyle.backgroundClip = 'text';
+        }
+
+        if (element.textShadow) {
+          textStyle.textShadow = element.textShadow;
+        }
+
+        if (element.textStroke) {
+          textStyle.WebkitTextStroke = element.textStroke;
+        }
+
         return (
-          <div
-            style={{
-              fontSize: (element.fontSize || 16) * zoom,
-              fontWeight: element.fontWeight,
-              color: element.color,
-              fontFamily: element.fontFamily,
-              textAlign: element.textAlign || 'left',
-              width: element.width ? element.width * zoom : 'auto',
-              maxWidth: element.width ? element.width * zoom : 'none',
-              lineHeight: element.lineHeight || 1.4,
-              letterSpacing: element.letterSpacing,
-              whiteSpace: 'pre-wrap',
-              wordWrap: 'break-word',
-              overflowWrap: 'break-word',
-              overflow: 'hidden',
-              cursor: 'move'
-            }}
-          >
+          <div style={textStyle}>
             {element.text}
           </div>
         );
