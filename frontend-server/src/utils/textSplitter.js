@@ -72,6 +72,8 @@ function extractBulletPoints(text) {
  * @returns {array} Array of slide objects
  */
 export function splitTextIntoSlides(text, options = {}) {
+  console.log('📄 textSplitter: Input text length:', text?.length);
+
   const {
     maxCharsPerSlide = 300,
     minCharsPerSlide = 50,
@@ -80,11 +82,13 @@ export function splitTextIntoSlides(text, options = {}) {
   } = options;
 
   if (!text || !text.trim()) {
+    console.warn('⚠️ textSplitter: Empty text provided');
     return [];
   }
 
   // Split by double newlines (paragraphs)
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+  console.log('📄 textSplitter: Found', paragraphs.length, 'paragraphs');
   
   const slides = [];
   let currentSlide = { type: 'content', text: '', title: '' };
@@ -152,13 +156,15 @@ export function splitTextIntoSlides(text, options = {}) {
   
   // If no slides were created, create one with all text
   if (slides.length === 0 && text.trim()) {
+    console.log('📄 textSplitter: No slides created, adding single slide with all text');
     slides.push({
       type: 'content',
       text: text.trim(),
       title: ''
     });
   }
-  
+
+  console.log('✅ textSplitter: Returning', slides.length, 'slides');
   return slides;
 }
 

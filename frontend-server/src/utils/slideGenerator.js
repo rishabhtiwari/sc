@@ -65,10 +65,16 @@ function createCanvasElement(templateElement, content, slideIndex) {
  * @returns {array} Array of canvas page objects
  */
 export function generateSlidesFromText(text, templateId = null, options = {}) {
+  console.log('🔧 slideGenerator: Starting with text length:', text?.length);
+  console.log('🔧 slideGenerator: Template ID:', templateId);
+
   // Split text into slide data
   const slideData = splitTextIntoSlides(text, options);
-  
+  console.log('🔧 slideGenerator: Split into', slideData.length, 'slides');
+  console.log('🔧 slideGenerator: Slide data:', slideData);
+
   if (slideData.length === 0) {
+    console.warn('⚠️ slideGenerator: No slides generated from text');
     return [];
   }
 

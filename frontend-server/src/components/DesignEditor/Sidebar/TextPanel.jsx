@@ -119,27 +119,39 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
 
   // Handle template selection
   const handleTemplateSelect = (templateId) => {
+    console.log('🎨 Template selected:', templateId);
+    console.log('📝 Pending text:', pendingText?.substring(0, 100) + '...');
+
     if (!pendingText) {
+      console.error('❌ No pending text');
       showToast('No text to convert', 'error');
       return;
     }
 
     try {
       // Generate slides from text using selected template
+      console.log('🔄 Generating slides...');
       const slides = generateSlidesFromText(pendingText, templateId);
+      console.log('✅ Generated slides:', slides);
 
       if (slides.length === 0) {
+        console.error('❌ No slides generated');
         showToast('Failed to generate slides', 'error');
         return;
       }
 
       // Check if onAddMultiplePages is available (for multi-page support)
+      console.log('🔍 Checking onAddMultiplePages:', typeof onAddMultiplePages);
+
       if (onAddMultiplePages && typeof onAddMultiplePages === 'function') {
+        console.log('✅ Calling onAddMultiplePages with', slides.length, 'slides');
         onAddMultiplePages(slides);
         showToast(`Created ${slides.length} slide${slides.length > 1 ? 's' : ''} successfully!`, 'success');
       } else {
+        console.warn('⚠️ onAddMultiplePages not available, using fallback');
         // Fallback: Add first slide only
         if (slides[0] && slides[0].elements) {
+          console.log('📄 Adding elements from first slide:', slides[0].elements);
           slides[0].elements.forEach(element => {
             onAddElement(element);
           });
@@ -151,7 +163,7 @@ const TextPanel = ({ onAddElement, onAddMultiplePages }) => {
       setPendingText('');
       setPastedText('');
     } catch (error) {
-      console.error('Error generating slides:', error);
+      console.error('❌ Error generating slides:', error);
       showToast('Failed to generate slides', 'error');
     }
   };
