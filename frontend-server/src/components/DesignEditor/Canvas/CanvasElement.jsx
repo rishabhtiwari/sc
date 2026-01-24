@@ -52,11 +52,44 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
               fontWeight: element.fontWeight,
               color: element.color,
               fontFamily: element.fontFamily,
+              textAlign: element.textAlign || 'left',
+              width: element.width || 'auto',
+              lineHeight: element.lineHeight || 1.4,
               whiteSpace: 'pre-wrap',
               cursor: 'move'
             }}
           >
             {element.text}
+          </div>
+        );
+
+      case 'bullets':
+        return (
+          <div
+            style={{
+              fontSize: element.fontSize,
+              fontWeight: element.fontWeight,
+              color: element.color,
+              fontFamily: element.fontFamily,
+              width: element.width || 'auto',
+              cursor: 'move'
+            }}
+          >
+            {element.bullets && element.bullets.map((bullet, index) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  marginBottom: element.spacing || 20
+                }}
+              >
+                <span style={{ marginRight: 10, flexShrink: 0 }}>
+                  {element.bulletStyle || '•'}
+                </span>
+                <span>{bullet}</span>
+              </div>
+            ))}
           </div>
         );
 
@@ -116,8 +149,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
       style={{
         left: (element.x || 0) * zoom,
         top: (element.y || 0) * zoom,
-        transform: `scale(${zoom})`,
-        transformOrigin: 'top left',
+        // Don't apply transform scale here - positions are already scaled by zoom
         cursor: isDragging ? 'grabbing' : 'grab'
       }}
     >

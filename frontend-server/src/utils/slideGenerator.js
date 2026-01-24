@@ -15,8 +15,18 @@ function generateId() {
 
 /**
  * Create canvas element from template element
+ * Converts percentage-based positioning to pixel values
  */
 function createCanvasElement(templateElement, content, slideIndex) {
+  // Assume canvas size of 1920x1080 (standard HD)
+  const canvasWidth = 1920;
+  const canvasHeight = 1080;
+
+  // Convert percentage to pixels
+  const xPos = (templateElement.position.x / 100) * canvasWidth;
+  const yPos = (templateElement.position.y / 100) * canvasHeight;
+  const elementWidth = (templateElement.width / 100) * canvasWidth;
+
   const element = {
     id: generateId(),
     type: templateElement.type,
@@ -25,17 +35,16 @@ function createCanvasElement(templateElement, content, slideIndex) {
     color: templateElement.color,
     fontFamily: templateElement.fontFamily,
     textAlign: templateElement.textAlign || 'left',
-    position: {
-      x: templateElement.position.x,
-      y: templateElement.position.y
-    },
-    width: templateElement.width,
+    x: xPos,
+    y: yPos,
+    width: elementWidth,
     lineHeight: templateElement.lineHeight || 1.4
   };
 
   // Add content based on role
   if (templateElement.role === 'title') {
-    element.text = content.title || 'Untitled';
+    // For title slides, use the text as title if no explicit title
+    element.text = content.title || content.text || 'Untitled';
   } else if (templateElement.role === 'body') {
     element.text = content.text || '';
   } else if (templateElement.role === 'bullets') {
@@ -49,10 +58,17 @@ function createCanvasElement(templateElement, content, slideIndex) {
     // For two-column layout
     const textParts = (content.text || '').split('\n\n');
     const half = Math.ceil(textParts.length / 2);
-    element.text = templateElement.role === 'left' 
+    element.text = templateElement.role === 'left'
       ? textParts.slice(0, half).join('\n\n')
       : textParts.slice(half).join('\n\n');
   }
+
+  console.log('🔧 Created element:', {
+    role: templateElement.role,
+    text: element.text?.substring(0, 50),
+    position: { x: element.x, y: element.y },
+    fontSize: element.fontSize
+  });
 
   return element;
 }
