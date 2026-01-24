@@ -5,80 +5,94 @@
  */
 
 export const slideTemplates = {
-  // 1. Title Slide - Large centered heading
+  // 1. Modern Title Slide - Professional gradient with large heading
   title: {
     id: 'title',
-    name: 'Title Slide',
-    icon: '📌',
-    description: 'Large centered heading with optional subtitle',
+    name: 'Modern Title',
+    icon: '🎯',
+    description: 'Bold title with modern gradient background',
     preview: 'https://via.placeholder.com/300x200/667eea/ffffff?text=Title+Slide',
     layout: {
       background: {
         type: 'gradient',
-        colors: ['#667eea', '#764ba2']
+        colors: ['#667eea', '#764ba2'],
+        angle: 135
       },
       elements: [
         {
           type: 'text',
           role: 'title',
-          fontSize: 64,
-          fontWeight: 'bold',
+          fontSize: 72,
+          fontWeight: '800',
           color: '#ffffff',
           textAlign: 'center',
-          position: { x: 50, y: 45 }, // percentage
+          position: { x: 10, y: 40 }, // percentage
           width: 80,
-          fontFamily: 'Inter, sans-serif'
+          fontFamily: 'Inter, -apple-system, sans-serif',
+          lineHeight: 1.2,
+          letterSpacing: '-0.02em'
         }
       ]
     }
   },
 
-  // 2. Content Slide - Title + Body text
+  // 2. Clean Content Slide - Professional white background with accent
   content: {
     id: 'content',
-    name: 'Content Slide',
+    name: 'Clean Content',
     icon: '📄',
-    description: 'Title with body text content',
+    description: 'Professional layout with title and body text',
     preview: 'https://via.placeholder.com/300x200/4f46e5/ffffff?text=Content+Slide',
     layout: {
       background: {
         type: 'solid',
-        color: '#ffffff'
+        color: '#f8fafc'
       },
       elements: [
         {
+          type: 'shape',
+          role: 'accent',
+          shapeType: 'rectangle',
+          fill: '#667eea',
+          position: { x: 0, y: 0 },
+          width: 100,
+          height: 2
+        },
+        {
           type: 'text',
           role: 'title',
-          fontSize: 48,
-          fontWeight: 'bold',
-          color: '#1f2937',
+          fontSize: 56,
+          fontWeight: '700',
+          color: '#1e293b',
           textAlign: 'left',
-          position: { x: 10, y: 15 },
-          width: 80,
-          fontFamily: 'Inter, sans-serif'
+          position: { x: 8, y: 12 },
+          width: 84,
+          fontFamily: 'Inter, -apple-system, sans-serif',
+          lineHeight: 1.2,
+          letterSpacing: '-0.02em'
         },
         {
           type: 'text',
           role: 'body',
-          fontSize: 20,
-          fontWeight: 'normal',
-          color: '#4b5563',
+          fontSize: 28,
+          fontWeight: '400',
+          color: '#475569',
           textAlign: 'left',
-          position: { x: 10, y: 35 },
-          width: 80,
-          lineHeight: 1.6,
-          fontFamily: 'Inter, sans-serif'
+          position: { x: 8, y: 32 },
+          width: 84,
+          lineHeight: 1.7,
+          fontFamily: 'Inter, -apple-system, sans-serif'
         }
       ]
     }
   },
 
-  // 3. Bullet Points - Title + List
+  // 3. Professional Bullet Points - Clean list layout
   bullets: {
     id: 'bullets',
-    name: 'Bullet Points',
-    icon: '📝',
-    description: 'Title with bullet point list',
+    name: 'Key Points',
+    icon: '✓',
+    description: 'Highlight key points with professional styling',
     preview: 'https://via.placeholder.com/300x200/10b981/ffffff?text=Bullet+Points',
     layout: {
       background: {
@@ -89,26 +103,28 @@ export const slideTemplates = {
         {
           type: 'text',
           role: 'title',
-          fontSize: 48,
-          fontWeight: 'bold',
-          color: '#1f2937',
+          fontSize: 52,
+          fontWeight: '700',
+          color: '#0f172a',
           textAlign: 'left',
-          position: { x: 10, y: 15 },
-          width: 80,
-          fontFamily: 'Inter, sans-serif'
+          position: { x: 8, y: 10 },
+          width: 84,
+          fontFamily: 'Inter, -apple-system, sans-serif',
+          lineHeight: 1.2
         },
         {
           type: 'bullets',
           role: 'bullets',
-          fontSize: 24,
-          fontWeight: 'normal',
-          color: '#4b5563',
+          fontSize: 32,
+          fontWeight: '400',
+          color: '#334155',
           textAlign: 'left',
-          position: { x: 15, y: 35 },
-          width: 75,
-          bulletStyle: '•',
-          spacing: 20,
-          fontFamily: 'Inter, sans-serif'
+          position: { x: 10, y: 28 },
+          width: 80,
+          bulletStyle: '✓',
+          spacing: 32,
+          fontFamily: 'Inter, -apple-system, sans-serif',
+          lineHeight: 1.5
         }
       ]
     }

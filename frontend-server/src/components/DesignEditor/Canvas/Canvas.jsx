@@ -5,10 +5,27 @@ import CanvasElement from './CanvasElement';
  * Canvas Component - Main design area
  * Features: Drag & drop, resize, rotate elements
  */
-const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, onDeleteElement }) => {
+const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, onDeleteElement, background }) => {
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [zoom, setZoom] = useState(0.5);
+
+  // Generate background style
+  const getBackgroundStyle = () => {
+    if (!background) return { backgroundColor: '#ffffff' };
+
+    if (background.type === 'gradient') {
+      const angle = background.angle || 135;
+      const colors = background.colors || ['#667eea', '#764ba2'];
+      return {
+        background: `linear-gradient(${angle}deg, ${colors.join(', ')})`
+      };
+    } else if (background.type === 'solid') {
+      return { backgroundColor: background.color || '#ffffff' };
+    }
+
+    return { backgroundColor: '#ffffff' };
+  };
 
   // Canvas presets
   const presets = [
@@ -96,12 +113,13 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
         <div
           ref={canvasRef}
           onClick={handleCanvasClick}
-          className="bg-white shadow-2xl relative"
+          className="shadow-2xl relative"
           style={{
             width: canvasSize.width * zoom,
             height: canvasSize.height * zoom,
             transform: `scale(1)`,
-            transformOrigin: 'center'
+            transformOrigin: 'center',
+            ...getBackgroundStyle()
           }}
         >
           {/* Render Elements */}

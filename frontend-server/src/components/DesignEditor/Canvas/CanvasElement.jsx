@@ -55,6 +55,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
               textAlign: element.textAlign || 'left',
               width: element.width || 'auto',
               lineHeight: element.lineHeight || 1.4,
+              letterSpacing: element.letterSpacing,
               whiteSpace: 'pre-wrap',
               cursor: 'move'
             }}

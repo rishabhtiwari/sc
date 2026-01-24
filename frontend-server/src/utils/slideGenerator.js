@@ -25,24 +25,41 @@ function createCanvasElement(templateElement, content, slideIndex) {
   // Convert percentage to pixels
   const xPos = (templateElement.position.x / 100) * canvasWidth;
   const yPos = (templateElement.position.y / 100) * canvasHeight;
-  const elementWidth = (templateElement.width / 100) * canvasWidth;
+  const elementWidth = templateElement.width ? (templateElement.width / 100) * canvasWidth : undefined;
+  const elementHeight = templateElement.height ? (templateElement.height / 100) * canvasHeight : undefined;
 
   const element = {
     id: generateId(),
     type: templateElement.type,
-    fontSize: templateElement.fontSize,
-    fontWeight: templateElement.fontWeight,
-    color: templateElement.color,
-    fontFamily: templateElement.fontFamily,
-    textAlign: templateElement.textAlign || 'left',
     x: xPos,
     y: yPos,
-    width: elementWidth,
-    lineHeight: templateElement.lineHeight || 1.4
   };
 
+  // Add type-specific properties
+  if (templateElement.type === 'shape') {
+    // For decorative shapes (accent bars, backgrounds, etc.)
+    element.shapeType = templateElement.shapeType || 'rectangle';
+    element.fill = templateElement.fill || '#000000';
+    element.stroke = templateElement.stroke || 'transparent';
+    element.strokeWidth = templateElement.strokeWidth || 0;
+    element.width = elementWidth;
+    element.height = elementHeight;
+  } else {
+    // For text elements
+    element.fontSize = templateElement.fontSize;
+    element.fontWeight = templateElement.fontWeight;
+    element.color = templateElement.color;
+    element.fontFamily = templateElement.fontFamily;
+    element.textAlign = templateElement.textAlign || 'left';
+    element.width = elementWidth;
+    element.lineHeight = templateElement.lineHeight || 1.4;
+    element.letterSpacing = templateElement.letterSpacing;
+  }
+
   // Add content based on role
-  if (templateElement.role === 'title') {
+  if (templateElement.role === 'accent') {
+    // Decorative element, no content needed
+  } else if (templateElement.role === 'title') {
     // For title slides, use the text as title if no explicit title
     element.text = content.title || content.text || 'Untitled';
   } else if (templateElement.role === 'body') {
@@ -64,6 +81,7 @@ function createCanvasElement(templateElement, content, slideIndex) {
   }
 
   console.log('🔧 Created element:', {
+    type: element.type,
     role: templateElement.role,
     text: element.text?.substring(0, 50),
     position: { x: element.x, y: element.y },
