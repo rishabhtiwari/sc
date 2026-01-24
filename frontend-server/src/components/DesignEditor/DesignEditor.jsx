@@ -11,6 +11,15 @@ const DesignEditor = () => {
   const [selectedTool, setSelectedTool] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [canvasElements, setCanvasElements] = useState([]);
+  const [pages, setPages] = useState([
+    {
+      id: 'page-1',
+      name: 'Page 1',
+      elements: [],
+      background: { type: 'solid', color: '#ffffff' }
+    }
+  ]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   /**
    * Handle adding element to canvas
@@ -19,11 +28,30 @@ const DesignEditor = () => {
     const newElement = {
       id: `element-${Date.now()}`,
       ...element,
-      x: 100,
-      y: 100,
+      x: element.x || 100,
+      y: element.y || 100,
     };
     setCanvasElements([...canvasElements, newElement]);
     setSelectedElement(newElement);
+  };
+
+  /**
+   * Handle adding multiple pages (for slide generation)
+   */
+  const handleAddMultiplePages = (slidePages) => {
+    if (!slidePages || slidePages.length === 0) return;
+
+    const newPages = slidePages.map((slide, index) => ({
+      id: slide.id || `page-${Date.now()}-${index}`,
+      name: slide.name || `Slide ${pages.length + index + 1}`,
+      elements: slide.elements || [],
+      background: slide.background || { type: 'solid', color: '#ffffff' },
+      duration: slide.duration || 5,
+      transition: slide.transition || 'fade'
+    }));
+
+    setPages([...pages, ...newPages]);
+    setCurrentPageIndex(pages.length); // Switch to first new page
   };
 
   /**
@@ -62,6 +90,7 @@ const DesignEditor = () => {
         selectedTool={selectedTool}
         onSelectTool={setSelectedTool}
         onAddElement={handleAddElement}
+        onAddMultiplePages={handleAddMultiplePages}
       />
 
       {/* Main Canvas Area */}

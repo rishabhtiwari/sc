@@ -680,20 +680,62 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex justify-center gap-3">
+                      <div className="flex justify-center gap-3 flex-wrap">
                         <button
                           onClick={handleSaveToLibrary}
                           className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors font-medium"
                         >
                           💾 Save to Library
                         </button>
-                        <button
-                          onClick={handleDone}
-                          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors font-medium"
-                        >
-                          ✓ Add to Canvas
-                        </button>
+
+                        {/* Show "Create Slides" in page mode, "Add to Canvas" in modal mode */}
+                        {mode === 'page' ? (
+                          <button
+                            onClick={() => {
+                              // Navigate to Design Editor with text content
+                              window.location.href = `/design-editor?action=create-slides&text=${encodeURIComponent(generatedText)}`;
+                            }}
+                            className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm rounded-md hover:from-purple-700 hover:to-blue-700 transition-colors font-medium"
+                          >
+                            🎨 Create Slides
+                          </button>
+                        ) : (
+                          <button
+                            onClick={handleDone}
+                            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors font-medium"
+                          >
+                            ✓ Add to Canvas
+                          </button>
+                        )}
                       </div>
+
+                      {/* Workflow Guide - Only in page mode */}
+                      {mode === 'page' && (
+                        <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                            <span>💡</span>
+                            Next Steps: Create Your Video
+                          </h4>
+                          <div className="space-y-2 text-xs text-gray-700">
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-blue-600">1.</span>
+                              <span>Click <strong>"Create Slides"</strong> to convert this text into presentation slides</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-blue-600">2.</span>
+                              <span>Design your slides in the <strong>Design Editor</strong> with images, backgrounds, and formatting</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-blue-600">3.</span>
+                              <span>Add voiceover using <strong>Audio Studio</strong> for each slide</span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <span className="font-semibold text-blue-600">4.</span>
+                              <span>Export as video with slides + audio synchronized</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -9,7 +9,7 @@ import ElementsPanel from './ElementsPanel';
  * Sidebar Component - Tool Selection
  * Similar to Veed.io sidebar with AI Tools, Images, Text, Media, Elements
  */
-const Sidebar = ({ selectedTool, onSelectTool, onAddElement }) => {
+const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages }) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
 
   const tools = [
@@ -95,7 +95,10 @@ const Sidebar = ({ selectedTool, onSelectTool, onAddElement }) => {
             <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
           </div>
           <div className="p-4">
-            <ActivePanel onAddElement={onAddElement} />
+            <ActivePanel
+              onAddElement={onAddElement}
+              onAddMultiplePages={onAddMultiplePages}
+            />
           </div>
         </div>
       )}
