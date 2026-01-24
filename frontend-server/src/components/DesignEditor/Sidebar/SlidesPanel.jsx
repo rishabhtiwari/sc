@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { generateSlidesFromText } from '../../../utils/slideGenerator';
-import TextStudio from '../../TextStudio/TextStudio';
+import TextStudio from '../TextStudio/TextStudio';
 
 /**
  * Slides Panel - Create and manage slides
@@ -182,9 +182,10 @@ const SlidesPanel = ({ onAddMultiplePages }) => {
       {/* Text Studio Modal */}
       {isTextStudioOpen && (
         <TextStudio
+          isOpen={true}
           mode="modal"
           onClose={() => setIsTextStudioOpen(false)}
-          onAddText={handleAddAIText}
+          onAddToCanvas={handleAddAIText}
         />
       )}
     </>
