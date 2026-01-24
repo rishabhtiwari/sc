@@ -77,16 +77,16 @@ const SlidesPanel = ({ onAddMultiplePages, currentBackground, onBackgroundChange
   return (
     <>
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">📊 Create Slides from Text</h3>
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">📊 Create Slides</h3>
 
         <div className="space-y-2">
-          {/* Upload Text File */}
+          {/* Upload Text File to Create Slides */}
           <button
             onClick={() => fileInputRef.current?.click()}
             className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
           >
             <span>📤</span>
-            Upload Text File
+            Upload File to Create Slides
           </button>
           <input
             ref={fileInputRef}
@@ -96,22 +96,22 @@ const SlidesPanel = ({ onAddMultiplePages, currentBackground, onBackgroundChange
             className="hidden"
           />
 
-          {/* Paste Text */}
+          {/* Paste Text to Create Slides */}
           <button
             onClick={() => setIsPasteModalOpen(true)}
             className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
           >
             <span>📋</span>
-            Paste Text
+            Paste Text to Create Slides
           </button>
 
-          {/* Generate with AI */}
+          {/* AI Generate Slides */}
           <button
             onClick={() => setIsTextStudioOpen(true)}
             className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
           >
             <span>✨</span>
-            Generate with AI
+            AI Generate Slides
           </button>
         </div>
 

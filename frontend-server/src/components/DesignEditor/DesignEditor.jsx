@@ -212,14 +212,14 @@ const DesignEditor = () => {
                   setPages(newPages);
                   setCurrentPageIndex(currentPageIndex + 1);
                 }}
-                className="w-8 h-8 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center text-lg font-bold"
+                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-lg font-bold shadow-sm"
                 title="Duplicate current slide"
               >
                 +
               </button>
               <button
                 onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
-                className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-lg"
+                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
                 title="Delete current slide"
               >
                 🗑️

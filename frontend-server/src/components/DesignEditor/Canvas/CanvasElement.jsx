@@ -6,12 +6,30 @@ import React, { useState, useRef } from 'react';
  */
 const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(element.text || '');
   const elementRef = useRef(null);
 
   const handleMouseDown = (e) => {
     e.stopPropagation();
     onSelect();
+
+    // Check if clicking on a resize handle
+    if (e.target.dataset.resizeHandle) {
+      setIsResizing(true);
+      setResizeHandle(e.target.dataset.resizeHandle);
+      setDragStart({
+        x: e.clientX,
+        y: e.clientY,
+        width: element.width || 200,
+        height: element.height || 100
+      });
+      return;
+    }
+
     setIsDragging(true);
     setDragStart({
       x: e.clientX - (element.x || 0) * zoom,
@@ -24,15 +42,67 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
       const newX = (e.clientX - dragStart.x) / zoom;
       const newY = (e.clientY - dragStart.y) / zoom;
       onUpdate({ x: newX, y: newY });
+    } else if (isResizing) {
+      const deltaX = (e.clientX - dragStart.x) / zoom;
+      const deltaY = (e.clientY - dragStart.y) / zoom;
+
+      let newWidth = dragStart.width;
+      let newHeight = dragStart.height;
+
+      if (resizeHandle.includes('e')) {
+        newWidth = Math.max(50, dragStart.width + deltaX);
+      }
+      if (resizeHandle.includes('w')) {
+        newWidth = Math.max(50, dragStart.width - deltaX);
+      }
+      if (resizeHandle.includes('s')) {
+        newHeight = Math.max(30, dragStart.height + deltaY);
+      }
+      if (resizeHandle.includes('n')) {
+        newHeight = Math.max(30, dragStart.height - deltaY);
+      }
+
+      onUpdate({ width: newWidth, height: newHeight });
     }
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+  };
+
+  const handleDoubleClick = (e) => {
+    if (element.type === 'text') {
+      e.stopPropagation();
+      setIsEditing(true);
+      setEditText(element.text || '');
+    }
+  };
+
+  const handleTextChange = (e) => {
+    setEditText(e.target.value);
+  };
+
+  const handleTextBlur = () => {
+    setIsEditing(false);
+    if (editText !== element.text) {
+      onUpdate({ text: editText });
+    }
+  };
+
+  const handleTextKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleTextBlur();
+    } else if (e.key === 'Escape') {
+      setIsEditing(false);
+      setEditText(element.text || '');
+    }
   };
 
   React.useEffect(() => {
-    if (isDragging) {
+    if (isDragging || isResizing) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       return () => {
@@ -40,7 +110,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isDragging, dragStart]);
+  }, [isDragging, isResizing, dragStart, resizeHandle]);
 
   const renderElement = () => {
     switch (element.type) {
@@ -52,18 +122,20 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
           fontFamily: element.fontFamily,
           textAlign: element.textAlign || 'left',
           width: element.width ? element.width * zoom : 'auto',
+          minWidth: element.width ? element.width * zoom : '100px',
           maxWidth: element.width ? element.width * zoom : 'none',
           lineHeight: element.lineHeight || 1.4,
           letterSpacing: element.letterSpacing,
           whiteSpace: 'pre-wrap',
           wordWrap: 'break-word',
           overflowWrap: 'break-word',
-          overflow: 'hidden',
-          cursor: 'move'
+          overflow: 'visible',
+          cursor: isEditing ? 'text' : 'move',
+          padding: '4px'
         };
 
         // Add text effects
-        if (element.gradient) {
+        if (element.gradient && !isEditing) {
           textStyle.background = element.gradient;
           textStyle.WebkitBackgroundClip = 'text';
           textStyle.WebkitTextFillColor = 'transparent';
@@ -78,8 +150,31 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
           textStyle.WebkitTextStroke = element.textStroke;
         }
 
+        if (isEditing) {
+          return (
+            <textarea
+              value={editText}
+              onChange={handleTextChange}
+              onBlur={handleTextBlur}
+              onKeyDown={handleTextKeyDown}
+              autoFocus
+              style={{
+                ...textStyle,
+                border: '2px solid #3b82f6',
+                borderRadius: '4px',
+                outline: 'none',
+                resize: 'none',
+                background: 'white'
+              }}
+            />
+          );
+        }
+
         return (
-          <div style={textStyle}>
+          <div
+            style={textStyle}
+            onDoubleClick={handleDoubleClick}
+          >
             {element.text}
           </div>
         );
@@ -174,20 +269,47 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
       style={{
         left: (element.x || 0) * zoom,
         top: (element.y || 0) * zoom,
-        // Don't apply transform scale here - positions are already scaled by zoom
-        cursor: isDragging ? 'grabbing' : 'grab'
+        cursor: isDragging ? 'grabbing' : (isEditing ? 'text' : 'grab')
       }}
     >
       {renderElement()}
 
       {/* Selection Handles */}
-      {isSelected && (
+      {isSelected && !isEditing && (
         <>
-          {/* Resize handles */}
-          <div className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-nwse-resize" />
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-nesw-resize" />
-          <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-nesw-resize" />
-          <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-nwse-resize" />
+          {/* Resize handles - corner handles */}
+          <div
+            data-resize-handle="nw"
+            onMouseDown={handleMouseDown}
+            className="absolute -top-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-nwse-resize z-10"
+          />
+          <div
+            data-resize-handle="ne"
+            onMouseDown={handleMouseDown}
+            className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-nesw-resize z-10"
+          />
+          <div
+            data-resize-handle="sw"
+            onMouseDown={handleMouseDown}
+            className="absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-nesw-resize z-10"
+          />
+          <div
+            data-resize-handle="se"
+            onMouseDown={handleMouseDown}
+            className="absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-nwse-resize z-10"
+          />
+
+          {/* Edge handles for width/height only */}
+          <div
+            data-resize-handle="e"
+            onMouseDown={handleMouseDown}
+            className="absolute top-1/2 -right-1 w-3 h-3 bg-blue-500 rounded-full cursor-ew-resize z-10 -translate-y-1/2"
+          />
+          <div
+            data-resize-handle="w"
+            onMouseDown={handleMouseDown}
+            className="absolute top-1/2 -left-1 w-3 h-3 bg-blue-500 rounded-full cursor-ew-resize z-10 -translate-y-1/2"
+          />
         </>
       )}
     </div>
