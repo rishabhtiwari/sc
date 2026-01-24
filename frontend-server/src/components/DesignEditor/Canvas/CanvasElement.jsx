@@ -48,12 +48,13 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
         return (
           <div
             style={{
-              fontSize: element.fontSize,
+              fontSize: (element.fontSize || 16) * zoom,
               fontWeight: element.fontWeight,
               color: element.color,
               fontFamily: element.fontFamily,
               textAlign: element.textAlign || 'left',
-              width: element.width || 'auto',
+              width: element.width ? element.width * zoom : 'auto',
+              maxWidth: element.width ? element.width * zoom : 'none',
               lineHeight: element.lineHeight || 1.4,
               letterSpacing: element.letterSpacing,
               whiteSpace: 'pre-wrap',
@@ -71,11 +72,12 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
         return (
           <div
             style={{
-              fontSize: element.fontSize,
+              fontSize: (element.fontSize || 16) * zoom,
               fontWeight: element.fontWeight,
               color: element.color,
               fontFamily: element.fontFamily,
-              width: element.width || 'auto',
+              width: element.width ? element.width * zoom : 'auto',
+              maxWidth: element.width ? element.width * zoom : 'none',
               lineHeight: element.lineHeight || 1.5,
               cursor: 'move'
             }}
@@ -86,12 +88,12 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
                 style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  marginBottom: element.spacing || 20,
+                  marginBottom: (element.spacing || 20) * zoom,
                   wordWrap: 'break-word',
                   overflowWrap: 'break-word'
                 }}
               >
-                <span style={{ marginRight: 10, flexShrink: 0, fontSize: '1.2em' }}>
+                <span style={{ marginRight: 10 * zoom, flexShrink: 0, fontSize: '1.2em' }}>
                   {element.bulletStyle || '•'}
                 </span>
                 <span style={{ flex: 1 }}>{bullet}</span>
@@ -106,8 +108,8 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
             src={element.src}
             alt="Canvas element"
             style={{
-              width: element.width,
-              height: element.height,
+              width: element.width ? element.width * zoom : 'auto',
+              height: element.height ? element.height * zoom : 'auto',
               objectFit: 'cover',
               cursor: 'move'
             }}
@@ -119,10 +121,10 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
         return (
           <div
             style={{
-              width: element.width,
-              height: element.height,
+              width: element.width ? element.width * zoom : 'auto',
+              height: element.height ? element.height * zoom : 'auto',
               backgroundColor: element.fill,
-              border: `${element.strokeWidth}px solid ${element.stroke}`,
+              border: `${(element.strokeWidth || 0) * zoom}px solid ${element.stroke || 'transparent'}`,
               borderRadius: element.shapeType === 'circle' ? '50%' : '0',
               cursor: 'move'
             }}
@@ -134,7 +136,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
         return (
           <div
             style={{
-              fontSize: element.fontSize,
+              fontSize: (element.fontSize || 16) * zoom,
               color: element.color,
               cursor: 'move'
             }}
