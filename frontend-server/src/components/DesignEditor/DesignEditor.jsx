@@ -22,7 +22,6 @@ const DesignEditor = () => {
   ]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
-  const [showBackgroundPicker, setShowBackgroundPicker] = useState(false);
 
   /**
    * Handle adding element to canvas (adds to current page)
@@ -145,6 +144,16 @@ const DesignEditor = () => {
   const currentPage = pages[currentPageIndex] || pages[0];
   const currentPageElements = currentPage?.elements || canvasElements;
 
+  // Handle background change
+  const handleBackgroundChange = (background) => {
+    const newPages = [...pages];
+    newPages[currentPageIndex] = {
+      ...newPages[currentPageIndex],
+      background
+    };
+    setPages(newPages);
+  };
+
   return (
     <div className="flex h-full bg-gray-50">
       {/* Left Sidebar - Tools */}
@@ -153,6 +162,8 @@ const DesignEditor = () => {
         onSelectTool={setSelectedTool}
         onAddElement={handleAddElement}
         onAddMultiplePages={handleAddMultiplePages}
+        currentBackground={currentPage?.background}
+        onBackgroundChange={handleBackgroundChange}
       />
 
       {/* Main Canvas Area */}
@@ -177,6 +188,43 @@ const DesignEditor = () => {
             >
               Next →
             </button>
+
+            {/* Slide Controls - Add & Delete */}
+            <div className="flex items-center gap-2 ml-4 border-l border-gray-300 pl-4">
+              <button
+                onClick={() => {
+                  // Duplicate current slide
+                  const currentSlide = pages[currentPageIndex];
+                  const newSlide = {
+                    ...currentSlide,
+                    id: `page-${Date.now()}`,
+                    name: `Slide ${pages.length + 1}`,
+                    elements: currentSlide.elements.map(el => ({
+                      ...el,
+                      id: `element-${Date.now()}-${Math.random()}`
+                    }))
+                  };
+                  const newPages = [
+                    ...pages.slice(0, currentPageIndex + 1),
+                    newSlide,
+                    ...pages.slice(currentPageIndex + 1)
+                  ];
+                  setPages(newPages);
+                  setCurrentPageIndex(currentPageIndex + 1);
+                }}
+                className="w-8 h-8 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center text-lg font-bold"
+                title="Duplicate current slide"
+              >
+                +
+              </button>
+              <button
+                onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
+                className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-lg"
+                title="Delete current slide"
+              >
+                🗑️
+              </button>
+            </div>
           </div>
         )}
 
@@ -188,64 +236,6 @@ const DesignEditor = () => {
           onDeleteElement={handleDeleteElement}
           background={currentPage?.background}
         />
-
-        {/* Slide Management Controls - Below Canvas */}
-        {pages.length > 1 && (
-          <div className="bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowBackgroundPicker(!showBackgroundPicker)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm flex items-center gap-2"
-              >
-                🎨 Change Background
-              </button>
-
-              {showBackgroundPicker && (
-                <div className="flex items-center gap-2 ml-2">
-                  <span className="text-sm text-gray-600">Background:</span>
-                  <input
-                    type="color"
-                    value={currentPage?.background?.color || '#ffffff'}
-                    onChange={(e) => {
-                      const newPages = [...pages];
-                      newPages[currentPageIndex] = {
-                        ...newPages[currentPageIndex],
-                        background: { type: 'solid', color: e.target.value }
-                      };
-                      setPages(newPages);
-                    }}
-                    className="w-10 h-10 rounded cursor-pointer border border-gray-300"
-                  />
-                  <button
-                    onClick={() => {
-                      const newPages = [...pages];
-                      newPages[currentPageIndex] = {
-                        ...newPages[currentPageIndex],
-                        background: {
-                          type: 'gradient',
-                          angle: 135,
-                          colors: ['#667eea', '#764ba2']
-                        }
-                      };
-                      setPages(newPages);
-                    }}
-                    className="px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded text-xs font-medium"
-                  >
-                    Gradient
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
-              disabled={pages.length === 1}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
-            >
-              🗑️ Delete Slide
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Right Properties Panel */}

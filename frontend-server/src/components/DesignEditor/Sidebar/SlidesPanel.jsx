@@ -5,7 +5,7 @@ import TextStudio from '../TextStudio/TextStudio';
 /**
  * Slides Panel - Create and manage slides
  */
-const SlidesPanel = ({ onAddMultiplePages }) => {
+const SlidesPanel = ({ onAddMultiplePages, currentBackground, onBackgroundChange }) => {
   const [isPasteModalOpen, setIsPasteModalOpen] = useState(false);
   const [isTextStudioOpen, setIsTextStudioOpen] = useState(false);
   const [pastedText, setPastedText] = useState('');
@@ -114,6 +114,76 @@ const SlidesPanel = ({ onAddMultiplePages }) => {
             Generate with AI
           </button>
         </div>
+
+        {/* Background Customization */}
+        {currentBackground && onBackgroundChange && (
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">🎨 Slide Background</h3>
+            <div className="space-y-3">
+              {/* Solid Color */}
+              <div>
+                <label className="text-xs text-gray-600 mb-1 block">Solid Color</label>
+                <input
+                  type="color"
+                  value={currentBackground?.color || '#ffffff'}
+                  onChange={(e) => onBackgroundChange({ type: 'solid', color: e.target.value })}
+                  className="w-full h-10 rounded cursor-pointer border border-gray-300"
+                />
+              </div>
+
+              {/* Gradient Presets */}
+              <div>
+                <label className="text-xs text-gray-600 mb-2 block">Gradient Presets</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onBackgroundChange({
+                      type: 'gradient',
+                      angle: 135,
+                      colors: ['#667eea', '#764ba2']
+                    })}
+                    className="h-10 rounded bg-gradient-to-br from-blue-500 to-purple-600 border border-gray-300 hover:scale-105 transition-transform"
+                    title="Blue to Purple"
+                  />
+                  <button
+                    onClick={() => onBackgroundChange({
+                      type: 'gradient',
+                      angle: 135,
+                      colors: ['#f093fb', '#f5576c']
+                    })}
+                    className="h-10 rounded bg-gradient-to-br from-pink-400 to-red-500 border border-gray-300 hover:scale-105 transition-transform"
+                    title="Pink to Red"
+                  />
+                  <button
+                    onClick={() => onBackgroundChange({
+                      type: 'gradient',
+                      angle: 135,
+                      colors: ['#4facfe', '#00f2fe']
+                    })}
+                    className="h-10 rounded bg-gradient-to-br from-blue-400 to-cyan-400 border border-gray-300 hover:scale-105 transition-transform"
+                    title="Blue to Cyan"
+                  />
+                  <button
+                    onClick={() => onBackgroundChange({
+                      type: 'gradient',
+                      angle: 135,
+                      colors: ['#43e97b', '#38f9d7']
+                    })}
+                    className="h-10 rounded bg-gradient-to-br from-green-400 to-teal-400 border border-gray-300 hover:scale-105 transition-transform"
+                    title="Green to Teal"
+                  />
+                </div>
+              </div>
+
+              {/* Reset to White */}
+              <button
+                onClick={() => onBackgroundChange({ type: 'solid', color: '#ffffff' })}
+                className="w-full px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
+              >
+                Reset to White
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Info Box */}
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
