@@ -109,50 +109,29 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   {/* Font Weight */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Weight</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { value: 'normal', label: 'Normal', weight: 'font-normal' },
-                        { value: '600', label: 'Semi', weight: 'font-semibold' },
-                        { value: 'bold', label: 'Bold', weight: 'font-bold' }
-                      ].map(({ value, label, weight }) => (
-                        <button
-                          key={value}
-                          onClick={() => onUpdate({ fontWeight: value })}
-                          className={`px-1 py-2 rounded text-xs ${weight} transition-all whitespace-nowrap ${
-                            element.fontWeight === value
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      value={element.fontWeight || 'normal'}
+                      onChange={(e) => onUpdate({ fontWeight: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="600">Semi Bold</option>
+                      <option value="bold">Bold</option>
+                    </select>
                   </div>
 
                   {/* Text Alignment */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Align</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { value: 'left', icon: '⬅️' },
-                        { value: 'center', icon: '↔️' },
-                        { value: 'right', icon: '➡️' }
-                      ].map(({ value, icon }) => (
-                        <button
-                          key={value}
-                          onClick={() => onUpdate({ textAlign: value })}
-                          className={`px-1 py-2 rounded text-base transition-all ${
-                            (element.textAlign || 'left') === value
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
-                          }`}
-                          title={value.charAt(0).toUpperCase() + value.slice(1)}
-                        >
-                          {icon}
-                        </button>
-                      ))}
-                    </div>
+                    <select
+                      value={element.textAlign || 'left'}
+                      onChange={(e) => onUpdate({ textAlign: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-md text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+                    >
+                      <option value="left">⬅️ Left</option>
+                      <option value="center">↔️ Center</option>
+                      <option value="right">➡️ Right</option>
+                    </select>
                   </div>
                 </div>
               )}

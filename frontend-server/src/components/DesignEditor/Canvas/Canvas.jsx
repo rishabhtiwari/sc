@@ -9,6 +9,7 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [zoom, setZoom] = useState(0.5);
+  const [isEditingText, setIsEditingText] = useState(false);
 
   // Generate background style
   const getBackgroundStyle = () => {
@@ -45,8 +46,9 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
   };
 
   const handleKeyDown = (e) => {
-    // Delete selected element on Delete/Backspace
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement) {
+    // Delete selected element on Delete/Backspace (but NOT when editing text)
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElement && !isEditingText) {
+      e.preventDefault();
       onDeleteElement(selectedElement.id);
     }
   };
@@ -54,7 +56,7 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElement]);
+  }, [selectedElement, isEditingText]);
 
   return (
     <div className="flex-1 flex flex-col bg-gray-100">
@@ -131,6 +133,12 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
               zoom={zoom}
               onSelect={() => onSelectElement(element)}
               onUpdate={(updates) => onUpdateElement(element.id, updates)}
+              onEditingChange={(editing) => {
+                // Only track editing state for the selected element
+                if (selectedElement?.id === element.id) {
+                  setIsEditingText(editing);
+                }
+              }}
             />
           ))}
 

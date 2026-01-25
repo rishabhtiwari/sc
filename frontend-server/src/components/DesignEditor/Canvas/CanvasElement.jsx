@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
  * Canvas Element Component
  * Renders different types of elements (text, image, shape, etc.)
  */
-const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
+const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditingChange }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState(null);
@@ -12,6 +12,13 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(element.text || '');
   const elementRef = useRef(null);
+
+  // Notify parent when editing state changes
+  React.useEffect(() => {
+    if (onEditingChange) {
+      onEditingChange(isEditing);
+    }
+  }, [isEditing, onEditingChange]);
 
   const handleMouseDown = (e) => {
     e.stopPropagation();
