@@ -109,7 +109,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   {/* Font Weight */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Weight</label>
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
                         { value: 'normal', label: 'Normal', weight: 'font-normal' },
                         { value: '600', label: 'Semi', weight: 'font-semibold' },
@@ -118,7 +118,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                         <button
                           key={value}
                           onClick={() => onUpdate({ fontWeight: value })}
-                          className={`px-2 py-2 rounded text-xs ${weight} transition-all ${
+                          className={`px-1 py-2 rounded text-xs ${weight} transition-all whitespace-nowrap ${
                             element.fontWeight === value
                               ? 'bg-blue-600 text-white shadow-sm'
                               : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
@@ -133,23 +133,23 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   {/* Text Alignment */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Align</label>
-                    <div className="grid grid-cols-3 gap-1.5">
+                    <div className="grid grid-cols-3 gap-2">
                       {[
-                        { value: 'left', icon: '⬅️', label: 'Left' },
-                        { value: 'center', icon: '↔️', label: 'Center' },
-                        { value: 'right', icon: '➡️', label: 'Right' }
-                      ].map(({ value, icon, label }) => (
+                        { value: 'left', icon: '⬅️' },
+                        { value: 'center', icon: '↔️' },
+                        { value: 'right', icon: '➡️' }
+                      ].map(({ value, icon }) => (
                         <button
                           key={value}
                           onClick={() => onUpdate({ textAlign: value })}
-                          className={`px-2 py-2 rounded text-xs transition-all ${
+                          className={`px-1 py-2 rounded text-base transition-all ${
                             (element.textAlign || 'left') === value
                               ? 'bg-blue-600 text-white shadow-sm'
                               : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
                           }`}
+                          title={value.charAt(0).toUpperCase() + value.slice(1)}
                         >
-                          <span className="mr-1">{icon}</span>
-                          {label}
+                          {icon}
                         </button>
                       ))}
                     </div>
