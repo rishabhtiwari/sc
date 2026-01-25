@@ -53,7 +53,7 @@ const ImagesPanel = ({ onAddElement }) => {
     <div className="space-y-6">
       {/* Upload Section */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">Upload Images</h3>
+        <h3 className="text-sm font-semibold text-gray-900">📤 Upload Images</h3>
         <input
           ref={fileInputRef}
           type="file"
@@ -64,12 +64,14 @@ const ImagesPanel = ({ onAddElement }) => {
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all text-center"
+          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
         >
-          <div className="text-3xl mb-2">📤</div>
-          <div className="text-sm font-medium text-gray-700">Click to upload</div>
-          <div className="text-xs text-gray-500 mt-1">PNG, JPG, GIF up to 10MB</div>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+          </svg>
+          Upload Image
         </button>
+        <p className="text-xs text-gray-500 text-center">PNG, JPG, GIF up to 10MB</p>
       </div>
 
       {/* Uploaded Images */}

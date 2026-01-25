@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
+import AudioTimeline from './AudioTimeline/AudioTimeline';
 import ConfirmDialog from '../common/ConfirmDialog';
 
 /**
@@ -17,11 +18,18 @@ const DesignEditor = () => {
       id: 'page-1',
       name: 'Page 1',
       elements: [],
-      background: { type: 'solid', color: '#ffffff' }
+      background: { type: 'solid', color: '#ffffff' },
+      duration: 5 // Default 5 seconds per slide
     }
   ]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
+
+  // Audio Timeline State
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRefs = useRef({});
 
   /**
    * Handle adding element to canvas (adds to current page)
@@ -154,6 +162,90 @@ const DesignEditor = () => {
     setPages(newPages);
   };
 
+  /**
+   * Handle adding audio track
+   */
+  const handleAddAudioTrack = (audioFile, audioUrl) => {
+    // Create audio element to get duration
+    const audio = new Audio(audioUrl);
+
+    audio.addEventListener('loadedmetadata', () => {
+      const newTrack = {
+        id: `audio-${Date.now()}`,
+        name: audioFile.name,
+        url: audioUrl,
+        duration: audio.duration,
+        startTime: 0, // Start at beginning by default
+        volume: 1
+      };
+
+      setAudioTracks([...audioTracks, newTrack]);
+      audioRefs.current[newTrack.id] = audio;
+
+      console.log('✅ Audio track added:', newTrack);
+    });
+  };
+
+  /**
+   * Handle audio track update (drag, stretch)
+   */
+  const handleAudioUpdate = (trackId, updates) => {
+    setAudioTracks(audioTracks.map(track =>
+      track.id === trackId ? { ...track, ...updates } : track
+    ));
+  };
+
+  /**
+   * Handle slide duration update
+   */
+  const handleSlideUpdate = (slideIndex, updates) => {
+    const newPages = pages.map((page, index) =>
+      index === slideIndex ? { ...page, ...updates } : page
+    );
+    setPages(newPages);
+  };
+
+  /**
+   * Handle timeline seek
+   */
+  const handleSeek = (time) => {
+    setCurrentTime(time);
+    // Update all audio elements
+    Object.values(audioRefs.current).forEach(audio => {
+      if (audio) {
+        audio.currentTime = time;
+      }
+    });
+  };
+
+  /**
+   * Handle play
+   */
+  const handlePlay = () => {
+    setIsPlaying(true);
+    // Play all audio tracks that should be playing at current time
+    audioTracks.forEach(track => {
+      const audio = audioRefs.current[track.id];
+      if (audio && currentTime >= track.startTime && currentTime < track.startTime + track.duration) {
+        audio.currentTime = currentTime - track.startTime;
+        audio.play();
+      }
+    });
+  };
+
+  /**
+   * Handle pause
+   */
+  const handlePause = () => {
+    setIsPlaying(false);
+    // Pause all audio tracks
+    Object.values(audioRefs.current).forEach(audio => {
+      if (audio) {
+        audio.pause();
+      }
+    });
+  };
+
   return (
     <div className="flex h-full bg-gray-50">
       {/* Left Sidebar - Tools */}
@@ -162,6 +254,7 @@ const DesignEditor = () => {
         onSelectTool={setSelectedTool}
         onAddElement={handleAddElement}
         onAddMultiplePages={handleAddMultiplePages}
+        onAddAudioTrack={handleAddAudioTrack}
         currentBackground={currentPage?.background}
         onBackgroundChange={handleBackgroundChange}
       />
@@ -228,14 +321,29 @@ const DesignEditor = () => {
           </div>
         )}
 
-        <Canvas
-          elements={currentPageElements}
-          selectedElement={selectedElement}
-          onSelectElement={handleSelectElement}
-          onUpdateElement={handleUpdateElement}
-          onDeleteElement={handleDeleteElement}
-          background={currentPage?.background}
-        />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Canvas
+            elements={currentPageElements}
+            selectedElement={selectedElement}
+            onSelectElement={handleSelectElement}
+            onUpdateElement={handleUpdateElement}
+            onDeleteElement={handleDeleteElement}
+            background={currentPage?.background}
+          />
+
+          {/* Audio Timeline at Bottom */}
+          <AudioTimeline
+            audioTracks={audioTracks}
+            slides={pages}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            onAudioUpdate={handleAudioUpdate}
+            onSlideUpdate={handleSlideUpdate}
+            onSeek={handleSeek}
+            onPlay={handlePlay}
+            onPause={handlePause}
+          />
+        </div>
       </div>
 
       {/* Right Properties Panel */}
