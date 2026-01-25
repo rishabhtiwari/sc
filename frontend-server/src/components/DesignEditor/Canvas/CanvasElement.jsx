@@ -221,16 +221,42 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
         );
 
       case 'image':
+        // Build filter string for image effects
+        const filters = [];
+        if (element.brightness !== undefined && element.brightness !== 100) {
+          filters.push(`brightness(${element.brightness}%)`);
+        }
+        if (element.contrast !== undefined && element.contrast !== 100) {
+          filters.push(`contrast(${element.contrast}%)`);
+        }
+        if (element.saturation !== undefined && element.saturation !== 100) {
+          filters.push(`saturate(${element.saturation}%)`);
+        }
+        if (element.blur !== undefined && element.blur > 0) {
+          filters.push(`blur(${element.blur}px)`);
+        }
+
+        const imageStyle = {
+          width: element.width ? element.width * zoom : 'auto',
+          height: element.height ? element.height * zoom : 'auto',
+          objectFit: 'cover',
+          cursor: 'move',
+          opacity: element.opacity !== undefined ? element.opacity : 1,
+          transform: `
+            rotate(${element.rotation || 0}deg)
+            scaleX(${element.flipX ? -1 : 1})
+            scaleY(${element.flipY ? -1 : 1})
+          `.trim(),
+          borderRadius: element.borderRadius ? `${element.borderRadius * zoom}px` : '0',
+          border: element.borderWidth ? `${element.borderWidth * zoom}px solid ${element.borderColor || '#000'}` : 'none',
+          filter: filters.length > 0 ? filters.join(' ') : 'none'
+        };
+
         return (
           <img
             src={element.src}
             alt="Canvas element"
-            style={{
-              width: element.width ? element.width * zoom : 'auto',
-              height: element.height ? element.height * zoom : 'auto',
-              objectFit: 'cover',
-              cursor: 'move'
-            }}
+            style={imageStyle}
             draggable={false}
           />
         );

@@ -10,6 +10,10 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
     typography: true,
     color: true,
     dimensions: true,
+    position: true,
+    transform: true,
+    effects: true,
+    border: true,
     stroke: true
   });
 
@@ -168,10 +172,55 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
       case 'image':
         return (
           <div className="space-y-1">
+            {/* Position Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Position"
+                icon="📍"
+                section="position"
+                isExpanded={expandedSections.position}
+              />
+              {expandedSections.position && (
+                <div className="p-4 space-y-4">
+                  {/* X Position */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">X Position</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round(element.x || 0)}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1920"
+                      value={element.x || 0}
+                      onChange={(e) => onUpdate({ x: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Y Position */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Y Position</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round(element.y || 0)}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1080"
+                      value={element.y || 0}
+                      onChange={(e) => onUpdate({ y: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Dimensions Section */}
             <div className="bg-white border-b border-gray-100">
               <SectionHeader
-                title="Dimensions"
+                title="Size"
                 icon="📐"
                 section="dimensions"
                 isExpanded={expandedSections.dimensions}
@@ -206,6 +255,218 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                       max="1000"
                       value={element.height}
                       onChange={(e) => onUpdate({ height: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Transform Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Transform"
+                icon="🔄"
+                section="transform"
+                isExpanded={expandedSections.transform}
+              />
+              {expandedSections.transform && (
+                <div className="p-4 space-y-4">
+                  {/* Rotation */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Rotation</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.rotation || 0}°</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="360"
+                      value={element.rotation || 0}
+                      onChange={(e) => onUpdate({ rotation: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Opacity */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Opacity</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round((element.opacity || 1) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={(element.opacity || 1) * 100}
+                      onChange={(e) => onUpdate({ opacity: parseInt(e.target.value) / 100 })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Flip Controls */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Flip</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => onUpdate({ flipX: !(element.flipX || false) })}
+                        className={`px-3 py-2 rounded text-xs transition-all ${
+                          element.flipX
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
+                        }`}
+                      >
+                        ↔️ Horizontal
+                      </button>
+                      <button
+                        onClick={() => onUpdate({ flipY: !(element.flipY || false) })}
+                        className={`px-3 py-2 rounded text-xs transition-all ${
+                          element.flipY
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-gray-50 border border-gray-200 text-gray-700 hover:border-blue-400'
+                        }`}
+                      >
+                        ↕️ Vertical
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Border Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Border"
+                icon="⬜"
+                section="border"
+                isExpanded={expandedSections.border}
+              />
+              {expandedSections.border && (
+                <div className="p-4 space-y-4">
+                  {/* Border Width */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Border Width</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.borderWidth || 0}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      value={element.borderWidth || 0}
+                      onChange={(e) => onUpdate({ borderWidth: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Border Color */}
+                  {(element.borderWidth || 0) > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">Border Color</label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={element.borderColor || '#000000'}
+                          onChange={(e) => onUpdate({ borderColor: e.target.value })}
+                          className="w-12 h-12 rounded-md cursor-pointer border border-gray-200"
+                        />
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded">{element.borderColor || '#000000'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Corner Radius */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Corner Radius</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.borderRadius || 0}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={element.borderRadius || 0}
+                      onChange={(e) => onUpdate({ borderRadius: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Effects Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Effects"
+                icon="✨"
+                section="effects"
+                isExpanded={expandedSections.effects}
+              />
+              {expandedSections.effects && (
+                <div className="p-4 space-y-4">
+                  {/* Brightness */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Brightness</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.brightness || 100}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      value={element.brightness || 100}
+                      onChange={(e) => onUpdate({ brightness: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Contrast */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Contrast</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.contrast || 100}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      value={element.contrast || 100}
+                      onChange={(e) => onUpdate({ contrast: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Saturation */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Saturation</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.saturation || 100}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="200"
+                      value={element.saturation || 100}
+                      onChange={(e) => onUpdate({ saturation: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Blur */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Blur</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.blur || 0}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      value={element.blur || 0}
+                      onChange={(e) => onUpdate({ blur: parseInt(e.target.value) })}
                       className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
                     />
                   </div>
