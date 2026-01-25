@@ -29,6 +29,7 @@ const AudioTimeline = ({
   const [dragType, setDragType] = useState(null); // 'audio' or 'slide'
   const [dragIndex, setDragIndex] = useState(null);
   const timelineRef = useRef(null);
+  const scrollContainerRef = useRef(null);
 
   // Calculate total duration (max of all audio tracks or slides)
   const totalDuration = Math.max(
@@ -181,10 +182,27 @@ const AudioTimeline = ({
     }
   }, [isDragging, isStretching, dragStart, stretchStart, dragType, dragIndex]);
 
+  // Auto-scroll to follow playhead during playback
+  useEffect(() => {
+    if (isPlaying && scrollContainerRef.current) {
+      const playheadPosition = timeToPixels(currentTime);
+      const container = scrollContainerRef.current;
+      const containerWidth = container.clientWidth;
+      const scrollLeft = container.scrollLeft;
+
+      // Auto-scroll if playhead is near the right edge or out of view
+      if (playheadPosition > scrollLeft + containerWidth - 100) {
+        container.scrollLeft = playheadPosition - containerWidth / 2;
+      } else if (playheadPosition < scrollLeft + 50) {
+        container.scrollLeft = Math.max(0, playheadPosition - 50);
+      }
+    }
+  }, [currentTime, isPlaying]);
+
   return (
-    <div className="bg-white border-t border-gray-200 flex flex-col" style={{ height: '220px' }}>
+    <div className="bg-white border-t border-gray-200 flex flex-col" style={{ height: '180px', flexShrink: 0 }}>
       {/* Timeline Header - Controls */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between" style={{ height: '44px', flexShrink: 0 }}>
         <div className="flex items-center gap-3">
           {/* Play/Pause Button */}
           <button
@@ -235,11 +253,15 @@ const AudioTimeline = ({
       </div>
 
       {/* Timeline Content */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50">
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50"
+        style={{ scrollBehavior: 'smooth' }}
+      >
         <div
           ref={timelineRef}
           className="relative h-full cursor-pointer"
-          style={{ minWidth: `${timeToPixels(totalDuration) + 100}px` }}
+          style={{ minWidth: `${Math.max(timeToPixels(totalDuration) + 200, 1000)}px`, height: '100%' }}
           onClick={handleTimelineClick}
         >
           {/* Time Ruler */}
@@ -265,11 +287,11 @@ const AudioTimeline = ({
           </div>
 
           {/* Slides Track */}
-          <div className="absolute top-8 left-0 right-0 h-16 bg-white">
-            <div className="px-2 py-1 text-xs font-semibold text-gray-600 border-b border-gray-200">
+          <div className="absolute top-8 left-0 right-0 h-12 bg-white">
+            <div className="px-2 py-0.5 text-xs font-semibold text-gray-600 border-b border-gray-200">
               📊 Slides
             </div>
-            <div className="relative h-full pt-6">
+            <div className="relative h-full pt-5">
               {slides.map((slide, index) => {
                 // Calculate slide start time based on previous slides
                 const prevSlides = slides.slice(0, index);
@@ -279,7 +301,7 @@ const AudioTimeline = ({
                 return (
                   <div
                     key={slide.id || index}
-                    className="absolute top-0 h-10 bg-purple-500 hover:bg-purple-600 border border-purple-300 rounded shadow-sm cursor-move transition-all"
+                    className="absolute top-0 h-7 bg-purple-500 hover:bg-purple-600 border border-purple-300 rounded shadow-sm cursor-move transition-all"
                     style={{
                       left: `${timeToPixels(startTime)}px`,
                       width: `${timeToPixels(slideDuration)}px`
@@ -287,7 +309,7 @@ const AudioTimeline = ({
                     title={`${slide.name || `Slide ${index + 1}`} (${formatTime(slideDuration)})`}
                     onMouseDown={(e) => handleSlideDragStart(e, index)}
                   >
-                    <div className="px-2 py-1 text-xs font-medium text-white truncate">
+                    <div className="px-2 py-0.5 text-xs font-medium text-white truncate">
                       {slide.name || `Slide ${index + 1}`}
                     </div>
                     <div
@@ -301,13 +323,13 @@ const AudioTimeline = ({
           </div>
 
           {/* Audio Tracks */}
-          <div className="absolute top-24 left-0 right-0 bottom-0 bg-gray-50">
+          <div className="absolute top-20 left-0 right-0 bottom-0 bg-gray-50">
             {audioTracks.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-400">
-                  <div className="text-3xl mb-2">🎵</div>
-                  <div className="text-sm font-medium text-gray-600">No audio tracks yet</div>
-                  <div className="text-xs mt-1 text-gray-500">Upload audio from the Media panel</div>
+                  <div className="text-2xl mb-1">🎵</div>
+                  <div className="text-xs font-medium text-gray-600">No audio tracks yet</div>
+                  <div className="text-xs mt-0.5 text-gray-500">Upload audio from the Media panel</div>
                 </div>
               </div>
             ) : (
@@ -318,14 +340,14 @@ const AudioTimeline = ({
                 return (
                   <div
                     key={track.id || index}
-                    className="relative mb-2 bg-white border-b border-gray-100"
-                    style={{ height: '60px' }}
+                    className="relative mb-1 bg-white border-b border-gray-100"
+                    style={{ height: '48px' }}
                   >
-                    <div className="px-2 py-1 text-xs font-semibold text-gray-600">
+                    <div className="px-2 py-0.5 text-xs font-semibold text-gray-600">
                       🎵 Track {index + 1}
                     </div>
                     <div
-                      className={`absolute top-6 h-12 rounded shadow-sm cursor-move transition-all ${
+                      className={`absolute top-5 h-10 rounded shadow-sm cursor-move transition-all ${
                         selectedTrack === track.id
                           ? 'bg-blue-500 border-2 border-blue-400'
                           : 'bg-blue-600 hover:bg-blue-500 border border-blue-400'
@@ -356,7 +378,7 @@ const AudioTimeline = ({
                     >
                       {/* Audio Waveform Placeholder */}
                       <div className="h-full flex items-center px-2">
-                        <div className="flex-1 flex items-center gap-0.5 h-8">
+                        <div className="flex-1 flex items-center gap-0.5 h-6">
                           {Array.from({ length: Math.min(50, Math.floor(timeToPixels(trackDuration) / 4)) }).map((_, i) => (
                             <div
                               key={i}
@@ -368,7 +390,7 @@ const AudioTimeline = ({
                       </div>
 
                       {/* Track Info */}
-                      <div className="absolute top-1 left-2 text-xs font-medium text-white truncate pr-8 drop-shadow">
+                      <div className="absolute top-0.5 left-2 text-xs font-medium text-white truncate pr-8 drop-shadow">
                         {track.name || 'Audio Track'}
                       </div>
 
