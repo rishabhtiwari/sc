@@ -179,10 +179,13 @@ const DesignEditor = () => {
         volume: 1
       };
 
-      setAudioTracks([...audioTracks, newTrack]);
-      audioRefs.current[newTrack.id] = audio;
+      setAudioTracks(prevTracks => {
+        const updatedTracks = [...prevTracks, newTrack];
+        console.log('✅ Audio track added:', newTrack, 'Duration:', audio.duration);
+        return updatedTracks;
+      });
 
-      console.log('✅ Audio track added:', newTrack);
+      audioRefs.current[newTrack.id] = audio;
     });
   };
 
@@ -364,9 +367,9 @@ const DesignEditor = () => {
           </div>
         )}
 
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
           {/* Canvas Area - Takes remaining space */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
             <Canvas
               elements={currentPageElements}
               selectedElement={selectedElement}
