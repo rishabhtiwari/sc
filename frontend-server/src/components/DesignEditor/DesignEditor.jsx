@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
@@ -246,6 +246,49 @@ const DesignEditor = () => {
     });
   };
 
+  /**
+   * Update playhead position during playback
+   */
+  useEffect(() => {
+    let animationFrame;
+
+    if (isPlaying) {
+      const updatePlayhead = () => {
+        setCurrentTime(prevTime => {
+          const newTime = prevTime + 0.016; // ~60fps
+
+          // Update audio elements
+          audioTracks.forEach(track => {
+            const audio = audioRefs.current[track.id];
+            if (audio) {
+              const trackTime = newTime - track.startTime;
+              if (trackTime >= 0 && trackTime <= track.duration) {
+                if (audio.paused) {
+                  audio.currentTime = trackTime;
+                  audio.play().catch(err => console.error('Audio play error:', err));
+                }
+              } else if (!audio.paused) {
+                audio.pause();
+              }
+            }
+          });
+
+          return newTime;
+        });
+
+        animationFrame = requestAnimationFrame(updatePlayhead);
+      };
+
+      animationFrame = requestAnimationFrame(updatePlayhead);
+    }
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isPlaying, audioTracks]);
+
   return (
     <div className="flex h-full bg-gray-50">
       {/* Left Sidebar - Tools */}
@@ -322,16 +365,19 @@ const DesignEditor = () => {
         )}
 
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Canvas
-            elements={currentPageElements}
-            selectedElement={selectedElement}
-            onSelectElement={handleSelectElement}
-            onUpdateElement={handleUpdateElement}
-            onDeleteElement={handleDeleteElement}
-            background={currentPage?.background}
-          />
+          {/* Canvas Area - Takes remaining space */}
+          <div className="flex-1 overflow-hidden">
+            <Canvas
+              elements={currentPageElements}
+              selectedElement={selectedElement}
+              onSelectElement={handleSelectElement}
+              onUpdateElement={handleUpdateElement}
+              onDeleteElement={handleDeleteElement}
+              background={currentPage?.background}
+            />
+          </div>
 
-          {/* Audio Timeline at Bottom */}
+          {/* Audio Timeline at Bottom - Fixed height */}
           <AudioTimeline
             audioTracks={audioTracks}
             slides={pages}

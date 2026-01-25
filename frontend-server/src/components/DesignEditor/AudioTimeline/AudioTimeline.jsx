@@ -182,47 +182,52 @@ const AudioTimeline = ({
   }, [isDragging, isStretching, dragStart, stretchStart, dragType, dragIndex]);
 
   return (
-    <div className="bg-gray-900 border-t border-gray-700 flex flex-col" style={{ height: '250px' }}>
+    <div className="bg-white border-t border-gray-200 flex flex-col" style={{ height: '220px' }}>
       {/* Timeline Header - Controls */}
-      <div className="bg-gray-800 border-b border-gray-700 px-4 py-2 flex items-center justify-between">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Play/Pause Button */}
           <button
             onClick={isPlaying ? onPause : onPlay}
-            className="w-10 h-10 bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center justify-center text-white transition-colors"
+            className="w-9 h-9 bg-blue-600 hover:bg-blue-700 rounded-md flex items-center justify-center text-white transition-colors shadow-sm"
           >
             {isPlaying ? (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
               </svg>
             ) : (
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}
           </button>
 
           {/* Time Display */}
-          <div className="text-sm font-mono text-gray-300">
+          <div className="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded border border-gray-200">
             {formatTime(currentTime)} / {formatTime(totalDuration)}
+          </div>
+
+          {/* Timeline Label */}
+          <div className="text-xs font-semibold text-gray-600 ml-2">
+            🎵 Audio Timeline
           </div>
         </div>
 
         {/* Zoom Controls */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">Zoom:</span>
+          <span className="text-xs text-gray-500">Zoom:</span>
           <button
             onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
-            className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+            className="px-2 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded text-gray-700 text-sm transition-colors"
           >
             −
           </button>
-          <span className="text-sm text-gray-300 min-w-[50px] text-center">
+          <span className="text-xs text-gray-700 min-w-[50px] text-center font-medium">
             {Math.round(zoom * 100)}%
           </span>
           <button
             onClick={() => setZoom(Math.min(3, zoom + 0.25))}
-            className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm"
+            className="px-2 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded text-gray-700 text-sm transition-colors"
           >
             +
           </button>
@@ -230,23 +235,23 @@ const AudioTimeline = ({
       </div>
 
       {/* Timeline Content */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
-        <div 
+      <div className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50">
+        <div
           ref={timelineRef}
           className="relative h-full cursor-pointer"
           style={{ minWidth: `${timeToPixels(totalDuration) + 100}px` }}
           onClick={handleTimelineClick}
         >
           {/* Time Ruler */}
-          <div className="absolute top-0 left-0 right-0 h-8 bg-gray-800 border-b border-gray-700 flex items-center">
+          <div className="absolute top-0 left-0 right-0 h-8 bg-white border-b border-gray-200 flex items-center">
             {Array.from({ length: Math.ceil(totalDuration) + 1 }).map((_, i) => (
               <div
                 key={i}
                 className="absolute flex flex-col items-center"
                 style={{ left: `${timeToPixels(i)}px` }}
               >
-                <div className="w-px h-2 bg-gray-600"></div>
-                <span className="text-xs text-gray-400 mt-1">{formatTime(i)}</span>
+                <div className="w-px h-2 bg-gray-300"></div>
+                <span className="text-xs text-gray-600 mt-1 font-medium">{formatTime(i)}</span>
               </div>
             ))}
           </div>
@@ -256,13 +261,13 @@ const AudioTimeline = ({
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
             style={{ left: `${timeToPixels(currentTime)}px` }}
           >
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full"></div>
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
           </div>
 
           {/* Slides Track */}
-          <div className="absolute top-8 left-0 right-0 h-16 bg-gray-750">
-            <div className="px-2 py-1 text-xs font-semibold text-gray-400 border-b border-gray-700">
-              Slides
+          <div className="absolute top-8 left-0 right-0 h-16 bg-white">
+            <div className="px-2 py-1 text-xs font-semibold text-gray-600 border-b border-gray-200">
+              📊 Slides
             </div>
             <div className="relative h-full pt-6">
               {slides.map((slide, index) => {
@@ -274,7 +279,7 @@ const AudioTimeline = ({
                 return (
                   <div
                     key={slide.id || index}
-                    className="absolute top-0 h-10 bg-purple-600 hover:bg-purple-500 border border-purple-400 rounded cursor-move transition-colors"
+                    className="absolute top-0 h-10 bg-purple-500 hover:bg-purple-600 border border-purple-300 rounded shadow-sm cursor-move transition-all"
                     style={{
                       left: `${timeToPixels(startTime)}px`,
                       width: `${timeToPixels(slideDuration)}px`
@@ -286,7 +291,7 @@ const AudioTimeline = ({
                       {slide.name || `Slide ${index + 1}`}
                     </div>
                     <div
-                      className="absolute bottom-0 right-0 w-2 h-full bg-purple-400 cursor-ew-resize hover:bg-purple-300"
+                      className="absolute bottom-0 right-0 w-2 h-full bg-purple-400 cursor-ew-resize hover:bg-purple-600 transition-colors"
                       onMouseDown={(e) => handleStretchStart(e, 'slide', index, 'right')}
                     ></div>
                   </div>
@@ -296,13 +301,13 @@ const AudioTimeline = ({
           </div>
 
           {/* Audio Tracks */}
-          <div className="absolute top-24 left-0 right-0 bottom-0">
+          <div className="absolute top-24 left-0 right-0 bottom-0 bg-gray-50">
             {audioTracks.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center text-gray-500">
-                  <div className="text-2xl mb-2">🎵</div>
-                  <div className="text-sm">No audio tracks yet</div>
-                  <div className="text-xs mt-1">Upload audio from the Media panel</div>
+                <div className="text-center text-gray-400">
+                  <div className="text-3xl mb-2">🎵</div>
+                  <div className="text-sm font-medium text-gray-600">No audio tracks yet</div>
+                  <div className="text-xs mt-1 text-gray-500">Upload audio from the Media panel</div>
                 </div>
               </div>
             ) : (
@@ -313,17 +318,17 @@ const AudioTimeline = ({
                 return (
                   <div
                     key={track.id || index}
-                    className="relative mb-2"
+                    className="relative mb-2 bg-white border-b border-gray-100"
                     style={{ height: '60px' }}
                   >
-                    <div className="px-2 py-1 text-xs font-semibold text-gray-400">
-                      Track {index + 1}
+                    <div className="px-2 py-1 text-xs font-semibold text-gray-600">
+                      🎵 Track {index + 1}
                     </div>
                     <div
-                      className={`absolute top-6 h-12 rounded cursor-move transition-all ${
+                      className={`absolute top-6 h-12 rounded shadow-sm cursor-move transition-all ${
                         selectedTrack === track.id
-                          ? 'bg-blue-600 border-2 border-blue-400'
-                          : 'bg-blue-700 hover:bg-blue-600 border border-blue-500'
+                          ? 'bg-blue-500 border-2 border-blue-400'
+                          : 'bg-blue-600 hover:bg-blue-500 border border-blue-400'
                       }`}
                       style={{
                         left: `${timeToPixels(startTime)}px`,
@@ -355,7 +360,7 @@ const AudioTimeline = ({
                           {Array.from({ length: Math.min(50, Math.floor(timeToPixels(trackDuration) / 4)) }).map((_, i) => (
                             <div
                               key={i}
-                              className="flex-1 bg-blue-300 rounded-sm"
+                              className="flex-1 bg-blue-200 rounded-sm opacity-70"
                               style={{ height: `${20 + Math.random() * 60}%` }}
                             ></div>
                           ))}
@@ -363,17 +368,17 @@ const AudioTimeline = ({
                       </div>
 
                       {/* Track Info */}
-                      <div className="absolute top-1 left-2 text-xs font-medium text-white truncate pr-8">
+                      <div className="absolute top-1 left-2 text-xs font-medium text-white truncate pr-8 drop-shadow">
                         {track.name || 'Audio Track'}
                       </div>
 
                       {/* Stretch Handles */}
                       <div
-                        className="absolute left-0 top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize hover:bg-blue-300"
+                        className="absolute left-0 top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize hover:bg-blue-500 transition-colors"
                         onMouseDown={(e) => handleStretchStart(e, 'audio', index, 'left')}
                       ></div>
                       <div
-                        className="absolute right-0 top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize hover:bg-blue-300"
+                        className="absolute right-0 top-0 bottom-0 w-2 bg-blue-400 cursor-ew-resize hover:bg-blue-500 transition-colors"
                         onMouseDown={(e) => handleStretchStart(e, 'audio', index, 'right')}
                       ></div>
                     </div>
