@@ -12,6 +12,8 @@ const MediaPanel = ({
   audioTracks = [],
   onAudioSelect,
   onAudioDeleteRequest,
+  videoTracks = [],
+  onVideoDeleteRequest,
   uploadedMedia = [],
   onUploadedMediaChange,
   onOpenAudioLibrary
@@ -263,17 +265,24 @@ const MediaPanel = ({
                             onAudioDeleteRequest(audioTrack.id, media.title, media.id);
                           } else {
                             // Audio not on timeline, just delete from media library
-                            if (window.confirm(`Delete "${media.title}"?`)) {
-                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                              showToast('Media deleted', 'success');
-                            }
-                          }
-                        } else {
-                          // For video and other media types, just delete from media library
-                          if (window.confirm(`Delete "${media.title}"?`)) {
                             onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                             showToast('Media deleted', 'success');
                           }
+                        } else if (media.type === 'video') {
+                          // For video, find the video track and delete from both timeline and media library
+                          const videoTrack = videoTracks.find(track => track.url === media.url);
+                          if (videoTrack && onVideoDeleteRequest) {
+                            // Delete from both timeline and media library
+                            onVideoDeleteRequest(videoTrack.id, media.title, media.id);
+                          } else {
+                            // Video not on timeline, just delete from media library
+                            onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                            showToast('Media deleted', 'success');
+                          }
+                        } else {
+                          // For other media types, just delete from media library
+                          onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                          showToast('Media deleted', 'success');
                         }
                       }}
                       className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"

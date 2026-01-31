@@ -56,6 +56,14 @@ const DesignEditor = () => {
     mediaId: null
   });
 
+  // Video Delete Confirmation Dialog
+  const [videoDeleteDialog, setVideoDeleteDialog] = useState({
+    isOpen: false,
+    videoId: null,
+    videoTitle: null,
+    mediaId: null
+  });
+
   // Audio Library Modal State
   const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
 
@@ -561,6 +569,43 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle video delete request (opens confirmation dialog)
+   */
+  const handleVideoDeleteRequest = (videoId, videoTitle, mediaId) => {
+    setVideoDeleteDialog({
+      isOpen: true,
+      videoId,
+      videoTitle,
+      mediaId
+    });
+  };
+
+  /**
+   * Confirm video deletion
+   */
+  const confirmVideoDelete = () => {
+    const { videoId, mediaId } = videoDeleteDialog;
+
+    // Delete from video tracks (timeline) and canvas
+    if (videoId) {
+      handleVideoDelete(videoId);
+
+      // Also close properties panel if this video element is selected
+      if (selectedElement && selectedElement.id === videoId) {
+        setSelectedElement(null);
+      }
+    }
+
+    // Delete from media library
+    if (mediaId) {
+      setUploadedVideo(prev => prev.filter(m => m.id !== mediaId));
+    }
+
+    // Close dialog
+    setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
+  };
+
+  /**
    * Handle slide duration update
    */
   const handleSlideUpdate = (slideIndex, updates) => {
@@ -841,6 +886,8 @@ const DesignEditor = () => {
         audioTracks={audioTracks}
         onAudioSelect={handleAudioSelect}
         onAudioDeleteRequest={handleAudioDeleteRequest}
+        videoTracks={videoTracks}
+        onVideoDeleteRequest={handleVideoDeleteRequest}
         uploadedAudio={uploadedAudio}
         onUploadedAudioChange={setUploadedAudio}
         uploadedVideo={uploadedVideo}
@@ -1018,6 +1065,20 @@ const DesignEditor = () => {
         message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
         warningMessage="This will permanently delete the audio from both the timeline and media library."
         confirmText="Delete Audio"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Delete Video Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={videoDeleteDialog.isOpen}
+        onClose={() => setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null })}
+        onConfirm={confirmVideoDelete}
+        title="Delete Video"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete "${videoDeleteDialog.videoTitle}"?`}
+        warningMessage="This will permanently delete the video from both the timeline and media library."
+        confirmText="Delete Video"
         cancelText="Cancel"
         variant="danger"
       />

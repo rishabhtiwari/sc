@@ -307,18 +307,24 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
 
         return (
           <video
+            key={element.id}
             src={element.src}
             style={videoStyle}
             muted={element.muted !== undefined ? element.muted : true}
             loop={element.loop !== undefined ? element.loop : false}
             playsInline
-            preload="auto"
+            preload="metadata"
             data-video-element-id={element.id}
             onLoadedMetadata={(e) => {
-              console.log('🎬 Video loaded:', element.id, 'duration:', e.target.duration);
+              console.log('🎬 Video loaded:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState);
+              // Ensure video is ready to play
+              e.target.load();
+            }}
+            onCanPlay={(e) => {
+              console.log('🎬 Video can play:', element.id);
             }}
             onError={(e) => {
-              console.error('❌ Video error:', element.id, e);
+              console.error('❌ Video error:', element.id, e.target.error);
             }}
           />
         );
