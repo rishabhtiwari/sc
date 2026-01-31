@@ -169,6 +169,7 @@ const DesignEditor = () => {
   const handleAddAudioTrack = (audioFile, audioUrl) => {
     // Create audio element to get duration
     const audio = new Audio(audioUrl);
+    const trackId = `audio-${Date.now()}`;
 
     audio.addEventListener('loadedmetadata', () => {
       setAudioTracks(prevTracks => {
@@ -183,12 +184,14 @@ const DesignEditor = () => {
         }
 
         const newTrack = {
-          id: `audio-${Date.now()}`,
+          id: trackId,
           name: audioFile.name,
           url: audioUrl,
           duration: audio.duration,
           startTime: startTime, // Auto-position at end of existing audio
-          volume: 1,
+          volume: 100, // Default volume 100%
+          fadeIn: 0,
+          fadeOut: 0,
           type: audioFile.name.toLowerCase().includes('voice') || audioFile.name.toLowerCase().includes('speech')
             ? 'voiceover'
             : audioFile.name.toLowerCase().includes('sfx') || audioFile.name.toLowerCase().includes('effect')
@@ -201,7 +204,9 @@ const DesignEditor = () => {
         return updatedTracks;
       });
 
-      audioRefs.current[`audio-${Date.now()}`] = audio;
+      // Set initial volume
+      audio.volume = 1.0; // 100%
+      audioRefs.current[trackId] = audio;
     });
   };
 
@@ -212,6 +217,11 @@ const DesignEditor = () => {
     setAudioTracks(audioTracks.map(track =>
       track.id === trackId ? { ...track, ...updates } : track
     ));
+
+    // Apply volume changes immediately to audio element
+    if (updates.volume !== undefined && audioRefs.current[trackId]) {
+      audioRefs.current[trackId].volume = updates.volume / 100;
+    }
   };
 
   /**
@@ -362,9 +372,10 @@ const DesignEditor = () => {
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
+   * Works both during playback AND when marker is moved manually
    */
   useEffect(() => {
-    if (isPlaying && pages.length > 0) {
+    if (pages.length > 0) {
       // Calculate which slide should be visible based on current time
       let accumulatedTime = 0;
       for (let i = 0; i < pages.length; i++) {
@@ -379,7 +390,7 @@ const DesignEditor = () => {
         accumulatedTime += slideDuration;
       }
     }
-  }, [currentTime, isPlaying, pages]);
+  }, [currentTime, pages]);
 
   return (
     <div className="flex h-full bg-gray-50">

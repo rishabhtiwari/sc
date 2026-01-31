@@ -167,19 +167,35 @@ const AudioBlock = ({
       {/* Track Name */}
       <div className="absolute top-0 left-0 right-0 px-2 py-0.5 text-xs font-medium text-white truncate bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-between">
         <span className="truncate">{track.name}</span>
-        {isSelected && onDelete && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (window.confirm(`Delete audio track "${track.name}"?`)) {
-                onDelete();
-              }
-            }}
-            className="ml-2 px-1.5 py-0.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs transition-colors flex-shrink-0"
-            title="Delete audio track"
-          >
-            🗑️
-          </button>
+        {isSelected && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Properties Icon */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(); // Ensure it's selected to show properties panel
+              }}
+              className="px-1.5 py-0.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs transition-colors"
+              title="Edit properties"
+            >
+              ⚙️
+            </button>
+            {/* Delete Icon */}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (window.confirm(`Delete audio track "${track.name}"?`)) {
+                    onDelete();
+                  }
+                }}
+                className="px-1.5 py-0.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs transition-colors"
+                title="Delete audio track"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
         )}
       </div>
 
