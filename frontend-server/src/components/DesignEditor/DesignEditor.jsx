@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
-import AudioTimeline from './AudioTimeline/AudioTimeline';
+import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import ConfirmDialog from '../common/ConfirmDialog';
 
 /**
@@ -417,7 +417,7 @@ const DesignEditor = () => {
           </div>
 
           {/* Audio Timeline at Bottom - Fixed height */}
-          <AudioTimeline
+          <AudioTimelineRefactored
             audioTracks={audioTracks}
             slides={pages}
             currentTime={currentTime}
