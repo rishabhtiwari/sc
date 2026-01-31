@@ -440,17 +440,15 @@ const DesignEditor = () => {
               const displayDuration = track.duration; // Stretched/trimmed duration on timeline
 
               if (trackTime >= 0 && trackTime <= displayDuration) {
-                // Calculate actual audio position (loop if stretched, trim if shortened)
-                const actualAudioTime = trackTime % originalDuration;
-
                 if (audio.paused) {
+                  // Calculate actual audio position when starting playback
+                  const actualAudioTime = trackTime % originalDuration;
                   audio.currentTime = actualAudioTime;
                   audio.play().catch(err => console.error('Audio play error:', err));
                 } else {
-                  // Keep audio in sync (handle looping)
-                  const timeDiff = Math.abs(audio.currentTime - actualAudioTime);
-                  if (timeDiff > 0.1) { // If out of sync by more than 100ms
-                    audio.currentTime = actualAudioTime;
+                  // Check if audio needs to loop (reached end of original duration)
+                  if (audio.currentTime >= originalDuration - 0.05) {
+                    audio.currentTime = 0; // Loop back to start
                   }
                 }
 

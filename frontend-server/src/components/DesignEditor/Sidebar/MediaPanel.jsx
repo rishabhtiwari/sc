@@ -68,13 +68,28 @@ const MediaPanel = ({
   };
 
   const handleAddMedia = (media) => {
-    onAddElement({
-      type: media.type,
-      src: media.url,
-      width: media.type === 'video' ? 400 : 300,
-      height: media.type === 'video' ? 300 : 100
-    });
-    showToast(`${media.type} added to canvas`, 'success');
+    // If it's audio, add to timeline instead of canvas
+    if (media.type === 'audio') {
+      // Check if this audio is already on the timeline
+      const existingTrack = audioTracks.find(track => track.url === media.url);
+      if (!existingTrack && onAddAudioTrack) {
+        // Re-create the file object from the media
+        const file = { name: media.title };
+        onAddAudioTrack(file, media.url);
+        showToast('Audio added to timeline', 'success');
+      } else if (existingTrack) {
+        showToast('Audio already on timeline', 'info');
+      }
+    } else {
+      // For video, add to canvas
+      onAddElement({
+        type: media.type,
+        src: media.url,
+        width: media.type === 'video' ? 400 : 300,
+        height: media.type === 'video' ? 300 : 100
+      });
+      showToast(`${media.type} added to canvas`, 'success');
+    }
   };
 
   return (
