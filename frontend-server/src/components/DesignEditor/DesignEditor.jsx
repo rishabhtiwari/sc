@@ -433,9 +433,20 @@ const DesignEditor = () => {
 
   /**
    * Handle audio track delete
+   * Removes from BOTH timeline AND uploaded media list
    */
   const handleAudioDelete = (trackId) => {
+    // Find the track to get its URL
+    const track = audioTracks.find(t => t.id === trackId);
+
+    // Remove from timeline
     setAudioTracks(audioTracks.filter(track => track.id !== trackId));
+
+    // Remove from uploaded media list (match by URL)
+    if (track?.url) {
+      setUploadedAudio(prev => prev.filter(m => m.url !== track.url));
+    }
+
     // Clean up audio ref
     if (audioRefs.current[trackId]) {
       const audio = audioRefs.current[trackId];
@@ -443,6 +454,7 @@ const DesignEditor = () => {
       audio.src = '';
       delete audioRefs.current[trackId];
     }
+
     // Deselect if this track was selected
     if (selectedAudioTrack?.id === trackId) {
       setSelectedAudioTrack(null);
@@ -478,15 +490,31 @@ const DesignEditor = () => {
 
   /**
    * Handle video track delete
+   * Removes from BOTH timeline AND uploaded media list
    */
   const handleVideoDelete = (trackId) => {
+    // Find the track to get its URL
+    const track = videoTracks.find(t => t.id === trackId);
+
+    // Remove from timeline
     setVideoTracks(videoTracks.filter(track => track.id !== trackId));
+
+    // Remove from uploaded media list (match by URL)
+    if (track?.url) {
+      setUploadedVideo(prev => prev.filter(m => m.url !== track.url));
+    }
+
     // Clean up video ref
     if (videoRefs.current[trackId]) {
       const video = videoRefs.current[trackId];
       video.pause();
       video.src = '';
       delete videoRefs.current[trackId];
+    }
+
+    // Deselect if this track was selected
+    if (selectedVideoTrack?.id === trackId) {
+      setSelectedVideoTrack(null);
     }
   };
 
