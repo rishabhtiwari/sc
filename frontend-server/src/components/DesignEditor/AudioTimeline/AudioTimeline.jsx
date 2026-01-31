@@ -26,7 +26,6 @@ const AudioTimeline = ({
   onPause,
   isPlaying = false
 }) => {
-  const [zoom, setZoom] = useState(1);
   const [selectedTrack, setSelectedTrack] = useState(null);
   const [selectedSlide, setSelectedSlide] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -44,22 +43,23 @@ const AudioTimeline = ({
   const canvasRefs = useRef({}); // Canvas refs for waveform rendering
 
   // Calculate total duration (max of all audio tracks or slides)
-  const totalDuration = Math.max(
-    30, // Minimum 30 seconds
-    duration,
-    ...audioTracks.map(track => {
-      const trackEnd = (track.startTime || 0) + (track.duration || 0);
-      console.log('Track duration calc:', track.name, 'duration:', track.duration, 'end:', trackEnd);
-      return trackEnd;
-    }),
-    ...slides.map((slide, index) => {
-      const prevSlides = slides.slice(0, index);
-      const startTime = prevSlides.reduce((sum, s) => sum + (s.duration || 5), 0);
-      return startTime + (slide.duration || 5);
-    })
-  );
+  const totalDuration = (() => {
+    // Calculate actual content duration
+    const audioDuration = audioTracks.length > 0
+      ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+      : 0;
 
-  console.log('Total Duration:', totalDuration, 'Audio tracks:', audioTracks.length);
+    const slidesDuration = slides.length > 0
+      ? slides.reduce((sum, s) => sum + (s.duration || 5), 0)
+      : 0;
+
+    const contentDuration = Math.max(audioDuration, slidesDuration, duration || 0);
+
+    // Only use minimum if there's no content at all
+    return contentDuration > 0 ? contentDuration : 30;
+  })();
+
+  console.log('Total Duration:', totalDuration, 'Audio tracks:', audioTracks.length, 'Slides:', slides.length);
 
   // Audio track color coding by type
   const getAudioTrackColor = (track) => {
@@ -124,19 +124,20 @@ const AudioTimeline = ({
     }));
   };
 
-  // Convert time to pixels - fit timeline to container width
+  // Convert time to pixels - scale to fit entire timeline within visible screen
   const timeToPixels = (time) => {
-    // Calculate available width (container width minus padding)
-    const availableWidth = containerWidth - 40; // 40px padding for margins
+    // Calculate available width (container width minus padding for margins)
+    const availableWidth = containerWidth - 80; // 80px total padding (40px each side)
 
-    // Fit the total duration within the available width
+    // Scale the entire timeline to fit within available width
+    // This ensures both start (0) and end (totalDuration) are always visible
     const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
     return time * pixelsPerSecond;
   };
 
   // Convert pixels to time
   const pixelsToTime = (pixels) => {
-    const availableWidth = containerWidth - 40;
+    const availableWidth = containerWidth - 80;
     const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
     return pixels / pixelsPerSecond;
   };
@@ -280,31 +281,6 @@ const AudioTimeline = ({
     }
   }, [isDragging, isStretching, dragStart, stretchStart, dragType, dragIndex]);
 
-  // Auto-scroll to follow playhead during playback ONLY
-  useEffect(() => {
-    if (isPlaying && scrollContainerRef.current) {
-      const playheadPosition = timeToPixels(currentTime);
-      const container = scrollContainerRef.current;
-      const containerWidth = container.clientWidth;
-      const scrollLeft = container.scrollLeft;
-
-      // Auto-scroll if playhead is near the right edge or out of view
-      if (playheadPosition > scrollLeft + containerWidth - 100) {
-        container.scrollLeft = playheadPosition - containerWidth / 2;
-      } else if (playheadPosition < scrollLeft + 50) {
-        container.scrollLeft = Math.max(0, playheadPosition - 50);
-      }
-    }
-  }, [currentTime, isPlaying]);
-
-  // Keep timeline scrolled to start when not playing
-  useEffect(() => {
-    if (!isPlaying && scrollContainerRef.current) {
-      // Reset scroll to beginning when stopped
-      scrollContainerRef.current.scrollLeft = 0;
-    }
-  }, [slides.length, audioTracks.length]);
-
   // Track container width for responsive timeline
   useEffect(() => {
     const updateWidth = () => {
@@ -343,26 +319,11 @@ const AudioTimeline = ({
           <div className="text-xs font-semibold text-gray-600">
             🎵 Audio Timeline
           </div>
-        </div>
 
-        {/* Zoom Controls */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Zoom:</span>
-          <button
-            onClick={() => setZoom(Math.max(0.5, zoom - 0.25))}
-            className="px-2 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded text-gray-700 text-sm transition-colors"
-          >
-            −
-          </button>
-          <span className="text-xs text-gray-700 min-w-[50px] text-center font-medium">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() => setZoom(Math.min(3, zoom + 0.25))}
-            className="px-2 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded text-gray-700 text-sm transition-colors"
-          >
-            +
-          </button>
+          {/* Duration Display */}
+          <div className="text-xs text-gray-500 ml-3">
+            Total: {formatTime(totalDuration)}
+          </div>
         </div>
 
         {/* Legend - Audio Color Coding */}
@@ -386,13 +347,14 @@ const AudioTimeline = ({
       {/* Timeline Content */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-x-hidden overflow-y-hidden bg-gray-50"
+        className="flex-1 overflow-hidden bg-gray-50"
         style={{ scrollBehavior: 'smooth' }}
       >
         <div
           ref={timelineRef}
-          className="relative h-full cursor-pointer w-full"
+          className="relative h-full cursor-pointer px-10"
           style={{
+            width: '100%',
             height: '100%'
           }}
           onClick={handleTimelineClick}

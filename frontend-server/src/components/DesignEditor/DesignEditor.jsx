@@ -170,22 +170,37 @@ const DesignEditor = () => {
     const audio = new Audio(audioUrl);
 
     audio.addEventListener('loadedmetadata', () => {
-      const newTrack = {
-        id: `audio-${Date.now()}`,
-        name: audioFile.name,
-        url: audioUrl,
-        duration: audio.duration,
-        startTime: 0, // Start at beginning by default
-        volume: 1
-      };
-
       setAudioTracks(prevTracks => {
+        // Calculate the end time of the last audio track
+        let startTime = 0;
+        if (prevTracks.length > 0) {
+          // Find the maximum end time among all existing tracks
+          const maxEndTime = Math.max(...prevTracks.map(track =>
+            (track.startTime || 0) + (track.duration || 0)
+          ));
+          startTime = maxEndTime; // Position new audio at the end
+        }
+
+        const newTrack = {
+          id: `audio-${Date.now()}`,
+          name: audioFile.name,
+          url: audioUrl,
+          duration: audio.duration,
+          startTime: startTime, // Auto-position at end of existing audio
+          volume: 1,
+          type: audioFile.name.toLowerCase().includes('voice') || audioFile.name.toLowerCase().includes('speech')
+            ? 'voiceover'
+            : audioFile.name.toLowerCase().includes('sfx') || audioFile.name.toLowerCase().includes('effect')
+            ? 'sfx'
+            : 'music' // Auto-detect type from filename
+        };
+
         const updatedTracks = [...prevTracks, newTrack];
-        console.log('✅ Audio track added:', newTrack, 'Duration:', audio.duration);
+        console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
         return updatedTracks;
       });
 
-      audioRefs.current[newTrack.id] = audio;
+      audioRefs.current[`audio-${Date.now()}`] = audio;
     });
   };
 
@@ -291,6 +306,27 @@ const DesignEditor = () => {
       }
     };
   }, [isPlaying, audioTracks]);
+
+  /**
+   * Auto-navigate to the slide that corresponds to current playhead position
+   */
+  useEffect(() => {
+    if (isPlaying && pages.length > 0) {
+      // Calculate which slide should be visible based on current time
+      let accumulatedTime = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const slideDuration = pages[i].duration || 5;
+        if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
+          if (currentPageIndex !== i) {
+            console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
+            setCurrentPageIndex(i);
+          }
+          break;
+        }
+        accumulatedTime += slideDuration;
+      }
+    }
+  }, [currentTime, isPlaying, pages]);
 
   return (
     <div className="flex h-full bg-gray-50">
