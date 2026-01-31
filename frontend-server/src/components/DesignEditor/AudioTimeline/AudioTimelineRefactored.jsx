@@ -172,7 +172,12 @@ const AudioTimelineRefactored = ({
           </TimelineTrack>
 
           {/* Audio Tracks */}
-          <TimelineTrack type="audio" height={audioTracks.length * 100 || 100}>
+          <TimelineTrack
+            type="audio"
+            height={audioTracks.length * 100 || 100}
+            maxHeight={300}
+            label="🎵 Audio"
+          >
             <div className="relative h-full">
               {audioTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
