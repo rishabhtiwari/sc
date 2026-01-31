@@ -127,12 +127,24 @@ const AudioTimeline = ({
   // Convert time to pixels - scale to fit entire timeline within visible screen
   const timeToPixels = (time) => {
     // Calculate available width (container width minus padding for margins)
-    const availableWidth = containerWidth - 80; // 80px total padding (40px each side)
+    const availableWidth = containerWidth - 80; // 80px total padding (40px each side from px-10)
 
     // Scale the entire timeline to fit within available width
     // This ensures both start (0) and end (totalDuration) are always visible
     const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
-    return time * pixelsPerSecond;
+    const result = time * pixelsPerSecond;
+
+    // Debug logging
+    if (time === totalDuration) {
+      console.log('🔍 Timeline Scaling Debug:');
+      console.log('  Container Width:', containerWidth);
+      console.log('  Available Width:', availableWidth);
+      console.log('  Total Duration:', totalDuration);
+      console.log('  Pixels Per Second:', pixelsPerSecond);
+      console.log('  End Position (should be ≤', availableWidth, '):', result);
+    }
+
+    return result;
   };
 
   // Convert pixels to time
@@ -152,6 +164,14 @@ const AudioTimeline = ({
   // Handle timeline click to seek
   const handleTimelineClick = (e) => {
     if (!timelineRef.current || isDragging || isStretching) return;
+
+    // Don't seek if clicking on interactive elements (handles, blocks, etc.)
+    if (e.target.classList.contains('cursor-ew-resize') ||
+        e.target.classList.contains('cursor-move') ||
+        e.target.closest('.cursor-ew-resize') ||
+        e.target.closest('.cursor-move')) {
+      return;
+    }
 
     const rect = timelineRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -187,6 +207,7 @@ const AudioTimeline = ({
   // Handle stretch start (audio or slide)
   const handleStretchStart = (e, type, index, edge) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent any default behavior
     setIsStretching(true);
     setDragType(type);
     setDragIndex(index);
