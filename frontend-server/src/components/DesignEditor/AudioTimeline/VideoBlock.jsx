@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTimeline } from '../../common/Timeline';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
 /**
  * Video Block Component
@@ -17,6 +18,7 @@ const VideoBlock = ({
   const [isStretching, setIsStretching] = useState(false);
   const [stretchStart, setStretchStart] = useState(null);
   const [thumbnail, setThumbnail] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const startTime = track.startTime || 0;
   const duration = track.duration || 5;
@@ -146,9 +148,7 @@ const VideoBlock = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (window.confirm(`Delete ${track.name || `Video ${index + 1}`}?`)) {
-                  onDelete();
-                }
+                setShowDeleteDialog(true);
               }}
               className="flex-shrink-0 w-5 h-5 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm relative z-30"
               title="Delete video"
@@ -173,6 +173,22 @@ const VideoBlock = ({
         onMouseDown={(e) => handleStretchStart(e, 'right')}
         onClick={(e) => e.stopPropagation()}
         title="Drag to adjust duration"
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={() => {
+          onDelete();
+          setShowDeleteDialog(false);
+        }}
+        title="Delete Video"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete ${track.name || `Video ${index + 1}`}?`}
+        confirmText="Delete Video"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

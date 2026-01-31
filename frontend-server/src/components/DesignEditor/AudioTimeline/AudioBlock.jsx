@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useTimeline } from '../../common/Timeline';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
 /**
  * Audio Block Component
@@ -21,6 +22,7 @@ const AudioBlock = ({
   const [isStretching, setIsStretching] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [stretchStart, setStretchStart] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [dragStart, setDragStart] = useState(null);
 
   const startTime = track.startTime || 0;
@@ -172,9 +174,7 @@ const AudioBlock = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm(`Delete ${track.name}?`)) {
-                onDelete();
-              }
+              setShowDeleteDialog(true);
             }}
             className="flex-shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm relative z-30"
             title="Delete audio"
@@ -203,6 +203,22 @@ const AudioBlock = ({
         onMouseDown={(e) => handleStretchStart(e, 'right')}
         onClick={(e) => e.stopPropagation()}
         title="Drag to extend duration"
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={() => {
+          onDelete();
+          setShowDeleteDialog(false);
+        }}
+        title="Delete Audio"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete ${track.name}?`}
+        confirmText="Delete Audio"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );
