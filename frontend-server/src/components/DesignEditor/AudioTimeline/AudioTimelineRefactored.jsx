@@ -137,7 +137,7 @@ const AudioTimelineRefactored = ({
             {isPlaying ? '⏸' : '▶'}
           </button>
 
-          <div className="text-xs font-semibold text-gray-600">🎵 Audio Timeline</div>
+          <div className="text-xs font-semibold text-gray-600">⏱️ Timeline</div>
         </div>
 
         {/* Legend */}
@@ -159,7 +159,7 @@ const AudioTimelineRefactored = ({
       </div>
 
       {/* Timeline Content - Using Generic Timeline Component */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-hidden">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden">
         <Timeline
           containerRef={scrollContainerRef}
           duration={totalDuration}
@@ -217,7 +217,6 @@ const AudioTimelineRefactored = ({
           <TimelineTrack
             type="video"
             height={videoTracks.length > 0 ? (videoTracks.length * 92 + 30) : 100}
-            maxHeight={300}
             label="🎥 Video"
           >
             <div className="relative">
@@ -240,7 +239,6 @@ const AudioTimelineRefactored = ({
           <TimelineTrack
             type="audio"
             height={audioTracks.length > 0 ? (audioTracks.length * 92 + 30) : 100}
-            maxHeight={300}
             label="🎵 Audio"
           >
             <div className="relative">

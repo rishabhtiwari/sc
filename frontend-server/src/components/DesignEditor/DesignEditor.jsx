@@ -645,29 +645,33 @@ const DesignEditor = () => {
           // Update video elements
           videoTracks.forEach(track => {
             const video = videoRefs.current[track.id];
-            if (video) {
-              const trackTime = newTime - track.startTime;
-              const originalDuration = track.originalDuration || track.duration; // Original video file duration
-              const displayDuration = track.duration; // Stretched/trimmed duration on timeline
+            if (!video) {
+              console.warn('⚠️ Video element not found for track:', track.id);
+              return;
+            }
 
-              if (trackTime >= 0 && trackTime <= displayDuration) {
-                if (video.paused) {
-                  // Calculate actual video position when starting playback
-                  const actualVideoTime = trackTime % originalDuration;
-                  video.currentTime = actualVideoTime;
-                  video.play().catch(err => console.error('Video play error:', err));
-                } else {
-                  // Check if video needs to loop (reached end of original duration)
-                  if (video.currentTime >= originalDuration - 0.05) {
-                    video.currentTime = 0; // Loop back to start
-                  }
+            const trackTime = newTime - track.startTime;
+            const originalDuration = track.originalDuration || track.duration; // Original video file duration
+            const displayDuration = track.duration; // Stretched/trimmed duration on timeline
+
+            if (trackTime >= 0 && trackTime <= displayDuration) {
+              if (video.paused) {
+                // Calculate actual video position when starting playback
+                const actualVideoTime = trackTime % originalDuration;
+                video.currentTime = actualVideoTime;
+                console.log('🎬 Playing video:', track.name, 'at time:', actualVideoTime);
+                video.play().catch(err => console.error('❌ Video play error:', err));
+              } else {
+                // Check if video needs to loop (reached end of original duration)
+                if (video.currentTime >= originalDuration - 0.05) {
+                  video.currentTime = 0; // Loop back to start
                 }
-
-                // Apply volume
-                video.volume = (track.volume || 100) / 100;
-              } else if (!video.paused) {
-                video.pause();
               }
+
+              // Apply volume
+              video.volume = (track.volume || 100) / 100;
+            } else if (!video.paused) {
+              video.pause();
             }
           });
 
@@ -795,7 +799,7 @@ const DesignEditor = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
           {/* Canvas Area - Takes remaining space */}
-          <div className="flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+          <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
             <Canvas
               elements={currentPageElements}
               selectedElement={selectedElement}
@@ -804,6 +808,33 @@ const DesignEditor = () => {
               onDeleteElement={handleDeleteElement}
               background={currentPage?.background}
             />
+
+            {/* Video Overlay - Shows active video on top of canvas */}
+            {videoTracks.map(track => {
+              const trackTime = currentTime - (track.startTime || 0);
+              const isActive = trackTime >= 0 && trackTime <= track.duration;
+
+              if (!isActive) return null;
+
+              return (
+                <div
+                  key={track.id}
+                  className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black bg-opacity-50"
+                  style={{ zIndex: 100 }}
+                >
+                  <video
+                    ref={el => {
+                      if (el && !videoRefs.current[track.id]) {
+                        videoRefs.current[track.id] = el;
+                      }
+                    }}
+                    src={track.url}
+                    className="max-w-full max-h-full"
+                    style={{ objectFit: 'contain' }}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* Audio Timeline at Bottom - Fixed height */}
