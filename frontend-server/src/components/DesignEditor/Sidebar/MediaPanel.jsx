@@ -8,6 +8,7 @@ import { useToast } from '../../../hooks/useToast';
 const MediaPanel = ({
   onAddElement,
   onAddAudioTrack,
+  onAddVideoTrack,
   panelType,
   audioTracks = [],
   onAudioSelect,
@@ -25,7 +26,9 @@ const MediaPanel = ({
   const isVideoPanel = panelType === 'video';
 
   const handleVideoUpload = (event) => {
+    console.log('🎥 handleVideoUpload called');
     const files = Array.from(event.target.files);
+    console.log('📁 Files:', files.length);
 
     files.forEach((file) => {
       if (file.type.startsWith('video/')) {
@@ -34,12 +37,24 @@ const MediaPanel = ({
           id: `video-${Date.now()}-${Math.random()}`,
           type: 'video',
           url,
-          title: file.name
+          title: file.name,
+          file: file
         };
+        console.log('➕ Adding to uploadedMedia:', newVideo);
         onUploadedMediaChange(prev => [...prev, newVideo]);
-        showToast('Video uploaded successfully', 'success');
+
+        // Add to timeline
+        if (onAddVideoTrack) {
+          console.log('🎬 Calling onAddVideoTrack for:', file.name);
+          onAddVideoTrack(file, url);
+        }
+
+        showToast('Video uploaded and added to timeline', 'success');
       }
     });
+
+    // Reset file input to allow re-uploading the same file
+    event.target.value = '';
   };
 
   const handleAudioUpload = (event) => {

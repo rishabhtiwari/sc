@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Timeline, TimelineTrack } from '../../common/Timeline';
 import SlideBlock from './SlideBlock';
 import AudioBlock from './AudioBlock';
+import VideoBlock from './VideoBlock';
 
 /**
  * Audio Timeline Component - Refactored with Generic Timeline
@@ -11,18 +12,23 @@ import AudioBlock from './AudioBlock';
  */
 const AudioTimelineRefactored = ({
   audioTracks = [],
+  videoTracks = [],
   slides = [],
   currentTime = 0,
   duration = 0,
   onAudioUpdate,
   onAudioDelete,
   onAudioSelect,
+  onVideoUpdate,
+  onVideoDelete,
+  onVideoSelect,
   onSlideUpdate,
   onSeek,
   onPlay,
   onPause,
   isPlaying = false,
-  selectedAudioId = null
+  selectedAudioId = null,
+  selectedVideoId = null
 }) => {
   const [selectedSlide, setSelectedSlide] = useState(null);
   const [audioWaveforms, setAudioWaveforms] = useState({});
@@ -39,11 +45,15 @@ const AudioTimelineRefactored = ({
       ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
       : 0;
 
+    const videoDuration = videoTracks.length > 0
+      ? Math.max(...videoTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+      : 0;
+
     const slidesDuration = slides.length > 0
       ? slides.reduce((sum, s) => sum + (s.duration || 5), 0)
       : 0;
 
-    const contentDuration = Math.max(audioDuration, slidesDuration, duration || 0);
+    const contentDuration = Math.max(audioDuration, videoDuration, slidesDuration, duration || 0);
     return contentDuration > 0 ? contentDuration : 30;
   })();
 
@@ -101,6 +111,13 @@ const AudioTimelineRefactored = ({
     }
   };
 
+  // Handle video update
+  const handleVideoUpdate = (trackId, updates) => {
+    if (onVideoUpdate) {
+      onVideoUpdate(trackId, updates);
+    }
+  };
+
   // Calculate slide start times
   const getSlideStartTime = (index) => {
     const prevSlides = slides.slice(0, index);
@@ -155,18 +172,66 @@ const AudioTimelineRefactored = ({
           {/* Slides Track */}
           <TimelineTrack type="slides" height={80} label="📸 Slides / Photos">
             <div className="relative h-full pt-6">
-              {slides.map((slide, index) => (
-                <SlideBlock
-                  key={slide.id || index}
-                  slide={slide}
-                  index={index}
-                  startTime={getSlideStartTime(index)}
-                  duration={slide.duration || 5}
-                  isSelected={selectedSlide === index}
-                  onSelect={() => setSelectedSlide(index)}
-                  onUpdate={(updates) => handleSlideUpdate(index, updates)}
-                  onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
-                />
+              {slides.map((slide, index) => {
+                const slideStartTime = getSlideStartTime(index);
+                const slideDuration = slide.duration || 5;
+                const slideEndTime = slideStartTime + slideDuration;
+
+                // Check if any video overlaps with this slide
+                const hasVideoOverlay = videoTracks.some(video => {
+                  const videoStart = video.startTime || 0;
+                  const videoEnd = videoStart + (video.duration || 0);
+                  return (videoStart < slideEndTime && videoEnd > slideStartTime);
+                });
+
+                return (
+                  <div key={slide.id || index} className="relative">
+                    <SlideBlock
+                      slide={slide}
+                      index={index}
+                      startTime={slideStartTime}
+                      duration={slideDuration}
+                      isSelected={selectedSlide === index}
+                      onSelect={() => setSelectedSlide(index)}
+                      onUpdate={(updates) => handleSlideUpdate(index, updates)}
+                      onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
+                    />
+                    {/* Visual indicator when video is playing over this slide */}
+                    {hasVideoOverlay && (
+                      <div
+                        className="absolute inset-0 bg-orange-500 bg-opacity-20 pointer-events-none rounded border border-orange-400 border-dashed"
+                        title="Video is playing over this slide"
+                      >
+                        <div className="absolute top-1 right-1 text-xs bg-orange-500 text-white px-1 rounded">
+                          🎥 Video Active
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </TimelineTrack>
+
+          {/* Video Tracks */}
+          <TimelineTrack
+            type="video"
+            height={videoTracks.length > 0 ? (videoTracks.length * 92 + 30) : 100}
+            maxHeight={300}
+            label="🎥 Video"
+          >
+            <div className="relative">
+              {videoTracks.map((track, index) => (
+                <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
+                  <VideoBlock
+                    track={track}
+                    index={index}
+                    isSelected={selectedVideoId === track.id}
+                    onSelect={() => onVideoSelect && onVideoSelect(track.id)}
+                    onUpdate={(updates) => handleVideoUpdate(track.id, updates)}
+                    onDelete={() => onVideoDelete && onVideoDelete(track.id)}
+                  />
+                </div>
               ))}
             </div>
           </TimelineTrack>
@@ -174,11 +239,11 @@ const AudioTimelineRefactored = ({
           {/* Audio Tracks */}
           <TimelineTrack
             type="audio"
-            height={audioTracks.length * 100 || 100}
+            height={audioTracks.length > 0 ? (audioTracks.length * 92 + 30) : 100}
             maxHeight={300}
             label="🎵 Audio"
           >
-            <div className="relative h-full">
+            <div className="relative">
               {audioTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
                   <AudioBlock

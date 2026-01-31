@@ -34,6 +34,11 @@ const DesignEditor = () => {
   const [selectedAudioTrack, setSelectedAudioTrack] = useState(null);
   const audioRefs = useRef({});
 
+  // Video Timeline State
+  const [videoTracks, setVideoTracks] = useState([]);
+  const [selectedVideoTrack, setSelectedVideoTrack] = useState(null);
+  const videoRefs = useRef({});
+
   // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
   // Separate state for audio and video to keep them independent
   const [uploadedAudio, setUploadedAudio] = useState([]);
@@ -246,6 +251,63 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle adding video track
+   */
+  const handleAddVideoTrack = (videoFile, videoUrl) => {
+    console.log('🎥 handleAddVideoTrack called:', { videoFile, videoUrl });
+
+    // Create video element to get duration
+    const video = document.createElement('video');
+    video.src = videoUrl;
+    const trackId = `video-${Date.now()}`;
+
+    console.log('🎥 Created video element with ID:', trackId);
+
+    video.addEventListener('loadedmetadata', () => {
+      console.log('🎥 Video metadata loaded. Duration:', video.duration);
+      setVideoTracks(prevTracks => {
+        // Calculate the end time of the last video track
+        let startTime = 0;
+        if (prevTracks.length > 0) {
+          // Find the maximum end time among all existing tracks
+          const maxEndTime = Math.max(...prevTracks.map(track =>
+            (track.startTime || 0) + (track.duration || 0)
+          ));
+          startTime = maxEndTime; // Position new video at the end
+        }
+
+        const newTrack = {
+          id: trackId,
+          name: videoFile.name,
+          url: videoUrl,
+          duration: video.duration,
+          originalDuration: video.duration,
+          startTime: startTime, // Auto-position at end of existing videos
+          volume: 100 // Default volume 100%
+        };
+
+        const updatedTracks = [...prevTracks, newTrack];
+        console.log('✅ Video track added:', newTrack, 'Start time:', startTime, 'Duration:', video.duration);
+        return updatedTracks;
+      });
+
+      // Set initial volume
+      video.volume = 1.0; // 100%
+      videoRefs.current[trackId] = video;
+    });
+
+    video.addEventListener('error', (e) => {
+      console.error('❌ Video loading error:', e);
+      console.error('❌ Video error details:', {
+        error: video.error,
+        code: video.error?.code,
+        message: video.error?.message,
+        src: video.src
+      });
+    });
+  };
+
+  /**
    * Handle adding audio from library
    * Adds to both uploadedAudio (media list) AND timeline
    */
@@ -361,6 +423,48 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle video track update (drag, stretch, properties)
+   */
+  const handleVideoUpdate = (trackId, updates) => {
+    setVideoTracks(prevTracks => {
+      const updatedTracks = prevTracks.map(track =>
+        track.id === trackId ? { ...track, ...updates } : track
+      );
+      return updatedTracks;
+    });
+
+    // Update video element volume if volume changed
+    if (updates.volume !== undefined && videoRefs.current[trackId]) {
+      videoRefs.current[trackId].volume = updates.volume / 100;
+    }
+  };
+
+  /**
+   * Handle video track delete
+   */
+  const handleVideoDelete = (trackId) => {
+    setVideoTracks(videoTracks.filter(track => track.id !== trackId));
+    // Clean up video ref
+    if (videoRefs.current[trackId]) {
+      const video = videoRefs.current[trackId];
+      video.pause();
+      video.src = '';
+      delete videoRefs.current[trackId];
+    }
+  };
+
+  /**
+   * Handle video track selection
+   */
+  const handleVideoSelect = (trackId) => {
+    const track = videoTracks.find(t => t.id === trackId);
+    setSelectedVideoTrack(track || null);
+    // Deselect canvas element and audio when video is selected
+    setSelectedElement(null);
+    setSelectedAudioTrack(null);
+  };
+
+  /**
    * Handle audio delete request (opens confirmation dialog)
    */
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
@@ -456,6 +560,12 @@ const DesignEditor = () => {
         audio.pause();
       }
     });
+    // Pause all video tracks
+    Object.values(videoRefs.current).forEach(video => {
+      if (video) {
+        video.pause();
+      }
+    });
   };
 
   /**
@@ -474,10 +584,13 @@ const DesignEditor = () => {
             const audioDuration = audioTracks.length > 0
               ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
               : 0;
+            const videoDuration = videoTracks.length > 0
+              ? Math.max(...videoTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+              : 0;
             const slidesDuration = pages.length > 0
               ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
               : 0;
-            return Math.max(audioDuration, slidesDuration, 30);
+            return Math.max(audioDuration, videoDuration, slidesDuration, 30);
           })();
 
           // Stop playback when reaching the end
@@ -488,6 +601,13 @@ const DesignEditor = () => {
               const audio = audioRefs.current[track.id];
               if (audio && !audio.paused) {
                 audio.pause();
+              }
+            });
+            // Pause all video
+            videoTracks.forEach(track => {
+              const video = videoRefs.current[track.id];
+              if (video && !video.paused) {
+                video.pause();
               }
             });
             return totalDuration;
@@ -522,6 +642,35 @@ const DesignEditor = () => {
             }
           });
 
+          // Update video elements
+          videoTracks.forEach(track => {
+            const video = videoRefs.current[track.id];
+            if (video) {
+              const trackTime = newTime - track.startTime;
+              const originalDuration = track.originalDuration || track.duration; // Original video file duration
+              const displayDuration = track.duration; // Stretched/trimmed duration on timeline
+
+              if (trackTime >= 0 && trackTime <= displayDuration) {
+                if (video.paused) {
+                  // Calculate actual video position when starting playback
+                  const actualVideoTime = trackTime % originalDuration;
+                  video.currentTime = actualVideoTime;
+                  video.play().catch(err => console.error('Video play error:', err));
+                } else {
+                  // Check if video needs to loop (reached end of original duration)
+                  if (video.currentTime >= originalDuration - 0.05) {
+                    video.currentTime = 0; // Loop back to start
+                  }
+                }
+
+                // Apply volume
+                video.volume = (track.volume || 100) / 100;
+              } else if (!video.paused) {
+                video.pause();
+              }
+            }
+          });
+
           return newTime;
         });
 
@@ -536,7 +685,7 @@ const DesignEditor = () => {
         cancelAnimationFrame(animationFrame);
       }
     };
-  }, [isPlaying, audioTracks, pages]);
+  }, [isPlaying, audioTracks, videoTracks, pages]);
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
@@ -569,6 +718,7 @@ const DesignEditor = () => {
         onAddElement={handleAddElement}
         onAddMultiplePages={handleAddMultiplePages}
         onAddAudioTrack={handleAddAudioTrack}
+        onAddVideoTrack={handleAddVideoTrack}
         currentBackground={currentPage?.background}
         onBackgroundChange={handleBackgroundChange}
         audioTracks={audioTracks}
@@ -659,13 +809,18 @@ const DesignEditor = () => {
           {/* Audio Timeline at Bottom - Fixed height */}
           <AudioTimelineRefactored
             audioTracks={audioTracks}
+            videoTracks={videoTracks}
             slides={pages}
             currentTime={currentTime}
             isPlaying={isPlaying}
             selectedAudioId={selectedAudioTrack?.id}
+            selectedVideoId={selectedVideoTrack?.id}
             onAudioUpdate={handleAudioUpdate}
             onAudioDelete={handleAudioDelete}
             onAudioSelect={handleAudioSelect}
+            onVideoUpdate={handleVideoUpdate}
+            onVideoDelete={handleVideoDelete}
+            onVideoSelect={handleVideoSelect}
             onSlideUpdate={handleSlideUpdate}
             onSeek={handleSeek}
             onPlay={handlePlay}
