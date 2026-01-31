@@ -126,8 +126,12 @@ const AudioTimeline = ({
 
   // Convert time to pixels - scale to fit entire timeline within visible screen
   const timeToPixels = (time) => {
-    // Calculate available width (container width minus padding for margins)
-    const availableWidth = containerWidth - 80; // 80px total padding (40px each side from px-10)
+    // The tracks already have left-10 right-10 padding applied via CSS
+    // So we need to measure the actual available width within those padded containers
+    // scrollContainerRef.current.clientWidth gives us the full container width
+    // We need to subtract 80px (40px left + 40px right from left-10 right-10)
+    const paddingTotal = 80; // left-10 (40px) + right-10 (40px)
+    const availableWidth = containerWidth - paddingTotal;
 
     // Scale the entire timeline to fit within available width
     // This ensures both start (0) and end (totalDuration) are always visible
@@ -138,6 +142,7 @@ const AudioTimeline = ({
     if (time === totalDuration) {
       console.log('🔍 Timeline Scaling Debug:');
       console.log('  Container Width:', containerWidth);
+      console.log('  Padding Total:', paddingTotal);
       console.log('  Available Width:', availableWidth);
       console.log('  Total Duration:', totalDuration);
       console.log('  Pixels Per Second:', pixelsPerSecond);
@@ -149,7 +154,8 @@ const AudioTimeline = ({
 
   // Convert pixels to time
   const pixelsToTime = (pixels) => {
-    const availableWidth = containerWidth - 80;
+    const paddingTotal = 80;
+    const availableWidth = containerWidth - paddingTotal;
     const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
     return pixels / pixelsPerSecond;
   };
