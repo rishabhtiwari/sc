@@ -175,8 +175,8 @@ const AudioTimelineRefactored = ({
           onPause={onPause}
         >
           {/* Slides Track */}
-          <TimelineTrack type="slides" height={80} label="📸 Slides / Photos">
-            <div className="relative h-full pt-6">
+          <TimelineTrack type="slides" height={110} label="📸 Slides / Photos">
+            <div className="relative h-full pt-8">
               {slides.map((slide, index) => {
                 const slideStartTime = getSlideStartTime(index);
                 const slideDuration = slide.duration || 5;
@@ -200,6 +200,7 @@ const AudioTimelineRefactored = ({
                       onSelect={() => setSelectedSlide(index)}
                       onUpdate={(updates) => handleSlideUpdate(index, updates)}
                       onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
+                      allSlides={slides}
                     />
                     {/* Visual indicator when video is playing over this slide */}
                     {hasVideoOverlay && (
@@ -221,10 +222,10 @@ const AudioTimelineRefactored = ({
           {/* Video Tracks */}
           <TimelineTrack
             type="video"
-            height={videoTracks.length > 0 ? (videoTracks.length * 92 + 30) : 100}
+            height={videoTracks.length > 0 ? (videoTracks.length * 92 + 40) : 100}
             label="🎥 Video"
           >
-            <div className="relative">
+            <div className="relative pt-8">
               {videoTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
                   <VideoBlock
@@ -243,10 +244,10 @@ const AudioTimelineRefactored = ({
           {/* Audio Tracks */}
           <TimelineTrack
             type="audio"
-            height={audioTracks.length > 0 ? (audioTracks.length * 92 + 30) : 100}
+            height={audioTracks.length > 0 ? (audioTracks.length * 92 + 40) : 100}
             label="🎵 Audio"
           >
-            <div className="relative">
+            <div className="relative pt-8">
               {audioTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
                   <AudioBlock

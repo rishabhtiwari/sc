@@ -13,7 +13,8 @@ const SlideBlock = ({
   isSelected,
   onSelect,
   onUpdate,
-  onTransitionClick
+  onTransitionClick,
+  allSlides = [] // All slides for collision detection
 }) => {
   const { timeToPixels, pixelsToTime, formatTime } = useTimeline();
   const [isStretching, setIsStretching] = useState(false);
@@ -27,6 +28,28 @@ const SlideBlock = ({
   // Calculate how many thumbnails to repeat across the block
   const thumbnailSize = 40;
   const thumbnailCount = Math.max(1, Math.floor(blockWidth / thumbnailSize));
+
+  /**
+   * Check if a new position would cause collision with other slides
+   * @param {number} newStart - Proposed start time
+   * @param {number} newDur - Proposed duration
+   * @returns {boolean} - True if collision detected
+   */
+  const checkCollision = (newStart, newDur) => {
+    const newEnd = newStart + newDur;
+
+    return allSlides.some((otherSlide, otherIndex) => {
+      // Don't check collision with self
+      if (otherIndex === index) return false;
+
+      const otherStart = otherSlide.startTime !== undefined ? otherSlide.startTime : 0;
+      const otherDur = otherSlide.duration || 5;
+      const otherEnd = otherStart + otherDur;
+
+      // Check if ranges overlap
+      return (newStart < otherEnd && newEnd > otherStart);
+    });
+  };
 
   const handleStretchStart = (e, edge) => {
     e.stopPropagation();
@@ -63,25 +86,43 @@ const SlideBlock = ({
 
       if (stretchStart.edge === 'right') {
         const newDuration = Math.max(1, stretchStart.initialDuration + deltaTime);
-        console.log('🔧 Stretching slide right. New duration:', newDuration);
-        if (onUpdate) {
-          onUpdate({ duration: newDuration });
+
+        // Check collision before updating
+        if (!checkCollision(startTime, newDuration)) {
+          console.log('🔧 Stretching slide right. New duration:', newDuration);
+          if (onUpdate) {
+            onUpdate({ duration: newDuration });
+          }
+        } else {
+          console.log('⚠️ Collision detected - cannot stretch right');
         }
       } else if (stretchStart.edge === 'left') {
         const newDuration = Math.max(1, stretchStart.initialDuration - deltaTime);
         const newStartTime = Math.max(0, stretchStart.initialStartTime + deltaTime);
-        console.log('🔧 Stretching slide left. New duration:', newDuration, 'New start:', newStartTime);
-        if (onUpdate) {
-          onUpdate({ duration: newDuration, startTime: newStartTime });
+
+        // Check collision before updating
+        if (!checkCollision(newStartTime, newDuration)) {
+          console.log('🔧 Stretching slide left. New duration:', newDuration, 'New start:', newStartTime);
+          if (onUpdate) {
+            onUpdate({ duration: newDuration, startTime: newStartTime });
+          }
+        } else {
+          console.log('⚠️ Collision detected - cannot stretch left');
         }
       }
     } else if (isDragging && dragStart) {
       const deltaX = e.clientX - dragStart.x;
       const deltaTime = pixelsToTime(deltaX);
       const newStartTime = Math.max(0, dragStart.initialStartTime + deltaTime);
-      console.log('🔧 Dragging slide. New start time:', newStartTime);
-      if (onUpdate) {
-        onUpdate({ startTime: newStartTime });
+
+      // Check collision before updating
+      if (!checkCollision(newStartTime, duration)) {
+        console.log('🔧 Dragging slide. New start time:', newStartTime);
+        if (onUpdate) {
+          onUpdate({ startTime: newStartTime });
+        }
+      } else {
+        console.log('⚠️ Collision detected - cannot move to:', newStartTime);
       }
     }
   };
