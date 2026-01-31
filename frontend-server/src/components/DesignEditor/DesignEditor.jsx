@@ -3,7 +3,9 @@ import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
+import AudioLibrary from './AudioLibrary/AudioLibrary';
 import ConfirmDialog from '../common/ConfirmDialog';
+import { useToast } from '../../hooks/useToast';
 
 /**
  * Main Design Editor Component
@@ -44,6 +46,11 @@ const DesignEditor = () => {
     audioTitle: null,
     mediaId: null
   });
+
+  // Audio Library Modal State
+  const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
+
+  const { showToast } = useToast();
 
   /**
    * Handle adding element to canvas (adds to current page)
@@ -221,6 +228,31 @@ const DesignEditor = () => {
       audio.volume = 1.0; // 100%
       audioRefs.current[trackId] = audio;
     });
+  };
+
+  /**
+   * Handle adding audio from library
+   * Adds to both uploadedAudio (media list) AND timeline
+   */
+  const handleAddFromLibrary = (audioData) => {
+    const url = audioData.url || audioData.audio_url;
+    const title = audioData.title || 'Library Audio';
+
+    // Add to uploadedAudio (so it appears in "Your Media")
+    const newAudio = {
+      id: `audio-${Date.now()}-${Math.random()}`,
+      type: 'audio',
+      url: url,
+      title: title,
+      file: { name: title }
+    };
+    setUploadedAudio(prev => [...prev, newAudio]);
+
+    // Add to timeline
+    handleAddAudioTrack({ name: title }, url);
+
+    showToast('Audio added to timeline and media library', 'success');
+    setIsAudioLibraryOpen(false);
   };
 
   /**
@@ -518,6 +550,7 @@ const DesignEditor = () => {
         onUploadedAudioChange={setUploadedAudio}
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
+        onOpenAudioLibrary={() => setIsAudioLibraryOpen(true)}
       />
 
       {/* Main Canvas Area */}
@@ -687,6 +720,13 @@ const DesignEditor = () => {
         confirmText="Delete Audio"
         cancelText="Cancel"
         variant="danger"
+      />
+
+      {/* Audio Library Modal */}
+      <AudioLibrary
+        isOpen={isAudioLibraryOpen}
+        onClose={() => setIsAudioLibraryOpen(false)}
+        onAddToCanvas={handleAddFromLibrary}
       />
     </div>
   );

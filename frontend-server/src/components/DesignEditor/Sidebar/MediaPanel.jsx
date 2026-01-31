@@ -1,6 +1,5 @@
 import React, { useState, useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
-import AudioLibraryPanel from '../../AudioStudio/AudioLibrary/AudioLibraryPanel';
 
 /**
  * Media Panel
@@ -14,7 +13,8 @@ const MediaPanel = ({
   onAudioSelect,
   onAudioDeleteRequest,
   uploadedMedia = [],
-  onUploadedMediaChange
+  onUploadedMediaChange,
+  onOpenAudioLibrary
 }) => {
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
@@ -161,23 +161,18 @@ const MediaPanel = ({
         </div>
       )}
 
-      {/* Audio Library - Only show on audio tab */}
-      {isAudioPanel && (
+      {/* Browse Audio Library Button - Only show on audio tab */}
+      {isAudioPanel && onOpenAudioLibrary && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-900">📁 Audio Library</h3>
-          <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ maxHeight: '400px' }}>
-            <AudioLibraryPanel
-              onAddToCanvas={(audioData) => {
-                // Add audio from library to timeline
-                if (onAddAudioTrack) {
-                  const file = { name: audioData.title || 'Library Audio' };
-                  const url = audioData.url || audioData.audio_url;
-                  onAddAudioTrack(file, url);
-                  showToast('Audio added to timeline', 'success');
-                }
-              }}
-            />
-          </div>
+          <button
+            onClick={onOpenAudioLibrary}
+            className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span className="text-xl">📁</span>
+            Browse Audio Library
+          </button>
+          <p className="text-xs text-gray-500 text-center">Access your saved audio files</p>
         </div>
       )}
 
