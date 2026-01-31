@@ -72,25 +72,14 @@ const MediaPanel = ({
     if (media.type === 'audio') {
       // Check if this audio is already on the timeline
       const existingTrack = audioTracks.find(track => track.url === media.url);
-      console.log('🔍 handleAddMedia - Audio click:', {
-        mediaTitle: media.title,
-        mediaUrl: media.url,
-        existingTrack: existingTrack ? existingTrack.id : 'none',
-        totalTracks: audioTracks.length,
-        allTrackUrls: audioTracks.map(t => t.url)
-      });
 
       if (!existingTrack && onAddAudioTrack) {
         // Re-create the file object from the media
         const file = { name: media.title };
-        console.log('✅ Calling onAddAudioTrack for:', media.title);
         onAddAudioTrack(file, media.url);
         showToast('Audio added to timeline', 'success');
       } else if (existingTrack) {
-        console.log('⚠️ Audio already on timeline:', existingTrack.id);
         showToast('Audio already on timeline', 'info');
-      } else {
-        console.log('❌ onAddAudioTrack is not available');
       }
     } else {
       // For video, add to canvas
@@ -202,11 +191,18 @@ const MediaPanel = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // If it's audio, find the audio track and call delete request
+                        // If it's audio, find the audio track
                         if (media.type === 'audio') {
                           const audioTrack = audioTracks.find(track => track.url === media.url);
                           if (audioTrack && onAudioDeleteRequest) {
-                            onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+                            // Audio is on timeline - remove from timeline only
+                            onAudioDeleteRequest(audioTrack.id, media.title, null);
+                          } else {
+                            // Audio is NOT on timeline - delete from media library
+                            if (window.confirm(`Permanently delete "${media.title}" from media library?`)) {
+                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                              showToast('Media deleted from library', 'success');
+                            }
                           }
                         }
                       }}

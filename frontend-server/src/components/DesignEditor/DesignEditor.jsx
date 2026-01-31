@@ -274,10 +274,6 @@ const DesignEditor = () => {
    * Handle audio track delete
    */
   const handleAudioDelete = (trackId) => {
-    console.log('🗑️ Deleting audio track:', trackId);
-    const trackToDelete = audioTracks.find(t => t.id === trackId);
-    console.log('Track being deleted:', trackToDelete);
-
     setAudioTracks(audioTracks.filter(track => track.id !== trackId));
     // Clean up audio ref
     if (audioRefs.current[trackId]) {
@@ -290,8 +286,6 @@ const DesignEditor = () => {
     if (selectedAudioTrack?.id === trackId) {
       setSelectedAudioTrack(null);
     }
-
-    console.log('✅ Audio track deleted. Remaining tracks:', audioTracks.filter(track => track.id !== trackId).length);
   };
 
   /**
@@ -320,16 +314,11 @@ const DesignEditor = () => {
    * Confirm audio deletion
    */
   const confirmAudioDelete = () => {
-    const { audioId, mediaId } = audioDeleteDialog;
+    const { audioId } = audioDeleteDialog;
 
-    // Delete from audio tracks
+    // Delete from audio tracks only (keep in uploaded media for re-use)
     if (audioId) {
       handleAudioDelete(audioId);
-    }
-
-    // Delete from uploaded media
-    if (mediaId) {
-      setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
     }
 
     // Close dialog
@@ -678,11 +667,11 @@ const DesignEditor = () => {
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
         onConfirm={confirmAudioDelete}
-        title="Delete Audio"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
-        warningMessage="This will permanently delete the audio from the timeline and media library."
-        confirmText="Delete Audio"
+        title="Remove Audio from Timeline"
+        description="Audio will remain in your media library"
+        message={`Remove "${audioDeleteDialog.audioTitle}" from timeline?`}
+        warningMessage="You can re-add this audio later by clicking on it in the media library."
+        confirmText="Remove from Timeline"
         cancelText="Cancel"
         variant="danger"
       />
