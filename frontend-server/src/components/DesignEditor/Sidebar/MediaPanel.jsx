@@ -171,39 +171,48 @@ const MediaPanel = ({
 
                   {/* Action Icons */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    {/* Properties Icon */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Find the corresponding audio track
-                        const audioTrack = audioTracks.find(track => track.url === media.url);
-                        if (audioTrack && onAudioSelect) {
-                          onAudioSelect(audioTrack.id);
-                        }
-                      }}
-                      className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
-                      title="Edit properties"
-                    >
-                      ⚙️
-                    </button>
-
-                    {/* Delete Icon - Only show if audio is on timeline */}
+                    {/* Properties Icon - Only show for audio on timeline */}
                     {media.type === 'audio' && audioTracks.find(track => track.url === media.url) && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          // Find the corresponding audio track
                           const audioTrack = audioTracks.find(track => track.url === media.url);
-                          if (audioTrack && onAudioDeleteRequest) {
-                            // Remove from timeline only (keep in media library)
-                            onAudioDeleteRequest(audioTrack.id, media.title, null);
+                          if (audioTrack && onAudioSelect) {
+                            onAudioSelect(audioTrack.id);
                           }
                         }}
-                        className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
-                        title="Remove from timeline"
+                        className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                        title="Edit properties"
                       >
-                        🗑️
+                        ⚙️
                       </button>
                     )}
+
+                    {/* Delete Icon - Always show */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // If it's audio, find the audio track and delete from both timeline and media library
+                        if (media.type === 'audio') {
+                          const audioTrack = audioTracks.find(track => track.url === media.url);
+                          if (audioTrack && onAudioDeleteRequest) {
+                            // Delete from both timeline and media library
+                            onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+                          } else {
+                            // Audio not on timeline, just delete from media library
+                            if (window.confirm(`Delete "${media.title}"?`)) {
+                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                              showToast('Media deleted', 'success');
+                            }
+                          }
+                        }
+                      }}
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete media"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 </div>
               </div>

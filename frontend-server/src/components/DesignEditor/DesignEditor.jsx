@@ -314,11 +314,16 @@ const DesignEditor = () => {
    * Confirm audio deletion
    */
   const confirmAudioDelete = () => {
-    const { audioId } = audioDeleteDialog;
+    const { audioId, mediaId } = audioDeleteDialog;
 
-    // Delete from audio tracks only (keep in uploaded media for re-use)
+    // Delete from audio tracks (timeline)
     if (audioId) {
       handleAudioDelete(audioId);
+    }
+
+    // Delete from uploaded media (media library)
+    if (mediaId) {
+      setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
     }
 
     // Close dialog
@@ -662,16 +667,16 @@ const DesignEditor = () => {
         variant="danger"
       />
 
-      {/* Remove Audio from Timeline Confirmation Dialog */}
+      {/* Delete Audio Confirmation Dialog */}
       <ConfirmDialog
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
         onConfirm={confirmAudioDelete}
-        title="Remove from Timeline"
-        description="Audio will stay in your media library"
-        message={`Remove "${audioDeleteDialog.audioTitle}" from timeline?`}
-        warningMessage="You can re-add this audio anytime by clicking on it in Your Media section."
-        confirmText="Remove from Timeline"
+        title="Delete Audio"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
+        warningMessage="This will permanently delete the audio from both the timeline and media library."
+        confirmText="Delete Audio"
         cancelText="Cancel"
         variant="danger"
       />
