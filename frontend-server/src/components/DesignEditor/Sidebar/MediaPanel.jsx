@@ -42,7 +42,9 @@ const MediaPanel = ({
   };
 
   const handleAudioUpload = (event) => {
+    console.log('🎵 handleAudioUpload called');
     const files = Array.from(event.target.files);
+    console.log('📁 Files:', files.length);
 
     files.forEach((file) => {
       if (file.type.startsWith('audio/')) {
@@ -54,10 +56,12 @@ const MediaPanel = ({
           title: file.name,
           file: file // Store file reference
         };
+        console.log('➕ Adding to uploadedMedia:', newAudio);
         onUploadedMediaChange(prev => [...prev, newAudio]);
 
         // Add to audio timeline if callback provided
         if (onAddAudioTrack) {
+          console.log('🎬 Calling onAddAudioTrack for:', file.name);
           onAddAudioTrack(file, url);
           showToast('Audio added to timeline', 'success');
         } else {
@@ -65,21 +69,32 @@ const MediaPanel = ({
         }
       }
     });
+
+    // Reset file input to allow re-uploading the same file
+    event.target.value = '';
   };
 
   const handleAddMedia = (media) => {
+    console.log('🔍 handleAddMedia called for:', media);
+    console.log('🔍 Current audioTracks:', audioTracks);
+
     // If it's audio, add to timeline instead of canvas
     if (media.type === 'audio') {
       // Check if this audio is already on the timeline
       const existingTrack = audioTracks.find(track => track.url === media.url);
+      console.log('🔍 Existing track:', existingTrack);
 
       if (!existingTrack && onAddAudioTrack) {
+        console.log('✅ Calling onAddAudioTrack for:', media.title);
         // Re-create the file object from the media
-        const file = { name: media.title };
+        const file = media.file || { name: media.title };
         onAddAudioTrack(file, media.url);
         showToast('Audio added to timeline', 'success');
       } else if (existingTrack) {
+        console.log('⚠️ Audio already on timeline:', media.title);
         showToast('Audio already on timeline', 'info');
+      } else {
+        console.log('❌ onAddAudioTrack not available');
       }
     } else {
       // For video, add to canvas
