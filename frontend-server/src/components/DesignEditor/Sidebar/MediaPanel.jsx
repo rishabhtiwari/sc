@@ -5,11 +5,15 @@ import { useToast } from '../../../hooks/useToast';
  * Media Panel
  * Features: Upload videos, audio, stock media
  */
-const MediaPanel = ({ onAddElement, onAddAudioTrack }) => {
+const MediaPanel = ({ onAddElement, onAddAudioTrack, panelType }) => {
   const [uploadedMedia, setUploadedMedia] = useState([]);
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const { showToast } = useToast();
+
+  // Determine if we should show video or audio based on panel type
+  const isAudioPanel = panelType === 'audio';
+  const isVideoPanel = panelType === 'video';
 
   const handleVideoUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -67,51 +71,55 @@ const MediaPanel = ({ onAddElement, onAddAudioTrack }) => {
 
   return (
     <div className="space-y-6">
-      {/* Upload Video */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">🎬 Upload Video</h3>
-        <input
-          ref={videoInputRef}
-          type="file"
-          accept="video/*"
-          multiple
-          onChange={handleVideoUpload}
-          className="hidden"
-        />
-        <button
-          onClick={() => videoInputRef.current?.click()}
-          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Upload Video
-        </button>
-        <p className="text-xs text-gray-500 text-center">MP4, MOV, AVI up to 100MB</p>
-      </div>
+      {/* Upload Video - Only show on video tab */}
+      {!isAudioPanel && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">🎬 Upload Video</h3>
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            multiple
+            onChange={handleVideoUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => videoInputRef.current?.click()}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Video
+          </button>
+          <p className="text-xs text-gray-500 text-center">MP4, MOV, AVI up to 100MB</p>
+        </div>
+      )}
 
-      {/* Upload Audio */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">🎵 Upload Audio</h3>
-        <input
-          ref={audioInputRef}
-          type="file"
-          accept="audio/*"
-          multiple
-          onChange={handleAudioUpload}
-          className="hidden"
-        />
-        <button
-          onClick={() => audioInputRef.current?.click()}
-          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Upload Audio
-        </button>
-        <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
-      </div>
+      {/* Upload Audio - Only show on audio tab */}
+      {!isVideoPanel && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">🎵 Upload Audio</h3>
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            multiple
+            onChange={handleAudioUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Audio
+          </button>
+          <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
+        </div>
+      )}
 
       {/* Uploaded Media */}
       {uploadedMedia.length > 0 && (

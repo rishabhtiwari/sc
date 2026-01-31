@@ -15,13 +15,15 @@ const AudioTimelineRefactored = ({
   currentTime = 0,
   duration = 0,
   onAudioUpdate,
+  onAudioDelete,
+  onAudioSelect,
   onSlideUpdate,
   onSeek,
   onPlay,
   onPause,
-  isPlaying = false
+  isPlaying = false,
+  selectedAudioId = null
 }) => {
-  const [selectedTrack, setSelectedTrack] = useState(null);
   const [selectedSlide, setSelectedSlide] = useState(null);
   const [audioWaveforms, setAudioWaveforms] = useState({});
   const [volumeEnvelopes, setVolumeEnvelopes] = useState({});
@@ -177,9 +179,10 @@ const AudioTimelineRefactored = ({
                   <AudioBlock
                     track={track}
                     index={index}
-                    isSelected={selectedTrack === track.id}
-                    onSelect={() => setSelectedTrack(track.id)}
+                    isSelected={selectedAudioId === track.id}
+                    onSelect={() => onAudioSelect && onAudioSelect(track.id)}
                     onUpdate={(updates) => handleAudioUpdate(track.id, updates)}
+                    onDelete={() => onAudioDelete && onAudioDelete(track.id)}
                     waveformData={generateWaveformData(track.id, track.duration)}
                     volumeEnvelope={getVolumeEnvelope(track.id)}
                     colors={getAudioTrackColor(track)}

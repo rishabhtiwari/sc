@@ -59,6 +59,136 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
 
   const renderProperties = () => {
     switch (element.type) {
+      case 'audio':
+        return (
+          <div className="space-y-1">
+            {/* Audio Info Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Audio Info"
+                icon="🎵"
+                section="content"
+                isExpanded={expandedSections.content}
+              />
+              {expandedSections.content && (
+                <div className="p-4 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide block mb-2">Track Name</label>
+                    <input
+                      type="text"
+                      value={element.name || ''}
+                      onChange={(e) => onUpdate({ name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Audio track name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide block mb-2">Type</label>
+                    <select
+                      value={element.type || 'music'}
+                      onChange={(e) => onUpdate({ type: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    >
+                      <option value="music">🎵 Music</option>
+                      <option value="voiceover">🎤 Voiceover</option>
+                      <option value="sfx">🔊 Sound Effect</option>
+                    </select>
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Duration: {element.duration?.toFixed(2)}s</div>
+                    <div>Start Time: {element.startTime?.toFixed(2)}s</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Volume Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Volume"
+                icon="🔊"
+                section="color"
+                isExpanded={expandedSections.color}
+              />
+              {expandedSections.color && (
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Volume</label>
+                      <span className="text-xs font-semibold text-gray-700">{element.volume || 100}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={element.volume || 100}
+                      onChange={(e) => onUpdate({ volume: parseInt(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Fade Effects Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Fade Effects"
+                icon="🌊"
+                section="effects"
+                isExpanded={expandedSections.effects}
+              />
+              {expandedSections.effects && (
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fade In</label>
+                      <span className="text-xs font-semibold text-gray-700">{element.fadeIn || 0}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      value={element.fadeIn || 0}
+                      onChange={(e) => onUpdate({ fadeIn: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fade Out</label>
+                      <span className="text-xs font-semibold text-gray-700">{element.fadeOut || 0}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5"
+                      step="0.1"
+                      value={element.fadeOut || 0}
+                      onChange={(e) => onUpdate({ fadeOut: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Delete Section */}
+            <div className="bg-white border-b border-gray-100">
+              <div className="p-4">
+                <button
+                  onClick={onDelete}
+                  className="w-full px-4 py-2.5 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                >
+                  <span>🗑️</span>
+                  Delete Audio Track
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+
       case 'text':
         return (
           <div className="space-y-1">

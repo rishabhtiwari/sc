@@ -116,6 +116,7 @@ const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages,
               onAddAudioTrack={onAddAudioTrack}
               currentBackground={currentBackground}
               onBackgroundChange={onBackgroundChange}
+              panelType={expandedPanel}
             />
           </div>
         </div>

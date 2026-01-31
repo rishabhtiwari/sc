@@ -29,6 +29,7 @@ const DesignEditor = () => {
   const [audioTracks, setAudioTracks] = useState([]);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [selectedAudioTrack, setSelectedAudioTrack] = useState(null);
   const audioRefs = useRef({});
 
   /**
@@ -205,12 +206,40 @@ const DesignEditor = () => {
   };
 
   /**
-   * Handle audio track update (drag, stretch)
+   * Handle audio track update (drag, stretch, properties)
    */
   const handleAudioUpdate = (trackId, updates) => {
     setAudioTracks(audioTracks.map(track =>
       track.id === trackId ? { ...track, ...updates } : track
     ));
+  };
+
+  /**
+   * Handle audio track delete
+   */
+  const handleAudioDelete = (trackId) => {
+    setAudioTracks(audioTracks.filter(track => track.id !== trackId));
+    // Clean up audio ref
+    if (audioRefs.current[trackId]) {
+      const audio = audioRefs.current[trackId];
+      audio.pause();
+      audio.src = '';
+      delete audioRefs.current[trackId];
+    }
+    // Deselect if this track was selected
+    if (selectedAudioTrack?.id === trackId) {
+      setSelectedAudioTrack(null);
+    }
+  };
+
+  /**
+   * Handle audio track selection
+   */
+  const handleAudioSelect = (trackId) => {
+    const track = audioTracks.find(t => t.id === trackId);
+    setSelectedAudioTrack(track || null);
+    // Deselect canvas element when audio is selected
+    setSelectedElement(null);
   };
 
   /**
@@ -275,6 +304,30 @@ const DesignEditor = () => {
         setCurrentTime(prevTime => {
           const newTime = prevTime + 0.016; // ~60fps
 
+          // Calculate total duration
+          const totalDuration = (() => {
+            const audioDuration = audioTracks.length > 0
+              ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+              : 0;
+            const slidesDuration = pages.length > 0
+              ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
+              : 0;
+            return Math.max(audioDuration, slidesDuration, 30);
+          })();
+
+          // Stop playback when reaching the end
+          if (newTime >= totalDuration) {
+            setIsPlaying(false);
+            // Pause all audio
+            audioTracks.forEach(track => {
+              const audio = audioRefs.current[track.id];
+              if (audio && !audio.paused) {
+                audio.pause();
+              }
+            });
+            return totalDuration;
+          }
+
           // Update audio elements
           audioTracks.forEach(track => {
             const audio = audioRefs.current[track.id];
@@ -305,7 +358,7 @@ const DesignEditor = () => {
         cancelAnimationFrame(animationFrame);
       }
     };
-  }, [isPlaying, audioTracks]);
+  }, [isPlaying, audioTracks, pages]);
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
@@ -422,7 +475,10 @@ const DesignEditor = () => {
             slides={pages}
             currentTime={currentTime}
             isPlaying={isPlaying}
+            selectedAudioId={selectedAudioTrack?.id}
             onAudioUpdate={handleAudioUpdate}
+            onAudioDelete={handleAudioDelete}
+            onAudioSelect={handleAudioSelect}
             onSlideUpdate={handleSlideUpdate}
             onSeek={handleSeek}
             onPlay={handlePlay}
@@ -437,6 +493,15 @@ const DesignEditor = () => {
           element={selectedElement}
           onUpdate={(updates) => handleUpdateElement(selectedElement.id, updates)}
           onDelete={() => handleDeleteElement(selectedElement.id)}
+        />
+      )}
+
+      {/* Audio Properties Panel */}
+      {selectedAudioTrack && (
+        <PropertiesPanel
+          element={{ ...selectedAudioTrack, type: 'audio' }}
+          onUpdate={(updates) => handleAudioUpdate(selectedAudioTrack.id, updates)}
+          onDelete={() => handleAudioDelete(selectedAudioTrack.id)}
         />
       )}
 

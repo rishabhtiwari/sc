@@ -11,6 +11,7 @@ const AudioBlock = ({
   isSelected,
   onSelect,
   onUpdate,
+  onDelete,
   waveformData,
   volumeEnvelope,
   colors
@@ -164,8 +165,22 @@ const AudioBlock = ({
       />
 
       {/* Track Name */}
-      <div className="absolute top-0 left-0 right-0 px-2 py-0.5 text-xs font-medium text-white truncate bg-black bg-opacity-30 backdrop-blur-sm">
-        {track.name}
+      <div className="absolute top-0 left-0 right-0 px-2 py-0.5 text-xs font-medium text-white truncate bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-between">
+        <span className="truncate">{track.name}</span>
+        {isSelected && onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete audio track "${track.name}"?`)) {
+                onDelete();
+              }
+            }}
+            className="ml-2 px-1.5 py-0.5 bg-red-500 hover:bg-red-600 text-white rounded text-xs transition-colors flex-shrink-0"
+            title="Delete audio track"
+          >
+            🗑️
+          </button>
+        )}
       </div>
 
       {/* Duration Label */}
