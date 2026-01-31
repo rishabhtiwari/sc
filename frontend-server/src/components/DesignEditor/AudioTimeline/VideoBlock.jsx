@@ -150,7 +150,7 @@ const VideoBlock = ({
                   onDelete();
                 }
               }}
-              className="flex-shrink-0 w-5 h-5 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm"
+              className="flex-shrink-0 w-5 h-5 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm relative z-30"
               title="Delete video"
             >
               ✕

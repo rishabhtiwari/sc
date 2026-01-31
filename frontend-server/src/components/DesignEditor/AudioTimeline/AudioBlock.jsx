@@ -176,7 +176,7 @@ const AudioBlock = ({
                 onDelete();
               }
             }}
-            className="flex-shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm"
+            className="flex-shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm relative z-30"
             title="Delete audio"
           >
             ✕

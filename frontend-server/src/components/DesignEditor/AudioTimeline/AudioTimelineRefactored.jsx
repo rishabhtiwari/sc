@@ -175,7 +175,7 @@ const AudioTimelineRefactored = ({
           onPause={onPause}
         >
           {/* Slides Track */}
-          <TimelineTrack type="slides" height={100} label="📸 Slides / Photos">
+          <TimelineTrack type="slides" height={125} label="📸 Slides / Photos">
             <div className="relative h-full pt-2">
               {slides.map((slide, index) => {
                 const slideStartTime = getSlideStartTime(index);
