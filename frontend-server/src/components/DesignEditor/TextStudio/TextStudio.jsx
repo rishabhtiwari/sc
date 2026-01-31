@@ -927,7 +927,7 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
 
   // Modal mode (for Design Editor popup)
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-[150] bg-black bg-opacity-50 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-2xl w-[95%] h-[95%] flex flex-col overflow-hidden">
         {studioContent}
       </div>

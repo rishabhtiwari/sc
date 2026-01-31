@@ -175,8 +175,8 @@ const AudioTimelineRefactored = ({
           onPause={onPause}
         >
           {/* Slides Track */}
-          <TimelineTrack type="slides" height={110} label="📸 Slides / Photos">
-            <div className="relative h-full pt-8">
+          <TimelineTrack type="slides" height={80} label="📸 Slides / Photos">
+            <div className="relative h-full pt-2">
               {slides.map((slide, index) => {
                 const slideStartTime = getSlideStartTime(index);
                 const slideDuration = slide.duration || 5;
@@ -222,10 +222,11 @@ const AudioTimelineRefactored = ({
           {/* Video Tracks */}
           <TimelineTrack
             type="video"
-            height={videoTracks.length > 0 ? (videoTracks.length * 92 + 40) : 100}
+            height={videoTracks.length > 0 ? (videoTracks.length * 92 + 30) : 100}
             label="🎥 Video"
+            className="mt-4"
           >
-            <div className="relative pt-8">
+            <div className="relative pt-2">
               {videoTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
                   <VideoBlock
@@ -244,10 +245,11 @@ const AudioTimelineRefactored = ({
           {/* Audio Tracks */}
           <TimelineTrack
             type="audio"
-            height={audioTracks.length > 0 ? (audioTracks.length * 92 + 40) : 100}
+            height={audioTracks.length > 0 ? (audioTracks.length * 92 + 30) : 100}
             label="🎵 Audio"
+            className="mt-4"
           >
-            <div className="relative pt-8">
+            <div className="relative pt-2">
               {audioTracks.map((track, index) => (
                 <div key={track.id || index} className="relative mb-3" style={{ height: '80px' }}>
                   <AudioBlock
