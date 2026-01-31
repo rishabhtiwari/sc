@@ -187,11 +187,16 @@ const DesignEditor = () => {
    * Handle adding audio track
    */
   const handleAddAudioTrack = (audioFile, audioUrl) => {
+    console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
+
     // Create audio element to get duration
     const audio = new Audio(audioUrl);
     const trackId = `audio-${Date.now()}`;
 
+    console.log('🎬 Created audio element with ID:', trackId);
+
     audio.addEventListener('loadedmetadata', () => {
+      console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
       setAudioTracks(prevTracks => {
         // Calculate the end time of the last audio track
         let startTime = 0;
@@ -228,6 +233,16 @@ const DesignEditor = () => {
       audio.volume = 1.0; // 100%
       audioRefs.current[trackId] = audio;
     });
+
+    audio.addEventListener('error', (e) => {
+      console.error('❌ Audio loading error:', e);
+      console.error('❌ Audio error details:', {
+        error: audio.error,
+        code: audio.error?.code,
+        message: audio.error?.message,
+        src: audio.src
+      });
+    });
   };
 
   /**
@@ -235,8 +250,19 @@ const DesignEditor = () => {
    * Adds to both uploadedAudio (media list) AND timeline
    */
   const handleAddFromLibrary = (audioData) => {
+    console.log('📁 handleAddFromLibrary called with:', audioData);
+
     const url = audioData.url || audioData.audio_url;
     const title = audioData.title || 'Library Audio';
+
+    console.log('📁 Extracted URL:', url);
+    console.log('📁 Extracted Title:', title);
+
+    if (!url) {
+      console.error('❌ No URL provided!');
+      showToast('Failed to add audio - no URL', 'error');
+      return;
+    }
 
     // Add to uploadedAudio (so it appears in "Your Media")
     const newAudio = {
@@ -246,9 +272,11 @@ const DesignEditor = () => {
       title: title,
       file: { name: title }
     };
+    console.log('📁 Adding to uploadedAudio:', newAudio);
     setUploadedAudio(prev => [...prev, newAudio]);
 
     // Add to timeline
+    console.log('📁 Calling handleAddAudioTrack with:', { name: title }, url);
     handleAddAudioTrack({ name: title }, url);
 
     showToast('Audio added to timeline and media library', 'success');
