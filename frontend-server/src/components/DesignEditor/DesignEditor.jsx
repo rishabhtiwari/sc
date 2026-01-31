@@ -58,6 +58,36 @@ const DesignEditor = () => {
   const { showToast } = useToast();
 
   /**
+   * Create video elements for all video tracks
+   */
+  useEffect(() => {
+    videoTracks.forEach(track => {
+      if (!videoRefs.current[track.id]) {
+        const video = document.createElement('video');
+        video.src = track.url;
+        video.volume = (track.volume || 100) / 100;
+        video.style.maxWidth = '100%';
+        video.style.maxHeight = '100%';
+        video.style.objectFit = 'contain';
+        videoRefs.current[track.id] = video;
+        console.log('📹 Created video element for:', track.id);
+      }
+    });
+
+    // Cleanup removed tracks
+    Object.keys(videoRefs.current).forEach(trackId => {
+      if (!videoTracks.find(t => t.id === trackId)) {
+        const video = videoRefs.current[trackId];
+        if (video) {
+          video.pause();
+          video.src = '';
+        }
+        delete videoRefs.current[trackId];
+      }
+    });
+  }, [videoTracks]);
+
+  /**
    * Handle adding element to canvas (adds to current page)
    */
   const handleAddElement = (element) => {
@@ -256,15 +286,15 @@ const DesignEditor = () => {
   const handleAddVideoTrack = (videoFile, videoUrl) => {
     console.log('🎥 handleAddVideoTrack called:', { videoFile, videoUrl });
 
-    // Create video element to get duration
-    const video = document.createElement('video');
-    video.src = videoUrl;
+    // Create temporary video element to get duration
+    const tempVideo = document.createElement('video');
+    tempVideo.src = videoUrl;
     const trackId = `video-${Date.now()}`;
 
-    console.log('🎥 Created video element with ID:', trackId);
+    console.log('🎥 Created video track with ID:', trackId);
 
-    video.addEventListener('loadedmetadata', () => {
-      console.log('🎥 Video metadata loaded. Duration:', video.duration);
+    tempVideo.addEventListener('loadedmetadata', () => {
+      console.log('🎥 Video metadata loaded. Duration:', tempVideo.duration);
       setVideoTracks(prevTracks => {
         // Calculate the end time of the last video track
         let startTime = 0;
@@ -280,29 +310,25 @@ const DesignEditor = () => {
           id: trackId,
           name: videoFile.name,
           url: videoUrl,
-          duration: video.duration,
-          originalDuration: video.duration,
+          duration: tempVideo.duration,
+          originalDuration: tempVideo.duration,
           startTime: startTime, // Auto-position at end of existing videos
           volume: 100 // Default volume 100%
         };
 
         const updatedTracks = [...prevTracks, newTrack];
-        console.log('✅ Video track added:', newTrack, 'Start time:', startTime, 'Duration:', video.duration);
+        console.log('✅ Video track added:', newTrack, 'Start time:', startTime, 'Duration:', tempVideo.duration);
         return updatedTracks;
       });
-
-      // Set initial volume
-      video.volume = 1.0; // 100%
-      videoRefs.current[trackId] = video;
     });
 
-    video.addEventListener('error', (e) => {
+    tempVideo.addEventListener('error', (e) => {
       console.error('❌ Video loading error:', e);
       console.error('❌ Video error details:', {
-        error: video.error,
-        code: video.error?.code,
-        message: video.error?.message,
-        src: video.src
+        error: tempVideo.error,
+        code: tempVideo.error?.code,
+        message: tempVideo.error?.message,
+        src: tempVideo.src
       });
     });
   };
@@ -810,31 +836,35 @@ const DesignEditor = () => {
             />
 
             {/* Video Overlay - Shows active video on top of canvas */}
-            {videoTracks.map(track => {
-              const trackTime = currentTime - (track.startTime || 0);
-              const isActive = trackTime >= 0 && trackTime <= track.duration;
+            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 100 }}>
+              {videoTracks.map(track => {
+                const trackTime = currentTime - (track.startTime || 0);
+                const isActive = trackTime >= 0 && trackTime <= track.duration;
 
-              if (!isActive) return null;
+                if (!isActive) return null;
 
-              return (
-                <div
-                  key={track.id}
-                  className="absolute inset-0 pointer-events-none flex items-center justify-center bg-black bg-opacity-50"
-                  style={{ zIndex: 100 }}
-                >
-                  <video
-                    ref={el => {
-                      if (el && !videoRefs.current[track.id]) {
-                        videoRefs.current[track.id] = el;
-                      }
-                    }}
-                    src={track.url}
-                    className="max-w-full max-h-full"
-                    style={{ objectFit: 'contain' }}
-                  />
-                </div>
-              );
-            })}
+                return (
+                  <div
+                    key={track.id}
+                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50"
+                  >
+                    <div
+                      ref={el => {
+                        if (el && videoRefs.current[track.id]) {
+                          const video = videoRefs.current[track.id];
+                          // Append video element if not already in DOM
+                          if (!el.contains(video)) {
+                            el.appendChild(video);
+                          }
+                        }
+                      }}
+                      className="flex items-center justify-center"
+                      style={{ maxWidth: '100%', maxHeight: '100%' }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Audio Timeline at Bottom - Fixed height */}
