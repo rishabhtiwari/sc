@@ -32,6 +32,9 @@ const DesignEditor = () => {
   const [selectedAudioTrack, setSelectedAudioTrack] = useState(null);
   const audioRefs = useRef({});
 
+  // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
+  const [uploadedMedia, setUploadedMedia] = useState([]);
+
   /**
    * Handle adding element to canvas (adds to current page)
    */
@@ -211,16 +214,51 @@ const DesignEditor = () => {
   };
 
   /**
+   * Apply fade in/out effect to audio element
+   */
+  const applyFadeEffect = (audio, track, currentTrackTime) => {
+    if (!audio || !track) return;
+
+    const baseVolume = (track.volume || 100) / 100;
+    const fadeIn = track.fadeIn || 0;
+    const fadeOut = track.fadeOut || 0;
+    const duration = track.duration || 0;
+
+    let volumeMultiplier = 1;
+
+    // Apply fade in
+    if (fadeIn > 0 && currentTrackTime < fadeIn) {
+      volumeMultiplier = currentTrackTime / fadeIn;
+    }
+
+    // Apply fade out
+    if (fadeOut > 0 && currentTrackTime > duration - fadeOut) {
+      volumeMultiplier = (duration - currentTrackTime) / fadeOut;
+    }
+
+    // Apply the calculated volume
+    audio.volume = baseVolume * Math.max(0, Math.min(1, volumeMultiplier));
+  };
+
+  /**
    * Handle audio track update (drag, stretch, properties)
    */
   const handleAudioUpdate = (trackId, updates) => {
-    setAudioTracks(audioTracks.map(track =>
-      track.id === trackId ? { ...track, ...updates } : track
-    ));
+    setAudioTracks(prevTracks => {
+      const updatedTracks = prevTracks.map(track =>
+        track.id === trackId ? { ...track, ...updates } : track
+      );
+      return updatedTracks;
+    });
 
-    // Apply volume changes immediately to audio element
-    if (updates.volume !== undefined && audioRefs.current[trackId]) {
-      audioRefs.current[trackId].volume = updates.volume / 100;
+    // Apply volume/fade changes immediately to audio element
+    if ((updates.volume !== undefined || updates.fadeIn !== undefined || updates.fadeOut !== undefined) && audioRefs.current[trackId]) {
+      const track = audioTracks.find(t => t.id === trackId);
+      if (track) {
+        const audio = audioRefs.current[trackId];
+        const currentTrackTime = audio.currentTime;
+        applyFadeEffect(audio, { ...track, ...updates }, currentTrackTime);
+      }
     }
   };
 
@@ -267,10 +305,15 @@ const DesignEditor = () => {
    */
   const handleSeek = (time) => {
     setCurrentTime(time);
-    // Update all audio elements
-    Object.values(audioRefs.current).forEach(audio => {
+    // Update all audio elements and apply fade effects
+    audioTracks.forEach(track => {
+      const audio = audioRefs.current[track.id];
       if (audio) {
-        audio.currentTime = time;
+        const trackTime = time - track.startTime;
+        if (trackTime >= 0 && trackTime <= track.duration) {
+          audio.currentTime = trackTime;
+          applyFadeEffect(audio, track, trackTime);
+        }
       }
     });
   };
@@ -284,7 +327,9 @@ const DesignEditor = () => {
     audioTracks.forEach(track => {
       const audio = audioRefs.current[track.id];
       if (audio && currentTime >= track.startTime && currentTime < track.startTime + track.duration) {
-        audio.currentTime = currentTime - track.startTime;
+        const trackTime = currentTime - track.startTime;
+        audio.currentTime = trackTime;
+        applyFadeEffect(audio, track, trackTime);
         audio.play();
       }
     });
@@ -348,6 +393,8 @@ const DesignEditor = () => {
                   audio.currentTime = trackTime;
                   audio.play().catch(err => console.error('Audio play error:', err));
                 }
+                // Apply fade in/out effect continuously during playback
+                applyFadeEffect(audio, track, trackTime);
               } else if (!audio.paused) {
                 audio.pause();
               }
@@ -406,6 +453,8 @@ const DesignEditor = () => {
         audioTracks={audioTracks}
         onAudioSelect={handleAudioSelect}
         onAudioDelete={handleAudioDelete}
+        uploadedMedia={uploadedMedia}
+        onUploadedMediaChange={setUploadedMedia}
       />
 
       {/* Main Canvas Area */}
@@ -507,28 +556,36 @@ const DesignEditor = () => {
           element={selectedElement}
           onUpdate={(updates) => handleUpdateElement(selectedElement.id, updates)}
           onDelete={() => handleDeleteElement(selectedElement.id)}
+          onClose={() => setSelectedElement(null)}
         />
       )}
 
       {/* Audio Properties Panel */}
-      {selectedAudioTrack && (
-        <PropertiesPanel
-          element={{
-            ...selectedAudioTrack,
-            type: 'audio',
-            audioType: selectedAudioTrack.type // Preserve the audio type (music/voiceover/sfx)
-          }}
-          onUpdate={(updates) => {
-            // If audioType is being updated, map it back to type
-            if (updates.audioType !== undefined) {
-              updates.type = updates.audioType;
-              delete updates.audioType;
-            }
-            handleAudioUpdate(selectedAudioTrack.id, updates);
-          }}
-          onDelete={() => handleAudioDelete(selectedAudioTrack.id)}
-        />
-      )}
+      {selectedAudioTrack && (() => {
+        // Find the current audio track from audioTracks (to get latest values)
+        const currentTrack = audioTracks.find(track => track.id === selectedAudioTrack.id);
+        if (!currentTrack) return null;
+
+        return (
+          <PropertiesPanel
+            element={{
+              ...currentTrack,
+              type: 'audio',
+              audioType: currentTrack.type // Preserve the audio type (music/voiceover/sfx)
+            }}
+            onUpdate={(updates) => {
+              // If audioType is being updated, map it back to type
+              if (updates.audioType !== undefined) {
+                updates.type = updates.audioType;
+                delete updates.audioType;
+              }
+              handleAudioUpdate(currentTrack.id, updates);
+            }}
+            onDelete={() => handleAudioDelete(currentTrack.id)}
+            onClose={() => setSelectedAudioTrack(null)}
+          />
+        );
+      })()}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog

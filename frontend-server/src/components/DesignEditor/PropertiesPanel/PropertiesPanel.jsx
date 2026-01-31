@@ -4,7 +4,7 @@ import React, { useState } from 'react';
  * Properties Panel - Edit selected element properties
  * Veed.io-inspired professional design with collapsible sections
  */
-const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
+const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
   const [expandedSections, setExpandedSections] = useState({
     content: true,
     typography: true,
@@ -121,6 +121,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                       type="range"
                       min="0"
                       max="100"
+                      step="1"
                       value={element.volume || 100}
                       onChange={(e) => onUpdate({ volume: parseInt(e.target.value) })}
                       className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
@@ -143,7 +144,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fade In</label>
-                      <span className="text-xs font-semibold text-gray-700">{element.fadeIn || 0}s</span>
+                      <span className="text-xs font-semibold text-gray-700">{(element.fadeIn || 0).toFixed(1)}s</span>
                     </div>
                     <input
                       type="range"
@@ -158,7 +159,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Fade Out</label>
-                      <span className="text-xs font-semibold text-gray-700">{element.fadeOut || 0}s</span>
+                      <span className="text-xs font-semibold text-gray-700">{(element.fadeOut || 0).toFixed(1)}s</span>
                     </div>
                     <input
                       type="range"
@@ -697,14 +698,30 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h2 className="text-sm font-bold text-gray-900">Properties</h2>
-            <p className="text-xs text-gray-500 mt-0.5 capitalize">{element.type} Element</p>
+            <p className="text-xs text-gray-500 mt-0.5 capitalize">
+              {element.type === 'audio' ? 'Audio Track' : `${element.type} Element`}
+            </p>
           </div>
-          <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center">
-            <span className="text-lg">
-              {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : '⬜'}
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center">
+              <span className="text-lg">
+                {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : '⬜'}
+              </span>
+            </div>
+            {/* Close Button */}
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors text-gray-500 hover:text-gray-700"
+                title="Close properties panel"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
       </div>

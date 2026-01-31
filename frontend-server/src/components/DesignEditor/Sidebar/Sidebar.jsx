@@ -20,7 +20,9 @@ const Sidebar = ({
   onBackgroundChange,
   audioTracks,
   onAudioSelect,
-  onAudioDelete
+  onAudioDelete,
+  uploadedMedia,
+  onUploadedMediaChange
 }) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
 
@@ -131,6 +133,8 @@ const Sidebar = ({
               audioTracks={audioTracks}
               onAudioSelect={onAudioSelect}
               onAudioDelete={onAudioDelete}
+              uploadedMedia={uploadedMedia}
+              onUploadedMediaChange={onUploadedMediaChange}
             />
           </div>
         </div>

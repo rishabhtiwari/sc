@@ -11,9 +11,10 @@ const MediaPanel = ({
   panelType,
   audioTracks = [],
   onAudioSelect,
-  onAudioDelete
+  onAudioDelete,
+  uploadedMedia = [],
+  onUploadedMediaChange
 }) => {
-  const [uploadedMedia, setUploadedMedia] = useState([]);
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const { showToast } = useToast();
@@ -24,7 +25,7 @@ const MediaPanel = ({
 
   const handleVideoUpload = (event) => {
     const files = Array.from(event.target.files);
-    
+
     files.forEach((file) => {
       if (file.type.startsWith('video/')) {
         const url = URL.createObjectURL(file);
@@ -34,7 +35,7 @@ const MediaPanel = ({
           url,
           title: file.name
         };
-        setUploadedMedia(prev => [...prev, newVideo]);
+        onUploadedMediaChange(prev => [...prev, newVideo]);
         showToast('Video uploaded successfully', 'success');
       }
     });
@@ -53,7 +54,7 @@ const MediaPanel = ({
           title: file.name,
           file: file // Store file reference
         };
-        setUploadedMedia(prev => [...prev, newAudio]);
+        onUploadedMediaChange(prev => [...prev, newAudio]);
 
         // Add to audio timeline if callback provided
         if (onAddAudioTrack) {
@@ -176,7 +177,7 @@ const MediaPanel = ({
                         e.stopPropagation();
                         if (window.confirm(`Delete "${media.title}"?`)) {
                           // Remove from uploaded media
-                          setUploadedMedia(prev => prev.filter(m => m.id !== media.id));
+                          onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
 
                           // If it's audio, also remove from audio tracks
                           if (media.type === 'audio') {
