@@ -312,13 +312,8 @@ const AudioTimeline = ({
             )}
           </button>
 
-          {/* Time Display */}
-          <div className="text-xs font-mono text-gray-700 bg-white px-2 py-1 rounded border border-gray-200">
-            {formatTime(currentTime)} / {formatTime(totalDuration)}
-          </div>
-
           {/* Timeline Label */}
-          <div className="text-xs font-semibold text-gray-600 ml-2">
+          <div className="text-xs font-semibold text-gray-600">
             🎵 Audio Timeline
           </div>
         </div>
@@ -377,28 +372,6 @@ const AudioTimeline = ({
           }}
           onClick={handleTimelineClick}
         >
-          {/* Time Ruler */}
-          <div className="absolute top-0 left-0 right-0 h-8 bg-white border-b border-gray-200 flex items-center">
-            {(() => {
-              // Determine interval based on total duration and zoom
-              const interval = totalDuration > 120 ? 10 : totalDuration > 60 ? 5 : 1;
-              const markers = [];
-              for (let i = 0; i <= Math.ceil(totalDuration); i += interval) {
-                markers.push(
-                  <div
-                    key={i}
-                    className="absolute flex flex-col items-center"
-                    style={{ left: `${timeToPixels(i)}px` }}
-                  >
-                    <div className="w-px h-2 bg-gray-300"></div>
-                    <span className="text-xs text-gray-600 mt-1 font-medium">{formatTime(i)}</span>
-                  </div>
-                );
-              }
-              return markers;
-            })()}
-          </div>
-
           {/* Playhead */}
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
@@ -408,7 +381,7 @@ const AudioTimeline = ({
           </div>
 
           {/* Slides/Photos Track - Enhanced with thumbnails and transitions */}
-          <div className="absolute top-8 left-0 right-0 h-20 bg-white border-b border-gray-200">
+          <div className="absolute top-0 left-0 right-0 h-20 bg-white border-b border-gray-200">
             <div className="px-2 py-1 text-xs font-semibold text-gray-600 border-b border-gray-200">
               📸 Slides / Photos
             </div>
@@ -525,7 +498,7 @@ const AudioTimeline = ({
           </div>
 
           {/* Audio Tracks - Enhanced with Waveforms and Volume Controls */}
-          <div className="absolute top-28 left-0 right-0 bottom-0 bg-gray-50">
+          <div className="absolute top-20 left-0 right-0 bottom-0 bg-gray-50">
             {audioTracks.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-400">
