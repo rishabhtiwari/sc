@@ -85,8 +85,8 @@ const PropertiesPanel = ({ element, onUpdate, onDelete }) => {
                   <div>
                     <label className="text-xs font-medium text-gray-600 uppercase tracking-wide block mb-2">Type</label>
                     <select
-                      value={element.type || 'music'}
-                      onChange={(e) => onUpdate({ type: e.target.value })}
+                      value={element.audioType || 'music'}
+                      onChange={(e) => onUpdate({ audioType: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     >
                       <option value="music">🎵 Music</option>

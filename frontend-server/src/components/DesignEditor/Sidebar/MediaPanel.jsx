@@ -5,7 +5,14 @@ import { useToast } from '../../../hooks/useToast';
  * Media Panel
  * Features: Upload videos, audio, stock media
  */
-const MediaPanel = ({ onAddElement, onAddAudioTrack, panelType }) => {
+const MediaPanel = ({
+  onAddElement,
+  onAddAudioTrack,
+  panelType,
+  audioTracks = [],
+  onAudioSelect,
+  onAudioDelete
+}) => {
   const [uploadedMedia, setUploadedMedia] = useState([]);
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
@@ -129,18 +136,64 @@ const MediaPanel = ({ onAddElement, onAddAudioTrack, panelType }) => {
             {uploadedMedia.map((media) => (
               <div
                 key={media.id}
-                onClick={() => handleAddMedia(media)}
-                className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer"
+                className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
               >
                 <div className="flex items-center gap-3">
                   <div className="text-2xl">
                     {media.type === 'video' ? '🎬' : '🎵'}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => handleAddMedia(media)}
+                  >
                     <div className="text-sm font-medium text-gray-900 truncate">
                       {media.title}
                     </div>
                     <div className="text-xs text-gray-500 capitalize">{media.type}</div>
+                  </div>
+
+                  {/* Action Icons */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Properties Icon */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Find the corresponding audio track
+                        const audioTrack = audioTracks.find(track => track.url === media.url);
+                        if (audioTrack && onAudioSelect) {
+                          onAudioSelect(audioTrack.id);
+                        }
+                      }}
+                      className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                      title="Edit properties"
+                    >
+                      ⚙️
+                    </button>
+
+                    {/* Delete Icon */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete "${media.title}"?`)) {
+                          // Remove from uploaded media
+                          setUploadedMedia(prev => prev.filter(m => m.id !== media.id));
+
+                          // If it's audio, also remove from audio tracks
+                          if (media.type === 'audio') {
+                            const audioTrack = audioTracks.find(track => track.url === media.url);
+                            if (audioTrack && onAudioDelete) {
+                              onAudioDelete(audioTrack.id);
+                            }
+                          }
+
+                          showToast(`${media.type} deleted`, 'success');
+                        }
+                      }}
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete media"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 </div>
               </div>

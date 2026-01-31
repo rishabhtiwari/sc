@@ -10,7 +10,18 @@ import ElementsPanel from './ElementsPanel';
  * Sidebar Component - Tool Selection
  * Organized sections: AI, Slides, Text, Images, Audio, Video, Elements
  */
-const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages, onAddAudioTrack, currentBackground, onBackgroundChange }) => {
+const Sidebar = ({
+  selectedTool,
+  onSelectTool,
+  onAddElement,
+  onAddMultiplePages,
+  onAddAudioTrack,
+  currentBackground,
+  onBackgroundChange,
+  audioTracks,
+  onAudioSelect,
+  onAudioDelete
+}) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
 
   const tools = [
@@ -117,6 +128,9 @@ const Sidebar = ({ selectedTool, onSelectTool, onAddElement, onAddMultiplePages,
               currentBackground={currentBackground}
               onBackgroundChange={onBackgroundChange}
               panelType={expandedPanel}
+              audioTracks={audioTracks}
+              onAudioSelect={onAudioSelect}
+              onAudioDelete={onAudioDelete}
             />
           </div>
         </div>

@@ -403,6 +403,9 @@ const DesignEditor = () => {
         onAddAudioTrack={handleAddAudioTrack}
         currentBackground={currentPage?.background}
         onBackgroundChange={handleBackgroundChange}
+        audioTracks={audioTracks}
+        onAudioSelect={handleAudioSelect}
+        onAudioDelete={handleAudioDelete}
       />
 
       {/* Main Canvas Area */}
@@ -510,8 +513,19 @@ const DesignEditor = () => {
       {/* Audio Properties Panel */}
       {selectedAudioTrack && (
         <PropertiesPanel
-          element={{ ...selectedAudioTrack, type: 'audio' }}
-          onUpdate={(updates) => handleAudioUpdate(selectedAudioTrack.id, updates)}
+          element={{
+            ...selectedAudioTrack,
+            type: 'audio',
+            audioType: selectedAudioTrack.type // Preserve the audio type (music/voiceover/sfx)
+          }}
+          onUpdate={(updates) => {
+            // If audioType is being updated, map it back to type
+            if (updates.audioType !== undefined) {
+              updates.type = updates.audioType;
+              delete updates.audioType;
+            }
+            handleAudioUpdate(selectedAudioTrack.id, updates);
+          }}
           onDelete={() => handleAudioDelete(selectedAudioTrack.id)}
         />
       )}
