@@ -72,13 +72,25 @@ const MediaPanel = ({
     if (media.type === 'audio') {
       // Check if this audio is already on the timeline
       const existingTrack = audioTracks.find(track => track.url === media.url);
+      console.log('🔍 handleAddMedia - Audio click:', {
+        mediaTitle: media.title,
+        mediaUrl: media.url,
+        existingTrack: existingTrack ? existingTrack.id : 'none',
+        totalTracks: audioTracks.length,
+        allTrackUrls: audioTracks.map(t => t.url)
+      });
+
       if (!existingTrack && onAddAudioTrack) {
         // Re-create the file object from the media
         const file = { name: media.title };
+        console.log('✅ Calling onAddAudioTrack for:', media.title);
         onAddAudioTrack(file, media.url);
         showToast('Audio added to timeline', 'success');
       } else if (existingTrack) {
+        console.log('⚠️ Audio already on timeline:', existingTrack.id);
         showToast('Audio already on timeline', 'info');
+      } else {
+        console.log('❌ onAddAudioTrack is not available');
       }
     } else {
       // For video, add to canvas

@@ -274,6 +274,10 @@ const DesignEditor = () => {
    * Handle audio track delete
    */
   const handleAudioDelete = (trackId) => {
+    console.log('🗑️ Deleting audio track:', trackId);
+    const trackToDelete = audioTracks.find(t => t.id === trackId);
+    console.log('Track being deleted:', trackToDelete);
+
     setAudioTracks(audioTracks.filter(track => track.id !== trackId));
     // Clean up audio ref
     if (audioRefs.current[trackId]) {
@@ -286,6 +290,8 @@ const DesignEditor = () => {
     if (selectedAudioTrack?.id === trackId) {
       setSelectedAudioTrack(null);
     }
+
+    console.log('✅ Audio track deleted. Remaining tracks:', audioTracks.filter(track => track.id !== trackId).length);
   };
 
   /**
