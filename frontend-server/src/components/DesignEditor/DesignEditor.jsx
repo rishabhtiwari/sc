@@ -21,7 +21,8 @@ const DesignEditor = () => {
       name: 'Page 1',
       elements: [],
       background: { type: 'solid', color: '#ffffff' },
-      duration: 5 // Default 5 seconds per slide
+      duration: 5, // Default 5 seconds per slide
+      startTime: 0 // Default start time (can be moved independently)
     }
   ]);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -126,14 +127,24 @@ const DesignEditor = () => {
       return;
     }
 
-    const newPages = slidePages.map((slide, index) => ({
-      id: slide.id || `page-${Date.now()}-${index}`,
-      name: slide.name || `Slide ${pages.length + index + 1}`,
-      elements: slide.elements || [],
-      background: slide.background || { type: 'solid', color: '#ffffff' },
-      duration: slide.duration || 5,
-      transition: slide.transition || 'fade'
-    }));
+    const newPages = slidePages.map((slide, index) => {
+      // Calculate start time for new slides (position at end of existing slides)
+      const existingDuration = pages.reduce((sum, p) => {
+        const pStart = p.startTime !== undefined ? p.startTime : 0;
+        const pDur = p.duration || 5;
+        return Math.max(sum, pStart + pDur);
+      }, 0);
+
+      return {
+        id: slide.id || `page-${Date.now()}-${index}`,
+        name: slide.name || `Slide ${pages.length + index + 1}`,
+        elements: slide.elements || [],
+        background: slide.background || { type: 'solid', color: '#ffffff' },
+        duration: slide.duration || 5,
+        startTime: existingDuration + (index * 5), // Position new slides sequentially after existing ones
+        transition: slide.transition || 'fade'
+      };
+    });
 
     console.log('📄 DesignEditor: Created new pages:', newPages);
     console.log('📄 DesignEditor: Current pages before update:', pages);

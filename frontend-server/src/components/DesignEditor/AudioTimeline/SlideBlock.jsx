@@ -17,7 +17,9 @@ const SlideBlock = ({
 }) => {
   const { timeToPixels, pixelsToTime, formatTime } = useTimeline();
   const [isStretching, setIsStretching] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [stretchStart, setStretchStart] = useState(null);
+  const [dragStart, setDragStart] = useState(null);
 
   const blockWidth = timeToPixels(duration);
   const leftPosition = timeToPixels(startTime);
@@ -34,38 +36,65 @@ const SlideBlock = ({
     setStretchStart({
       x: e.clientX,
       edge,
-      initialDuration: duration
+      initialDuration: duration,
+      initialStartTime: startTime
+    });
+  };
+
+  const handleDragStart = (e) => {
+    // Don't drag if clicking on handles
+    if (e.target.classList.contains('cursor-ew-resize')) {
+      return;
+    }
+
+    e.stopPropagation();
+    console.log('🎯 Slide drag started:', index);
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX,
+      initialStartTime: startTime
     });
   };
 
   const handleMouseMove = (e) => {
-    if (!isStretching || !stretchStart) return;
+    if (isStretching && stretchStart) {
+      const deltaX = e.clientX - stretchStart.x;
+      const deltaTime = pixelsToTime(deltaX);
 
-    const deltaX = e.clientX - stretchStart.x;
-    const deltaTime = pixelsToTime(deltaX);
-
-    if (stretchStart.edge === 'right') {
-      const newDuration = Math.max(1, stretchStart.initialDuration + deltaTime);
-      console.log('🔧 Stretching slide right. New duration:', newDuration);
-      if (onUpdate) {
-        onUpdate({ duration: newDuration });
+      if (stretchStart.edge === 'right') {
+        const newDuration = Math.max(1, stretchStart.initialDuration + deltaTime);
+        console.log('🔧 Stretching slide right. New duration:', newDuration);
+        if (onUpdate) {
+          onUpdate({ duration: newDuration });
+        }
+      } else if (stretchStart.edge === 'left') {
+        const newDuration = Math.max(1, stretchStart.initialDuration - deltaTime);
+        const newStartTime = Math.max(0, stretchStart.initialStartTime + deltaTime);
+        console.log('🔧 Stretching slide left. New duration:', newDuration, 'New start:', newStartTime);
+        if (onUpdate) {
+          onUpdate({ duration: newDuration, startTime: newStartTime });
+        }
       }
-    } else if (stretchStart.edge === 'left') {
-      const newDuration = Math.max(1, stretchStart.initialDuration - deltaTime);
-      console.log('🔧 Stretching slide left. New duration:', newDuration);
+    } else if (isDragging && dragStart) {
+      const deltaX = e.clientX - dragStart.x;
+      const deltaTime = pixelsToTime(deltaX);
+      const newStartTime = Math.max(0, dragStart.initialStartTime + deltaTime);
+      console.log('🔧 Dragging slide. New start time:', newStartTime);
       if (onUpdate) {
-        onUpdate({ duration: newDuration });
+        onUpdate({ startTime: newStartTime });
       }
     }
   };
 
   const handleMouseUp = () => {
     setIsStretching(false);
+    setIsDragging(false);
     setStretchStart(null);
+    setDragStart(null);
   };
 
   useEffect(() => {
-    if (isStretching) {
+    if (isStretching || isDragging) {
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
       return () => {
@@ -73,7 +102,7 @@ const SlideBlock = ({
         window.removeEventListener('mouseup', handleMouseUp);
       };
     }
-  }, [isStretching, stretchStart]);
+  }, [isStretching, isDragging, stretchStart, dragStart]);
 
   return (
     <>
@@ -83,13 +112,14 @@ const SlideBlock = ({
           isSelected
             ? 'bg-purple-500 border-2 border-purple-300 ring-2 ring-purple-200'
             : 'bg-purple-600 hover:bg-purple-500 border border-purple-400'
-        }`}
+        } ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
         style={{
           left: `${leftPosition}px`,
           width: `${blockWidth}px`,
           minWidth: '40px'
         }}
         title={`${slide.name || `Slide ${index + 1}`} (${formatTime(duration)})`}
+        onMouseDown={handleDragStart}
         onClick={(e) => {
           e.stopPropagation();
           if (onSelect) onSelect();

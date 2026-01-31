@@ -120,6 +120,11 @@ const AudioTimelineRefactored = ({
 
   // Calculate slide start times
   const getSlideStartTime = (index) => {
+    // If slide has explicit startTime, use it; otherwise calculate sequentially
+    if (slides[index].startTime !== undefined) {
+      return slides[index].startTime;
+    }
+    // Fallback to sequential calculation for backward compatibility
     const prevSlides = slides.slice(0, index);
     return prevSlides.reduce((sum, s) => sum + (s.duration || 5), 0);
   };
