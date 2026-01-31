@@ -397,6 +397,17 @@ const AudioTimeline = ({
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
           </div>
 
+          {/* Timeline End Boundary Marker (Debug) */}
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-green-500 z-40 pointer-events-none opacity-50"
+            style={{ left: `${40 + timeToPixels(totalDuration)}px` }}
+            title="Timeline End Boundary"
+          >
+            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 px-1 py-0.5 bg-green-500 text-white text-xs rounded">
+              END
+            </div>
+          </div>
+
           {/* Slides/Photos Track - Enhanced with thumbnails and transitions */}
           <div className="absolute top-0 left-10 right-10 h-20 bg-white border-b border-gray-200">
             <div className="px-2 py-1 text-xs font-semibold text-gray-600 border-b border-gray-200">
@@ -433,15 +444,6 @@ const AudioTimeline = ({
                         e.stopPropagation();
                         setSelectedSlide(index);
                       }}
-                      onMouseDown={(e) => {
-                        // Check if clicking on handles
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const clickX = e.clientX - rect.left;
-                        if (clickX < 8 || clickX > rect.width - 8) {
-                          return; // Let handle catch it
-                        }
-                        handleSlideDragStart(e, index);
-                      }}
                     >
                       {/* Repeating Thumbnails - Best Practice for Photos */}
                       <div className="h-full flex items-center gap-0.5 px-1">
@@ -471,13 +473,23 @@ const AudioTimeline = ({
 
                       {/* Handlebar Resize Handles - Best Practice */}
                       <div
-                        className="absolute left-0 top-0 bottom-0 w-2 bg-purple-400 cursor-ew-resize hover:bg-purple-300 transition-colors border-r border-purple-300"
-                        onMouseDown={(e) => handleStretchStart(e, 'slide', index, 'left')}
+                        className="absolute left-0 top-0 bottom-0 w-2 bg-purple-400 cursor-ew-resize hover:bg-purple-300 transition-colors border-r border-purple-300 z-20"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleStretchStart(e, 'slide', index, 'left');
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                         title="Drag to adjust start time"
                       ></div>
                       <div
-                        className="absolute right-0 top-0 bottom-0 w-2 bg-purple-400 cursor-ew-resize hover:bg-purple-300 transition-colors border-l border-purple-300"
-                        onMouseDown={(e) => handleStretchStart(e, 'slide', index, 'right')}
+                        className="absolute right-0 top-0 bottom-0 w-2 bg-purple-400 cursor-ew-resize hover:bg-purple-300 transition-colors border-l border-purple-300 z-20"
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          handleStretchStart(e, 'slide', index, 'right');
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                         title="Drag to extend duration"
                       ></div>
                     </div>
@@ -515,7 +527,7 @@ const AudioTimeline = ({
           </div>
 
           {/* Audio Tracks - Enhanced with Waveforms and Volume Controls */}
-          <div className="absolute top-20 left-10 right-10 bottom-0 bg-gray-50">
+          <div className="absolute top-20 left-10 right-10 bottom-0 bg-gray-50 overflow-visible">
             {audioTracks.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-400">
