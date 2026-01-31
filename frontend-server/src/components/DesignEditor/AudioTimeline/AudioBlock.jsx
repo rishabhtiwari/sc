@@ -139,7 +139,7 @@ const AudioBlock = ({
 
   return (
     <div
-      className={`absolute top-0 h-16 border rounded shadow-sm cursor-move transition-all overflow-hidden ${
+      className={`absolute top-0 h-20 border rounded shadow-sm cursor-move transition-all overflow-hidden ${
         isSelected
           ? `${colors.bg} border-2 ${colors.border} ring-2 ring-opacity-50`
           : `${colors.bg} ${colors.hover} border ${colors.border}`
@@ -160,13 +160,28 @@ const AudioBlock = ({
       <canvas
         ref={canvasRef}
         width={Math.max(40, blockWidth)}
-        height={64}
+        height={80}
         className="absolute inset-0 pointer-events-none"
       />
 
       {/* Track Name */}
-      <div className="absolute top-0 left-0 right-0 px-2 py-0.5 text-xs font-medium text-white truncate bg-black bg-opacity-30 backdrop-blur-sm">
+      <div className="absolute top-0 left-0 right-0 px-2 py-0.5 text-xs font-medium text-white truncate bg-black bg-opacity-30 backdrop-blur-sm flex items-center justify-between gap-1">
         <span className="truncate">{track.name}</span>
+        {/* Delete Button */}
+        {onDelete && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete ${track.name}?`)) {
+                onDelete();
+              }
+            }}
+            className="flex-shrink-0 w-4 h-4 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm"
+            title="Delete audio"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
       {/* Duration Label */}

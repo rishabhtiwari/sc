@@ -141,6 +141,21 @@ const VideoBlock = ({
               {isTrimmed && <span className="ml-1">✂️</span>}
             </div>
           </div>
+          {/* Delete Button */}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`Delete ${track.name || `Video ${index + 1}`}?`)) {
+                  onDelete();
+                }
+              }}
+              className="flex-shrink-0 w-5 h-5 bg-red-500 hover:bg-red-600 rounded flex items-center justify-center text-white text-xs transition-colors shadow-sm"
+              title="Delete video"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 

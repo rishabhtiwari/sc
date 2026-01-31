@@ -149,7 +149,7 @@ const SlideBlock = ({
     <>
       {/* Slide Block */}
       <div
-        className={`absolute top-0 h-12 border rounded shadow-sm transition-all overflow-hidden ${
+        className={`absolute top-0 h-15 border rounded shadow-sm transition-all overflow-hidden ${
           isSelected
             ? 'bg-purple-500 border-2 border-purple-300 ring-2 ring-purple-200'
             : 'bg-purple-600 hover:bg-purple-500 border border-purple-400'
@@ -171,7 +171,7 @@ const SlideBlock = ({
           {Array.from({ length: thumbnailCount }).map((_, thumbIdx) => (
             <div
               key={thumbIdx}
-              className="flex-shrink-0 w-9 h-9 bg-purple-400 rounded border border-purple-300 flex items-center justify-center"
+              className="flex-shrink-0 w-11 h-11 bg-purple-400 rounded border border-purple-300 flex items-center justify-center"
             >
               {slide.elements && slide.elements.length > 0 ? (
                 slide.elements[0].type === 'image' ? (
@@ -215,7 +215,7 @@ const SlideBlock = ({
       {/* Transition Icon Between Slides */}
       {onTransitionClick && (
         <div
-          className="absolute top-0 h-12 w-8 flex items-center justify-center cursor-pointer z-10 group"
+          className="absolute top-0 h-15 w-8 flex items-center justify-center cursor-pointer z-10 group"
           style={{
             left: `${leftPosition + blockWidth - 16}px`
           }}
