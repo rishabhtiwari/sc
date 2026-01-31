@@ -214,6 +214,7 @@ const AudioTimeline = ({
   const handleStretchStart = (e, type, index, edge) => {
     e.stopPropagation();
     e.preventDefault(); // Prevent any default behavior
+    console.log('🎯 Stretch started:', type, 'index:', index, 'edge:', edge);
     setIsStretching(true);
     setDragType(type);
     setDragIndex(index);
@@ -276,10 +277,12 @@ const AudioTimeline = ({
         if (stretchStart.edge === 'right') {
           // Extend duration from right edge
           const newDuration = Math.max(1, stretchStart.duration + deltaTime);
+          console.log('🔧 Stretching slide', dragIndex, 'from right. New duration:', newDuration);
           onSlideUpdate(dragIndex, { duration: newDuration });
         } else if (stretchStart.edge === 'left') {
           // Adjust duration from left edge (trim from start)
           const newDuration = Math.max(1, stretchStart.duration - deltaTime);
+          console.log('🔧 Stretching slide', dragIndex, 'from left. New duration:', newDuration);
           onSlideUpdate(dragIndex, { duration: newDuration });
         }
       }

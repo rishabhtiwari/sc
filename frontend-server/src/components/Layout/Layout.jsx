@@ -366,23 +366,6 @@ const Layout = ({ children, user, onLogout }) => {
 
         {/* Page Content */}
         <div className="p-6">
-          {/* Debug indicator - remove after confirming */}
-          <div style={{
-            position: 'fixed',
-            bottom: '10px',
-            right: '10px',
-            backgroundColor: '#f0f4f8',
-            border: '2px solid #2563eb',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            color: '#2563eb',
-            zIndex: 9999,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }}>
-            ✓ Blue BG Active
-          </div>
           {children}
         </div>
       </main>
