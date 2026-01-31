@@ -11,7 +11,7 @@ const MediaPanel = ({
   panelType,
   audioTracks = [],
   onAudioSelect,
-  onAudioDelete,
+  onAudioDeleteRequest,
   uploadedMedia = [],
   onUploadedMediaChange
 }) => {
@@ -175,19 +175,12 @@ const MediaPanel = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm(`Delete "${media.title}"?`)) {
-                          // Remove from uploaded media
-                          onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-
-                          // If it's audio, also remove from audio tracks
-                          if (media.type === 'audio') {
-                            const audioTrack = audioTracks.find(track => track.url === media.url);
-                            if (audioTrack && onAudioDelete) {
-                              onAudioDelete(audioTrack.id);
-                            }
+                        // If it's audio, find the audio track and call delete request
+                        if (media.type === 'audio') {
+                          const audioTrack = audioTracks.find(track => track.url === media.url);
+                          if (audioTrack && onAudioDeleteRequest) {
+                            onAudioDeleteRequest(audioTrack.id, media.title, media.id);
                           }
-
-                          showToast(`${media.type} deleted`, 'success');
                         }
                       }}
                       className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"

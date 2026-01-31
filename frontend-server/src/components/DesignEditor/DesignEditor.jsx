@@ -35,6 +35,14 @@ const DesignEditor = () => {
   // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
   const [uploadedMedia, setUploadedMedia] = useState([]);
 
+  // Audio Delete Confirmation Dialog
+  const [audioDeleteDialog, setAudioDeleteDialog] = useState({
+    isOpen: false,
+    audioId: null,
+    audioTitle: null,
+    mediaId: null
+  });
+
   /**
    * Handle adding element to canvas (adds to current page)
    */
@@ -291,6 +299,38 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle audio delete request (opens confirmation dialog)
+   */
+  const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
+    setAudioDeleteDialog({
+      isOpen: true,
+      audioId,
+      audioTitle,
+      mediaId
+    });
+  };
+
+  /**
+   * Confirm audio deletion
+   */
+  const confirmAudioDelete = () => {
+    const { audioId, mediaId } = audioDeleteDialog;
+
+    // Delete from audio tracks
+    if (audioId) {
+      handleAudioDelete(audioId);
+    }
+
+    // Delete from uploaded media
+    if (mediaId) {
+      setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
+    }
+
+    // Close dialog
+    setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
+  };
+
+  /**
    * Handle slide duration update
    */
   const handleSlideUpdate = (slideIndex, updates) => {
@@ -310,8 +350,12 @@ const DesignEditor = () => {
       const audio = audioRefs.current[track.id];
       if (audio) {
         const trackTime = time - track.startTime;
+        const originalDuration = audio.duration;
+
         if (trackTime >= 0 && trackTime <= track.duration) {
-          audio.currentTime = trackTime;
+          // Calculate actual audio position (loop if stretched)
+          const actualAudioTime = trackTime % originalDuration;
+          audio.currentTime = actualAudioTime;
           applyFadeEffect(audio, track, trackTime);
         }
       }
@@ -328,7 +372,11 @@ const DesignEditor = () => {
       const audio = audioRefs.current[track.id];
       if (audio && currentTime >= track.startTime && currentTime < track.startTime + track.duration) {
         const trackTime = currentTime - track.startTime;
-        audio.currentTime = trackTime;
+        const originalDuration = audio.duration;
+
+        // Calculate actual audio position (loop if stretched)
+        const actualAudioTime = trackTime % originalDuration;
+        audio.currentTime = actualAudioTime;
         applyFadeEffect(audio, track, trackTime);
         audio.play();
       }
@@ -388,11 +436,24 @@ const DesignEditor = () => {
             const audio = audioRefs.current[track.id];
             if (audio) {
               const trackTime = newTime - track.startTime;
-              if (trackTime >= 0 && trackTime <= track.duration) {
+              const originalDuration = audio.duration; // Original audio file duration
+              const displayDuration = track.duration; // Stretched/trimmed duration on timeline
+
+              if (trackTime >= 0 && trackTime <= displayDuration) {
+                // Calculate actual audio position (loop if stretched, trim if shortened)
+                const actualAudioTime = trackTime % originalDuration;
+
                 if (audio.paused) {
-                  audio.currentTime = trackTime;
+                  audio.currentTime = actualAudioTime;
                   audio.play().catch(err => console.error('Audio play error:', err));
+                } else {
+                  // Keep audio in sync (handle looping)
+                  const timeDiff = Math.abs(audio.currentTime - actualAudioTime);
+                  if (timeDiff > 0.1) { // If out of sync by more than 100ms
+                    audio.currentTime = actualAudioTime;
+                  }
                 }
+
                 // Apply fade in/out effect continuously during playback
                 applyFadeEffect(audio, track, trackTime);
               } else if (!audio.paused) {
@@ -452,7 +513,7 @@ const DesignEditor = () => {
         onBackgroundChange={handleBackgroundChange}
         audioTracks={audioTracks}
         onAudioSelect={handleAudioSelect}
-        onAudioDelete={handleAudioDelete}
+        onAudioDeleteRequest={handleAudioDeleteRequest}
         uploadedMedia={uploadedMedia}
         onUploadedMediaChange={setUploadedMedia}
       />
@@ -587,7 +648,7 @@ const DesignEditor = () => {
         );
       })()}
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Slide Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
         onClose={() => setDeleteDialog({ isOpen: false, slideIndex: null })}
@@ -604,6 +665,20 @@ const DesignEditor = () => {
         message={`Are you sure you want to delete slide ${deleteDialog.slideIndex + 1}?`}
         warningMessage="This will permanently delete the slide and all its content."
         confirmText="Delete Slide"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Delete Audio Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={audioDeleteDialog.isOpen}
+        onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
+        onConfirm={confirmAudioDelete}
+        title="Delete Audio"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
+        warningMessage="This will permanently delete the audio from the timeline and media library."
+        confirmText="Delete Audio"
         cancelText="Cancel"
         variant="danger"
       />
