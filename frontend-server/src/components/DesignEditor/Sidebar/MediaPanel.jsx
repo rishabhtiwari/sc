@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
 
 /**
@@ -8,7 +8,6 @@ import { useToast } from '../../../hooks/useToast';
 const MediaPanel = ({
   onAddElement,
   onAddAudioTrack,
-  onAddVideoTrack,
   panelType,
   audioTracks = [],
   onAudioSelect,
@@ -33,23 +32,29 @@ const MediaPanel = ({
     files.forEach((file) => {
       if (file.type.startsWith('video/')) {
         const url = URL.createObjectURL(file);
-        const newVideo = {
-          id: `video-${Date.now()}-${Math.random()}`,
-          type: 'video',
-          url,
-          title: file.name,
-          file: file
+
+        // Create video element to get duration
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+
+        video.onloadedmetadata = () => {
+          const newVideo = {
+            id: `video-${Date.now()}-${Math.random()}`,
+            type: 'video',
+            url,
+            title: file.name,
+            file: file,
+            duration: video.duration // Store video duration
+          };
+          console.log('➕ Adding to uploadedMedia:', newVideo);
+          onUploadedMediaChange(prev => [...prev, newVideo]);
+          showToast('Video uploaded successfully', 'success');
+
+          // Clean up
+          URL.revokeObjectURL(video.src);
         };
-        console.log('➕ Adding to uploadedMedia:', newVideo);
-        onUploadedMediaChange(prev => [...prev, newVideo]);
 
-        // Add to timeline
-        if (onAddVideoTrack) {
-          console.log('🎬 Calling onAddVideoTrack for:', file.name);
-          onAddVideoTrack(file, url);
-        }
-
-        showToast('Video uploaded and added to timeline', 'success');
+        video.src = url;
       }
     });
 
@@ -112,13 +117,24 @@ const MediaPanel = ({
       } else {
         console.log('❌ onAddAudioTrack not available');
       }
+    } else if (media.type === 'video') {
+      // For video, add to canvas as an element
+      onAddElement({
+        type: 'video',
+        src: media.url,
+        width: 640,
+        height: 360,
+        duration: media.duration, // Pass video duration
+        file: media.file
+      });
+      showToast('Video added to canvas', 'success');
     } else {
-      // For video, add to canvas
+      // For other media types
       onAddElement({
         type: media.type,
         src: media.url,
-        width: media.type === 'video' ? 400 : 300,
-        height: media.type === 'video' ? 300 : 100
+        width: 300,
+        height: 200
       });
       showToast(`${media.type} added to canvas`, 'success');
     }
@@ -251,6 +267,12 @@ const MediaPanel = ({
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                               showToast('Media deleted', 'success');
                             }
+                          }
+                        } else {
+                          // For video and other media types, just delete from media library
+                          if (window.confirm(`Delete "${media.title}"?`)) {
+                            onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                            showToast('Media deleted', 'success');
                           }
                         }
                       }}

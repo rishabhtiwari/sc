@@ -16,7 +16,6 @@ const Sidebar = ({
   onAddElement,
   onAddMultiplePages,
   onAddAudioTrack,
-  onAddVideoTrack,
   currentBackground,
   onBackgroundChange,
   audioTracks,
@@ -131,7 +130,6 @@ const Sidebar = ({
               onAddElement={onAddElement}
               onAddMultiplePages={onAddMultiplePages}
               onAddAudioTrack={onAddAudioTrack}
-              onAddVideoTrack={onAddVideoTrack}
               currentBackground={currentBackground}
               onBackgroundChange={onBackgroundChange}
               panelType={expandedPanel}

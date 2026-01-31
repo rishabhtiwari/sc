@@ -289,6 +289,33 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
           </div>
         );
 
+      case 'video':
+        const videoStyle = {
+          width: element.width ? element.width * zoom : 'auto',
+          height: element.height ? element.height * zoom : 'auto',
+          objectFit: 'cover',
+          cursor: 'move',
+          opacity: element.opacity !== undefined ? element.opacity : 1,
+          transform: `
+            rotate(${element.rotation || 0}deg)
+            scaleX(${element.flipX ? -1 : 1})
+            scaleY(${element.flipY ? -1 : 1})
+          `.trim(),
+          borderRadius: element.borderRadius ? `${element.borderRadius * zoom}px` : '0',
+          border: element.borderWidth ? `${element.borderWidth * zoom}px solid ${element.borderColor || '#000'}` : 'none',
+        };
+
+        return (
+          <video
+            src={element.src}
+            style={videoStyle}
+            muted={element.muted !== undefined ? element.muted : true}
+            loop={element.loop !== undefined ? element.loop : false}
+            playsInline
+            data-video-element-id={element.id}
+          />
+        );
+
       default:
         return <div>Unknown element type</div>;
     }

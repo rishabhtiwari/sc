@@ -40,6 +40,9 @@ const DesignEditor = () => {
   const [selectedVideoTrack, setSelectedVideoTrack] = useState(null);
   const videoRefs = useRef({});
 
+  // Video refs for controlling video playback on canvas
+  const videoElementRefs = useRef({});
+
   // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
   // Separate state for audio and video to keep them independent
   const [uploadedAudio, setUploadedAudio] = useState([]);
@@ -59,36 +62,6 @@ const DesignEditor = () => {
   const { showToast } = useToast();
 
   /**
-   * Create video elements for all video tracks
-   */
-  useEffect(() => {
-    videoTracks.forEach(track => {
-      if (!videoRefs.current[track.id]) {
-        const video = document.createElement('video');
-        video.src = track.url;
-        video.volume = (track.volume || 100) / 100;
-        video.style.maxWidth = '100%';
-        video.style.maxHeight = '100%';
-        video.style.objectFit = 'contain';
-        videoRefs.current[track.id] = video;
-        console.log('📹 Created video element for:', track.id);
-      }
-    });
-
-    // Cleanup removed tracks
-    Object.keys(videoRefs.current).forEach(trackId => {
-      if (!videoTracks.find(t => t.id === trackId)) {
-        const video = videoRefs.current[trackId];
-        if (video) {
-          video.pause();
-          video.src = '';
-        }
-        delete videoRefs.current[trackId];
-      }
-    });
-  }, [videoTracks]);
-
-  /**
    * Handle adding element to canvas (adds to current page)
    */
   const handleAddElement = (element) => {
@@ -99,13 +72,28 @@ const DesignEditor = () => {
       y: element.y || 100,
     };
 
+    // Calculate start time for video on timeline based on current slide position
+    let slideStartTime = 0;
+    for (let i = 0; i < currentPageIndex; i++) {
+      slideStartTime += pages[i].duration || 5;
+    }
+
     // Update current page's elements
     const updatedPages = pages.map((page, index) => {
       if (index === currentPageIndex) {
-        return {
+        const updatedPage = {
           ...page,
           elements: [...(page.elements || []), newElement]
         };
+
+        // If adding a video element, auto-adjust slide duration to match video length
+        if (element.type === 'video' && element.duration) {
+          console.log('🎬 Video added with duration:', element.duration);
+          updatedPage.duration = Math.ceil(element.duration); // Round up to nearest second
+          console.log('📊 Slide duration updated to:', updatedPage.duration);
+        }
+
+        return updatedPage;
       }
       return page;
     });
@@ -113,6 +101,31 @@ const DesignEditor = () => {
     setPages(updatedPages);
     setCanvasElements([...canvasElements, newElement]); // Keep for backward compatibility
     setSelectedElement(newElement);
+
+    // If adding a video element, also add it to the video timeline
+    if (element.type === 'video' && element.duration) {
+      const videoTrack = {
+        id: newElement.id,
+        elementId: newElement.id, // Link to canvas element
+        name: element.file?.name || 'Video',
+        url: element.src, // Use 'url' for consistency with VideoBlock
+        src: element.src, // Keep src for compatibility
+        file: element.file,
+        startTime: slideStartTime,
+        duration: element.duration,
+        originalDuration: element.duration, // Store original for trimming
+        trimStart: 0, // How much trimmed from start
+        trimEnd: 0, // How much trimmed from end
+        volume: element.volume || 100,
+        playbackSpeed: element.playbackSpeed || 1,
+        slideIndex: currentPageIndex,
+        videoType: 'video' // Can be 'video', 'b-roll', etc.
+      };
+
+      console.log('🎬 Adding video to timeline:', videoTrack);
+      setVideoTracks(prev => [...prev, videoTrack]);
+      setSelectedVideoTrack(videoTrack.id);
+    }
   };
 
   /**
@@ -291,58 +304,7 @@ const DesignEditor = () => {
     });
   };
 
-  /**
-   * Handle adding video track
-   */
-  const handleAddVideoTrack = (videoFile, videoUrl) => {
-    console.log('🎥 handleAddVideoTrack called:', { videoFile, videoUrl });
 
-    // Create temporary video element to get duration
-    const tempVideo = document.createElement('video');
-    tempVideo.src = videoUrl;
-    const trackId = `video-${Date.now()}`;
-
-    console.log('🎥 Created video track with ID:', trackId);
-
-    tempVideo.addEventListener('loadedmetadata', () => {
-      console.log('🎥 Video metadata loaded. Duration:', tempVideo.duration);
-      setVideoTracks(prevTracks => {
-        // Calculate the end time of the last video track
-        let startTime = 0;
-        if (prevTracks.length > 0) {
-          // Find the maximum end time among all existing tracks
-          const maxEndTime = Math.max(...prevTracks.map(track =>
-            (track.startTime || 0) + (track.duration || 0)
-          ));
-          startTime = maxEndTime; // Position new video at the end
-        }
-
-        const newTrack = {
-          id: trackId,
-          name: videoFile.name,
-          url: videoUrl,
-          duration: tempVideo.duration,
-          originalDuration: tempVideo.duration,
-          startTime: startTime, // Auto-position at end of existing videos
-          volume: 100 // Default volume 100%
-        };
-
-        const updatedTracks = [...prevTracks, newTrack];
-        console.log('✅ Video track added:', newTrack, 'Start time:', startTime, 'Duration:', tempVideo.duration);
-        return updatedTracks;
-      });
-    });
-
-    tempVideo.addEventListener('error', (e) => {
-      console.error('❌ Video loading error:', e);
-      console.error('❌ Video error details:', {
-        error: tempVideo.error,
-        code: tempVideo.error?.code,
-        message: tempVideo.error?.message,
-        src: tempVideo.src
-      });
-    });
-  };
 
   /**
    * Handle adding audio from library
@@ -472,9 +434,11 @@ const DesignEditor = () => {
   };
 
   /**
-   * Handle video track update (drag, stretch, properties)
+   * Handle video track update
    */
   const handleVideoUpdate = (trackId, updates) => {
+    console.log('🎬 Updating video track:', trackId, updates);
+
     setVideoTracks(prevTracks => {
       const updatedTracks = prevTracks.map(track =>
         track.id === trackId ? { ...track, ...updates } : track
@@ -482,26 +446,54 @@ const DesignEditor = () => {
       return updatedTracks;
     });
 
-    // Update video element volume if volume changed
-    if (updates.volume !== undefined && videoRefs.current[trackId]) {
-      videoRefs.current[trackId].volume = updates.volume / 100;
+    // Also update the canvas element if properties changed
+    if (updates.volume !== undefined || updates.playbackSpeed !== undefined ||
+        updates.loop !== undefined || updates.muted !== undefined) {
+      const track = videoTracks.find(t => t.id === trackId);
+      if (track?.elementId) {
+        handleUpdateElement(track.elementId, updates);
+      }
+    }
+
+    // If duration changed (trimming), update the canvas element and slide duration
+    if (updates.duration !== undefined) {
+      const track = videoTracks.find(t => t.id === trackId);
+      if (track?.elementId) {
+        handleUpdateElement(track.elementId, { duration: updates.duration });
+
+        // Update slide duration if this is the only/main video on the slide
+        const updatedPages = pages.map((page, index) => {
+          if (index === track.slideIndex) {
+            return {
+              ...page,
+              duration: Math.ceil(updates.duration)
+            };
+          }
+          return page;
+        });
+        setPages(updatedPages);
+      }
     }
   };
 
   /**
    * Handle video track delete
-   * Removes from BOTH timeline AND uploaded media list
+   * Removes from BOTH timeline AND canvas element
    */
   const handleVideoDelete = (trackId) => {
-    // Find the track to get its URL
     const track = videoTracks.find(t => t.id === trackId);
 
     // Remove from timeline
-    setVideoTracks(videoTracks.filter(track => track.id !== trackId));
+    setVideoTracks(videoTracks.filter(t => t.id !== trackId));
+
+    // Remove canvas element
+    if (track?.elementId) {
+      handleDeleteElement(track.elementId);
+    }
 
     // Remove from uploaded media list (match by URL)
-    if (track?.url) {
-      setUploadedVideo(prev => prev.filter(m => m.url !== track.url));
+    if (track?.src) {
+      setUploadedVideo(prev => prev.filter(m => m.url !== track.src));
     }
 
     // Clean up video ref
@@ -513,7 +505,7 @@ const DesignEditor = () => {
     }
 
     // Deselect if this track was selected
-    if (selectedVideoTrack?.id === trackId) {
+    if (selectedVideoTrack === trackId) {
       setSelectedVideoTrack(null);
     }
   };
@@ -523,11 +515,18 @@ const DesignEditor = () => {
    */
   const handleVideoSelect = (trackId) => {
     const track = videoTracks.find(t => t.id === trackId);
-    setSelectedVideoTrack(track || null);
-    // Deselect canvas element and audio when video is selected
-    setSelectedElement(null);
-    setSelectedAudioTrack(null);
+    setSelectedVideoTrack(track?.id || null);
+
+    // Also select the canvas element
+    if (track?.elementId) {
+      const element = currentPageElements.find(el => el.id === track.elementId);
+      if (element) {
+        setSelectedElement(element);
+      }
+    }
   };
+
+
 
   /**
    * Handle audio delete request (opens confirmation dialog)
@@ -625,12 +624,6 @@ const DesignEditor = () => {
         audio.pause();
       }
     });
-    // Pause all video tracks
-    Object.values(videoRefs.current).forEach(video => {
-      if (video) {
-        video.pause();
-      }
-    });
   };
 
   /**
@@ -649,13 +642,10 @@ const DesignEditor = () => {
             const audioDuration = audioTracks.length > 0
               ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
               : 0;
-            const videoDuration = videoTracks.length > 0
-              ? Math.max(...videoTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
-              : 0;
             const slidesDuration = pages.length > 0
               ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
               : 0;
-            return Math.max(audioDuration, videoDuration, slidesDuration, 30);
+            return Math.max(audioDuration, slidesDuration, 30);
           })();
 
           // Stop playback when reaching the end
@@ -666,13 +656,6 @@ const DesignEditor = () => {
               const audio = audioRefs.current[track.id];
               if (audio && !audio.paused) {
                 audio.pause();
-              }
-            });
-            // Pause all video
-            videoTracks.forEach(track => {
-              const video = videoRefs.current[track.id];
-              if (video && !video.paused) {
-                video.pause();
               }
             });
             return totalDuration;
@@ -707,39 +690,6 @@ const DesignEditor = () => {
             }
           });
 
-          // Update video elements
-          videoTracks.forEach(track => {
-            const video = videoRefs.current[track.id];
-            if (!video) {
-              console.warn('⚠️ Video element not found for track:', track.id);
-              return;
-            }
-
-            const trackTime = newTime - track.startTime;
-            const originalDuration = track.originalDuration || track.duration; // Original video file duration
-            const displayDuration = track.duration; // Stretched/trimmed duration on timeline
-
-            if (trackTime >= 0 && trackTime <= displayDuration) {
-              if (video.paused) {
-                // Calculate actual video position when starting playback
-                const actualVideoTime = trackTime % originalDuration;
-                video.currentTime = actualVideoTime;
-                console.log('🎬 Playing video:', track.name, 'at time:', actualVideoTime);
-                video.play().catch(err => console.error('❌ Video play error:', err));
-              } else {
-                // Check if video needs to loop (reached end of original duration)
-                if (video.currentTime >= originalDuration - 0.05) {
-                  video.currentTime = 0; // Loop back to start
-                }
-              }
-
-              // Apply volume
-              video.volume = (track.volume || 100) / 100;
-            } else if (!video.paused) {
-              video.pause();
-            }
-          });
-
           return newTime;
         });
 
@@ -754,7 +704,7 @@ const DesignEditor = () => {
         cancelAnimationFrame(animationFrame);
       }
     };
-  }, [isPlaying, audioTracks, videoTracks, pages]);
+  }, [isPlaying, audioTracks, pages]);
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
@@ -778,6 +728,72 @@ const DesignEditor = () => {
     }
   }, [currentTime, pages]);
 
+  /**
+   * Control video playback based on timeline position and current slide
+   * Videos play when their slide is active and timeline is playing
+   */
+  useEffect(() => {
+    const currentPage = pages[currentPageIndex];
+    if (!currentPage) return;
+
+    // Find all video elements on the current page
+    const videoElements = currentPage.elements?.filter(el => el.type === 'video') || [];
+
+    // Calculate the time offset within the current slide
+    let slideStartTime = 0;
+    for (let i = 0; i < currentPageIndex; i++) {
+      slideStartTime += pages[i].duration || 5;
+    }
+    const timeInSlide = currentTime - slideStartTime;
+
+    videoElements.forEach(videoElement => {
+      // Find the video DOM element
+      const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
+
+      if (videoEl) {
+        // Store ref for cleanup
+        videoElementRefs.current[videoElement.id] = videoEl;
+
+        // Apply video properties
+        videoEl.volume = (videoElement.volume || 100) / 100;
+        videoEl.playbackRate = videoElement.playbackSpeed || 1;
+        videoEl.loop = videoElement.loop || false;
+        videoEl.muted = videoElement.muted !== undefined ? videoElement.muted : true;
+
+        if (isPlaying && timeInSlide >= 0 && timeInSlide < (currentPage.duration || 5)) {
+          // Sync video time with timeline position
+          if (Math.abs(videoEl.currentTime - timeInSlide) > 0.5) {
+            videoEl.currentTime = timeInSlide;
+          }
+
+          // Play video if paused
+          if (videoEl.paused) {
+            videoEl.play().catch(err => console.error('Video play error:', err));
+          }
+        } else {
+          // Pause video if not in active range
+          if (!videoEl.paused) {
+            videoEl.pause();
+          }
+        }
+      }
+    });
+
+    // Pause videos on other slides
+    pages.forEach((page, pageIndex) => {
+      if (pageIndex !== currentPageIndex) {
+        const otherVideoElements = page.elements?.filter(el => el.type === 'video') || [];
+        otherVideoElements.forEach(videoElement => {
+          const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
+          if (videoEl && !videoEl.paused) {
+            videoEl.pause();
+            videoEl.currentTime = 0;
+          }
+        });
+      }
+    });
+  }, [currentTime, isPlaying, currentPageIndex, pages]);
+
   return (
     <div className="flex h-full bg-gray-50">
       {/* Left Sidebar - Tools */}
@@ -787,7 +803,6 @@ const DesignEditor = () => {
         onAddElement={handleAddElement}
         onAddMultiplePages={handleAddMultiplePages}
         onAddAudioTrack={handleAddAudioTrack}
-        onAddVideoTrack={handleAddVideoTrack}
         currentBackground={currentPage?.background}
         onBackgroundChange={handleBackgroundChange}
         audioTracks={audioTracks}
@@ -873,37 +888,6 @@ const DesignEditor = () => {
               onDeleteElement={handleDeleteElement}
               background={currentPage?.background}
             />
-
-            {/* Video Overlay - Shows active video on top of canvas */}
-            <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 100 }}>
-              {videoTracks.map(track => {
-                const trackTime = currentTime - (track.startTime || 0);
-                const isActive = trackTime >= 0 && trackTime <= track.duration;
-
-                if (!isActive) return null;
-
-                return (
-                  <div
-                    key={track.id}
-                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50"
-                  >
-                    <div
-                      ref={el => {
-                        if (el && videoRefs.current[track.id]) {
-                          const video = videoRefs.current[track.id];
-                          // Append video element if not already in DOM
-                          if (!el.contains(video)) {
-                            el.appendChild(video);
-                          }
-                        }
-                      }}
-                      className="flex items-center justify-center"
-                      style={{ maxWidth: '100%', maxHeight: '100%' }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
           {/* Audio Timeline at Bottom - Fixed height */}
@@ -914,7 +898,7 @@ const DesignEditor = () => {
             currentTime={currentTime}
             isPlaying={isPlaying}
             selectedAudioId={selectedAudioTrack?.id}
-            selectedVideoId={selectedVideoTrack?.id}
+            selectedVideoId={selectedVideoTrack}
             onAudioUpdate={handleAudioUpdate}
             onAudioDelete={handleAudioDelete}
             onAudioSelect={handleAudioSelect}

@@ -111,13 +111,6 @@ const AudioTimelineRefactored = ({
     }
   };
 
-  // Handle video update
-  const handleVideoUpdate = (trackId, updates) => {
-    if (onVideoUpdate) {
-      onVideoUpdate(trackId, updates);
-    }
-  };
-
   // Calculate slide start times
   const getSlideStartTime = (index) => {
     // If slide has explicit startTime, use it; otherwise calculate sequentially
@@ -180,14 +173,6 @@ const AudioTimelineRefactored = ({
               {slides.map((slide, index) => {
                 const slideStartTime = getSlideStartTime(index);
                 const slideDuration = slide.duration || 5;
-                const slideEndTime = slideStartTime + slideDuration;
-
-                // Check if any video overlaps with this slide
-                const hasVideoOverlay = videoTracks.some(video => {
-                  const videoStart = video.startTime || 0;
-                  const videoEnd = videoStart + (video.duration || 0);
-                  return (videoStart < slideEndTime && videoEnd > slideStartTime);
-                });
 
                 return (
                   <div key={slide.id || index} className="relative">
@@ -202,17 +187,6 @@ const AudioTimelineRefactored = ({
                       onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
                       allSlides={slides}
                     />
-                    {/* Visual indicator when video is playing over this slide */}
-                    {hasVideoOverlay && (
-                      <div
-                        className="absolute inset-0 bg-orange-500 bg-opacity-20 pointer-events-none rounded border border-orange-400 border-dashed"
-                        title="Video is playing over this slide"
-                      >
-                        <div className="absolute top-1 right-1 text-xs bg-orange-500 text-white px-1 rounded">
-                          🎥 Video Active
-                        </div>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -223,7 +197,7 @@ const AudioTimelineRefactored = ({
           <TimelineTrack
             type="video"
             height={videoTracks.length > 0 ? (videoTracks.length * 115 + 30) : 125}
-            label="🎥 Video"
+            label="🎬 Video"
             className="mt-4"
           >
             <div className="relative pt-2">
@@ -234,7 +208,7 @@ const AudioTimelineRefactored = ({
                     index={index}
                     isSelected={selectedVideoId === track.id}
                     onSelect={() => onVideoSelect && onVideoSelect(track.id)}
-                    onUpdate={(updates) => handleVideoUpdate(track.id, updates)}
+                    onUpdate={(updates) => onVideoUpdate && onVideoUpdate(track.id, updates)}
                     onDelete={() => onVideoDelete && onVideoDelete(track.id)}
                   />
                 </div>

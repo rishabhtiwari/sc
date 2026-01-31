@@ -190,6 +190,198 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
           </div>
         );
 
+      case 'video':
+        return (
+          <div className="space-y-1">
+            {/* Position Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Position"
+                icon="📍"
+                section="position"
+                isExpanded={expandedSections.position}
+              />
+              {expandedSections.position && (
+                <div className="p-4 space-y-4">
+                  {/* X Position */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">X Position</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round(element.x || 0)}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1920"
+                      value={element.x || 0}
+                      onChange={(e) => onUpdate({ x: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Y Position */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Y Position</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round(element.y || 0)}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1080"
+                      value={element.y || 0}
+                      onChange={(e) => onUpdate({ y: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Dimensions Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Size"
+                icon="📐"
+                section="dimensions"
+                isExpanded={expandedSections.dimensions}
+              />
+              {expandedSections.dimensions && (
+                <div className="p-4 space-y-4">
+                  {/* Width */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Width</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.width}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="1920"
+                      value={element.width}
+                      onChange={(e) => onUpdate({ width: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Height */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Height</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.height}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="1080"
+                      value={element.height}
+                      onChange={(e) => onUpdate({ height: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Video Playback Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Playback"
+                icon="▶️"
+                section="content"
+                isExpanded={expandedSections.content}
+              />
+              {expandedSections.content && (
+                <div className="p-4 space-y-4">
+                  {/* Volume */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Volume</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.volume || 100}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={element.volume || 100}
+                      onChange={(e) => onUpdate({ volume: parseInt(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Playback Speed */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Speed</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.playbackSpeed || 1}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.25"
+                      max="2"
+                      step="0.25"
+                      value={element.playbackSpeed || 1}
+                      onChange={(e) => onUpdate({ playbackSpeed: parseFloat(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+
+                  {/* Loop */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Loop Video</label>
+                    <input
+                      type="checkbox"
+                      checked={element.loop || false}
+                      onChange={(e) => onUpdate({ loop: e.target.checked })}
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Muted */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Mute Audio</label>
+                    <input
+                      type="checkbox"
+                      checked={element.muted !== undefined ? element.muted : true}
+                      onChange={(e) => onUpdate({ muted: e.target.checked })}
+                      className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Transform Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Transform"
+                icon="🔄"
+                section="transform"
+                isExpanded={expandedSections.transform}
+              />
+              {expandedSections.transform && (
+                <div className="p-4 space-y-4">
+                  {/* Opacity */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Opacity</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{Math.round((element.opacity || 1) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={(element.opacity || 1) * 100}
+                      onChange={(e) => onUpdate({ opacity: parseInt(e.target.value) / 100 })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
       case 'text':
         return (
           <div className="space-y-1">
@@ -707,7 +899,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center">
               <span className="text-lg">
-                {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : '⬜'}
+                {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : element.type === 'video' ? '🎬' : '⬜'}
               </span>
             </div>
             {/* Close Button */}
