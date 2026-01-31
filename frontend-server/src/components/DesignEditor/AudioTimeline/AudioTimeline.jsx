@@ -373,7 +373,7 @@ const AudioTimeline = ({
       >
         <div
           ref={timelineRef}
-          className="relative h-full cursor-pointer px-10"
+          className="relative h-full cursor-pointer"
           style={{
             width: '100%',
             height: '100%'
@@ -383,17 +383,17 @@ const AudioTimeline = ({
           {/* Playhead */}
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
-            style={{ left: `${timeToPixels(currentTime)}px` }}
+            style={{ left: `${40 + timeToPixels(currentTime)}px` }}
           >
             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
           </div>
 
           {/* Slides/Photos Track - Enhanced with thumbnails and transitions */}
-          <div className="absolute top-0 left-0 right-0 h-20 bg-white border-b border-gray-200">
+          <div className="absolute top-0 left-10 right-10 h-20 bg-white border-b border-gray-200">
             <div className="px-2 py-1 text-xs font-semibold text-gray-600 border-b border-gray-200">
               📸 Slides / Photos
             </div>
-            <div className="relative h-full pt-6">
+            <div className="relative h-full pt-6 overflow-visible">
               {slides.map((slide, index) => {
                 // Calculate slide start time based on previous slides
                 const prevSlides = slides.slice(0, index);
@@ -506,7 +506,7 @@ const AudioTimeline = ({
           </div>
 
           {/* Audio Tracks - Enhanced with Waveforms and Volume Controls */}
-          <div className="absolute top-20 left-0 right-0 bottom-0 bg-gray-50">
+          <div className="absolute top-20 left-10 right-10 bottom-0 bg-gray-50">
             {audioTracks.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-400">
