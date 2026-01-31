@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
+import AudioLibraryPanel from '../../AudioStudio/AudioLibrary/AudioLibraryPanel';
 
 /**
  * Media Panel
@@ -157,6 +158,26 @@ const MediaPanel = ({
             Upload Audio
           </button>
           <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
+        </div>
+      )}
+
+      {/* Audio Library - Only show on audio tab */}
+      {isAudioPanel && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">📁 Audio Library</h3>
+          <div className="border border-gray-200 rounded-lg overflow-hidden" style={{ maxHeight: '400px' }}>
+            <AudioLibraryPanel
+              onAddToCanvas={(audioData) => {
+                // Add audio from library to timeline
+                if (onAddAudioTrack) {
+                  const file = { name: audioData.title || 'Library Audio' };
+                  const url = audioData.url || audioData.audio_url;
+                  onAddAudioTrack(file, url);
+                  showToast('Audio added to timeline', 'success');
+                }
+              }}
+            />
+          </div>
         </div>
       )}
 

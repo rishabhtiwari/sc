@@ -33,7 +33,9 @@ const DesignEditor = () => {
   const audioRefs = useRef({});
 
   // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
-  const [uploadedMedia, setUploadedMedia] = useState([]);
+  // Separate state for audio and video to keep them independent
+  const [uploadedAudio, setUploadedAudio] = useState([]);
+  const [uploadedVideo, setUploadedVideo] = useState([]);
 
   // Audio Delete Confirmation Dialog
   const [audioDeleteDialog, setAudioDeleteDialog] = useState({
@@ -321,9 +323,9 @@ const DesignEditor = () => {
       handleAudioDelete(audioId);
     }
 
-    // Delete from uploaded media (media library)
+    // Delete from uploaded audio (media library)
     if (mediaId) {
-      setUploadedMedia(prev => prev.filter(m => m.id !== mediaId));
+      setUploadedAudio(prev => prev.filter(m => m.id !== mediaId));
     }
 
     // Close dialog
@@ -512,8 +514,10 @@ const DesignEditor = () => {
         audioTracks={audioTracks}
         onAudioSelect={handleAudioSelect}
         onAudioDeleteRequest={handleAudioDeleteRequest}
-        uploadedMedia={uploadedMedia}
-        onUploadedMediaChange={setUploadedMedia}
+        uploadedAudio={uploadedAudio}
+        onUploadedAudioChange={setUploadedAudio}
+        uploadedVideo={uploadedVideo}
+        onUploadedVideoChange={setUploadedVideo}
       />
 
       {/* Main Canvas Area */}
@@ -625,6 +629,10 @@ const DesignEditor = () => {
         const currentTrack = audioTracks.find(track => track.id === selectedAudioTrack.id);
         if (!currentTrack) return null;
 
+        // Find the corresponding media ID from uploadedAudio
+        const mediaItem = uploadedAudio.find(m => m.url === currentTrack.url);
+        const mediaId = mediaItem?.id || null;
+
         return (
           <PropertiesPanel
             element={{
@@ -640,7 +648,7 @@ const DesignEditor = () => {
               }
               handleAudioUpdate(currentTrack.id, updates);
             }}
-            onDelete={() => handleAudioDelete(currentTrack.id)}
+            onDelete={() => handleAudioDeleteRequest(currentTrack.id, currentTrack.name, mediaId)}
             onClose={() => setSelectedAudioTrack(null)}
           />
         );
