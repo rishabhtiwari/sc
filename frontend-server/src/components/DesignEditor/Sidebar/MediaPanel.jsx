@@ -187,30 +187,23 @@ const MediaPanel = ({
                       ⚙️
                     </button>
 
-                    {/* Delete Icon */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // If it's audio, find the audio track
-                        if (media.type === 'audio') {
+                    {/* Delete Icon - Only show if audio is on timeline */}
+                    {media.type === 'audio' && audioTracks.find(track => track.url === media.url) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           const audioTrack = audioTracks.find(track => track.url === media.url);
                           if (audioTrack && onAudioDeleteRequest) {
-                            // Audio is on timeline - remove from timeline only
+                            // Remove from timeline only (keep in media library)
                             onAudioDeleteRequest(audioTrack.id, media.title, null);
-                          } else {
-                            // Audio is NOT on timeline - delete from media library
-                            if (window.confirm(`Permanently delete "${media.title}" from media library?`)) {
-                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                              showToast('Media deleted from library', 'success');
-                            }
                           }
-                        }
-                      }}
-                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete media"
-                    >
-                      🗑️
-                    </button>
+                        }}
+                        className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                        title="Remove from timeline"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

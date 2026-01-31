@@ -662,15 +662,15 @@ const DesignEditor = () => {
         variant="danger"
       />
 
-      {/* Delete Audio Confirmation Dialog */}
+      {/* Remove Audio from Timeline Confirmation Dialog */}
       <ConfirmDialog
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
         onConfirm={confirmAudioDelete}
-        title="Remove Audio from Timeline"
-        description="Audio will remain in your media library"
+        title="Remove from Timeline"
+        description="Audio will stay in your media library"
         message={`Remove "${audioDeleteDialog.audioTitle}" from timeline?`}
-        warningMessage="You can re-add this audio later by clicking on it in the media library."
+        warningMessage="You can re-add this audio anytime by clicking on it in Your Media section."
         confirmText="Remove from Timeline"
         cancelText="Cancel"
         variant="danger"
