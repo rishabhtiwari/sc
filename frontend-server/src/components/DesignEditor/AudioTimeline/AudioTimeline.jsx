@@ -38,6 +38,7 @@ const AudioTimeline = ({
   const [audioWaveforms, setAudioWaveforms] = useState({}); // Store waveform data
   const [volumeEnvelopes, setVolumeEnvelopes] = useState({}); // Store volume envelope data
   const [slideTransitions, setSlideTransitions] = useState({}); // Store transition types between slides
+  const [containerWidth, setContainerWidth] = useState(1000); // Track container width for responsive timeline
   const timelineRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const canvasRefs = useRef({}); // Canvas refs for waveform rendering
@@ -123,15 +124,20 @@ const AudioTimeline = ({
     }));
   };
 
-  // Convert time to pixels
+  // Convert time to pixels - fit timeline to container width
   const timeToPixels = (time) => {
-    const pixelsPerSecond = 50 * zoom;
+    // Calculate available width (container width minus padding)
+    const availableWidth = containerWidth - 40; // 40px padding for margins
+
+    // Fit the total duration within the available width
+    const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
     return time * pixelsPerSecond;
   };
 
   // Convert pixels to time
   const pixelsToTime = (pixels) => {
-    const pixelsPerSecond = 50 * zoom;
+    const availableWidth = containerWidth - 40;
+    const pixelsPerSecond = totalDuration > 0 ? availableWidth / totalDuration : 50;
     return pixels / pixelsPerSecond;
   };
 
@@ -274,7 +280,7 @@ const AudioTimeline = ({
     }
   }, [isDragging, isStretching, dragStart, stretchStart, dragType, dragIndex]);
 
-  // Auto-scroll to follow playhead during playback
+  // Auto-scroll to follow playhead during playback ONLY
   useEffect(() => {
     if (isPlaying && scrollContainerRef.current) {
       const playheadPosition = timeToPixels(currentTime);
@@ -290,6 +296,27 @@ const AudioTimeline = ({
       }
     }
   }, [currentTime, isPlaying]);
+
+  // Keep timeline scrolled to start when not playing
+  useEffect(() => {
+    if (!isPlaying && scrollContainerRef.current) {
+      // Reset scroll to beginning when stopped
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }, [slides.length, audioTracks.length]);
+
+  // Track container width for responsive timeline
+  useEffect(() => {
+    const updateWidth = () => {
+      if (scrollContainerRef.current) {
+        setContainerWidth(scrollContainerRef.current.clientWidth);
+      }
+    };
+
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
 
   return (
     <div className="bg-white border-t border-gray-200 flex flex-col" style={{ height: '300px', flexShrink: 0 }}>
@@ -359,15 +386,13 @@ const AudioTimeline = ({
       {/* Timeline Content */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50"
+        className="flex-1 overflow-x-hidden overflow-y-hidden bg-gray-50"
         style={{ scrollBehavior: 'smooth' }}
       >
         <div
           ref={timelineRef}
-          className="relative h-full cursor-pointer"
+          className="relative h-full cursor-pointer w-full"
           style={{
-            width: `${Math.max(timeToPixels(totalDuration) + 200, 1000)}px`,
-            minWidth: `${Math.max(timeToPixels(totalDuration) + 200, 1000)}px`,
             height: '100%'
           }}
           onClick={handleTimelineClick}
