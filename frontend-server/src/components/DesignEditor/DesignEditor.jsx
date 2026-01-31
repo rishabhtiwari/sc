@@ -746,11 +746,28 @@ const DesignEditor = () => {
     }
     const timeInSlide = currentTime - slideStartTime;
 
+    console.log('🎬 Video playback control:', {
+      currentPageIndex,
+      videoCount: videoElements.length,
+      isPlaying,
+      currentTime,
+      slideStartTime,
+      timeInSlide,
+      slideDuration: currentPage.duration || 5
+    });
+
     videoElements.forEach(videoElement => {
       // Find the video DOM element
       const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
 
       if (videoEl) {
+        console.log('🎬 Found video element:', videoElement.id, {
+          paused: videoEl.paused,
+          currentTime: videoEl.currentTime,
+          readyState: videoEl.readyState,
+          duration: videoEl.duration
+        });
+
         // Store ref for cleanup
         videoElementRefs.current[videoElement.id] = videoEl;
 
@@ -761,21 +778,36 @@ const DesignEditor = () => {
         videoEl.muted = videoElement.muted !== undefined ? videoElement.muted : true;
 
         if (isPlaying && timeInSlide >= 0 && timeInSlide < (currentPage.duration || 5)) {
+          console.log('🎬 Should play video:', videoElement.id);
+
           // Sync video time with timeline position
           if (Math.abs(videoEl.currentTime - timeInSlide) > 0.5) {
+            console.log('🎬 Syncing video time:', timeInSlide);
             videoEl.currentTime = timeInSlide;
           }
 
           // Play video if paused
           if (videoEl.paused) {
-            videoEl.play().catch(err => console.error('Video play error:', err));
+            console.log('🎬 Playing video:', videoElement.id);
+            videoEl.play().catch(err => {
+              console.error('❌ Video play error:', err);
+              // Try to play muted if autoplay is blocked
+              if (err.name === 'NotAllowedError') {
+                console.log('🎬 Retrying with muted=true');
+                videoEl.muted = true;
+                videoEl.play().catch(err2 => console.error('❌ Video play error (muted):', err2));
+              }
+            });
           }
         } else {
           // Pause video if not in active range
           if (!videoEl.paused) {
+            console.log('🎬 Pausing video:', videoElement.id);
             videoEl.pause();
           }
         }
+      } else {
+        console.warn('⚠️ Video element not found in DOM:', videoElement.id);
       }
     });
 
@@ -786,6 +818,7 @@ const DesignEditor = () => {
         otherVideoElements.forEach(videoElement => {
           const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
           if (videoEl && !videoEl.paused) {
+            console.log('🎬 Pausing video on other slide:', videoElement.id);
             videoEl.pause();
             videoEl.currentTime = 0;
           }

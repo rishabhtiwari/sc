@@ -312,7 +312,14 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
             muted={element.muted !== undefined ? element.muted : true}
             loop={element.loop !== undefined ? element.loop : false}
             playsInline
+            preload="auto"
             data-video-element-id={element.id}
+            onLoadedMetadata={(e) => {
+              console.log('🎬 Video loaded:', element.id, 'duration:', e.target.duration);
+            }}
+            onError={(e) => {
+              console.error('❌ Video error:', element.id, e);
+            }}
           />
         );
 
