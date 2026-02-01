@@ -157,27 +157,68 @@ const MediaPanel = ({
       // If duration is not available, try to get it from the video element
       if (!media.duration || media.duration === 0) {
         console.warn('⚠️ Video duration not available, attempting to extract...');
-        const video = document.createElement('video');
-        video.preload = 'metadata';
-        video.onloadedmetadata = () => {
-          console.log('✅ Video duration extracted:', video.duration);
-          onAddElement({
-            type: 'video',
-            src: media.url,
-            width: 640,
-            height: 360,
-            duration: video.duration,
-            trimStart: 0,
-            trimEnd: video.duration,
-            playbackSpeed: 1,
-            volume: 100,
-            muted: false,
-            loop: false,
-            file: media.file
-          });
-          showToast('Video added to canvas', 'success');
+
+        const extractDuration = async () => {
+          try {
+            let videoUrl = media.url;
+
+            // If this is an API URL, fetch it with authentication
+            const isApiUrl = media.url.startsWith('/api/');
+            if (isApiUrl) {
+              const token = localStorage.getItem('auth_token');
+              if (!token) {
+                console.error('No auth token for video duration extraction');
+                showToast('Authentication required', 'error');
+                return;
+              }
+
+              const response = await fetch(media.url, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+
+              if (!response.ok) {
+                console.error('Failed to fetch video for duration:', response.status);
+                showToast('Failed to load video', 'error');
+                return;
+              }
+
+              const blob = await response.blob();
+              videoUrl = URL.createObjectURL(blob);
+            }
+
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.onloadedmetadata = () => {
+              console.log('✅ Video duration extracted:', video.duration);
+              onAddElement({
+                type: 'video',
+                src: media.url,
+                width: 640,
+                height: 360,
+                duration: video.duration,
+                trimStart: 0,
+                trimEnd: video.duration,
+                playbackSpeed: 1,
+                volume: 100,
+                muted: false,
+                loop: false,
+                file: media.file
+              });
+              showToast('Video added to canvas', 'success');
+
+              // Cleanup blob URL if we created one
+              if (isApiUrl && videoUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(videoUrl);
+              }
+            };
+            video.src = videoUrl;
+          } catch (error) {
+            console.error('Error extracting video duration:', error);
+            showToast('Failed to load video', 'error');
+          }
         };
-        video.src = media.url;
+
+        extractDuration();
       } else {
         onAddElement({
           type: 'video',
