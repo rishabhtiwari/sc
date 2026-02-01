@@ -6,14 +6,14 @@ import projectService from '../../../services/projectService';
 export const uploadBlobToAsset = async (blob, type, name) => {
   try {
     console.log(`📤 Uploading ${type}:`, name);
-    
+
     // Fetch the blob data
     const response = await fetch(blob);
     const blobData = await response.blob();
-    
+
     // Create a File object
     const file = new File([blobData], name, { type: blobData.type });
-    
+
     // Upload to asset service
     const asset = await projectService.uploadAsset(file, type);
     console.log(`📦 Upload response:`, asset);
@@ -23,7 +23,12 @@ export const uploadBlobToAsset = async (blob, type, name) => {
     }
 
     console.log(`✅ Uploaded ${type}:`, asset.asset_id);
-    return asset.asset_id;
+
+    // Return both asset_id and url
+    return {
+      asset_id: asset.asset_id,
+      url: asset.url
+    };
   } catch (error) {
     console.error(`❌ Failed to upload ${type}:`, error);
     throw error;

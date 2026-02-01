@@ -71,6 +71,8 @@ export const useProjectState = ({
       return savedProject;
     } catch (error) {
       console.error('❌ Failed to save project:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error details:', JSON.stringify(error.response?.data, null, 2));
       throw error;
     } finally {
       setIsSaving(false);
