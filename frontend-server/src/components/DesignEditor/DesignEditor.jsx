@@ -210,28 +210,30 @@ const DesignEditor = () => {
     if (addAsset.type === 'audio') {
       console.log('🎵 Adding audio to media list only (not to timeline)');
       handleAddAudio({
-        id: `media-${Date.now()}`,
+        id: addAsset.libraryId || `media-${Date.now()}`,
         url: addAsset.src || addAsset.url,
-        title: addAsset.name || addAsset.title,
+        title: addAsset.name || addAsset.title || 'Audio',
         type: 'audio',
+        duration: addAsset.duration || 0,
         libraryId: addAsset.libraryId
       });
     } else if (addAsset.type === 'image') {
       console.log('🖼️ Adding image to media list only (not to canvas)');
       handleAddImage({
-        id: `media-${Date.now()}`,
+        id: addAsset.libraryId || `media-${Date.now()}`,
         url: addAsset.src || addAsset.url,
-        title: addAsset.name || addAsset.title,
+        title: addAsset.name || addAsset.title || 'Image',
         type: 'image',
         libraryId: addAsset.libraryId
       });
     } else if (addAsset.type === 'video') {
       console.log('🎬 Adding video to media list only (not to canvas)');
       handleAddVideo({
-        id: `media-${Date.now()}`,
+        id: addAsset.libraryId || `media-${Date.now()}`,
         url: addAsset.src || addAsset.url,
-        title: addAsset.name || addAsset.title,
+        title: addAsset.name || addAsset.title || 'Video',
         type: 'video',
+        duration: addAsset.duration || 0,
         libraryId: addAsset.libraryId
       });
     }
@@ -436,6 +438,14 @@ const DesignEditor = () => {
   const handlePause = () => {
     if (isPlaying) {
       handlePlayPause();
+
+      // Pause all audio elements
+      audioTracks.forEach(track => {
+        const audio = audioRefs.current[track.id];
+        if (audio && !audio.paused) {
+          audio.pause();
+        }
+      });
     }
   };
 
