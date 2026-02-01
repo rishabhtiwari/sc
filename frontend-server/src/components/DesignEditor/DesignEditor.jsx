@@ -98,6 +98,9 @@ const DesignEditor = () => {
   const [uploadedAudio, setUploadedAudio] = useState([]);
   const [uploadedVideo, setUploadedVideo] = useState([]);
 
+  // Track processed assets to prevent duplicate processing
+  const processedAssetRef = useRef(null);
+
   // Audio Delete Confirmation Dialog
   const [audioDeleteDialog, setAudioDeleteDialog] = useState({
     isOpen: false,
@@ -1122,6 +1125,18 @@ const DesignEditor = () => {
   };
 
   /**
+   * Debug: Log media list changes
+   */
+  useEffect(() => {
+    console.log('📊 Media lists updated:', {
+      uploadedAudio: uploadedAudio.length,
+      uploadedVideo: uploadedVideo.length,
+      audioDetails: uploadedAudio.map(a => ({ title: a.title, url: a.url?.substring(0, 50) })),
+      videoDetails: uploadedVideo.map(v => ({ title: v.title, type: v.type, url: v.url?.substring(0, 50) }))
+    });
+  }, [uploadedAudio, uploadedVideo]);
+
+  /**
    * Handle loading project from URL query parameter
    */
   useEffect(() => {
@@ -1142,10 +1157,24 @@ const DesignEditor = () => {
    */
   useEffect(() => {
     const addAsset = location.state?.addAsset;
-    if (addAsset) {
-      console.log('📥 Received asset from library:', addAsset);
+    if (!addAsset) return;
+
+    // Create a unique key for this asset to prevent duplicate processing
+    // Don't use Date.now() as it changes on every render
+    const assetKey = `${addAsset.type}-${addAsset.src || addAsset.url || addAsset.title}`;
+
+    // Check if we've already processed this exact asset
+    if (processedAssetRef.current === assetKey) {
+      console.log('⏭️ Asset already processed, skipping:', assetKey);
+      return;
+    }
+
+    console.log('📥 Processing new asset from library:', addAsset);
+    processedAssetRef.current = assetKey;
 
       if (addAsset.type === 'image') {
+        console.log('🖼️ Adding image to canvas and media list');
+
         // Add image to canvas
         handleAddElement({
           type: 'image',
@@ -1157,27 +1186,34 @@ const DesignEditor = () => {
 
         // Add to uploaded video list (which contains both images and videos)
         setUploadedVideo(prev => {
+          console.log('📊 Current uploadedVideo count:', prev.length);
           const exists = prev.some(v => v.url === addAsset.src);
           if (!exists) {
-            return [...prev, {
+            const newList = [...prev, {
               id: `media-${Date.now()}`,
               url: addAsset.src,
               title: addAsset.name,
               type: 'image',
               libraryId: addAsset.libraryId
             }];
+            console.log('✅ Added image to media list. New count:', newList.length);
+            return newList;
           }
+          console.log('⚠️ Image already in media list');
           return prev;
         });
 
         showToast('Image added to canvas', 'success');
       } else if (addAsset.type === 'audio') {
+        console.log('🎵 Adding audio to timeline and media list');
+
         // Add to audio tracks directly since we already have the URL
         const trackId = `audio-${Date.now()}`;
         const audio = new Audio(addAsset.url);
 
         audio.addEventListener('loadedmetadata', () => {
           setAudioTracks(prevTracks => {
+            console.log('📊 Current audio tracks count:', prevTracks.length);
             let startTime = 0;
             if (prevTracks.length > 0) {
               const maxEndTime = Math.max(...prevTracks.map(track =>
@@ -1208,16 +1244,20 @@ const DesignEditor = () => {
 
           // Add to uploaded audio list
           setUploadedAudio(prev => {
+            console.log('📊 Current uploadedAudio count:', prev.length);
             const exists = prev.some(a => a.url === addAsset.url);
             if (!exists) {
-              return [...prev, {
+              const newList = [...prev, {
                 id: trackId,
                 url: addAsset.url,
                 title: addAsset.title || 'Library Audio',
                 type: 'audio',
                 libraryId: addAsset.libraryId
               }];
+              console.log('✅ Added audio to media list. New count:', newList.length);
+              return newList;
             }
+            console.log('⚠️ Audio already in media list');
             return prev;
           });
 
@@ -1231,6 +1271,8 @@ const DesignEditor = () => {
 
         audio.src = addAsset.url;
       } else if (addAsset.type === 'video') {
+        console.log('🎬 Adding video to canvas and media list');
+
         // Add video to canvas
         handleAddElement({
           type: 'video',
@@ -1243,9 +1285,10 @@ const DesignEditor = () => {
 
         // Add to uploaded video list
         setUploadedVideo(prev => {
+          console.log('📊 Current uploadedVideo count:', prev.length);
           const exists = prev.some(v => v.url === addAsset.src);
           if (!exists) {
-            return [...prev, {
+            const newList = [...prev, {
               id: `media-${Date.now()}`,
               url: addAsset.src,
               title: addAsset.name,
@@ -1253,15 +1296,15 @@ const DesignEditor = () => {
               duration: addAsset.duration,
               libraryId: addAsset.libraryId
             }];
+            console.log('✅ Added video to media list. New count:', newList.length);
+            return newList;
           }
+          console.log('⚠️ Video already in media list');
           return prev;
         });
 
         showToast('Video added to canvas', 'success');
       }
-
-      // Clear the state to prevent re-adding on re-render
-      navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state]);
 
