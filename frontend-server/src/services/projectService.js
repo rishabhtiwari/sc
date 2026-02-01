@@ -94,18 +94,34 @@ class ProjectService {
    */
   async uploadAsset(file, type) {
     try {
+      console.log(`📤 Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('asset_type', type);  // Changed from 'type' to 'asset_type'
       formData.append('name', file.name);
 
-      const response = await api.post('/assets/upload', formData);
+      const startTime = Date.now();
+      const response = await api.post('/assets/upload', formData, {
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          console.log(`📊 Upload progress: ${percentCompleted}% (${(progressEvent.loaded / 1024 / 1024).toFixed(2)} MB)`);
+        }
+      });
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      console.log(`✅ Upload completed in ${duration}s`);
       console.log('📦 Upload response:', response.data);
 
       // Return the full response data which includes asset_id, url, and asset object
       return response.data;
     } catch (error) {
-      console.error('Error uploading asset:', error);
+      console.error('❌ Error uploading asset:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       throw error;
     }
   }

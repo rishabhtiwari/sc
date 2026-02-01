@@ -119,19 +119,29 @@ class StorageService:
     ) -> str:
         """
         Get a pre-signed URL for temporary access
-        
+
         Args:
             bucket: Bucket name
             object_name: Object key/path
             expires: URL expiration time
-            
+
         Returns:
-            Pre-signed URL
+            Pre-signed URL with external endpoint
         """
         try:
             url = self.client.presigned_get_object(bucket, object_name, expires=expires)
+
+            # Replace internal Docker hostname with external accessible endpoint
+            # This allows browser to access the presigned URL
+            if url.startswith('http://minio:9000'):
+                url = url.replace('http://minio:9000', 'http://localhost:9000')
+                logger.info(f"Replaced internal MinIO URL with external endpoint")
+            elif url.startswith('https://minio:9000'):
+                url = url.replace('https://minio:9000', 'http://localhost:9000')
+                logger.info(f"Replaced internal MinIO URL with external endpoint")
+
             return url
-            
+
         except S3Error as e:
             logger.error(f"Error generating presigned URL: {e}")
             raise
