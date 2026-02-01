@@ -90,7 +90,7 @@ class ProjectService {
    * Upload asset (audio/video/image) and get asset ID
    * @param {File} file - File to upload
    * @param {string} type - Asset type (audio, video, image)
-   * @returns {Promise<Object>} Asset data with asset_id
+   * @returns {Promise<Object>} Asset data with asset_id and url
    */
   async uploadAsset(file, type) {
     try {
@@ -100,7 +100,10 @@ class ProjectService {
       formData.append('name', file.name);
 
       const response = await api.post('/assets/upload', formData);
-      return response.data.asset;
+      console.log('📦 Upload response:', response.data);
+
+      // Return the full response data which includes asset_id, url, and asset object
+      return response.data;
     } catch (error) {
       console.error('Error uploading asset:', error);
       throw error;

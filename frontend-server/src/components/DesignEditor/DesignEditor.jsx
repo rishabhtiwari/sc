@@ -760,17 +760,30 @@ const DesignEditor = () => {
                 if (element.src.startsWith('blob:')) {
                   if (element.file) {
                     console.log(`  📤 Uploading ${element.type}:`, element.file.name);
-                    const asset = await projectService.uploadAsset(element.file, element.type);
-                    console.log(`  ✅ Uploaded successfully:`, {
-                      asset_id: asset.asset_id,
-                      url: asset.storage?.url?.substring(0, 50)
-                    });
-                    return {
-                      ...element,
-                      assetId: asset.asset_id,
-                      src: asset.storage.url,
-                      file: undefined // Remove file object from saved data
-                    };
+                    try {
+                      const asset = await projectService.uploadAsset(element.file, element.type);
+                      console.log(`  📦 Upload response:`, asset);
+
+                      if (!asset || !asset.asset_id) {
+                        console.error(`  ❌ Upload failed - invalid response:`, asset);
+                        throw new Error(`Failed to upload ${element.type}: Invalid response from server`);
+                      }
+
+                      console.log(`  ✅ Uploaded successfully:`, {
+                        asset_id: asset.asset_id,
+                        url: asset.url?.substring(0, 50)
+                      });
+
+                      return {
+                        ...element,
+                        assetId: asset.asset_id,
+                        src: asset.url || asset.storage?.url, // Use asset.url (presigned URL)
+                        file: undefined // Remove file object from saved data
+                      };
+                    } catch (uploadError) {
+                      console.error(`  ❌ Error uploading ${element.type}:`, uploadError);
+                      throw uploadError;
+                    }
                   } else {
                     console.warn(`  ⚠️ ${element.type} has blob URL but no file object!`, element.id);
                   }
@@ -812,7 +825,7 @@ const DesignEditor = () => {
               return {
                 ...track,
                 assetId: asset.asset_id,
-                url: asset.storage.url,
+                url: asset.url, // Use presigned URL from response
                 file: undefined
               };
             }
