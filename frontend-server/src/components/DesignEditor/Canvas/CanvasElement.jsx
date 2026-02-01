@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import AuthenticatedVideo from '../../common/AuthenticatedVideo';
 
 /**
  * Canvas Element Component
@@ -308,33 +309,53 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
 
         console.log('🎬 Rendering video element:', element.id, 'src:', element.src?.substring(0, 50));
 
-        return (
-          <video
-            key={element.id}
-            src={element.src}
-            style={videoStyle}
-            muted={element.muted !== undefined ? element.muted : true}
-            loop={element.loop !== undefined ? element.loop : false}
-            playsInline
-            preload="auto"
-            data-video-element-id={element.id}
-            onLoadedMetadata={(e) => {
-              console.log('🎬 Video onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState, 'src valid:', !!e.target.src);
-            }}
-            onCanPlay={(e) => {
-              console.log('🎬 Video onCanPlay:', element.id);
-            }}
-            onPlay={(e) => {
-              console.log('✅ Video onPlay event:', element.id);
-            }}
-            onPause={(e) => {
-              console.log('⏸️ Video onPause event:', element.id);
-            }}
-            onError={(e) => {
-              console.error('❌ Video onError:', element.id, 'error:', e.target.error);
-            }}
-          />
-        );
+        // Check if this is an API URL that needs authentication
+        const isApiUrl = element.src && element.src.startsWith('/api/assets/download/');
+
+        if (isApiUrl) {
+          // Use AuthenticatedVideo for API URLs
+          return (
+            <AuthenticatedVideo
+              key={element.id}
+              src={element.src}
+              style={videoStyle}
+              muted={element.muted !== undefined ? element.muted : true}
+              loop={element.loop !== undefined ? element.loop : false}
+              playsInline
+              preload="auto"
+              data-video-element-id={element.id}
+            />
+          );
+        } else {
+          // Use regular video tag for blob URLs and local files
+          return (
+            <video
+              key={element.id}
+              src={element.src}
+              style={videoStyle}
+              muted={element.muted !== undefined ? element.muted : true}
+              loop={element.loop !== undefined ? element.loop : false}
+              playsInline
+              preload="auto"
+              data-video-element-id={element.id}
+              onLoadedMetadata={(e) => {
+                console.log('🎬 Video onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState, 'src valid:', !!e.target.src);
+              }}
+              onCanPlay={(e) => {
+                console.log('🎬 Video onCanPlay:', element.id);
+              }}
+              onPlay={(e) => {
+                console.log('✅ Video onPlay event:', element.id);
+              }}
+              onPause={(e) => {
+                console.log('⏸️ Video onPause event:', element.id);
+              }}
+              onError={(e) => {
+                console.error('❌ Video onError:', element.id, 'error:', e.target.error);
+              }}
+            />
+          );
+        }
 
       default:
         return <div>Unknown element type</div>;

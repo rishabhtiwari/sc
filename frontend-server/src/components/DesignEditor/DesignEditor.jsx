@@ -1635,6 +1635,17 @@ const DesignEditor = () => {
           onOpenProject={handleLoadProject}
         />
       )}
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-lg font-medium text-gray-900">Loading project...</p>
+            <p className="text-sm text-gray-500">Please wait while we load your project</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
