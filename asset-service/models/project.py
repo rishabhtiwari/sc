@@ -42,18 +42,27 @@ class Background(BaseModel):
 class Element(BaseModel):
     """Canvas element"""
     id: str
-    type: str  # text, image, video, shape, etc.
+    type: str  # text, image, video, shape, icon, sticker, etc.
     x: float
     y: float
     width: Optional[float] = None
     height: Optional[float] = None
     assetId: Optional[str] = None  # Reference to assets collection
     src: Optional[str] = None
-    # Element-specific properties stored as dict
+    # Text element properties
     text: Optional[str] = None
     fontSize: Optional[int] = None
     fontFamily: Optional[str] = None
     color: Optional[str] = None
+    # Shape element properties
+    shapeType: Optional[str] = None  # rectangle, circle, triangle, star, line, arrow
+    fill: Optional[str] = None
+    stroke: Optional[str] = None
+    strokeWidth: Optional[float] = None
+    # Icon/Sticker element properties
+    icon: Optional[str] = None  # Icon emoji/character
+    emoji: Optional[str] = None  # Sticker emoji
+    # Common transform properties
     rotation: Optional[float] = 0
     opacity: Optional[float] = 1
     # Video-specific properties
