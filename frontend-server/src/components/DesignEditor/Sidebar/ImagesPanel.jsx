@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { imageLibrary } from '../../../services/assetLibraryService';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Images Panel
@@ -149,7 +150,7 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
                 key={image.id}
                 className="relative group rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500 transition-all"
               >
-                <img
+                <AuthenticatedImage
                   src={image.url}
                   alt={image.title}
                   className="w-full h-24 object-cover cursor-pointer"
