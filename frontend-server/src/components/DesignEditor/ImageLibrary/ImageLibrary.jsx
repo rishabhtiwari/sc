@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { imageLibrary } from '../../../services/assetLibraryService';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Image Library Modal - Full-screen modal for browsing image library
@@ -108,7 +109,7 @@ const ImageLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
                   className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group"
                 >
                   <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                    <img
+                    <AuthenticatedImage
                       src={image.url}
                       alt={image.name}
                       className="w-full h-full object-cover"
