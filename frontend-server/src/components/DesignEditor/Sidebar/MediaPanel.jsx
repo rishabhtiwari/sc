@@ -136,6 +136,12 @@ const MediaPanel = ({
             width: 640,
             height: 360,
             duration: video.duration,
+            trimStart: 0,
+            trimEnd: video.duration,
+            playbackSpeed: 1,
+            volume: 100,
+            muted: false,
+            loop: false,
             file: media.file
           });
           showToast('Video added to canvas', 'success');
@@ -147,7 +153,13 @@ const MediaPanel = ({
           src: media.url,
           width: 640,
           height: 360,
-          duration: media.duration, // Pass video duration
+          duration: media.duration,
+          trimStart: 0,
+          trimEnd: media.duration,
+          playbackSpeed: 1,
+          volume: 100,
+          muted: false,
+          loop: false,
           file: media.file
         });
         showToast('Video added to canvas', 'success');
