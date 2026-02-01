@@ -22,6 +22,8 @@ import VoicePreviewPage from './pages/VoicePreviewPage';
 import TextStudioPage from './pages/TextStudioPage';
 import DesignEditorPage from './pages/DesignEditorPage';
 import AssetLibraryPage from './pages/AssetLibraryPage';
+import ImageLibraryPage from './pages/ImageLibraryPage';
+import VideoLibraryPage from './pages/VideoLibraryPage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
@@ -129,6 +131,8 @@ function App() {
                   <Route path="/text-studio" element={<TextStudioPage />} />
                   <Route path="/design-editor" element={<DesignEditorPage />} />
                   <Route path="/asset-library" element={<AssetLibraryPage />} />
+                  <Route path="/asset-library/images" element={<ImageLibraryPage />} />
+                  <Route path="/asset-library/videos" element={<VideoLibraryPage />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />

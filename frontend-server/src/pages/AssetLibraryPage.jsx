@@ -27,7 +27,7 @@ const AssetLibraryPage = () => {
       description: 'Browse and manage your image assets',
       color: 'from-purple-500 to-pink-500',
       bgColor: 'from-purple-50 to-pink-50',
-      route: '/image-processing',
+      route: '/asset-library/images',
       stats: { total: 0, recent: 0 }
     },
     {
@@ -47,7 +47,7 @@ const AssetLibraryPage = () => {
       description: 'Manage your video content',
       color: 'from-orange-500 to-red-500',
       bgColor: 'from-orange-50 to-red-50',
-      route: '/design-editor',
+      route: '/asset-library/videos',
       stats: { total: 0, recent: 0 }
     }
   ];
