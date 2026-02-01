@@ -122,18 +122,35 @@ def download_asset_by_path(bucket, object_path):
             stream=True
         )
 
-        # Forward all headers including Content-Type, Content-Disposition, etc.
-        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
-        headers_to_forward = {
-            name: value for name, value in response.headers.items()
-            if name.lower() not in excluded_headers
-        }
+        if response.status_code != 200:
+            logger.error(f"Asset service returned error: {response.status_code}")
+            return jsonify({
+                'success': False,
+                'error': f'Failed to download asset: {response.status_code}'
+            }), response.status_code
 
-        return Response(
+        # Get Content-Type from upstream response
+        content_type = response.headers.get('Content-Type', 'application/octet-stream')
+
+        # Create Flask response with explicit mimetype
+        flask_response = Response(
             response.iter_content(chunk_size=8192),
-            status=response.status_code,
-            headers=headers_to_forward
+            status=200,
+            mimetype=content_type
         )
+
+        # Forward other important headers
+        if 'Content-Disposition' in response.headers:
+            flask_response.headers['Content-Disposition'] = response.headers['Content-Disposition']
+        if 'Accept-Ranges' in response.headers:
+            flask_response.headers['Accept-Ranges'] = response.headers['Accept-Ranges']
+        if 'Cache-Control' in response.headers:
+            flask_response.headers['Cache-Control'] = response.headers['Cache-Control']
+
+        logger.info(f"Proxying asset: {bucket}/{object_path} as {content_type}")
+
+        return flask_response
+
     except Exception as e:
         logger.error(f"Error proxying to asset-service download by path: {str(e)}")
         return jsonify({'error': str(e), 'status': 'error'}), 500
