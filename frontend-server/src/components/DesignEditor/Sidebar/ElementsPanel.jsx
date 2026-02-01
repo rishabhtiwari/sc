@@ -44,6 +44,8 @@ const ElementsPanel = ({ onAddElement }) => {
       type: 'icon',
       icon: icon.icon,
       fontSize: 48,
+      width: 64,
+      height: 64,
       color: '#000000'
     });
     showToast(`${icon.name} added to canvas`, 'success');
@@ -96,7 +98,9 @@ const ElementsPanel = ({ onAddElement }) => {
                 onAddElement({
                   type: 'sticker',
                   emoji,
-                  fontSize: 64
+                  fontSize: 64,
+                  width: 80,
+                  height: 80
                 });
                 showToast('Sticker added to canvas', 'success');
               }}

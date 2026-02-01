@@ -34,7 +34,9 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
         x: e.clientX,
         y: e.clientY,
         width: element.width || 200,
-        height: element.height || 100
+        height: element.height || 100,
+        elementX: element.x || 0,
+        elementY: element.y || 0
       });
       return;
     }
@@ -57,21 +59,43 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
 
       let newWidth = dragStart.width;
       let newHeight = dragStart.height;
+      let newX = dragStart.elementX;
+      let newY = dragStart.elementY;
 
+      // East handle - increase width to the right
       if (resizeHandle.includes('e')) {
         newWidth = Math.max(50, dragStart.width + deltaX);
       }
+
+      // West handle - increase width to the left (also move element)
       if (resizeHandle.includes('w')) {
-        newWidth = Math.max(50, dragStart.width - deltaX);
+        const proposedWidth = Math.max(50, dragStart.width - deltaX);
+        const widthDiff = proposedWidth - dragStart.width;
+        newWidth = proposedWidth;
+        newX = dragStart.elementX - widthDiff;
       }
+
+      // South handle - increase height downward
       if (resizeHandle.includes('s')) {
         newHeight = Math.max(30, dragStart.height + deltaY);
       }
+
+      // North handle - increase height upward (also move element)
       if (resizeHandle.includes('n')) {
-        newHeight = Math.max(30, dragStart.height - deltaY);
+        const proposedHeight = Math.max(30, dragStart.height - deltaY);
+        const heightDiff = proposedHeight - dragStart.height;
+        newHeight = proposedHeight;
+        newY = dragStart.elementY - heightDiff;
       }
 
-      onUpdate({ width: newWidth, height: newHeight });
+      // Update both size and position
+      const updates = { width: newWidth, height: newHeight };
+      if (resizeHandle.includes('w') || resizeHandle.includes('n')) {
+        updates.x = newX;
+        updates.y = newY;
+      }
+
+      onUpdate(updates);
     }
   };
 
@@ -298,9 +322,14 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
         return (
           <div
             style={{
-              fontSize: (element.fontSize || 16) * zoom,
+              fontSize: element.width ? element.width * zoom : (element.fontSize || 64) * zoom,
               color: element.color,
-              cursor: 'move'
+              cursor: 'move',
+              width: element.width ? element.width * zoom : 'auto',
+              height: element.height ? element.height * zoom : 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             {element.icon || element.emoji}

@@ -139,6 +139,10 @@ const DesignEditor = () => {
   const handleAddElement = (element) => {
     console.log('🎨 handleAddElement called with:', {
       type: element.type,
+      shapeType: element.shapeType,
+      icon: element.icon,
+      emoji: element.emoji,
+      text: element.text,
       hasSrc: !!element.src,
       hasFile: !!element.file,
       duration: element.duration,
@@ -829,6 +833,7 @@ const DesignEditor = () => {
                 srcType: element.src?.substring(0, 10)
               });
 
+              // Handle video and image elements with src
               if ((element.type === 'video' || element.type === 'image') && element.src) {
                 // Only upload if it's a blob URL (local file)
                 if (element.src.startsWith('blob:')) {
@@ -874,6 +879,9 @@ const DesignEditor = () => {
                 // If already has assetId, keep it
                 return element;
               }
+
+              // All other element types (text, shape, icon, sticker, bullets) - save as-is
+              console.log(`  ✅ Keeping ${element.type} element as-is`);
               return element;
             })
           );
@@ -1157,6 +1165,21 @@ const DesignEditor = () => {
       const project = await projectService.loadProject(projectId);
 
       console.log('📂 Loaded project:', project);
+      console.log('📄 Pages in loaded project:', project.pages?.length || 0);
+      project.pages?.forEach((page, index) => {
+        console.log(`  📄 Page ${index} (${page.name}):`, {
+          id: page.id,
+          elementCount: page.elements?.length || 0,
+          elements: page.elements?.map(el => ({
+            id: el.id,
+            type: el.type,
+            shapeType: el.shapeType,
+            icon: el.icon,
+            emoji: el.emoji,
+            text: el.text?.substring(0, 20)
+          }))
+        });
+      });
 
       // Restore state
       setPages(project.pages || []);
