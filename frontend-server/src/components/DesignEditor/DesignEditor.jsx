@@ -125,7 +125,9 @@ const DesignEditor = () => {
     handlePlayPause,
     handleSeek,
     registerVideoRef,
-    unregisterVideoRef
+    unregisterVideoRef,
+    setIsPlaying,
+    setCurrentTime
   } = useVideoPlayback(pages, currentPageIndex);
 
   // Delete Dialog States
