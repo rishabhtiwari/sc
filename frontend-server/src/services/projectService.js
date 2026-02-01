@@ -2,9 +2,10 @@
  * Project Service
  * Handles design editor project save/load operations
  */
-import axios from 'axios';
+import api from './api';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+// Use relative API path (proxied through frontend server)
+const API_BASE_URL = '/api';
 
 class ProjectService {
   /**
@@ -14,15 +15,7 @@ class ProjectService {
    */
   async saveProject(projectData) {
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/projects/`,
-        projectData,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const response = await api.post('/projects/', projectData);
       return response.data;
     } catch (error) {
       console.error('Error saving project:', error);
@@ -38,15 +31,7 @@ class ProjectService {
    */
   async updateProject(projectId, updateData) {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/api/projects/${projectId}`,
-        updateData,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+      const response = await api.put(`/projects/${projectId}`, updateData);
       return response.data;
     } catch (error) {
       console.error('Error updating project:', error);
@@ -61,9 +46,7 @@ class ProjectService {
    */
   async loadProject(projectId) {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/api/projects/${projectId}`
-      );
+      const response = await api.get(`/projects/${projectId}`);
       return response.data;
     } catch (error) {
       console.error('Error loading project:', error);
@@ -79,9 +62,7 @@ class ProjectService {
   async listProjects(filters = {}) {
     try {
       const params = new URLSearchParams(filters).toString();
-      const response = await axios.get(
-        `${API_BASE_URL}/api/projects/?${params}`
-      );
+      const response = await api.get(`/projects/?${params}`);
       return response.data;
     } catch (error) {
       console.error('Error listing projects:', error);
@@ -97,9 +78,7 @@ class ProjectService {
    */
   async deleteProject(projectId, hardDelete = false) {
     try {
-      const response = await axios.delete(
-        `${API_BASE_URL}/api/projects/${projectId}?hard=${hardDelete}`
-      );
+      const response = await api.delete(`/projects/${projectId}?hard=${hardDelete}`);
       return response.data;
     } catch (error) {
       console.error('Error deleting project:', error);
@@ -120,15 +99,7 @@ class ProjectService {
       formData.append('type', type);
       formData.append('name', file.name);
 
-      const response = await axios.post(
-        `${API_BASE_URL}/api/assets/upload`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
+      const response = await api.post('/assets/upload', formData);
       return response.data.asset;
     } catch (error) {
       console.error('Error uploading asset:', error);
