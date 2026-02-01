@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
-import { imageLibrary, videoLibrary } from '../../../services/assetLibraryService';
+import { videoLibrary } from '../../../services/assetLibraryService';
 
 /**
  * Media Panel
@@ -17,7 +17,8 @@ const MediaPanel = ({
   onVideoDeleteRequest,
   uploadedMedia = [],
   onUploadedMediaChange,
-  onOpenAudioLibrary
+  onOpenAudioLibrary,
+  onOpenVideoLibrary
 }) => {
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
@@ -208,10 +209,10 @@ const MediaPanel = ({
 
   return (
     <div className="space-y-6">
-      {/* Upload Video - Only show on video tab */}
+      {/* Video Section - Only show on video tab */}
       {!isAudioPanel && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">🎬 Upload Video</h3>
+          <h3 className="text-sm font-semibold text-gray-900">🎬 Video</h3>
           <input
             ref={videoInputRef}
             type="file"
@@ -220,23 +221,37 @@ const MediaPanel = ({
             onChange={handleVideoUpload}
             className="hidden"
           />
-          <button
-            onClick={() => videoInputRef.current?.click()}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            Upload Video
-          </button>
+          {/* Upload and Library buttons side-by-side */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => videoInputRef.current?.click()}
+              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload
+            </button>
+            {onOpenVideoLibrary && (
+              <button
+                onClick={onOpenVideoLibrary}
+                className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+                </svg>
+                Library
+              </button>
+            )}
+          </div>
           <p className="text-xs text-gray-500 text-center">MP4, MOV, AVI up to 100MB</p>
         </div>
       )}
 
-      {/* Upload Audio - Only show on audio tab */}
+      {/* Audio Section - Only show on audio tab */}
       {!isVideoPanel && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">🎵 Upload Audio</h3>
+          <h3 className="text-sm font-semibold text-gray-900">🎵 Audio</h3>
           <input
             ref={audioInputRef}
             type="file"
@@ -245,31 +260,30 @@ const MediaPanel = ({
             onChange={handleAudioUpload}
             className="hidden"
           />
-          <button
-            onClick={() => audioInputRef.current?.click()}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            Upload Audio
-          </button>
+          {/* Upload and Library buttons side-by-side */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => audioInputRef.current?.click()}
+              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              Upload
+            </button>
+            {onOpenAudioLibrary && (
+              <button
+                onClick={onOpenAudioLibrary}
+                className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+                </svg>
+                Library
+              </button>
+            )}
+          </div>
           <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
-        </div>
-      )}
-
-      {/* Browse Audio Library Button - Only show on audio tab */}
-      {isAudioPanel && onOpenAudioLibrary && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-900">📁 Audio Library</h3>
-          <button
-            onClick={onOpenAudioLibrary}
-            className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-          >
-            <span className="text-xl">📁</span>
-            Browse Audio Library
-          </button>
-          <p className="text-xs text-gray-500 text-center">Access your saved audio files</p>
         </div>
       )}
 
@@ -324,13 +338,9 @@ const MediaPanel = ({
 
                         try {
                           // Delete from backend library if it has a libraryId
-                          if (media.libraryId) {
-                            console.log(`🗑️ Deleting from library: ${media.libraryId}`);
-                            if (media.type === 'video') {
-                              await videoLibrary.delete(media.libraryId);
-                            } else if (media.type === 'image') {
-                              await imageLibrary.delete(media.libraryId);
-                            }
+                          if (media.libraryId && media.type === 'video') {
+                            console.log(`🗑️ Deleting video from library: ${media.libraryId}`);
+                            await videoLibrary.delete(media.libraryId);
                             console.log('✅ Deleted from library');
                           }
 

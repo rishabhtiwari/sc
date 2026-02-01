@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
+import { imageLibrary } from '../../../services/assetLibraryService';
 
 /**
  * Images Panel
  * Features: Upload images, Stock images, Search
  */
-const ImagesPanel = ({ onAddElement }) => {
+const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
   const fileInputRef = useRef(null);
@@ -53,7 +54,7 @@ const ImagesPanel = ({ onAddElement }) => {
     <div className="space-y-6">
       {/* Upload Section */}
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-900">📤 Upload Images</h3>
+        <h3 className="text-sm font-semibold text-gray-900">🖼️ Images</h3>
         <input
           ref={fileInputRef}
           type="file"
@@ -62,15 +63,29 @@ const ImagesPanel = ({ onAddElement }) => {
           onChange={handleFileUpload}
           className="hidden"
         />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Upload Image
-        </button>
+        {/* Upload and Library buttons side-by-side */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload
+          </button>
+          {onOpenImageLibrary && (
+            <button
+              onClick={onOpenImageLibrary}
+              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+              </svg>
+              Library
+            </button>
+          )}
+        </div>
         <p className="text-xs text-gray-500 text-center">PNG, JPG, GIF up to 10MB</p>
       </div>
 
