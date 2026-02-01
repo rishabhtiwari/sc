@@ -52,8 +52,8 @@ const MediaPanel = ({
           onUploadedMediaChange(prev => [...prev, newVideo]);
           showToast('Video uploaded successfully', 'success');
 
-          // Clean up
-          URL.revokeObjectURL(video.src);
+          // DON'T revoke the URL - we need it for playback on canvas
+          // The URL will be cleaned up when the component unmounts or video is deleted
         };
 
         video.src = url;

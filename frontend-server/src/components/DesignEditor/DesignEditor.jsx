@@ -491,6 +491,11 @@ const DesignEditor = () => {
   const handleVideoDelete = (trackId) => {
     const track = videoTracks.find(t => t.id === trackId);
 
+    // Revoke blob URL to free memory
+    if (track?.url && track.url.startsWith('blob:')) {
+      URL.revokeObjectURL(track.url);
+    }
+
     // Remove from timeline
     setVideoTracks(videoTracks.filter(t => t.id !== trackId));
 
@@ -871,6 +876,27 @@ const DesignEditor = () => {
       }
     });
   }, [currentTime, isPlaying, currentPageIndex, pages]);
+
+  /**
+   * Cleanup blob URLs on unmount to prevent memory leaks
+   */
+  useEffect(() => {
+    return () => {
+      // Cleanup video blob URLs
+      uploadedVideo.forEach(video => {
+        if (video.url && video.url.startsWith('blob:')) {
+          URL.revokeObjectURL(video.url);
+        }
+      });
+
+      // Cleanup audio blob URLs
+      uploadedAudio.forEach(audio => {
+        if (audio.url && audio.url.startsWith('blob:')) {
+          URL.revokeObjectURL(audio.url);
+        }
+      });
+    };
+  }, []); // Empty deps - only run on unmount
 
   return (
     <div className="flex h-full bg-gray-50">
