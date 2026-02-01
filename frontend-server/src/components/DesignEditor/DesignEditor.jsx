@@ -452,6 +452,51 @@ const DesignEditor = () => {
   };
 
   /**
+   * Create Audio elements for loaded tracks that don't have refs
+   * This is needed when loading a project - the audioTracks state is restored
+   * but the Audio element instances need to be created
+   */
+  useEffect(() => {
+    audioTracks.forEach(track => {
+      if (!audioRefs.current[track.id] && track.url) {
+        console.log('🎵 Creating Audio element for loaded track:', track.id, track.url);
+        const audio = new Audio(track.url);
+
+        audio.addEventListener('loadedmetadata', () => {
+          console.log('✅ Audio metadata loaded for:', track.id, 'Duration:', audio.duration);
+        });
+
+        audio.addEventListener('error', (e) => {
+          console.error('❌ Audio loading error for:', track.id, e);
+          console.error('❌ Audio error details:', {
+            error: audio.error,
+            code: audio.error?.code,
+            message: audio.error?.message,
+            src: audio.src,
+            networkState: audio.networkState,
+            readyState: audio.readyState
+          });
+        });
+
+        audio.volume = (track.volume || 100) / 100;
+        audioRefs.current[track.id] = audio;
+      }
+    });
+
+    // Cleanup: remove refs for tracks that no longer exist
+    Object.keys(audioRefs.current).forEach(trackId => {
+      if (!audioTracks.find(t => t.id === trackId)) {
+        const audio = audioRefs.current[trackId];
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+        }
+        delete audioRefs.current[trackId];
+      }
+    });
+  }, [audioTracks]);
+
+  /**
    * Handle audio track update (drag, stretch, properties)
    */
   const handleAudioUpdate = (trackId, updates) => {
