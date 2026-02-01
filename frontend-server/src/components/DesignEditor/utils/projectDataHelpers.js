@@ -171,9 +171,22 @@ export const prepareProjectData = async (
 
   console.log('✅ Videos are stored in page elements (not separate videoTracks)');
 
+  // Calculate total duration from pages
+  const totalDuration = processedPages.reduce((sum, page) => sum + (page.duration || 5), 0);
+
   // Build final project data
   const projectData = {
     name: currentProject?.name || `Project ${new Date().toLocaleDateString()}`,
+    settings: {
+      canvas: {
+        width: 1920,
+        height: 1080,
+        background: '#ffffff'
+      },
+      duration: totalDuration,
+      fps: 30,
+      quality: '1080p'
+    },
     pages: processedPages,
     audioTracks: processedAudioTracks,
     videoTracks: [], // Empty - videos are in page elements

@@ -312,6 +312,19 @@ const DesignEditor = () => {
     }
   };
 
+  /**
+   * Handle play/pause for timeline
+   */
+  const handlePlay = () => {
+    handlePlayPause();
+  };
+
+  const handlePause = () => {
+    if (isPlaying) {
+      handlePlayPause();
+    }
+  };
+
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
     setAudioDeleteDialog({
       isOpen: true,
