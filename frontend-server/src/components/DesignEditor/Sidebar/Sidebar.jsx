@@ -25,6 +25,8 @@ const Sidebar = ({
   onVideoDeleteRequest,
   uploadedAudio,
   onUploadedAudioChange,
+  uploadedImage,
+  onUploadedImageChange,
   uploadedVideo,
   onUploadedVideoChange,
   onOpenAudioLibrary,
@@ -142,8 +144,16 @@ const Sidebar = ({
               onAudioDeleteRequest={onAudioDeleteRequest}
               videoTracks={videoTracks}
               onVideoDeleteRequest={onVideoDeleteRequest}
-              uploadedMedia={expandedPanel === 'audio' ? uploadedAudio : uploadedVideo}
-              onUploadedMediaChange={expandedPanel === 'audio' ? onUploadedAudioChange : onUploadedVideoChange}
+              uploadedMedia={
+                expandedPanel === 'audio' ? uploadedAudio :
+                expandedPanel === 'images' ? uploadedImage :
+                uploadedVideo
+              }
+              onUploadedMediaChange={
+                expandedPanel === 'audio' ? onUploadedAudioChange :
+                expandedPanel === 'images' ? onUploadedImageChange :
+                onUploadedVideoChange
+              }
               onOpenAudioLibrary={onOpenAudioLibrary}
               onOpenImageLibrary={onOpenImageLibrary}
               onOpenVideoLibrary={onOpenVideoLibrary}

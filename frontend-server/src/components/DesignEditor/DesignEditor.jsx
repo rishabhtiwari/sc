@@ -101,8 +101,9 @@ const DesignEditor = () => {
   const videoElementRefs = useRef({});
 
   // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
-  // Separate state for audio and video to keep them independent
+  // Separate state for audio, images, and video to keep them independent
   const [uploadedAudio, setUploadedAudio] = useState([]);
+  const [uploadedImage, setUploadedImage] = useState([]);
   const [uploadedVideo, setUploadedVideo] = useState([]);
 
   // Track processed assets to prevent duplicate processing
@@ -972,6 +973,7 @@ const DesignEditor = () => {
         // Store media lists for sidebar (includes library assets not yet used in project)
         mediaLibrary: {
           uploadedAudio: uploadedAudio,
+          uploadedImage: uploadedImage,
           uploadedVideo: uploadedVideo
         },
         status: 'draft',
@@ -1041,10 +1043,11 @@ const DesignEditor = () => {
    * Extract media items from loaded project to populate sidebar media lists
    * This merges project media with any existing media in state (e.g., from library)
    */
-  const extractMediaFromProject = (project, existingAudio = [], existingVideo = []) => {
+  const extractMediaFromProject = (project, existingAudio = [], existingImage = [], existingVideo = []) => {
     console.log('📦 Extracting media from project:', project);
     console.log('📦 Existing media in state:', {
       audio: existingAudio.length,
+      image: existingImage.length,
       video: existingVideo.length
     });
 
@@ -1068,19 +1071,33 @@ const DesignEditor = () => {
     }));
 
     // Extract videos and images from page elements
-    const mediaFromElements = [];
+    const imagesFromElements = [];
+    const videosFromElements = [];
+
     (project.pages || []).forEach(page => {
       (page.elements || []).forEach(el => {
-        if ((el.type === 'video' || el.type === 'image') && (el.src || el.url)) {
+        if (el.type === 'image' && (el.src || el.url)) {
+          const url = el.src || el.url;
+          const exists = imagesFromElements.some(i => i.url === url);
+          if (!exists) {
+            imagesFromElements.push({
+              id: el.id || `image-${Date.now()}-${Math.random()}`,
+              type: 'image',
+              url: url,
+              title: el.name || 'Image Element',
+            });
+          }
+        } else if (el.type === 'video' && (el.src || el.url)) {
           const url = el.src || el.url;
           // Check if not already in videoFromTracks
-          const exists = videoFromTracks.some(v => v.url === url);
+          const exists = videoFromTracks.some(v => v.url === url) ||
+                        videosFromElements.some(v => v.url === url);
           if (!exists) {
-            mediaFromElements.push({
-              id: el.id || `${el.type}-${Date.now()}-${Math.random()}`,
-              type: el.type,
+            videosFromElements.push({
+              id: el.id || `video-${Date.now()}-${Math.random()}`,
+              type: 'video',
               url: url,
-              title: el.name || `${el.type} Element`,
+              title: el.name || 'Video Element',
               duration: el.duration,
             });
           }
@@ -1088,19 +1105,7 @@ const DesignEditor = () => {
       });
     });
 
-    // Combine project videos with existing videos (from library)
-    const projectVideos = [...videoFromTracks, ...mediaFromElements];
-    const mergedVideos = [...existingVideo];
-
-    // Add project videos that don't already exist
-    projectVideos.forEach(pv => {
-      const exists = mergedVideos.some(ev => ev.url === pv.url);
-      if (!exists) {
-        mergedVideos.push(pv);
-      }
-    });
-
-    // Merge audio similarly
+    // Merge audio
     const mergedAudio = [...existingAudio];
     audioItems.forEach(pa => {
       const exists = mergedAudio.some(ea => ea.url === pa.url);
@@ -1109,13 +1114,34 @@ const DesignEditor = () => {
       }
     });
 
+    // Merge images
+    const mergedImages = [...existingImage];
+    imagesFromElements.forEach(pi => {
+      const exists = mergedImages.some(ei => ei.url === pi.url);
+      if (!exists) {
+        mergedImages.push(pi);
+      }
+    });
+
+    // Merge videos
+    const projectVideos = [...videoFromTracks, ...videosFromElements];
+    const mergedVideos = [...existingVideo];
+    projectVideos.forEach(pv => {
+      const exists = mergedVideos.some(ev => ev.url === pv.url);
+      if (!exists) {
+        mergedVideos.push(pv);
+      }
+    });
+
     console.log('📦 Merged media:', {
       audio: mergedAudio.length,
+      image: mergedImages.length,
       video: mergedVideos.length
     });
 
     return {
       audio: mergedAudio,
+      image: mergedImages,
       video: mergedVideos
     };
   };
@@ -1162,6 +1188,21 @@ const DesignEditor = () => {
           return merged;
         });
 
+        setUploadedImage(prevImage => {
+          console.log('📦 Merging image - existing:', prevImage.length, 'saved:', (project.mediaLibrary.uploadedImage || []).length);
+          const merged = [...prevImage];
+
+          (project.mediaLibrary.uploadedImage || []).forEach(savedImage => {
+            const exists = merged.some(i => i.url === savedImage.url);
+            if (!exists) {
+              merged.push(savedImage);
+            }
+          });
+
+          console.log('✅ Merged image count:', merged.length);
+          return merged;
+        });
+
         setUploadedVideo(prevVideo => {
           console.log('📦 Merging video - existing:', prevVideo.length, 'saved:', (project.mediaLibrary.uploadedVideo || []).length);
           const merged = [...prevVideo];
@@ -1179,19 +1220,37 @@ const DesignEditor = () => {
       } else {
         console.log('📦 No saved media library, extracting from project content');
 
-        // Extract and populate media lists for sidebar from project content
-        // Use functional updates to get current state
+        // We need to extract media using current state values
+        // Use a ref to collect current state, then update all at once
+        let currentAudio, currentImage, currentVideo;
+
         setUploadedAudio(prevAudio => {
-          console.log('📦 Current audio in state:', prevAudio.length);
-          const media = extractMediaFromProject(project, prevAudio, []);
-          console.log('✅ Audio after extraction:', media.audio.length);
-          return media.audio;
+          currentAudio = prevAudio;
+          console.log('📦 Current audio in state:', currentAudio.length);
+          return prevAudio; // Don't update yet
+        });
+
+        setUploadedImage(prevImage => {
+          currentImage = prevImage;
+          console.log('📦 Current image in state:', currentImage.length);
+          return prevImage; // Don't update yet
         });
 
         setUploadedVideo(prevVideo => {
-          console.log('📦 Current video in state:', prevVideo.length);
-          const media = extractMediaFromProject(project, [], prevVideo);
-          console.log('✅ Video after extraction:', media.video.length);
+          currentVideo = prevVideo;
+          console.log('📦 Current video in state:', currentVideo.length);
+
+          // Now extract and merge with current state
+          const media = extractMediaFromProject(project, currentAudio, currentImage, currentVideo);
+          console.log('✅ Media after extraction:', {
+            audio: media.audio.length,
+            image: media.image.length,
+            video: media.video.length
+          });
+
+          // Update all three states
+          setUploadedAudio(media.audio);
+          setUploadedImage(media.image);
           return media.video;
         });
       }
@@ -1230,15 +1289,17 @@ const DesignEditor = () => {
   useEffect(() => {
     console.log('📊 In-memory state updated:', {
       uploadedAudio: uploadedAudio.length,
+      uploadedImage: uploadedImage.length,
       uploadedVideo: uploadedVideo.length,
       pages: pages.length,
       audioTracks: audioTracks.length,
       hasProject: !!currentProject,
       projectId: currentProject?.project_id,
       audioDetails: uploadedAudio.map(a => ({ title: a.title, url: a.url?.substring(0, 50) })),
-      videoDetails: uploadedVideo.map(v => ({ title: v.title, type: v.type, url: v.url?.substring(0, 50) }))
+      imageDetails: uploadedImage.map(i => ({ title: i.title, url: i.url?.substring(0, 50) })),
+      videoDetails: uploadedVideo.map(v => ({ title: v.title, url: v.url?.substring(0, 50) }))
     });
-  }, [uploadedAudio, uploadedVideo, pages, audioTracks, currentProject]);
+  }, [uploadedAudio, uploadedImage, uploadedVideo, pages, audioTracks, currentProject]);
 
   /**
    * Handle loading project from URL query parameter
@@ -1291,10 +1352,10 @@ const DesignEditor = () => {
     if (addAsset.type === 'image') {
       console.log('🖼️ Adding image to media list only (not to canvas)');
 
-      // Add to uploaded video list (which contains both images and videos)
-      setUploadedVideo(prev => {
-        console.log('📊 Current uploadedVideo count:', prev.length);
-        const exists = prev.some(v => v.url === addAsset.src);
+      // Add to uploaded image list
+      setUploadedImage(prev => {
+        console.log('📊 Current uploadedImage count:', prev.length);
+        const exists = prev.some(i => i.url === addAsset.src);
         if (!exists) {
           const newList = [...prev, {
             id: `media-${Date.now()}`,
@@ -1304,7 +1365,7 @@ const DesignEditor = () => {
             libraryId: addAsset.libraryId
           }];
           console.log('✅ Added image to media list. New count:', newList.length);
-          console.log('📋 Media list now contains:', newList.map(v => ({ title: v.title, type: v.type })));
+          console.log('📋 Image list now contains:', newList.map(i => ({ title: i.title })));
           return newList;
         }
         console.log('⚠️ Image already in media list');
@@ -1657,6 +1718,8 @@ const DesignEditor = () => {
         onVideoDeleteRequest={handleVideoDeleteRequest}
         uploadedAudio={uploadedAudio}
         onUploadedAudioChange={setUploadedAudio}
+        uploadedImage={uploadedImage}
+        onUploadedImageChange={setUploadedImage}
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
         onOpenAudioLibrary={() => navigate('/audio-studio/library', {

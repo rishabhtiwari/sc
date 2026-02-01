@@ -7,11 +7,18 @@ import AuthenticatedImage from '../../common/AuthenticatedImage';
  * Images Panel
  * Features: Upload images, Stock images, Search
  */
-const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
+const ImagesPanel = ({
+  onAddElement,
+  onOpenImageLibrary,
+  uploadedMedia = [],
+  onUploadedMediaChange
+}) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [uploadedImages, setUploadedImages] = useState([]);
   const fileInputRef = useRef(null);
   const { showToast } = useToast();
+
+  // Use uploadedMedia from props instead of local state
+  const uploadedImages = uploadedMedia;
 
   // Sample stock images (replace with actual stock image API)
   const stockImages = [
@@ -43,7 +50,7 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
               // No file property - it's in library now
             };
 
-            setUploadedImages(prev => [...prev, newImage]);
+            onUploadedMediaChange(prev => [...prev, newImage]);
             showToast('Image uploaded to library', 'success');
           }
         } catch (error) {
@@ -57,7 +64,7 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
               url: e.target.result,
               title: file.name
             };
-            setUploadedImages(prev => [...prev, newImage]);
+            onUploadedMediaChange(prev => [...prev, newImage]);
             showToast('Image uploaded (not saved to library)', 'warning');
           };
           reader.readAsDataURL(file);
@@ -93,7 +100,7 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
       }
 
       // Remove from UI state
-      setUploadedImages(prev => prev.filter(img => img.id !== image.id));
+      onUploadedMediaChange(prev => prev.filter(img => img.id !== image.id));
       showToast('Image deleted', 'success');
     } catch (error) {
       console.error('❌ Error deleting image:', error);

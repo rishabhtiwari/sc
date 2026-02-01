@@ -340,7 +340,7 @@ const MediaPanel = ({
               >
                 <div className="flex items-center gap-3">
                   <div className="text-2xl">
-                    {media.type === 'video' ? '🎬' : '🎵'}
+                    {media.type === 'video' ? '🎬' : media.type === 'image' ? '🖼️' : '🎵'}
                   </div>
                   <div
                     className="flex-1 min-w-0 cursor-pointer"
