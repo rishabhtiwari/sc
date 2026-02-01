@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 project_bp = Blueprint('project', __name__)
 
-ASSET_SERVICE_URL = 'http://asset-service:8000'
+ASSET_SERVICE_URL = 'http://ichat-asset-service:8099'
 
 
 @project_bp.route('/projects/', methods=['POST'])

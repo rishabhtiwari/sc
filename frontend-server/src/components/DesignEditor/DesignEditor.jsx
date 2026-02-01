@@ -4,7 +4,7 @@ import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import AudioLibrary from './AudioLibrary/AudioLibrary';
-import ProjectBrowser from './ProjectBrowser/ProjectBrowser';
+import ProjectDashboard from './ProjectDashboard/ProjectDashboard';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import projectService from '../../services/projectService';
@@ -1340,12 +1340,13 @@ const DesignEditor = () => {
         onAddToCanvas={handleAddFromLibrary}
       />
 
-      {/* Project Browser Modal */}
-      <ProjectBrowser
-        isOpen={showProjectBrowser}
-        onClose={() => setShowProjectBrowser(false)}
-        onLoadProject={handleLoadProject}
-      />
+      {/* Project Dashboard */}
+      {showProjectBrowser && (
+        <ProjectDashboard
+          onClose={() => setShowProjectBrowser(false)}
+          onOpenProject={handleLoadProject}
+        />
+      )}
     </div>
   );
 };
