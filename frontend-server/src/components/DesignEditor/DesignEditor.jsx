@@ -4,6 +4,8 @@ import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import AudioLibrary from './AudioLibrary/AudioLibrary';
+import ImageLibrary from './ImageLibrary/ImageLibrary';
+import VideoLibrary from './VideoLibrary/VideoLibrary';
 import ProjectDashboard from './ProjectDashboard/ProjectDashboard';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
@@ -113,8 +115,10 @@ const DesignEditor = () => {
     mediaId: null
   });
 
-  // Audio Library Modal State
+  // Library Modal States
   const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
+  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
+  const [isVideoLibraryOpen, setIsVideoLibraryOpen] = useState(false);
 
   // Project State
   const [currentProject, setCurrentProject] = useState(null);
@@ -423,6 +427,46 @@ const DesignEditor = () => {
 
     showToast('Audio added to timeline and media library', 'success');
     setIsAudioLibraryOpen(false);
+  };
+
+  /**
+   * Handle adding image from library
+   */
+  const handleAddImageFromLibrary = (imageData) => {
+    console.log('📁 Adding image from library:', imageData);
+
+    // Add image to canvas
+    handleAddElement({
+      type: 'image',
+      src: imageData.src,
+      libraryId: imageData.libraryId
+    });
+
+    showToast('Image added to canvas', 'success');
+    setIsImageLibraryOpen(false);
+  };
+
+  /**
+   * Handle adding video from library
+   */
+  const handleAddVideoFromLibrary = (videoData) => {
+    console.log('📁 Adding video from library:', videoData);
+
+    // Add to uploadedVideo state
+    const newVideo = {
+      id: videoData.libraryId,
+      type: 'video',
+      url: videoData.url,
+      title: videoData.title,
+      duration: videoData.duration,
+      libraryId: videoData.libraryId,
+      // No file property - this is from library, already uploaded
+    };
+    console.log('📁 Adding to uploadedVideo:', newVideo);
+    setUploadedVideo(prev => [...prev, newVideo]);
+
+    showToast('Video added to media library', 'success');
+    setIsVideoLibraryOpen(false);
   };
 
   /**
@@ -1404,8 +1448,8 @@ const DesignEditor = () => {
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
         onOpenAudioLibrary={() => setIsAudioLibraryOpen(true)}
-        onOpenImageLibrary={() => alert('Image Library - Coming Soon!')}
-        onOpenVideoLibrary={() => alert('Video Library - Coming Soon!')}
+        onOpenImageLibrary={() => setIsImageLibraryOpen(true)}
+        onOpenVideoLibrary={() => setIsVideoLibraryOpen(true)}
       />
 
       {/* Main Canvas Area */}
@@ -1644,6 +1688,20 @@ const DesignEditor = () => {
         isOpen={isAudioLibraryOpen}
         onClose={() => setIsAudioLibraryOpen(false)}
         onAddToCanvas={handleAddFromLibrary}
+      />
+
+      {/* Image Library Modal */}
+      <ImageLibrary
+        isOpen={isImageLibraryOpen}
+        onClose={() => setIsImageLibraryOpen(false)}
+        onAddToCanvas={handleAddImageFromLibrary}
+      />
+
+      {/* Video Library Modal */}
+      <VideoLibrary
+        isOpen={isVideoLibraryOpen}
+        onClose={() => setIsVideoLibraryOpen(false)}
+        onAddToCanvas={handleAddVideoFromLibrary}
       />
 
       {/* Project Dashboard */}
