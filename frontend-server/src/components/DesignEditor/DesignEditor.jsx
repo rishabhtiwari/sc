@@ -457,29 +457,59 @@ const DesignEditor = () => {
    * but the Audio element instances need to be created
    */
   useEffect(() => {
-    audioTracks.forEach(track => {
+    audioTracks.forEach(async (track) => {
       if (!audioRefs.current[track.id] && track.url) {
         console.log('🎵 Creating Audio element for loaded track:', track.id, track.url);
-        const audio = new Audio(track.url);
 
-        audio.addEventListener('loadedmetadata', () => {
-          console.log('✅ Audio metadata loaded for:', track.id, 'Duration:', audio.duration);
-        });
+        // If URL is a blob URL, use it directly
+        if (track.url.startsWith('blob:')) {
+          const audio = new Audio(track.url);
 
-        audio.addEventListener('error', (e) => {
-          console.error('❌ Audio loading error for:', track.id, e);
-          console.error('❌ Audio error details:', {
-            error: audio.error,
-            code: audio.error?.code,
-            message: audio.error?.message,
-            src: audio.src,
-            networkState: audio.networkState,
-            readyState: audio.readyState
+          audio.addEventListener('loadedmetadata', () => {
+            console.log('✅ Audio metadata loaded for:', track.id, 'Duration:', audio.duration);
           });
-        });
 
-        audio.volume = (track.volume || 100) / 100;
-        audioRefs.current[track.id] = audio;
+          audio.addEventListener('error', (e) => {
+            console.error('❌ Audio loading error for:', track.id, e);
+          });
+
+          audio.volume = (track.volume || 100) / 100;
+          audioRefs.current[track.id] = audio;
+        } else {
+          // For API URLs, fetch with authentication headers and create blob URL
+          try {
+            console.log('📥 Fetching audio with auth headers:', track.url);
+            const token = localStorage.getItem('auth_token');
+            const response = await fetch(track.url, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            console.log('✅ Created blob URL for audio:', track.id);
+
+            const audio = new Audio(blobUrl);
+
+            audio.addEventListener('loadedmetadata', () => {
+              console.log('✅ Audio metadata loaded for:', track.id, 'Duration:', audio.duration);
+            });
+
+            audio.addEventListener('error', (e) => {
+              console.error('❌ Audio loading error for:', track.id, e);
+            });
+
+            audio.volume = (track.volume || 100) / 100;
+            audioRefs.current[track.id] = audio;
+          } catch (error) {
+            console.error('❌ Failed to fetch audio:', track.id, error);
+          }
+        }
       }
     });
 

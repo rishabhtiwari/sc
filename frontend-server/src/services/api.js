@@ -80,5 +80,23 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Helper function to append auth token to URL for use in <audio> and <video> tags
+ * These HTML elements don't support custom headers, so we pass the token as a query parameter
+ *
+ * @param {string} url - The URL to append the token to
+ * @returns {string} - URL with token appended as query parameter
+ */
+export function appendAuthToken(url) {
+  if (!url) return url;
+
+  const token = localStorage.getItem('auth_token');
+  if (!token) return url;
+
+  // Check if URL already has query parameters
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
+}
+
 export default api;
 
