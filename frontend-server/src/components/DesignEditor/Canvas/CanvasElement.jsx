@@ -303,7 +303,10 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
           `.trim(),
           borderRadius: element.borderRadius ? `${element.borderRadius * zoom}px` : '0',
           border: element.borderWidth ? `${element.borderWidth * zoom}px solid ${element.borderColor || '#000'}` : 'none',
+          pointerEvents: 'none', // Prevent video from capturing mouse events
         };
+
+        console.log('🎬 Rendering video element:', element.id, 'src:', element.src?.substring(0, 50));
 
         return (
           <video
@@ -313,18 +316,22 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
             muted={element.muted !== undefined ? element.muted : true}
             loop={element.loop !== undefined ? element.loop : false}
             playsInline
-            preload="metadata"
+            preload="auto"
             data-video-element-id={element.id}
             onLoadedMetadata={(e) => {
-              console.log('🎬 Video loaded:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState);
-              // Ensure video is ready to play
-              e.target.load();
+              console.log('🎬 Video onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState, 'src valid:', !!e.target.src);
             }}
             onCanPlay={(e) => {
-              console.log('🎬 Video can play:', element.id);
+              console.log('🎬 Video onCanPlay:', element.id);
+            }}
+            onPlay={(e) => {
+              console.log('✅ Video onPlay event:', element.id);
+            }}
+            onPause={(e) => {
+              console.log('⏸️ Video onPause event:', element.id);
             }}
             onError={(e) => {
-              console.error('❌ Video error:', element.id, e.target.error);
+              console.error('❌ Video onError:', element.id, 'error:', e.target.error);
             }}
           />
         );
