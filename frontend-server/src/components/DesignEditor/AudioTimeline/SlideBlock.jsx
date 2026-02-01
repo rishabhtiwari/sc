@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTimeline } from '../../common/Timeline';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Slide Block Component
@@ -175,7 +176,7 @@ const SlideBlock = ({
             >
               {slide.elements && slide.elements.length > 0 ? (
                 slide.elements[0].type === 'image' ? (
-                  <img
+                  <AuthenticatedImage
                     src={slide.elements[0].src}
                     alt=""
                     className="w-full h-full object-cover rounded"
