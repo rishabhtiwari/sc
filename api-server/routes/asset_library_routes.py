@@ -68,12 +68,16 @@ def save_to_image_library():
             'X-User-Id': user_id
         }
 
+        # Forward query parameters (name, folder, etc.)
+        params = request.args.to_dict()
+
         # Forward multipart form data
         response = requests.post(
             f'{ASSET_SERVICE_URL}/api/image-library/library',
             headers=headers,
             files=request.files,
             data=request.form,
+            params=params,  # Forward query parameters
             timeout=60
         )
 
@@ -164,12 +168,16 @@ def save_to_video_library():
             'X-User-Id': user_id
         }
 
+        # Forward query parameters (name, duration, folder, etc.)
+        params = request.args.to_dict()
+
         # Forward multipart form data
         response = requests.post(
             f'{ASSET_SERVICE_URL}/api/video-library/library',
             headers=headers,
             files=request.files,
             data=request.form,
+            params=params,  # Forward query parameters
             timeout=120  # Longer timeout for video uploads
         )
 
