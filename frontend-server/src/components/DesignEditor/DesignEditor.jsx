@@ -1404,6 +1404,8 @@ const DesignEditor = () => {
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
         onOpenAudioLibrary={() => setIsAudioLibraryOpen(true)}
+        onOpenImageLibrary={() => alert('Image Library - Coming Soon!')}
+        onOpenVideoLibrary={() => alert('Video Library - Coming Soon!')}
       />
 
       {/* Main Canvas Area */}

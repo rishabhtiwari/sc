@@ -27,7 +27,9 @@ const Sidebar = ({
   onUploadedAudioChange,
   uploadedVideo,
   onUploadedVideoChange,
-  onOpenAudioLibrary
+  onOpenAudioLibrary,
+  onOpenImageLibrary,
+  onOpenVideoLibrary
 }) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
 
@@ -143,6 +145,8 @@ const Sidebar = ({
               uploadedMedia={expandedPanel === 'audio' ? uploadedAudio : uploadedVideo}
               onUploadedMediaChange={expandedPanel === 'audio' ? onUploadedAudioChange : onUploadedVideoChange}
               onOpenAudioLibrary={onOpenAudioLibrary}
+              onOpenImageLibrary={onOpenImageLibrary}
+              onOpenVideoLibrary={onOpenVideoLibrary}
             />
           </div>
         </div>
