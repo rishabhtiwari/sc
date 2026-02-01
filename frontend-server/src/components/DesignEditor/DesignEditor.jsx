@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
@@ -14,6 +14,7 @@ import projectService from '../../services/projectService';
  */
 const DesignEditor = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [selectedTool, setSelectedTool] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [canvasElements, setCanvasElements] = useState([]);
@@ -1112,7 +1113,6 @@ const DesignEditor = () => {
       });
 
       showToast('Project loaded successfully', 'success');
-      setShowProjectBrowser(false);
     } catch (error) {
       console.error('Error loading project:', error);
       showToast(`Failed to load project: ${error.message}`, 'error');
@@ -1120,6 +1120,150 @@ const DesignEditor = () => {
       setIsLoading(false);
     }
   };
+
+  /**
+   * Handle loading project from URL query parameter
+   */
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const projectId = searchParams.get('project');
+
+    if (projectId) {
+      // Only load if we haven't loaded this project yet
+      if (!currentProject || currentProject.project_id !== projectId) {
+        console.log('📂 Loading project from URL:', projectId);
+        handleLoadProject(projectId);
+      }
+    }
+  }, [location.search]);
+
+  /**
+   * Handle incoming assets from library pages
+   */
+  useEffect(() => {
+    const addAsset = location.state?.addAsset;
+    if (addAsset) {
+      console.log('📥 Received asset from library:', addAsset);
+
+      if (addAsset.type === 'image') {
+        // Add image to canvas
+        handleAddElement({
+          type: 'image',
+          src: addAsset.src,
+          name: addAsset.name,
+          width: 300,
+          height: 200
+        });
+
+        // Add to uploaded video list (which contains both images and videos)
+        setUploadedVideo(prev => {
+          const exists = prev.some(v => v.url === addAsset.src);
+          if (!exists) {
+            return [...prev, {
+              id: `media-${Date.now()}`,
+              url: addAsset.src,
+              title: addAsset.name,
+              type: 'image',
+              libraryId: addAsset.libraryId
+            }];
+          }
+          return prev;
+        });
+
+        showToast('Image added to canvas', 'success');
+      } else if (addAsset.type === 'audio') {
+        // Add to audio tracks directly since we already have the URL
+        const trackId = `audio-${Date.now()}`;
+        const audio = new Audio(addAsset.url);
+
+        audio.addEventListener('loadedmetadata', () => {
+          setAudioTracks(prevTracks => {
+            let startTime = 0;
+            if (prevTracks.length > 0) {
+              const maxEndTime = Math.max(...prevTracks.map(track =>
+                (track.startTime || 0) + (track.duration || 0)
+              ));
+              startTime = maxEndTime;
+            }
+
+            const newTrack = {
+              id: trackId,
+              name: addAsset.title || 'Library Audio',
+              url: addAsset.url,
+              duration: addAsset.duration || audio.duration,
+              startTime: startTime,
+              volume: 100,
+              fadeIn: 0,
+              fadeOut: 0,
+              playbackSpeed: 1,
+              type: 'music'
+            };
+
+            audioRefs.current[trackId] = audio;
+            audio.volume = 1.0;
+
+            console.log('✅ Audio track added from library:', newTrack);
+            return [...prevTracks, newTrack];
+          });
+
+          // Add to uploaded audio list
+          setUploadedAudio(prev => {
+            const exists = prev.some(a => a.url === addAsset.url);
+            if (!exists) {
+              return [...prev, {
+                id: trackId,
+                url: addAsset.url,
+                title: addAsset.title || 'Library Audio',
+                type: 'audio',
+                libraryId: addAsset.libraryId
+              }];
+            }
+            return prev;
+          });
+
+          showToast('Audio added to timeline', 'success');
+        });
+
+        audio.addEventListener('error', (e) => {
+          console.error('❌ Audio loading error:', e);
+          showToast('Failed to load audio', 'error');
+        });
+
+        audio.src = addAsset.url;
+      } else if (addAsset.type === 'video') {
+        // Add video to canvas
+        handleAddElement({
+          type: 'video',
+          src: addAsset.src,
+          name: addAsset.name,
+          duration: addAsset.duration,
+          width: 640,
+          height: 360
+        });
+
+        // Add to uploaded video list
+        setUploadedVideo(prev => {
+          const exists = prev.some(v => v.url === addAsset.src);
+          if (!exists) {
+            return [...prev, {
+              id: `media-${Date.now()}`,
+              url: addAsset.src,
+              title: addAsset.name,
+              type: 'video',
+              duration: addAsset.duration,
+              libraryId: addAsset.libraryId
+            }];
+          }
+          return prev;
+        });
+
+        showToast('Video added to canvas', 'success');
+      }
+
+      // Clear the state to prevent re-adding on re-render
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.state]);
 
   /**
    * Handle create new project
