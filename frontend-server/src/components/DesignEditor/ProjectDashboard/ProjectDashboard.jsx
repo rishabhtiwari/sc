@@ -24,9 +24,10 @@ const ProjectDashboard = ({ onOpenProject, onClose }) => {
       const filters = {};
       if (filter === 'drafts') filters.status = 'draft';
       if (filter === 'published') filters.status = 'published';
-      
+
       const data = await projectService.listProjects(filters);
-      setProjects(data.projects || []);
+      // API returns array directly, not wrapped in { projects: [...] }
+      setProjects(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading projects:', error);
     } finally {
