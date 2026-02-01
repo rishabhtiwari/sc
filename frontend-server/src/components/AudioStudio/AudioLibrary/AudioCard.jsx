@@ -140,7 +140,7 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
       <audio
         ref={audioRef}
         src={audioUrl}
@@ -154,9 +154,20 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
         <button
           onClick={togglePlayPause}
           disabled={loading || !audioUrl}
-          className="w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          title={loading ? 'Loading...' : isPlaying ? 'Pause' : 'Play'}
         >
-          {loading ? '⏳' : isPlaying ? '⏸️' : '▶️'}
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : isPlaying ? (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
         </button>
 
         {/* Audio Info */}

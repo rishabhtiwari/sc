@@ -14,6 +14,7 @@ const VideoLibraryPage = () => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, video: null });
+  const [playingVideo, setPlayingVideo] = useState(null);
 
   // Load videos on mount
   useEffect(() => {
@@ -52,6 +53,10 @@ const VideoLibraryPage = () => {
       showToast('Failed to delete video', 'error');
       setDeleteDialog({ isOpen: false, video: null });
     }
+  };
+
+  const handlePlayVideo = (videoId) => {
+    setPlayingVideo(playingVideo === videoId ? null : videoId);
   };
 
   // Filter videos based on search query
@@ -162,11 +167,30 @@ const VideoLibraryPage = () => {
                     src={video.url}
                     className="w-full h-full object-cover"
                     preload="metadata"
+                    autoPlay={playingVideo === video.video_id}
+                    controls={playingVideo === video.video_id}
                   />
+                  {/* Play Button Overlay */}
+                  {playingVideo !== video.video_id && (
+                    <button
+                      onClick={() => handlePlayVideo(video.video_id)}
+                      className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-all group/play"
+                      title="Play video"
+                    >
+                      <div className="w-16 h-16 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center shadow-lg transform group-hover/play:scale-110 transition-transform">
+                        <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </button>
+                  )}
                   {/* Delete Button Overlay */}
                   <button
-                    onClick={() => handleDeleteClick(video)}
-                    className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow flex items-center justify-center"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick(video);
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow flex items-center justify-center z-10"
                     title="Delete video"
                   >
                     ✕
