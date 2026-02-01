@@ -818,17 +818,37 @@ const DesignEditor = () => {
 
       // Process audio tracks
       const processedAudioTracks = await Promise.all(
-        audioTracks.map(async (track) => {
+        audioTracks.map(async (track, trackIndex) => {
+          console.log(`🎵 Processing audio track ${trackIndex}:`, {
+            id: track.id,
+            name: track.name,
+            hasUrl: !!track.url,
+            hasFile: !!track.file,
+            urlType: track.url?.substring(0, 10)
+          });
+
           if (track.url && track.url.startsWith('blob:')) {
             if (track.file) {
-              const asset = await projectService.uploadAsset(track.file, 'audio');
-              return {
-                ...track,
-                assetId: asset.asset_id,
-                url: asset.url, // Use presigned URL from response
-                file: undefined
-              };
+              console.log(`  📤 Uploading audio:`, track.file.name);
+              try {
+                const asset = await projectService.uploadAsset(track.file, 'audio');
+                console.log(`  📦 Audio upload response:`, asset);
+                console.log(`  ✅ Audio uploaded:`, asset.asset_id);
+                return {
+                  ...track,
+                  assetId: asset.asset_id,
+                  url: asset.url, // Use presigned URL from response
+                  file: undefined
+                };
+              } catch (uploadError) {
+                console.error(`  ❌ Error uploading audio:`, uploadError);
+                throw uploadError;
+              }
+            } else {
+              console.warn(`  ⚠️ Audio has blob URL but no file!`, track.id);
             }
+          } else {
+            console.log(`  ℹ️ Audio already has non-blob URL or no URL`);
           }
           return track;
         })

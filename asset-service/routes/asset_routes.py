@@ -189,11 +189,17 @@ async def upload_asset(
         logger.info(f"Asset uploaded successfully: {asset_id}")
 
         # Generate presigned URL for browser access (valid for 24 hours)
-        presigned_url = storage_service.get_presigned_url(
-            bucket=bucket,
-            object_name=storage_key,
-            expires=timedelta(hours=24)
-        )
+        try:
+            presigned_url = storage_service.get_presigned_url(
+                bucket=bucket,
+                object_name=storage_key,
+                expires=timedelta(hours=24)
+            )
+            logger.info(f"✅ Presigned URL generated: {presigned_url[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ Failed to generate presigned URL: {e}")
+            logger.warning(f"⚠️ Falling back to storage URL: {storage_url}")
+            presigned_url = storage_url
 
         # Return response with presigned URL and full asset data
         return {
