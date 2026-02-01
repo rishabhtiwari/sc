@@ -40,6 +40,7 @@ const DesignEditor = () => {
   // UI State
   const [selectedTool, setSelectedTool] = useState(null);
   const [zoom, setZoom] = useState(1);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
 
   // Pages state (initialized with one default page)
   const [pages, setPages] = useState([{
@@ -171,7 +172,7 @@ const DesignEditor = () => {
     const addAsset = location.state?.addAsset;
     if (!addAsset) return;
 
-    const assetKey = `${addAsset.type}-${addAsset.src}`;
+    const assetKey = `${addAsset.type}-${addAsset.src || addAsset.url}`;
 
     // Check if we've already processed this asset
     if (processedAssetRef.current === assetKey) {
@@ -187,13 +188,31 @@ const DesignEditor = () => {
     // Add to appropriate media list
     if (addAsset.type === 'audio') {
       console.log('🎵 Adding audio to media list only (not to timeline)');
-      handleAddAudio(addAsset);
+      handleAddAudio({
+        id: `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url,
+        title: addAsset.name || addAsset.title,
+        type: 'audio',
+        libraryId: addAsset.libraryId
+      });
     } else if (addAsset.type === 'image') {
       console.log('🖼️ Adding image to media list only (not to canvas)');
-      handleAddImage(addAsset);
+      handleAddImage({
+        id: `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url,
+        title: addAsset.name || addAsset.title,
+        type: 'image',
+        libraryId: addAsset.libraryId
+      });
     } else if (addAsset.type === 'video') {
       console.log('🎬 Adding video to media list only (not to canvas)');
-      handleAddVideo(addAsset);
+      handleAddVideo({
+        id: `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url,
+        title: addAsset.name || addAsset.title,
+        type: 'video',
+        libraryId: addAsset.libraryId
+      });
     }
   }, [location.state?.addAsset]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -219,15 +238,78 @@ const DesignEditor = () => {
       startTime: 0,
       volume: 100,
       fadeIn: 0,
-      fadeOut: 0
+      fadeOut: 0,
+      type: audioData.type || 'music'
     };
 
     setAudioTracks(prev => [...prev, newTrack]);
     showToast('Audio added to timeline', 'success');
   };
 
+  /**
+   * Handle audio track update (drag, stretch, properties)
+   */
+  const handleAudioUpdate = (trackId, updates) => {
+    setAudioTracks(prevTracks =>
+      prevTracks.map(track =>
+        track.id === trackId ? { ...track, ...updates } : track
+      )
+    );
+  };
+
+  /**
+   * Handle audio track delete
+   */
+  const handleAudioDelete = (trackId) => {
+    setAudioTracks(prevTracks => prevTracks.filter(track => track.id !== trackId));
+  };
+
+  /**
+   * Handle video track update - Updates the video element in the page
+   */
+  const handleVideoUpdate = (trackId, updates) => {
+    console.log('🎬 Updating video element:', trackId, updates);
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.map(el =>
+        el.id === trackId ? { ...el, ...updates } : el
+      )
+    })));
+  };
+
+  /**
+   * Handle video track delete
+   */
+  const handleVideoDelete = (trackId) => {
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.filter(el => el.id !== trackId)
+    })));
+  };
+
+  /**
+   * Handle slide duration update
+   */
+  const handleSlideUpdate = (slideIndex, updates) => {
+    setPages(prevPages => prevPages.map((page, index) =>
+      index === slideIndex ? { ...page, ...updates } : page
+    ));
+  };
+
   const handleAudioSelect = (audioId) => {
     console.log('🎵 Audio selected:', audioId);
+    const track = audioTracks.find(t => t.id === audioId);
+    if (track) {
+      setSelectedElement({ ...track, type: 'audio' });
+    }
+  };
+
+  const handleVideoSelect = (videoId) => {
+    console.log('🎬 Video selected:', videoId);
+    const videoElement = currentPage?.elements.find(el => el.id === videoId);
+    if (videoElement) {
+      handleSelectElement(videoElement);
+    }
   };
 
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
@@ -420,24 +502,42 @@ const DesignEditor = () => {
 
         {/* Page Navigation */}
         {pages.length > 1 && (
-          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center gap-3">
-            <button
-              onClick={handlePreviousPage}
-              disabled={currentPageIndex === 0}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
-            >
-              ← Previous
-            </button>
-            <span className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-100 rounded-lg">
-              Slide {currentPageIndex + 1} / {pages.length}
-            </span>
-            <button
-              onClick={handleNextPage}
-              disabled={currentPageIndex === pages.length - 1}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
-            >
-              Next →
-            </button>
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handlePreviousPage}
+                disabled={currentPageIndex === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+              >
+                ← Previous
+              </button>
+              <span className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-100 rounded-lg">
+                Slide {currentPageIndex + 1} / {pages.length}
+              </span>
+              <button
+                onClick={handleNextPage}
+                disabled={currentPageIndex === pages.length - 1}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+              >
+                Next →
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleDuplicatePage(currentPageIndex)}
+                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                title="Duplicate current slide"
+              >
+                +
+              </button>
+              <button
+                onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
+                className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                title="Delete current slide"
+              >
+                🗑️
+              </button>
+            </div>
           </div>
         )}
 
@@ -452,33 +552,61 @@ const DesignEditor = () => {
         />
 
         {/* Audio Timeline */}
-        <AudioTimelineRefactored
-          audioTracks={audioTracks}
-          videoTracks={videoTracks}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-          onPlayPause={handlePlayPause}
-          onSeek={handleSeek}
-          onAudioSelect={handleAudioSelect}
-          onVideoSelect={(videoId) => {
-            const videoElement = currentPage?.elements.find(el => el.id === videoId);
-            if (videoElement) handleSelectElement(videoElement);
-          }}
-          selectedAudioTrack={selectedElement?.type === 'audio' ? selectedElement.id : null}
-          selectedVideoTrack={selectedElement?.type === 'video' ? selectedElement.id : null}
-          onAudioDeleteRequest={handleAudioDeleteRequest}
-          onVideoDeleteRequest={handleVideoDeleteRequest}
-        />
+        {(audioTracks.length > 0 || videoTracks.length > 0) && (
+          <AudioTimelineRefactored
+            audioTracks={audioTracks}
+            videoTracks={videoTracks}
+            slides={pages}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            selectedAudioId={selectedElement?.type === 'audio' ? selectedElement.id : null}
+            selectedVideoId={selectedElement?.type === 'video' ? selectedElement.id : null}
+            onAudioUpdate={handleAudioUpdate}
+            onAudioDelete={handleAudioDelete}
+            onAudioSelect={handleAudioSelect}
+            onVideoUpdate={handleVideoUpdate}
+            onVideoDelete={handleVideoDelete}
+            onVideoSelect={handleVideoSelect}
+            onSlideUpdate={handleSlideUpdate}
+            onSeek={handleSeek}
+            onPlay={handlePlay}
+            onPause={handlePause}
+          />
+        )}
       </div>
 
       {/* Properties Panel */}
-      <PropertiesPanel
-        selectedElement={selectedElement}
-        onUpdateElement={handleUpdateElement}
-        onDeselectElement={handleDeselectElement}
+      {selectedElement && (
+        <PropertiesPanel
+          element={selectedElement}
+          onUpdate={(updates) => handleUpdateElement(selectedElement.id, updates)}
+          onDelete={() => handleDeleteElement(selectedElement.id)}
+          onClose={() => handleDeselectElement()}
+        />
+      )}
+
+      {/* Delete Slide Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, slideIndex: null })}
+        onConfirm={() => {
+          const newPages = pages.filter((_, index) => index !== deleteDialog.slideIndex);
+          if (newPages.length > 0) {
+            setPages(newPages);
+            setCurrentPageIndex(Math.max(0, deleteDialog.slideIndex - 1));
+          }
+          setDeleteDialog({ isOpen: false, slideIndex: null });
+        }}
+        title="Delete Slide"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete slide ${deleteDialog.slideIndex + 1}?`}
+        warningMessage="This will permanently delete the slide and all its content."
+        confirmText="Delete Slide"
+        cancelText="Cancel"
+        variant="danger"
       />
 
-      {/* Delete Confirmation Dialogs */}
+      {/* Delete Audio Confirmation Dialog */}
       <ConfirmDialog
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
