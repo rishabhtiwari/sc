@@ -15,9 +15,12 @@ export const imageLibrary = {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('name', name || file.name);
 
-      const response = await api.post('/image-library/library', formData, {
+      // Send name as query parameter (backend expects it as Query param)
+      const params = new URLSearchParams();
+      params.append('name', name || file.name);
+
+      const response = await api.post(`/image-library/library?${params.toString()}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
