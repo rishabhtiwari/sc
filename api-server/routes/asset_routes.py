@@ -110,6 +110,35 @@ def download_asset(asset_id):
         return jsonify({'error': str(e), 'status': 'error'}), 500
 
 
+@asset_bp.route('/assets/download/<bucket>/<path:object_path>', methods=['GET'])
+def download_asset_by_path(bucket, object_path):
+    """Download asset file by bucket and object path (proxy URL)"""
+    try:
+        headers = get_request_headers_with_context()
+        response = requests.get(
+            f'{ASSET_SERVICE_URL}/api/assets/download/{bucket}/{object_path}',
+            headers=headers,
+            timeout=60,
+            stream=True
+        )
+
+        # Forward all headers including Content-Type, Content-Disposition, etc.
+        excluded_headers = ['content-encoding', 'content-length', 'transfer-encoding', 'connection']
+        headers_to_forward = {
+            name: value for name, value in response.headers.items()
+            if name.lower() not in excluded_headers
+        }
+
+        return Response(
+            response.iter_content(chunk_size=8192),
+            status=response.status_code,
+            headers=headers_to_forward
+        )
+    except Exception as e:
+        logger.error(f"Error proxying to asset-service download by path: {str(e)}")
+        return jsonify({'error': str(e), 'status': 'error'}), 500
+
+
 @asset_bp.route('/assets/<asset_id>/url', methods=['GET'])
 def get_asset_url(asset_id):
     """Get pre-signed URL for asset"""

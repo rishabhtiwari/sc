@@ -120,30 +120,30 @@ class StorageService:
         """
         Get a pre-signed URL for temporary access
 
+        Instead of using MinIO's presigned URLs (which use internal hostname),
+        we return a URL that goes through the API server proxy.
+
         Args:
             bucket: Bucket name
             object_name: Object key/path
-            expires: URL expiration time
+            expires: URL expiration time (not used for proxy URLs)
 
         Returns:
-            Pre-signed URL with external endpoint
+            URL accessible from browser through API server proxy
         """
         try:
-            url = self.client.presigned_get_object(bucket, object_name, expires=expires)
+            # Instead of generating a presigned URL with internal MinIO hostname,
+            # return a URL that goes through the API server proxy
+            # The API server will handle authentication and proxy to MinIO
 
-            # Replace internal Docker hostname with external accessible endpoint
-            # This allows browser to access the presigned URL
-            if url.startswith('http://minio:9000'):
-                url = url.replace('http://minio:9000', 'http://localhost:9000')
-                logger.info(f"Replaced internal MinIO URL with external endpoint")
-            elif url.startswith('https://minio:9000'):
-                url = url.replace('https://minio:9000', 'http://localhost:9000')
-                logger.info(f"Replaced internal MinIO URL with external endpoint")
+            # Format: /api/assets/download/{bucket}/{object_name}
+            proxy_url = f"/api/assets/download/{bucket}/{object_name}"
 
-            return url
+            logger.info(f"Generated proxy URL: {proxy_url}")
+            return proxy_url
 
-        except S3Error as e:
-            logger.error(f"Error generating presigned URL: {e}")
+        except Exception as e:
+            logger.error(f"Error generating proxy URL: {e}")
             raise
     
     def delete_file(self, bucket: str, object_name: str) -> bool:
