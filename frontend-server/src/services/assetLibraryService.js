@@ -20,11 +20,8 @@ export const imageLibrary = {
       const params = new URLSearchParams();
       params.append('name', name || file.name);
 
-      const response = await api.post(`/image-library/library?${params.toString()}`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Don't set Content-Type header - let browser set it with boundary
+      const response = await api.post(`/image-library/library?${params.toString()}`, formData);
 
       return response.data;
     } catch (error) {
@@ -74,14 +71,14 @@ export const videoLibrary = {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('name', name || file.name);
-      formData.append('duration', duration.toString());
 
-      const response = await api.post('/video-library/library', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Send name and duration as query parameters (backend expects them as Query params)
+      const params = new URLSearchParams();
+      params.append('name', name || file.name);
+      params.append('duration', duration.toString());
+
+      // Don't set Content-Type header - let browser set it with boundary
+      const response = await api.post(`/video-library/library?${params.toString()}`, formData);
 
       return response.data;
     } catch (error) {
