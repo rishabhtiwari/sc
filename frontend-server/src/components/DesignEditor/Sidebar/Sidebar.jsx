@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AIToolsPanel from './AIToolsPanel';
 import SlidesPanel from './SlidesPanel';
 import TextPanel from './TextPanel';
@@ -35,6 +35,13 @@ const Sidebar = ({
   onOpenVideoLibrary
 }) => {
   const [expandedPanel, setExpandedPanel] = useState(null);
+
+  // Sync local state with parent's selectedTool prop
+  useEffect(() => {
+    if (selectedTool !== expandedPanel) {
+      setExpandedPanel(selectedTool);
+    }
+  }, [selectedTool]);
 
   const tools = [
     {

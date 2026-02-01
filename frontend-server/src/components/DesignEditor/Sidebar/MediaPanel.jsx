@@ -391,22 +391,22 @@ const MediaPanel = ({
                           // If it's audio, find the audio track and delete from both timeline and media library
                           if (media.type === 'audio') {
                             const audioTrack = audioTracks.find(track => track.url === media.url);
-                            if (audioTrack && onAudioDeleteRequest) {
-                              // Delete from both timeline and media library
-                              onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+                            if (onAudioDeleteRequest) {
+                              // Always use delete request handler (shows confirmation)
+                              onAudioDeleteRequest(audioTrack?.id || null, media.title, media.id);
                             } else {
-                              // Audio not on timeline, just delete from media library
+                              // Fallback: just delete from media library
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                               showToast('Media deleted', 'success');
                             }
                           } else if (media.type === 'video') {
                             // For video, find the video track and delete from both timeline and media library
                             const videoTrack = videoTracks.find(track => track.url === media.url);
-                            if (videoTrack && onVideoDeleteRequest) {
-                              // Delete from both timeline and media library
-                              onVideoDeleteRequest(videoTrack.id, media.title, media.id);
+                            if (onVideoDeleteRequest) {
+                              // Always use delete request handler (shows confirmation)
+                              onVideoDeleteRequest(videoTrack?.id || null, media.title, media.id);
                             } else {
-                              // Video not on timeline, just delete from media library
+                              // Fallback: just delete from media library
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                               showToast('Media deleted from library', 'success');
                             }

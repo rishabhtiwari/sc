@@ -590,14 +590,14 @@ const DesignEditor = () => {
   const confirmAudioDelete = () => {
     const { audioId, mediaId } = audioDeleteDialog;
 
-    // Remove from timeline
+    // Remove from timeline if it exists there
     if (audioId) {
       setAudioTracks(prev => prev.filter(track => track.id !== audioId));
     }
 
-    // Remove from media list
+    // Remove from media library
     if (mediaId) {
-      handleDeleteAudio(mediaId);
+      setUploadedAudio(prev => prev.filter(audio => audio.id !== mediaId));
     }
 
     setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
@@ -619,14 +619,17 @@ const DesignEditor = () => {
   const confirmVideoDelete = () => {
     const { videoId, mediaId } = videoDeleteDialog;
 
-    // Remove from canvas
+    // Remove from canvas if it exists there
     if (videoId) {
-      handleDeleteElement(videoId);
+      setPages(prevPages => prevPages.map(page => ({
+        ...page,
+        elements: page.elements.filter(el => el.id !== videoId)
+      })));
     }
 
-    // Remove from media list
+    // Remove from media library
     if (mediaId) {
-      handleDeleteVideo(mediaId);
+      setUploadedVideo(prev => prev.filter(video => video.id !== mediaId));
     }
 
     setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
@@ -668,13 +671,16 @@ const DesignEditor = () => {
     // Remove all instances from canvas
     if (imageElements && imageElements.length > 0) {
       imageElements.forEach(({ element }) => {
-        handleDeleteElement(element.id);
+        setPages(prevPages => prevPages.map(page => ({
+          ...page,
+          elements: page.elements.filter(el => el.id !== element.id)
+        })));
       });
     }
 
-    // Remove from media list
+    // Remove from media library
     if (mediaId) {
-      handleDeleteImage(mediaId);
+      setUploadedImage(prev => prev.filter(image => image.id !== mediaId));
     }
 
     setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });

@@ -46,6 +46,7 @@ export const useMediaManagement = () => {
    * Add video to media list
    */
   const handleAddVideo = (videoData) => {
+    console.log('🎬 handleAddVideo called with:', videoData);
     setUploadedVideo(prev => {
       // Check if already exists
       const exists = prev.some(v => v.url === videoData.url);
@@ -53,9 +54,12 @@ export const useMediaManagement = () => {
         console.log('🎬 Video already in list, skipping');
         return prev;
       }
-      
-      console.log('🎬 Adding video to media list:', videoData.name);
-      return [...prev, videoData];
+
+      console.log('🎬 Adding video to media list:', videoData.title || videoData.name);
+      console.log('🎬 Current video list length:', prev.length);
+      const newList = [...prev, videoData];
+      console.log('🎬 New video list length:', newList.length);
+      return newList;
     });
   };
 
