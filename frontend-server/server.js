@@ -328,16 +328,23 @@ app.post('/api/templates/upload/logo', upload.single('file'), async (req, res) =
 // Special routes for image and video library uploads (must come before general API proxy)
 app.post('/api/image-library/library', upload.single('file'), async (req, res) => {
     try {
+        console.log('📥 Image library upload request received');
+        console.log('File:', req.file ? 'YES' : 'NO');
+        console.log('Query:', req.query);
+
         if (!req.file) {
+            console.error('❌ No file in request');
             return res.status(400).json({ success: false, error: 'No file provided' });
         }
 
+        console.log('✅ Creating FormData...');
         const formData = new FormData();
         formData.append('file', req.file.buffer, {
             filename: req.file.originalname,
             contentType: req.file.mimetype,
             knownLength: req.file.size
         });
+        console.log('✅ FormData created');
 
         // Extract query parameters (name, folder, etc.)
         const queryParams = new URLSearchParams(req.query).toString();
@@ -365,10 +372,12 @@ app.post('/api/image-library/library', upload.single('file'), async (req, res) =
 
         res.status(response.status).json(response.data);
     } catch (error) {
-        console.error(`❌ Image library upload proxy error: ${error.message}`);
+        console.error(`❌ Image library upload proxy error:`, error);
+        console.error(`Error stack:`, error.stack);
         res.status(500).json({
             error: 'Image library upload proxy error',
-            message: error.message
+            message: error.message,
+            stack: error.stack
         });
     }
 });
