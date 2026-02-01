@@ -96,7 +96,7 @@ class ProjectService {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', type);
+      formData.append('asset_type', type);  // Changed from 'type' to 'asset_type'
       formData.append('name', file.name);
 
       const response = await api.post('/assets/upload', formData);
