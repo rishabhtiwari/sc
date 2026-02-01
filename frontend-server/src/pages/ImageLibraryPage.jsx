@@ -27,6 +27,16 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
   const fromEditor = location.state?.fromEditor || false;
   const returnPath = location.state?.returnPath || '/design-editor';
 
+  // Debug: Log state on mount and when it changes
+  useEffect(() => {
+    console.log('🖼️ [ImageLibrary] Component state:', {
+      fromEditor,
+      returnPath,
+      isModal,
+      locationState: location.state
+    });
+  }, [fromEditor, returnPath, isModal, location.state]);
+
   // Load images on mount
   useEffect(() => {
     fetchImages();
@@ -67,7 +77,15 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
   };
 
   const handleImageClick = (image) => {
+    console.log('🖼️ [ImageLibrary] Image clicked:', {
+      isModal,
+      fromEditor,
+      returnPath,
+      image: { url: image.url, name: image.name }
+    });
+
     if (isModal && onAddToCanvas) {
+      console.log('🖼️ [ImageLibrary] Using modal mode - calling onAddToCanvas');
       onAddToCanvas({
         type: 'image',
         src: image.url,
@@ -77,6 +95,14 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
       showToast('Image added to canvas', 'success');
       if (onClose) onClose();
     } else if (fromEditor) {
+      console.log('🖼️ [ImageLibrary] Navigating back to editor:', returnPath);
+      console.log('🖼️ [ImageLibrary] With asset:', {
+        type: 'image',
+        src: image.url,
+        name: image.name,
+        libraryId: image.image_id
+      });
+
       // Navigate back to editor with selected image, preserving the return path
       navigate(returnPath, {
         state: {
@@ -89,6 +115,8 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
         }
       });
       showToast('Image added to canvas', 'success');
+    } else {
+      console.log('🖼️ [ImageLibrary] No action - not in modal or fromEditor mode');
     }
   };
 

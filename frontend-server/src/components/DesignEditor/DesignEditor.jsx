@@ -1132,7 +1132,7 @@ const DesignEditor = () => {
   };
 
   /**
-   * Debug: Log location changes
+   * Debug: Log location changes and clear processed asset ref when navigating away
    */
   useEffect(() => {
     console.log('🌐 Location changed:', {
@@ -1141,6 +1141,13 @@ const DesignEditor = () => {
       hasAddAsset: !!location.state?.addAsset,
       addAssetType: location.state?.addAsset?.type
     });
+
+    // Clear the processed asset ref when location changes without addAsset
+    // This allows the same asset to be added again after navigating away
+    if (!location.state?.addAsset && processedAssetRef.current) {
+      console.log('🧹 Clearing processed asset ref');
+      processedAssetRef.current = null;
+    }
   }, [location]);
 
   /**
@@ -1177,12 +1184,24 @@ const DesignEditor = () => {
    * Handle incoming assets from library pages
    */
   useEffect(() => {
+    console.log('🔍 useEffect triggered - checking for addAsset:', {
+      hasLocationState: !!location.state,
+      hasAddAsset: !!location.state?.addAsset,
+      addAsset: location.state?.addAsset
+    });
+
     const addAsset = location.state?.addAsset;
-    if (!addAsset) return;
+    if (!addAsset) {
+      console.log('⏭️ No addAsset in location.state, skipping');
+      return;
+    }
 
     // Create a unique key for this asset to prevent duplicate processing
     // Don't use Date.now() as it changes on every render
     const assetKey = `${addAsset.type}-${addAsset.src || addAsset.url || addAsset.title}`;
+
+    console.log('🔑 Asset key generated:', assetKey);
+    console.log('🔑 Previous processed key:', processedAssetRef.current);
 
     // Check if we've already processed this exact asset
     if (processedAssetRef.current === assetKey) {
