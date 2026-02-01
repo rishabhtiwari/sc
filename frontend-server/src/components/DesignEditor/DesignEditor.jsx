@@ -1,12 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
-import AudioLibrary from './AudioLibrary/AudioLibrary';
-import ImageLibrary from './ImageLibrary/ImageLibrary';
-import VideoLibrary from './VideoLibrary/VideoLibrary';
-import ProjectDashboard from './ProjectDashboard/ProjectDashboard';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
 import projectService from '../../services/projectService';
@@ -16,6 +13,7 @@ import projectService from '../../services/projectService';
  * Layout: Sidebar | Canvas | Properties Panel
  */
 const DesignEditor = () => {
+  const navigate = useNavigate();
   const [selectedTool, setSelectedTool] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [canvasElements, setCanvasElements] = useState([]);
@@ -115,16 +113,10 @@ const DesignEditor = () => {
     mediaId: null
   });
 
-  // Library Modal States
-  const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
-  const [isImageLibraryOpen, setIsImageLibraryOpen] = useState(false);
-  const [isVideoLibraryOpen, setIsVideoLibraryOpen] = useState(false);
-
   // Project State
   const [currentProject, setCurrentProject] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showProjectBrowser, setShowProjectBrowser] = useState(false);
 
   const { showToast } = useToast();
 
@@ -390,84 +382,7 @@ const DesignEditor = () => {
 
 
 
-  /**
-   * Handle adding audio from library
-   * Adds to both uploadedAudio (media list) AND timeline
-   */
-  const handleAddFromLibrary = (audioData) => {
-    console.log('📁 handleAddFromLibrary called with:', audioData);
 
-    const url = audioData.url || audioData.audio_url;
-    const title = audioData.title || 'Library Audio';
-
-    console.log('📁 Extracted URL:', url);
-    console.log('📁 Extracted Title:', title);
-
-    if (!url) {
-      console.error('❌ No URL provided!');
-      showToast('Failed to add audio - no URL', 'error');
-      return;
-    }
-
-    // Add to uploadedAudio (so it appears in "Your Media")
-    // Note: Don't add 'file' property for library audio - it's already uploaded
-    const newAudio = {
-      id: `audio-${Date.now()}-${Math.random()}`,
-      type: 'audio',
-      url: url,
-      title: title,
-      // No file property - this is from library, already uploaded
-    };
-    console.log('📁 Adding to uploadedAudio:', newAudio);
-    setUploadedAudio(prev => [...prev, newAudio]);
-
-    // Add to timeline
-    console.log('📁 Calling handleAddAudioTrack with:', { name: title }, url);
-    handleAddAudioTrack({ name: title }, url);
-
-    showToast('Audio added to timeline and media library', 'success');
-    setIsAudioLibraryOpen(false);
-  };
-
-  /**
-   * Handle adding image from library
-   */
-  const handleAddImageFromLibrary = (imageData) => {
-    console.log('📁 Adding image from library:', imageData);
-
-    // Add image to canvas
-    handleAddElement({
-      type: 'image',
-      src: imageData.src,
-      libraryId: imageData.libraryId
-    });
-
-    showToast('Image added to canvas', 'success');
-    setIsImageLibraryOpen(false);
-  };
-
-  /**
-   * Handle adding video from library
-   */
-  const handleAddVideoFromLibrary = (videoData) => {
-    console.log('📁 Adding video from library:', videoData);
-
-    // Add to uploadedVideo state
-    const newVideo = {
-      id: videoData.libraryId,
-      type: 'video',
-      url: videoData.url,
-      title: videoData.title,
-      duration: videoData.duration,
-      libraryId: videoData.libraryId,
-      // No file property - this is from library, already uploaded
-    };
-    console.log('📁 Adding to uploadedVideo:', newVideo);
-    setUploadedVideo(prev => [...prev, newVideo]);
-
-    showToast('Video added to media library', 'success');
-    setIsVideoLibraryOpen(false);
-  };
 
   /**
    * Apply fade in/out effect to audio element
@@ -1447,9 +1362,9 @@ const DesignEditor = () => {
         onUploadedAudioChange={setUploadedAudio}
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
-        onOpenAudioLibrary={() => setIsAudioLibraryOpen(true)}
-        onOpenImageLibrary={() => setIsImageLibraryOpen(true)}
-        onOpenVideoLibrary={() => setIsVideoLibraryOpen(true)}
+        onOpenAudioLibrary={() => navigate('/audio-studio/library', { state: { fromEditor: true } })}
+        onOpenImageLibrary={() => navigate('/asset-management/images', { state: { fromEditor: true } })}
+        onOpenVideoLibrary={() => navigate('/asset-management/videos', { state: { fromEditor: true } })}
       />
 
       {/* Main Canvas Area */}
@@ -1480,7 +1395,7 @@ const DesignEditor = () => {
               )}
             </button>
             <button
-              onClick={() => setShowProjectBrowser(true)}
+              onClick={() => navigate('/asset-management/projects', { state: { fromEditor: true } })}
               disabled={isLoading}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
             >
@@ -1683,34 +1598,7 @@ const DesignEditor = () => {
         variant="danger"
       />
 
-      {/* Audio Library Modal */}
-      <AudioLibrary
-        isOpen={isAudioLibraryOpen}
-        onClose={() => setIsAudioLibraryOpen(false)}
-        onAddToCanvas={handleAddFromLibrary}
-      />
 
-      {/* Image Library Modal */}
-      <ImageLibrary
-        isOpen={isImageLibraryOpen}
-        onClose={() => setIsImageLibraryOpen(false)}
-        onAddToCanvas={handleAddImageFromLibrary}
-      />
-
-      {/* Video Library Modal */}
-      <VideoLibrary
-        isOpen={isVideoLibraryOpen}
-        onClose={() => setIsVideoLibraryOpen(false)}
-        onAddToCanvas={handleAddVideoFromLibrary}
-      />
-
-      {/* Project Dashboard */}
-      {showProjectBrowser && (
-        <ProjectDashboard
-          onClose={() => setShowProjectBrowser(false)}
-          onOpenProject={handleLoadProject}
-        />
-      )}
 
       {/* Loading Overlay */}
       {isLoading && (

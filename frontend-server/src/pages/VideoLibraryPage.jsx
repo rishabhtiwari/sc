@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { videoLibrary } from '../services/assetLibraryService';
@@ -9,12 +10,17 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
  * Video Library Page - Full page view of all videos with modern, appealing design
  */
 const VideoLibraryPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, video: null });
   const [playingVideo, setPlayingVideo] = useState(null);
+
+  // Check if opened from Design Editor
+  const fromEditor = location.state?.fromEditor || false;
 
   // Load videos on mount
   useEffect(() => {
@@ -116,12 +122,24 @@ const VideoLibraryPage = () => {
                   <span className="text-gray-600 ml-1">videos</span>
                 </p>
               </div>
-              <Button
-                onClick={() => window.location.href = '/design-editor'}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                🎨 Design Editor
-              </Button>
+              {fromEditor ? (
+                <Button
+                  onClick={() => navigate('/design-editor')}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Back to Editor
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => navigate('/design-editor')}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                  🎨 Design Editor
+                </Button>
+              )}
             </div>
           </div>
         </div>

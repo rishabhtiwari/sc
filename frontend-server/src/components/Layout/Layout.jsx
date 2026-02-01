@@ -24,7 +24,7 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/audio-studio', icon: '🎙️', label: 'Audio Studio' },
     { path: '/text-studio', icon: '📝', label: 'Text Studio' },
     { path: '/design-editor', icon: '🎨', label: 'Design Editor' },
-    { path: '/asset-library', icon: '📚', label: 'Asset Library' },
+    { path: '/asset-management', icon: '📚', label: 'Asset Management' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
     { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
     {

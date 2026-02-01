@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { imageLibrary } from '../services/assetLibraryService';
@@ -7,13 +8,23 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 
 /**
  * Image Library Page - Full page view of all images with modern, appealing design
+ * Can be used as a standalone page or as a modal popup
+ *
+ * @param {boolean} isModal - If true, renders as a modal popup
+ * @param {function} onClose - Close handler for modal mode
+ * @param {function} onAddToCanvas - Handler for adding image to canvas (modal mode)
  */
-const ImageLibraryPage = () => {
+const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, image: null });
+
+  // Check if opened from Design Editor
+  const fromEditor = location.state?.fromEditor || false;
 
   // Load images on mount
   useEffect(() => {
@@ -54,14 +65,27 @@ const ImageLibraryPage = () => {
     }
   };
 
+  const handleImageClick = (image) => {
+    if (isModal && onAddToCanvas) {
+      onAddToCanvas({
+        type: 'image',
+        src: image.url,
+        name: image.name,
+        libraryId: image.image_id
+      });
+      showToast('Image added to canvas', 'success');
+      if (onClose) onClose();
+    }
+  };
+
   // Filter images based on search query
   const filteredImages = images.filter(image =>
     image.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    const loadingContent = (
+      <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="relative mb-6">
             <div className="w-16 h-16 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin mx-auto"></div>
@@ -73,46 +97,77 @@ const ImageLibraryPage = () => {
         </div>
       </div>
     );
+
+    if (isModal) {
+      return (
+        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-2xl w-[95%] h-[95%] flex flex-col overflow-hidden">
+            {loadingContent}
+          </div>
+        </div>
+      );
+    }
+    return <div className="min-h-screen bg-gray-50">{loadingContent}</div>;
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Content */}
-      <div className="space-y-6 p-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🖼️</span>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Image Library
-                </h1>
-                <p className="text-gray-600 text-sm mt-1">
-                  Browse and manage your image collection
-                </p>
-              </div>
+  const content = (
+    <div className={isModal ? "flex flex-col h-full" : "min-h-screen bg-gray-50"}>
+      {/* Header */}
+      <div className={`bg-white ${isModal ? 'border-b' : 'rounded-lg shadow'} border-gray-200 p-6 ${isModal ? 'flex-shrink-0' : ''}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center">
+              <span className="text-2xl">🖼️</span>
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
-                <p className="text-sm text-gray-700">
-                  <span className="font-semibold text-gray-900">{filteredImages.length}</span>
-                  <span className="text-gray-500 mx-1">/</span>
-                  <span className="font-semibold text-gray-900">{images.length}</span>
-                  <span className="text-gray-600 ml-1">images</span>
-                </p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Image Library
+              </h1>
+              <p className="text-gray-600 text-sm mt-1">
+                {isModal ? 'Browse and add images to your canvas' : 'Browse and manage your image collection'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="bg-gray-50 px-4 py-2 rounded-lg border border-gray-200">
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold text-gray-900">{filteredImages.length}</span>
+                <span className="text-gray-500 mx-1">/</span>
+                <span className="font-semibold text-gray-900">{images.length}</span>
+                <span className="text-gray-600 ml-1">images</span>
+              </p>
+            </div>
+            {isModal ? (
+              <button
+                onClick={onClose}
+                className="text-gray-600 hover:text-gray-900 text-2xl font-bold transition-colors"
+              >
+                ✕
+              </button>
+            ) : fromEditor ? (
               <Button
-                onClick={() => window.location.href = '/design-editor'}
+                onClick={() => navigate('/design-editor')}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+                Back to Editor
+              </Button>
+            ) : (
+              <Button
+                onClick={() => navigate('/design-editor')}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 🎨 Design Editor
               </Button>
-            </div>
+            )}
           </div>
         </div>
+      </div>
+
+      {/* Content */}
+      <div className={`${isModal ? 'flex-1 overflow-y-auto' : 'space-y-6'} p-6 ${isModal ? 'bg-gray-50' : 'max-w-7xl mx-auto'}`}>
 
         {/* Search Bar */}
         <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
@@ -147,7 +202,8 @@ const ImageLibraryPage = () => {
             {filteredImages.map((image, index) => (
               <div
                 key={image.image_id}
-                className="bg-white rounded-lg shadow hover:shadow-md transition-all overflow-hidden group border border-gray-200"
+                className={`bg-white rounded-lg shadow hover:shadow-md transition-all overflow-hidden group border border-gray-200 ${isModal ? 'cursor-pointer' : ''}`}
+                onClick={() => isModal && handleImageClick(image)}
               >
                 {/* Image Preview */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden">
@@ -156,9 +212,20 @@ const ImageLibraryPage = () => {
                     alt={image.name}
                     className="w-full h-full object-cover"
                   />
+                  {isModal && (
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all flex items-center justify-center">
+                      <button className="px-4 py-2 bg-blue-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium">
+                        Add to Canvas
+                      </button>
+                    </div>
+                  )}
                   {/* Delete Button Overlay */}
-                  <button
-                    onClick={() => handleDeleteClick(image)}
+                  {!isModal && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(image);
+                      }}
                     className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow flex items-center justify-center"
                     title="Delete image"
                   >
@@ -187,19 +254,34 @@ const ImageLibraryPage = () => {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <ConfirmDialog
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, image: null })}
-        onConfirm={confirmDelete}
-        title="Delete Image"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${deleteDialog.image?.name || 'this image'}"?`}
-        confirmText="Delete Image"
-        cancelText="Cancel"
-        variant="danger"
-      />
+      {!isModal && (
+        <ConfirmDialog
+          isOpen={deleteDialog.isOpen}
+          onClose={() => setDeleteDialog({ isOpen: false, image: null })}
+          onConfirm={confirmDelete}
+          title="Delete Image"
+          description="This action cannot be undone"
+          message={`Are you sure you want to delete "${deleteDialog.image?.name || 'this image'}"?`}
+          confirmText="Delete Image"
+          cancelText="Cancel"
+          variant="danger"
+        />
+      )}
     </div>
   );
+
+  // Wrap in modal if needed
+  if (isModal) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
+        <div className="bg-white rounded-lg shadow-2xl w-[95%] h-[95%] flex flex-col overflow-hidden">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
+  return content;
 };
 
 export default ImageLibraryPage;

@@ -24,6 +24,7 @@ import DesignEditorPage from './pages/DesignEditorPage';
 import AssetLibraryPage from './pages/AssetLibraryPage';
 import ImageLibraryPage from './pages/ImageLibraryPage';
 import VideoLibraryPage from './pages/VideoLibraryPage';
+import ProjectsPage from './pages/ProjectsPage';
 import { isAuthenticated as checkAuth, verifyToken } from './services/authService';
 import api from './services/api';
 
@@ -130,9 +131,14 @@ function App() {
                   <Route path="/audio-studio/voice-preview" element={<VoicePreviewPage />} />
                   <Route path="/text-studio" element={<TextStudioPage />} />
                   <Route path="/design-editor" element={<DesignEditorPage />} />
-                  <Route path="/asset-library" element={<AssetLibraryPage />} />
-                  <Route path="/asset-library/images" element={<ImageLibraryPage />} />
-                  <Route path="/asset-library/videos" element={<VideoLibraryPage />} />
+                  <Route path="/asset-management" element={<AssetLibraryPage />} />
+                  <Route path="/asset-management/projects" element={<ProjectsPage />} />
+                  <Route path="/asset-management/images" element={<ImageLibraryPage />} />
+                  <Route path="/asset-management/videos" element={<VideoLibraryPage />} />
+                  {/* Legacy routes for backward compatibility */}
+                  <Route path="/asset-library" element={<Navigate to="/asset-management" replace />} />
+                  <Route path="/asset-library/images" element={<Navigate to="/asset-management/images" replace />} />
+                  <Route path="/asset-library/videos" element={<Navigate to="/asset-management/videos" replace />} />
                   <Route path="/youtube" element={<YouTubePage />} />
                   <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />
