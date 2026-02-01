@@ -117,6 +117,7 @@ const DesignEditor = () => {
   const [currentProject, setCurrentProject] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [createNewDialog, setCreateNewDialog] = useState({ isOpen: false });
 
   const { showToast } = useToast();
 
@@ -1121,6 +1122,58 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle create new project
+   * Resets the editor to initial state
+   */
+  const handleCreateNewProject = () => {
+    // Check if there are unsaved changes
+    const hasContent = pages.some(page => page.elements.length > 0) ||
+                       audioTracks.length > 0 ||
+                       currentProject !== null;
+
+    if (hasContent) {
+      // Show confirmation dialog
+      setCreateNewDialog({ isOpen: true });
+    } else {
+      // No content, just reset
+      resetToNewProject();
+    }
+  };
+
+  /**
+   * Reset editor to new project state
+   */
+  const resetToNewProject = () => {
+    // Reset all state to initial values
+    setPages([
+      {
+        id: 'page-1',
+        name: 'Page 1',
+        elements: [],
+        background: { type: 'solid', color: '#ffffff' },
+        duration: 5,
+        startTime: 0
+      }
+    ]);
+    setCurrentPageIndex(0);
+    setSelectedElement(null);
+    setSelectedTool(null);
+    setAudioTracks([]);
+    setUploadedAudio([]);
+    setUploadedVideo([]);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setSelectedAudioTrack(null);
+    setSelectedVideoTrack(null);
+    setCurrentProject(null);
+
+    // Close dialog
+    setCreateNewDialog({ isOpen: false });
+
+    showToast('New project created', 'success');
+  };
+
+  /**
    * Update playhead position during playback
    */
   useEffect(() => {
@@ -1372,10 +1425,22 @@ const DesignEditor = () => {
         {/* Project Toolbar */}
         <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Create New Project */}
+            <button
+              onClick={handleCreateNewProject}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Project
+            </button>
+
+            {/* Save Project */}
             <button
               onClick={handleSaveProject}
               disabled={isSaving}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
             >
               {isSaving ? (
                 <>
@@ -1390,19 +1455,21 @@ const DesignEditor = () => {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                   </svg>
-                  Save Project
+                  Save
                 </>
               )}
             </button>
+
+            {/* Load Project */}
             <button
               onClick={() => navigate('/asset-management/projects', { state: { fromEditor: true } })}
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
               </svg>
-              Load Project
+              Load
             </button>
           </div>
           {currentProject && (
@@ -1473,8 +1540,8 @@ const DesignEditor = () => {
         )}
 
         <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
-          {/* Canvas Area - Takes remaining space */}
-          <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
+          {/* Canvas Area - Takes remaining space, scrollable */}
+          <div className="flex-1 relative" style={{ minHeight: 0, overflow: 'auto' }}>
             <Canvas
               elements={currentPageElements}
               selectedElement={selectedElement}
@@ -1485,26 +1552,28 @@ const DesignEditor = () => {
             />
           </div>
 
-          {/* Audio Timeline at Bottom - Fixed height */}
-          <AudioTimelineRefactored
-            audioTracks={audioTracks}
-            videoTracks={videoTracks}
-            slides={pages}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            selectedAudioId={selectedAudioTrack?.id}
-            selectedVideoId={selectedVideoTrack}
-            onAudioUpdate={handleAudioUpdate}
-            onAudioDelete={handleAudioDelete}
-            onAudioSelect={handleAudioSelect}
-            onVideoUpdate={handleVideoUpdate}
-            onVideoDelete={handleVideoDelete}
-            onVideoSelect={handleVideoSelect}
-            onSlideUpdate={handleSlideUpdate}
-            onSeek={handleSeek}
-            onPlay={handlePlay}
-            onPause={handlePause}
-          />
+          {/* Audio Timeline at Bottom - Only show when audio/video is uploaded */}
+          {(audioTracks.length > 0 || videoTracks.length > 0) && (
+            <AudioTimelineRefactored
+              audioTracks={audioTracks}
+              videoTracks={videoTracks}
+              slides={pages}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              selectedAudioId={selectedAudioTrack?.id}
+              selectedVideoId={selectedVideoTrack}
+              onAudioUpdate={handleAudioUpdate}
+              onAudioDelete={handleAudioDelete}
+              onAudioSelect={handleAudioSelect}
+              onVideoUpdate={handleVideoUpdate}
+              onVideoDelete={handleVideoDelete}
+              onVideoSelect={handleVideoSelect}
+              onSlideUpdate={handleSlideUpdate}
+              onSeek={handleSeek}
+              onPlay={handlePlay}
+              onPause={handlePause}
+            />
+          )}
         </div>
       </div>
 
@@ -1598,7 +1667,19 @@ const DesignEditor = () => {
         variant="danger"
       />
 
-
+      {/* Create New Project Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={createNewDialog.isOpen}
+        onClose={() => setCreateNewDialog({ isOpen: false })}
+        onConfirm={resetToNewProject}
+        title="Create New Project"
+        description="You have unsaved changes"
+        message="Creating a new project will clear all current work. Are you sure you want to continue?"
+        warningMessage="Make sure to save your current project before creating a new one."
+        confirmText="Create New Project"
+        cancelText="Cancel"
+        variant="warning"
+      />
 
       {/* Loading Overlay */}
       {isLoading && (

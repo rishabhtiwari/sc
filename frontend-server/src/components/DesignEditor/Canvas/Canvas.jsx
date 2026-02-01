@@ -110,20 +110,21 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
         </div>
       </div>
 
-      {/* Canvas Area */}
-      <div className="flex-1 overflow-auto p-8 flex items-center justify-center">
-        <div
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="shadow-2xl relative"
-          style={{
-            width: canvasSize.width * zoom,
-            height: canvasSize.height * zoom,
-            transform: `scale(1)`,
-            transformOrigin: 'center',
-            ...getBackgroundStyle()
-          }}
-        >
+      {/* Canvas Area - Scrollable container */}
+      <div className="flex-1 overflow-auto p-8">
+        <div className="min-h-full flex items-start justify-center">
+          <div
+            ref={canvasRef}
+            onClick={handleCanvasClick}
+            className="shadow-2xl relative my-auto"
+            style={{
+              width: canvasSize.width * zoom,
+              height: canvasSize.height * zoom,
+              transform: `scale(1)`,
+              transformOrigin: 'center',
+              ...getBackgroundStyle()
+            }}
+          >
           {/* Render Elements */}
           {elements.map((element) => (
             <CanvasElement
@@ -152,6 +153,7 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>
