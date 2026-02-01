@@ -185,15 +185,36 @@ async def upload_asset(
         
         # Save to database
         db_service.create_asset(asset_data)
-        
+
         logger.info(f"Asset uploaded successfully: {asset_id}")
-        
-        return UploadResponse(
-            success=True,
-            asset_id=asset_id,
-            url=storage_url,
-            message="Asset uploaded successfully"
+
+        # Generate presigned URL for browser access (valid for 24 hours)
+        presigned_url = storage_service.get_presigned_url(
+            bucket=bucket,
+            object_name=storage_key,
+            expires=timedelta(hours=24)
         )
+
+        # Return response with presigned URL and full asset data
+        return {
+            "success": True,
+            "asset_id": asset_id,
+            "url": presigned_url,  # Presigned URL for browser access
+            "message": "Asset uploaded successfully",
+            "asset": {
+                "asset_id": asset_id,
+                "type": asset_type,
+                "name": name or file.filename,
+                "storage": {
+                    "bucket": bucket,
+                    "key": storage_key,
+                    "url": presigned_url
+                },
+                "size": file_size,
+                "duration": file_info.get("duration"),
+                "dimensions": file_info.get("dimensions")
+            }
+        }
         
     except HTTPException:
         raise

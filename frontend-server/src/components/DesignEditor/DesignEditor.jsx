@@ -81,6 +81,8 @@ const DesignEditor = () => {
    * Handle adding element to canvas (adds to current page)
    */
   const handleAddElement = (element) => {
+    console.log('🎨 handleAddElement called with:', element);
+
     const newElement = {
       id: `element-${Date.now()}`,
       ...element,
@@ -103,10 +105,15 @@ const DesignEditor = () => {
         };
 
         // If adding a video element, auto-adjust slide duration to match video length
-        if (element.type === 'video' && element.duration) {
-          console.log('🎬 Video added with duration:', element.duration);
-          updatedPage.duration = Math.ceil(element.duration); // Round up to nearest second
-          console.log('📊 Slide duration updated to:', updatedPage.duration);
+        if (element.type === 'video') {
+          if (element.duration && element.duration > 0) {
+            console.log('🎬 Video added with duration:', element.duration);
+            updatedPage.duration = Math.ceil(element.duration); // Round up to nearest second
+            console.log('📊 Slide duration updated to:', updatedPage.duration);
+          } else {
+            console.warn('⚠️ Video element has no duration! Element:', element);
+            console.warn('⚠️ Slide duration will remain:', page.duration || 5);
+          }
         }
 
         return updatedPage;
@@ -120,6 +127,16 @@ const DesignEditor = () => {
 
     // If adding a video element, also add it to the video timeline
     if (element.type === 'video' && element.duration) {
+      // Get the updated slide duration (which was just set to match video duration)
+      const currentSlide = updatedPages[currentPageIndex];
+      const slideDuration = currentSlide.duration || 5;
+
+      // Video track duration should match the slide duration
+      // If video is longer than slide, it will be trimmed
+      // If video is shorter than slide, it will play and then show last frame
+      const videoTrackDuration = Math.min(element.duration, slideDuration);
+      const trimEnd = element.duration > slideDuration ? element.duration - slideDuration : 0;
+
       const videoTrack = {
         id: newElement.id,
         elementId: newElement.id, // Link to canvas element
@@ -128,17 +145,22 @@ const DesignEditor = () => {
         src: element.src, // Keep src for compatibility
         file: element.file,
         startTime: slideStartTime,
-        duration: element.duration,
+        duration: videoTrackDuration, // Constrained to slide duration
         originalDuration: element.duration, // Store original for trimming
         trimStart: 0, // How much trimmed from start
-        trimEnd: 0, // How much trimmed from end
+        trimEnd: trimEnd, // Trim from end if video is longer than slide
         volume: element.volume || 100,
         playbackSpeed: element.playbackSpeed || 1,
         slideIndex: currentPageIndex,
         videoType: 'video' // Can be 'video', 'b-roll', etc.
       };
 
-      console.log('🎬 Adding video to timeline:', videoTrack);
+      console.log('🎬 Adding video to timeline:', {
+        ...videoTrack,
+        slideDuration,
+        videoOriginalDuration: element.duration,
+        trimmed: trimEnd > 0
+      });
       setVideoTracks(prev => [...prev, videoTrack]);
       setSelectedVideoTrack(videoTrack.id);
     }
@@ -626,6 +648,37 @@ const DesignEditor = () => {
       index === slideIndex ? { ...page, ...updates } : page
     );
     setPages(newPages);
+
+    // If duration is being updated, also update video tracks on this slide
+    if (updates.duration !== undefined) {
+      const newDuration = updates.duration;
+      console.log('📊 Slide duration updated to:', newDuration, 'for slide:', slideIndex);
+
+      // Update video tracks that belong to this slide
+      setVideoTracks(prevTracks => prevTracks.map(track => {
+        if (track.slideIndex === slideIndex) {
+          // Constrain video track duration to new slide duration
+          const constrainedDuration = Math.min(track.originalDuration, newDuration);
+          const trimEnd = track.originalDuration > newDuration ? track.originalDuration - newDuration : 0;
+
+          console.log('🎬 Updating video track duration:', {
+            trackId: track.id,
+            oldDuration: track.duration,
+            newDuration: constrainedDuration,
+            slideDuration: newDuration,
+            originalDuration: track.originalDuration,
+            trimEnd
+          });
+
+          return {
+            ...track,
+            duration: constrainedDuration,
+            trimEnd: trimEnd
+          };
+        }
+        return track;
+      }));
+    }
   };
 
   /**
@@ -829,6 +882,65 @@ const DesignEditor = () => {
   };
 
   /**
+   * Extract media items from loaded project to populate sidebar media lists
+   */
+  const extractMediaFromProject = (project) => {
+    console.log('📦 Extracting media from project:', project);
+
+    // Extract audio from audio tracks
+    const audioItems = (project.audioTracks || []).map(track => ({
+      id: track.id || `audio-${Date.now()}-${Math.random()}`,
+      type: 'audio',
+      url: track.url,
+      title: track.name || 'Audio',
+      duration: track.duration,
+      // Note: No file object since it's already uploaded to MinIO
+    }));
+
+    // Extract videos from video tracks
+    const videoFromTracks = (project.videoTracks || []).map(track => ({
+      id: track.id || `video-${Date.now()}-${Math.random()}`,
+      type: 'video',
+      url: track.url || track.src,
+      title: track.name || 'Video',
+      duration: track.duration || track.originalDuration,
+    }));
+
+    // Extract videos from page elements
+    const videoFromElements = [];
+    (project.pages || []).forEach(page => {
+      (page.elements || []).forEach(el => {
+        if (el.type === 'video' && el.src) {
+          // Check if not already in videoFromTracks
+          const exists = videoFromTracks.some(v => v.url === el.src);
+          if (!exists) {
+            videoFromElements.push({
+              id: el.id || `video-${Date.now()}-${Math.random()}`,
+              type: 'video',
+              url: el.src,
+              title: 'Video Element',
+              duration: el.duration,
+            });
+          }
+        }
+      });
+    });
+
+    // Combine all videos
+    const allVideos = [...videoFromTracks, ...videoFromElements];
+
+    console.log('📦 Extracted media:', {
+      audio: audioItems.length,
+      video: allVideos.length
+    });
+
+    return {
+      audio: audioItems,
+      video: allVideos
+    };
+  };
+
+  /**
    * Handle load project
    */
   const handleLoadProject = async (projectId) => {
@@ -838,6 +950,8 @@ const DesignEditor = () => {
 
       const project = await projectService.loadProject(projectId);
 
+      console.log('📂 Loaded project:', project);
+
       // Restore state
       setPages(project.pages || []);
       setAudioTracks(project.audioTracks || []);
@@ -846,6 +960,16 @@ const DesignEditor = () => {
       setCurrentPageIndex(0);
       setCurrentTime(0);
       setIsPlaying(false);
+
+      // Extract and populate media lists for sidebar
+      const media = extractMediaFromProject(project);
+      setUploadedAudio(media.audio);
+      setUploadedVideo(media.video);
+
+      console.log('✅ Media lists populated:', {
+        uploadedAudio: media.audio.length,
+        uploadedVideo: media.video.length
+      });
 
       showToast('Project loaded successfully', 'success');
       setShowProjectBrowser(false);

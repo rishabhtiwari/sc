@@ -121,15 +121,37 @@ const MediaPanel = ({
       }
     } else if (media.type === 'video') {
       // For video, add to canvas as an element
-      onAddElement({
-        type: 'video',
-        src: media.url,
-        width: 640,
-        height: 360,
-        duration: media.duration, // Pass video duration
-        file: media.file
-      });
-      showToast('Video added to canvas', 'success');
+      console.log('🎬 Adding video to canvas. Duration:', media.duration);
+
+      // If duration is not available, try to get it from the video element
+      if (!media.duration || media.duration === 0) {
+        console.warn('⚠️ Video duration not available, attempting to extract...');
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+          console.log('✅ Video duration extracted:', video.duration);
+          onAddElement({
+            type: 'video',
+            src: media.url,
+            width: 640,
+            height: 360,
+            duration: video.duration,
+            file: media.file
+          });
+          showToast('Video added to canvas', 'success');
+        };
+        video.src = media.url;
+      } else {
+        onAddElement({
+          type: 'video',
+          src: media.url,
+          width: 640,
+          height: 360,
+          duration: media.duration, // Pass video duration
+          file: media.file
+        });
+        showToast('Video added to canvas', 'success');
+      }
     } else {
       // For other media types
       onAddElement({
