@@ -56,6 +56,14 @@ class Element(BaseModel):
     color: Optional[str] = None
     rotation: Optional[float] = 0
     opacity: Optional[float] = 1
+    # Video-specific properties
+    duration: Optional[float] = None
+    trimStart: Optional[float] = None
+    trimEnd: Optional[float] = None
+    playbackSpeed: Optional[float] = None
+    volume: Optional[int] = None
+    muted: Optional[bool] = None
+    loop: Optional[bool] = None
     # Store all other properties
     properties: Dict[str, Any] = Field(default_factory=dict)
 
