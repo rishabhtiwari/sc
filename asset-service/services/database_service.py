@@ -265,11 +265,11 @@ class DatabaseService:
                 query["user_id"] = user_id
 
             logger.info(f"Querying audio_library with: {query}")
-            audio = self.audio_library.find_one(query)
+            # Exclude _id field to avoid ObjectId serialization issues
+            audio = self.audio_library.find_one(query, {"_id": 0})
 
             if audio:
                 logger.info(f"Found audio: {audio.get('audio_id')}")
-                audio['_id'] = str(audio['_id'])
             else:
                 logger.warning(f"Audio not found with query: {query}")
 
