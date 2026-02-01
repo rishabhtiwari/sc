@@ -91,10 +91,36 @@ const DesignEditor = () => {
     selectedElement,
     handleAddElement,
     handleUpdateElement,
-    handleDeleteElement,
+    handleDeleteElement: handleDeleteElementBase,
     handleSelectElement,
     handleDeselectElement
   } = useElementManagement(pages, setPages, currentPageIndex);
+
+  /**
+   * Wrapper for handleDeleteElement that also removes from media library
+   */
+  const handleDeleteElement = (elementId) => {
+    // Find the element to get its type and URL
+    let elementToDelete = null;
+    pages.forEach(page => {
+      const el = page.elements.find(e => e.id === elementId);
+      if (el) {
+        elementToDelete = el;
+      }
+    });
+
+    // Delete from canvas
+    handleDeleteElementBase(elementId);
+
+    // Also remove from media library if it's an image or video
+    if (elementToDelete) {
+      if (elementToDelete.type === 'image' && elementToDelete.src) {
+        setUploadedImage(prev => prev.filter(img => img.url !== elementToDelete.src));
+      } else if (elementToDelete.type === 'video' && elementToDelete.src) {
+        setUploadedVideo(prev => prev.filter(vid => vid.url !== elementToDelete.src));
+      }
+    }
+  };
 
   // Project State Hook
   const {
@@ -156,6 +182,9 @@ const DesignEditor = () => {
 
   // Track processed assets to prevent duplicate processing
   const processedAssetRef = useRef(null);
+
+  // Audio refs for playback control
+  const audioRefs = useRef({});
 
   /**
    * Handle adding asset from library (audio, image, video)
@@ -295,7 +324,16 @@ const DesignEditor = () => {
    * Handle audio track delete
    */
   const handleAudioDelete = (trackId) => {
+    // Find the track to get its URL
+    const track = audioTracks.find(t => t.id === trackId);
+
+    // Remove from timeline
     setAudioTracks(prevTracks => prevTracks.filter(track => track.id !== trackId));
+
+    // Also remove from media library if it exists there
+    if (track && track.src) {
+      setUploadedAudio(prev => prev.filter(audio => audio.url !== track.src));
+    }
   };
 
   /**
@@ -315,10 +353,25 @@ const DesignEditor = () => {
    * Handle video track delete
    */
   const handleVideoDelete = (trackId) => {
+    // Find the video element to get its URL
+    let videoUrl = null;
+    pages.forEach(page => {
+      const videoEl = page.elements.find(el => el.id === trackId && el.type === 'video');
+      if (videoEl) {
+        videoUrl = videoEl.src;
+      }
+    });
+
+    // Remove from canvas
     setPages(prevPages => prevPages.map(page => ({
       ...page,
       elements: page.elements.filter(el => el.id !== trackId)
     })));
+
+    // Also remove from media library if it exists there
+    if (videoUrl) {
+      setUploadedVideo(prev => prev.filter(video => video.url !== videoUrl));
+    }
   };
 
   /**
@@ -344,6 +397,33 @@ const DesignEditor = () => {
     if (videoElement) {
       handleSelectElement(videoElement);
     }
+  };
+
+  /**
+   * Apply fade in/out effect to audio element
+   */
+  const applyFadeEffect = (audio, track, currentTrackTime) => {
+    if (!audio || !track) return;
+
+    const baseVolume = (track.volume || 100) / 100;
+    const fadeIn = track.fadeIn || 0;
+    const fadeOut = track.fadeOut || 0;
+    const duration = track.duration || 0;
+
+    let volumeMultiplier = 1;
+
+    // Apply fade in
+    if (fadeIn > 0 && currentTrackTime < fadeIn) {
+      volumeMultiplier = currentTrackTime / fadeIn;
+    }
+
+    // Apply fade out
+    if (fadeOut > 0 && currentTrackTime > duration - fadeOut) {
+      volumeMultiplier = (duration - currentTrackTime) / fadeOut;
+    }
+
+    // Apply the calculated volume
+    audio.volume = baseVolume * Math.max(0, Math.min(1, volumeMultiplier));
   };
 
   /**
@@ -384,8 +464,44 @@ const DesignEditor = () => {
           // Stop playback when reaching the end
           if (newTime >= totalDuration) {
             setIsPlaying(false);
+            // Pause all audio
+            audioTracks.forEach(track => {
+              const audio = audioRefs.current[track.id];
+              if (audio && !audio.paused) {
+                audio.pause();
+              }
+            });
             return totalDuration;
           }
+
+          // Update audio elements
+          audioTracks.forEach(track => {
+            const audio = audioRefs.current[track.id];
+            if (audio) {
+              const trackTime = newTime - track.startTime;
+              const originalDuration = audio.duration; // Original audio file duration
+              const displayDuration = track.duration; // Stretched/trimmed duration on timeline
+
+              if (trackTime >= 0 && trackTime <= displayDuration) {
+                if (audio.paused) {
+                  // Calculate actual audio position when starting playback
+                  const actualAudioTime = trackTime % originalDuration;
+                  audio.currentTime = actualAudioTime;
+                  audio.play().catch(err => console.error('Audio play error:', err));
+                } else {
+                  // Check if audio needs to loop (reached end of original duration)
+                  if (audio.currentTime >= originalDuration - 0.05) {
+                    audio.currentTime = 0; // Loop back to start
+                  }
+                }
+
+                // Apply fade in/out effect continuously during playback
+                applyFadeEffect(audio, track, trackTime);
+              } else if (!audio.paused) {
+                audio.pause();
+              }
+            }
+          });
 
           return newTime;
         });
@@ -402,6 +518,34 @@ const DesignEditor = () => {
       }
     };
   }, [isPlaying, audioTracks, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Create Audio elements for audio tracks
+   */
+  useEffect(() => {
+    audioTracks.forEach(track => {
+      if (!audioRefs.current[track.id] && track.src) {
+        console.log(`🎵 Creating audio element for track: ${track.id}`);
+        const audio = new Audio(track.src);
+        audio.volume = (track.volume || 100) / 100;
+        audio.loop = false;
+        audioRefs.current[track.id] = audio;
+      }
+    });
+
+    // Cleanup removed tracks
+    Object.keys(audioRefs.current).forEach(trackId => {
+      if (!audioTracks.find(t => t.id === trackId)) {
+        console.log(`🗑️ Removing audio element for track: ${trackId}`);
+        const audio = audioRefs.current[trackId];
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+        }
+        delete audioRefs.current[trackId];
+      }
+    });
+  }, [audioTracks]);
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
