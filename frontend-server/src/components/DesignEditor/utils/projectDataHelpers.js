@@ -1,4 +1,4 @@
-import { assetService } from '../../../services/assetService';
+import projectService from '../../../services/projectService';
 
 /**
  * Upload a blob URL to the asset service
@@ -15,10 +15,15 @@ export const uploadBlobToAsset = async (blob, type, name) => {
     const file = new File([blobData], name, { type: blobData.type });
     
     // Upload to asset service
-    const result = await assetService.upload(file, type);
-    
-    console.log(`✅ Uploaded ${type}:`, result.url);
-    return result;
+    const asset = await projectService.uploadAsset(file, type);
+    console.log(`📦 Upload response:`, asset);
+
+    if (!asset || !asset.asset_id) {
+      throw new Error(`Failed to upload ${type}: Invalid response from server`);
+    }
+
+    console.log(`✅ Uploaded ${type}:`, asset.asset_id);
+    return asset.asset_id;
   } catch (error) {
     console.error(`❌ Failed to upload ${type}:`, error);
     throw error;

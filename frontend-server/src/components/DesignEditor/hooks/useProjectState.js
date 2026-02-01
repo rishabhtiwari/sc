@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { projectService } from '../../../services/projectService';
+import projectService from '../../../services/projectService';
 import { prepareProjectData, extractMediaFromProject } from '../utils/projectDataHelpers';
 
 /**
