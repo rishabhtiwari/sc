@@ -75,6 +75,19 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
       });
       showToast('Image added to canvas', 'success');
       if (onClose) onClose();
+    } else if (fromEditor) {
+      // Navigate back to editor with selected image
+      navigate('/design-editor', {
+        state: {
+          addAsset: {
+            type: 'image',
+            src: image.url,
+            name: image.name,
+            libraryId: image.image_id
+          }
+        }
+      });
+      showToast('Image added to canvas', 'success');
     }
   };
 
@@ -202,8 +215,8 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
             {filteredImages.map((image, index) => (
               <div
                 key={image.image_id}
-                className={`bg-white rounded-lg shadow hover:shadow-md transition-all overflow-hidden group border border-gray-200 ${isModal ? 'cursor-pointer' : ''}`}
-                onClick={() => isModal && handleImageClick(image)}
+                className={`bg-white rounded-lg shadow hover:shadow-md transition-all overflow-hidden group border border-gray-200 ${(isModal || fromEditor) ? 'cursor-pointer' : ''}`}
+                onClick={() => (isModal || fromEditor) && handleImageClick(image)}
               >
                 {/* Image Preview */}
                 <div className="aspect-square bg-gray-100 relative overflow-hidden">
@@ -212,7 +225,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
                     alt={image.name}
                     className="w-full h-full object-cover"
                   />
-                  {isModal && (
+                  {(isModal || fromEditor) && (
                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all flex items-center justify-center">
                       <button className="px-4 py-2 bg-blue-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium">
                         Add to Canvas
@@ -220,7 +233,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
                     </div>
                   )}
                   {/* Delete Button Overlay */}
-                  {!isModal && (
+                  {!isModal && !fromEditor && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

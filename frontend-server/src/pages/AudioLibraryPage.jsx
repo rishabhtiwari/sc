@@ -81,6 +81,24 @@ const AudioLibraryPage = () => {
     setSelectedType('all');
   };
 
+  const handleAddToCanvas = (audioData) => {
+    if (fromEditor) {
+      // Navigate back to editor with selected audio
+      navigate('/design-editor', {
+        state: {
+          addAsset: {
+            type: 'audio',
+            title: audioData.title,
+            url: audioData.url,
+            audio_url: audioData.audio_url,
+            duration: audioData.duration
+          }
+        }
+      });
+      showToast('Audio added to timeline', 'success');
+    }
+  };
+
   const getTypeIcon = (type) => {
     switch (type) {
       case 'voiceover': return '🎙️';
@@ -345,6 +363,7 @@ const AudioLibraryPage = () => {
                 key={audio.audio_id}
                 audio={audio}
                 onDelete={handleDelete}
+                onAddToCanvas={fromEditor ? handleAddToCanvas : undefined}
               />
             ))}
           </div>

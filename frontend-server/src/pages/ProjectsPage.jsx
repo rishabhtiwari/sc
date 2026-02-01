@@ -231,10 +231,10 @@ const ProjectsPage = () => {
         isOpen={deleteDialog.isOpen}
         title="Delete Project"
         message={`Are you sure you want to delete "${deleteDialog.project?.name || 'this project'}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        confirmText="Delete"
+        cancelText="Cancel"
         onConfirm={confirmDelete}
-        onCancel={() => setDeleteDialog({ isOpen: false, project: null })}
+        onClose={() => setDeleteDialog({ isOpen: false, project: null })}
         variant="danger"
       />
     </div>

@@ -65,6 +65,24 @@ const VideoLibraryPage = () => {
     setPlayingVideo(playingVideo === videoId ? null : videoId);
   };
 
+  const handleAddToCanvas = (video) => {
+    if (fromEditor) {
+      // Navigate back to editor with selected video
+      navigate('/design-editor', {
+        state: {
+          addAsset: {
+            type: 'video',
+            src: video.url,
+            name: video.name,
+            duration: video.duration,
+            libraryId: video.video_id
+          }
+        }
+      });
+      showToast('Video added to timeline', 'success');
+    }
+  };
+
   // Filter videos based on search query
   const filteredVideos = videos.filter(video =>
     video.name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -189,7 +207,7 @@ const VideoLibraryPage = () => {
                     controls={playingVideo === video.video_id}
                   />
                   {/* Play Button Overlay */}
-                  {playingVideo !== video.video_id && (
+                  {playingVideo !== video.video_id && !fromEditor && (
                     <button
                       onClick={() => handlePlayVideo(video.video_id)}
                       className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-all group/play"
@@ -202,17 +220,31 @@ const VideoLibraryPage = () => {
                       </div>
                     </button>
                   )}
+                  {/* Add to Canvas Button Overlay (when fromEditor) */}
+                  {fromEditor && playingVideo !== video.video_id && (
+                    <button
+                      onClick={() => handleAddToCanvas(video)}
+                      className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/40 transition-all group/add"
+                      title="Add to canvas"
+                    >
+                      <div className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg opacity-0 group-hover/add:opacity-100 transition-opacity text-sm font-medium">
+                        Add to Canvas
+                      </div>
+                    </button>
+                  )}
                   {/* Delete Button Overlay */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClick(video);
-                    }}
-                    className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow flex items-center justify-center z-10"
-                    title="Delete video"
-                  >
-                    ✕
-                  </button>
+                  {!fromEditor && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(video);
+                      }}
+                      className="absolute top-2 right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow flex items-center justify-center z-10"
+                      title="Delete video"
+                    >
+                      ✕
+                    </button>
+                  )}
                   {/* Duration Badge */}
                   <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-xs font-medium">
                     {formatDuration(video.duration)}
