@@ -1142,43 +1142,59 @@ const DesignEditor = () => {
       setIsPlaying(false);
 
       // Restore media library if saved in project, otherwise extract from project content
-      let mediaToRestore;
+      // Use functional state updates to get the latest state values
       if (project.mediaLibrary) {
         console.log('📚 Restoring saved media library from project');
-        // Merge saved media library with any existing media (from library navigation)
-        mediaToRestore = {
-          audio: [...uploadedAudio],
-          video: [...uploadedVideo]
-        };
 
-        // Add saved media that doesn't already exist
-        (project.mediaLibrary.uploadedAudio || []).forEach(savedAudio => {
-          const exists = mediaToRestore.audio.some(a => a.url === savedAudio.url);
-          if (!exists) {
-            mediaToRestore.audio.push(savedAudio);
-          }
+        // Merge saved media library with any existing media (from library navigation)
+        setUploadedAudio(prevAudio => {
+          console.log('📦 Merging audio - existing:', prevAudio.length, 'saved:', (project.mediaLibrary.uploadedAudio || []).length);
+          const merged = [...prevAudio];
+
+          (project.mediaLibrary.uploadedAudio || []).forEach(savedAudio => {
+            const exists = merged.some(a => a.url === savedAudio.url);
+            if (!exists) {
+              merged.push(savedAudio);
+            }
+          });
+
+          console.log('✅ Merged audio count:', merged.length);
+          return merged;
         });
 
-        (project.mediaLibrary.uploadedVideo || []).forEach(savedVideo => {
-          const exists = mediaToRestore.video.some(v => v.url === savedVideo.url);
-          if (!exists) {
-            mediaToRestore.video.push(savedVideo);
-          }
+        setUploadedVideo(prevVideo => {
+          console.log('📦 Merging video - existing:', prevVideo.length, 'saved:', (project.mediaLibrary.uploadedVideo || []).length);
+          const merged = [...prevVideo];
+
+          (project.mediaLibrary.uploadedVideo || []).forEach(savedVideo => {
+            const exists = merged.some(v => v.url === savedVideo.url);
+            if (!exists) {
+              merged.push(savedVideo);
+            }
+          });
+
+          console.log('✅ Merged video count:', merged.length);
+          return merged;
         });
       } else {
         console.log('📦 No saved media library, extracting from project content');
+
         // Extract and populate media lists for sidebar from project content
-        // Pass existing media to merge with project media (in case assets were added from library)
-        mediaToRestore = extractMediaFromProject(project, uploadedAudio, uploadedVideo);
+        // Use functional updates to get current state
+        setUploadedAudio(prevAudio => {
+          console.log('📦 Current audio in state:', prevAudio.length);
+          const media = extractMediaFromProject(project, prevAudio, []);
+          console.log('✅ Audio after extraction:', media.audio.length);
+          return media.audio;
+        });
+
+        setUploadedVideo(prevVideo => {
+          console.log('📦 Current video in state:', prevVideo.length);
+          const media = extractMediaFromProject(project, [], prevVideo);
+          console.log('✅ Video after extraction:', media.video.length);
+          return media.video;
+        });
       }
-
-      setUploadedAudio(mediaToRestore.audio);
-      setUploadedVideo(mediaToRestore.video);
-
-      console.log('✅ Media lists populated:', {
-        uploadedAudio: mediaToRestore.audio.length,
-        uploadedVideo: mediaToRestore.video.length
-      });
 
       showToast('Project loaded successfully', 'success');
     } catch (error) {
