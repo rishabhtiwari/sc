@@ -115,7 +115,7 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   };
 
   const handleDelete = () => {
-    onDelete(audio.audio_id);
+    onDelete(audio);
     setShowMenu(false);
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { imageLibrary } from '../../../services/assetLibraryService';
 import AuthenticatedImage from '../../common/AuthenticatedImage';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
 /**
  * Image Library Modal - Full-screen modal for browsing image library
@@ -10,6 +11,7 @@ const ImageLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
   const { showToast } = useToast();
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, image: null });
 
   useEffect(() => {
     if (isOpen) {
@@ -45,18 +47,22 @@ const ImageLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
     }
   };
 
-  const handleDelete = async (imageId) => {
-    if (!window.confirm('Are you sure you want to delete this image?')) {
-      return;
-    }
+  const handleDeleteClick = (image) => {
+    setDeleteDialog({ isOpen: true, image });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog.image) return;
 
     try {
-      await imageLibrary.delete(imageId);
+      await imageLibrary.delete(deleteDialog.image.image_id);
       showToast('Image deleted successfully', 'success');
+      setDeleteDialog({ isOpen: false, image: null });
       fetchImages(); // Refresh list
     } catch (error) {
       console.error('Failed to delete image:', error);
       showToast('Failed to delete image', 'error');
+      setDeleteDialog({ isOpen: false, image: null });
     }
   };
 
@@ -122,7 +128,7 @@ const ImageLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
                         Add to Canvas
                       </button>
                       <button
-                        onClick={() => handleDelete(image.image_id)}
+                        onClick={() => handleDeleteClick(image)}
                         className="px-3 py-1.5 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium"
                       >
                         Delete
@@ -141,6 +147,24 @@ const ImageLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, image: null })}
+        onConfirm={confirmDelete}
+        title="Delete Image"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.image
+            ? `Are you sure you want to delete "${deleteDialog.image.name}"?`
+            : ''
+        }
+        warningMessage="This will permanently delete the image from your library. This action cannot be undone."
+        confirmText="Delete Image"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };

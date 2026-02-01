@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../../hooks/useToast';
 import { videoLibrary } from '../../../services/assetLibraryService';
+import ConfirmDialog from '../../common/ConfirmDialog';
+import AuthenticatedVideo from '../../common/AuthenticatedVideo';
 
 /**
  * Video Library Modal - Full-screen modal for browsing video library
@@ -9,6 +11,7 @@ const VideoLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
   const { showToast } = useToast();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, video: null });
 
   useEffect(() => {
     if (isOpen) {
@@ -45,18 +48,22 @@ const VideoLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
     }
   };
 
-  const handleDelete = async (videoId) => {
-    if (!window.confirm('Are you sure you want to delete this video?')) {
-      return;
-    }
+  const handleDeleteClick = (video) => {
+    setDeleteDialog({ isOpen: true, video });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog.video) return;
 
     try {
-      await videoLibrary.delete(videoId);
+      await videoLibrary.delete(deleteDialog.video.video_id);
       showToast('Video deleted successfully', 'success');
+      setDeleteDialog({ isOpen: false, video: null });
       fetchVideos(); // Refresh list
     } catch (error) {
       console.error('Failed to delete video:', error);
       showToast('Failed to delete video', 'error');
+      setDeleteDialog({ isOpen: false, video: null });
     }
   };
 
@@ -109,7 +116,7 @@ const VideoLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
                   className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group"
                 >
                   <div className="aspect-video bg-gray-100 relative overflow-hidden">
-                    <video
+                    <AuthenticatedVideo
                       src={video.url}
                       className="w-full h-full object-cover"
                       preload="metadata"
@@ -122,7 +129,7 @@ const VideoLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
                         Add to Canvas
                       </button>
                       <button
-                        onClick={() => handleDelete(video.video_id)}
+                        onClick={() => handleDeleteClick(video)}
                         className="px-3 py-1.5 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-sm font-medium"
                       >
                         Delete
@@ -146,6 +153,24 @@ const VideoLibrary = ({ isOpen, onClose, onAddToCanvas }) => {
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, video: null })}
+        onConfirm={confirmDelete}
+        title="Delete Video"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.video
+            ? `Are you sure you want to delete "${deleteDialog.video.name}"?`
+            : ''
+        }
+        warningMessage="This will permanently delete the video from your library. This action cannot be undone."
+        confirmText="Delete Video"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };

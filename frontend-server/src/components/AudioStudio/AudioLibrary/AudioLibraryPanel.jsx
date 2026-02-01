@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../../hooks/useToast';
 import { useAudioLibrary } from '../../../hooks/useAudioLibrary';
 import AudioGrid from './AudioGrid';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
 /**
  * Audio Library Panel Component
@@ -13,21 +14,26 @@ const AudioLibraryPanel = ({ refreshTrigger, onAddToCanvas }) => {
   const { showToast } = useToast();
   const { audioFiles, loading, fetchAudioFiles, deleteAudio } = useAudioLibrary();
   const [filter, setFilter] = useState('all'); // all, voiceover, music
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, audio: null });
 
   useEffect(() => {
     fetchAudioFiles();
   }, [refreshTrigger]);
 
-  const handleDelete = async (audioId) => {
-    if (!window.confirm('Are you sure you want to delete this audio?')) {
-      return;
-    }
+  const handleDeleteClick = (audio) => {
+    setDeleteDialog({ isOpen: true, audio });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteDialog.audio) return;
 
     try {
-      await deleteAudio(audioId);
+      await deleteAudio(deleteDialog.audio.audio_id);
       showToast('Audio deleted successfully', 'success');
+      setDeleteDialog({ isOpen: false, audio: null });
     } catch (error) {
       showToast(error.message || 'Failed to delete audio', 'error');
+      setDeleteDialog({ isOpen: false, audio: null });
     }
   };
 
@@ -127,11 +133,29 @@ const AudioLibraryPanel = ({ refreshTrigger, onAddToCanvas }) => {
         ) : (
           <AudioGrid
             audioFiles={filteredAudioFiles}
-            onDelete={handleDelete}
+            onDelete={handleDeleteClick}
             onAddToCanvas={onAddToCanvas}
           />
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, audio: null })}
+        onConfirm={confirmDelete}
+        title="Delete Audio"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.audio
+            ? `Are you sure you want to delete "${deleteDialog.audio.name}"?`
+            : ''
+        }
+        warningMessage="This will permanently delete the audio from your library. This action cannot be undone."
+        confirmText="Delete Audio"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 };
