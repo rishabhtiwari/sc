@@ -1027,6 +1027,25 @@ const DesignEditor = () => {
         note: 'Videos are stored in page elements'
       });
 
+      // Log detailed element data to verify icons/stickers are included
+      console.log('📦 Detailed project data:');
+      projectData.pages?.forEach((page, index) => {
+        console.log(`  📄 Page ${index}:`, {
+          name: page.name,
+          elementCount: page.elements?.length || 0,
+          elements: page.elements?.map(el => ({
+            type: el.type,
+            id: el.id,
+            icon: el.icon,
+            emoji: el.emoji,
+            shapeType: el.shapeType,
+            width: el.width,
+            height: el.height,
+            text: el.text?.substring(0, 20)
+          }))
+        });
+      });
+
       let savedProject;
       if (currentProject?.project_id) {
         // Update existing project
@@ -1169,15 +1188,22 @@ const DesignEditor = () => {
       project.pages?.forEach((page, index) => {
         console.log(`  📄 Page ${index} (${page.name}):`, {
           id: page.id,
-          elementCount: page.elements?.length || 0,
-          elements: page.elements?.map(el => ({
-            id: el.id,
+          elementCount: page.elements?.length || 0
+        });
+        // Log each element individually for better visibility
+        page.elements?.forEach((el, elIndex) => {
+          console.log(`    🔹 Element ${elIndex}:`, {
             type: el.type,
-            shapeType: el.shapeType,
+            id: el.id,
             icon: el.icon,
             emoji: el.emoji,
-            text: el.text?.substring(0, 20)
-          }))
+            shapeType: el.shapeType,
+            width: el.width,
+            height: el.height,
+            fontSize: el.fontSize,
+            text: el.text?.substring(0, 30),
+            hasSrc: !!el.src
+          });
         });
       });
 
