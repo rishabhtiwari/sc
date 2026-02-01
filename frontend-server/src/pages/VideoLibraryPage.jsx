@@ -68,8 +68,12 @@ const VideoLibraryPage = () => {
 
   const handleAddToCanvas = (video) => {
     if (fromEditor) {
+      // Split returnPath into pathname and search to preserve query params
+      const [pathname, search] = returnPath.split('?');
+      const fullPath = search ? `${pathname}?${search}` : pathname;
+
       // Navigate back to editor with selected video, preserving the return path
-      navigate(returnPath, {
+      navigate(fullPath, {
         state: {
           addAsset: {
             type: 'video',

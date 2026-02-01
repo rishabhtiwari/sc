@@ -103,8 +103,19 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
         libraryId: image.image_id
       });
 
+      // Split returnPath into pathname and search to preserve query params
+      const [pathname, search] = returnPath.split('?');
+      const fullPath = search ? `${pathname}?${search}` : pathname;
+
+      console.log('🖼️ [ImageLibrary] Navigation details:', {
+        returnPath,
+        pathname,
+        search,
+        fullPath
+      });
+
       // Navigate back to editor with selected image, preserving the return path
-      navigate(returnPath, {
+      navigate(fullPath, {
         state: {
           addAsset: {
             type: 'image',
