@@ -21,6 +21,7 @@ const VideoLibraryPage = () => {
 
   // Check if opened from Design Editor
   const fromEditor = location.state?.fromEditor || false;
+  const returnPath = location.state?.returnPath || '/design-editor';
 
   // Load videos on mount
   useEffect(() => {
@@ -67,8 +68,8 @@ const VideoLibraryPage = () => {
 
   const handleAddToCanvas = (video) => {
     if (fromEditor) {
-      // Navigate back to editor with selected video
-      navigate('/design-editor', {
+      // Navigate back to editor with selected video, preserving the return path
+      navigate(returnPath, {
         state: {
           addAsset: {
             type: 'video',
@@ -142,7 +143,7 @@ const VideoLibraryPage = () => {
               </div>
               {fromEditor ? (
                 <Button
-                  onClick={() => navigate('/design-editor')}
+                  onClick={() => navigate(returnPath)}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

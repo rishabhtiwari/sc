@@ -25,6 +25,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
 
   // Check if opened from Design Editor
   const fromEditor = location.state?.fromEditor || false;
+  const returnPath = location.state?.returnPath || '/design-editor';
 
   // Load images on mount
   useEffect(() => {
@@ -76,8 +77,8 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
       showToast('Image added to canvas', 'success');
       if (onClose) onClose();
     } else if (fromEditor) {
-      // Navigate back to editor with selected image
-      navigate('/design-editor', {
+      // Navigate back to editor with selected image, preserving the return path
+      navigate(returnPath, {
         state: {
           addAsset: {
             type: 'image',
@@ -159,7 +160,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
               </button>
             ) : fromEditor ? (
               <Button
-                onClick={() => navigate('/design-editor')}
+                onClick={() => navigate(returnPath)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

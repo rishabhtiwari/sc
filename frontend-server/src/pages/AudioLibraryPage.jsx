@@ -16,6 +16,7 @@ const AudioLibraryPage = () => {
 
   // Check if opened from Design Editor
   const fromEditor = location.state?.fromEditor || false;
+  const returnPath = location.state?.returnPath || '/design-editor';
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -83,8 +84,8 @@ const AudioLibraryPage = () => {
 
   const handleAddToCanvas = (audioData) => {
     if (fromEditor) {
-      // Navigate back to editor with selected audio
-      navigate('/design-editor', {
+      // Navigate back to editor with selected audio, preserving the return path
+      navigate(returnPath, {
         state: {
           addAsset: {
             type: 'audio',
@@ -170,7 +171,7 @@ const AudioLibraryPage = () => {
               </div>
               {fromEditor ? (
                 <Button
-                  onClick={() => navigate('/design-editor')}
+                  onClick={() => navigate(returnPath)}
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

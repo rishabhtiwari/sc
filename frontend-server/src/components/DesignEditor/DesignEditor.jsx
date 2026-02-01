@@ -15,6 +15,13 @@ import projectService from '../../services/projectService';
 const DesignEditor = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Debug: Log when component mounts/unmounts
+  useEffect(() => {
+    console.log('🎨 DesignEditor mounted');
+    return () => console.log('🎨 DesignEditor unmounted');
+  }, []);
+
   const [selectedTool, setSelectedTool] = useState(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [canvasElements, setCanvasElements] = useState([]);
@@ -1125,16 +1132,30 @@ const DesignEditor = () => {
   };
 
   /**
+   * Debug: Log location changes
+   */
+  useEffect(() => {
+    console.log('🌐 Location changed:', {
+      pathname: location.pathname,
+      search: location.search,
+      hasAddAsset: !!location.state?.addAsset,
+      addAssetType: location.state?.addAsset?.type
+    });
+  }, [location]);
+
+  /**
    * Debug: Log media list changes
    */
   useEffect(() => {
     console.log('📊 Media lists updated:', {
       uploadedAudio: uploadedAudio.length,
       uploadedVideo: uploadedVideo.length,
+      pages: pages.length,
+      audioTracks: audioTracks.length,
       audioDetails: uploadedAudio.map(a => ({ title: a.title, url: a.url?.substring(0, 50) })),
       videoDetails: uploadedVideo.map(v => ({ title: v.title, type: v.type, url: v.url?.substring(0, 50) }))
     });
-  }, [uploadedAudio, uploadedVideo]);
+  }, [uploadedAudio, uploadedVideo, pages, audioTracks]);
 
   /**
    * Handle loading project from URL query parameter
@@ -1601,9 +1622,24 @@ const DesignEditor = () => {
         onUploadedAudioChange={setUploadedAudio}
         uploadedVideo={uploadedVideo}
         onUploadedVideoChange={setUploadedVideo}
-        onOpenAudioLibrary={() => navigate('/audio-studio/library', { state: { fromEditor: true } })}
-        onOpenImageLibrary={() => navigate('/asset-management/images', { state: { fromEditor: true } })}
-        onOpenVideoLibrary={() => navigate('/asset-management/videos', { state: { fromEditor: true } })}
+        onOpenAudioLibrary={() => navigate('/audio-studio/library', {
+          state: {
+            fromEditor: true,
+            returnPath: location.pathname + location.search
+          }
+        })}
+        onOpenImageLibrary={() => navigate('/asset-management/images', {
+          state: {
+            fromEditor: true,
+            returnPath: location.pathname + location.search
+          }
+        })}
+        onOpenVideoLibrary={() => navigate('/asset-management/videos', {
+          state: {
+            fromEditor: true,
+            returnPath: location.pathname + location.search
+          }
+        })}
       />
 
       {/* Main Canvas Area */}
