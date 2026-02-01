@@ -434,7 +434,8 @@ app.use('/api', async (req, res) => {
         // Check if this is an image endpoint that returns binary data
         const isImageEndpoint = req.originalUrl.startsWith('/api/proxy-image') ||
                                 req.originalUrl.startsWith('/api/image/cleaned/') ||
-                                req.originalUrl.startsWith('/api/cleaned-image/');
+                                req.originalUrl.startsWith('/api/cleaned-image/') ||
+                                req.originalUrl.startsWith('/api/assets/download/image-assets/');
 
         // Check if this is an audio endpoint that returns binary data
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
@@ -442,11 +443,13 @@ app.use('/api', async (req, res) => {
                                 req.originalUrl.startsWith('/api/audio/proxy/') ||
                                 req.originalUrl.startsWith('/api/audio-studio/preview/') ||
                                 req.originalUrl.match(/\/api\/audio-studio\/library\/[^\/]+\/stream$/) ||
-                                req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
+                                req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/) ||
+                                req.originalUrl.startsWith('/api/assets/download/audio-assets/');
 
         // Check if this is a video endpoint that returns binary data
         const isVideoEndpoint = req.originalUrl.startsWith('/api/templates/preview/video/') ||
                                 req.originalUrl.startsWith('/api/ecommerce/public/product/') ||
+                                req.originalUrl.startsWith('/api/assets/download/video-assets/') ||
                                 req.originalUrl.match(/\.mp4$/) ||
                                 req.originalUrl.match(/\.webm$/) ||
                                 req.originalUrl.match(/\.mov$/);
