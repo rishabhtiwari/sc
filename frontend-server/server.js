@@ -332,7 +332,6 @@ app.post('/api/image-library/library', upload.single('file'), async (req, res) =
             return res.status(400).json({ success: false, error: 'No file provided' });
         }
 
-        const FormData = require('form-data');
         const formData = new FormData();
         formData.append('file', req.file.buffer, {
             filename: req.file.originalname,
@@ -380,7 +379,6 @@ app.post('/api/video-library/library', upload.single('file'), async (req, res) =
             return res.status(400).json({ success: false, error: 'No file provided' });
         }
 
-        const FormData = require('form-data');
         const formData = new FormData();
         formData.append('file', req.file.buffer, {
             filename: req.file.originalname,
