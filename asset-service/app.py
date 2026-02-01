@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from config.settings import settings
-from routes import asset_routes, audio_library_routes, project_routes
+from routes import asset_routes, audio_library_routes, project_routes, image_library_routes, video_library_routes
 
 # Configure logging
 logging.basicConfig(
@@ -83,6 +83,18 @@ app.include_router(
     audio_library_routes.router,
     prefix="/api/audio-studio",
     tags=["Audio Studio"]
+)
+
+app.include_router(
+    image_library_routes.router,
+    prefix="/api/image-library",
+    tags=["Image Library"]
+)
+
+app.include_router(
+    video_library_routes.router,
+    prefix="/api/video-library",
+    tags=["Video Library"]
 )
 
 app.include_router(

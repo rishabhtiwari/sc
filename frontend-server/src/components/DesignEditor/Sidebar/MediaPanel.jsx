@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
+import { imageLibrary, videoLibrary } from '../../../services/assetLibraryService';
 
 /**
  * Media Panel
@@ -26,12 +27,12 @@ const MediaPanel = ({
   const isAudioPanel = panelType === 'audio';
   const isVideoPanel = panelType === 'video';
 
-  const handleVideoUpload = (event) => {
+  const handleVideoUpload = async (event) => {
     console.log('🎥 handleVideoUpload called');
     const files = Array.from(event.target.files);
     console.log('📁 Files:', files.length);
 
-    files.forEach((file) => {
+    for (const file of files) {
       if (file.type.startsWith('video/')) {
         const url = URL.createObjectURL(file);
 
@@ -39,26 +40,55 @@ const MediaPanel = ({
         const video = document.createElement('video');
         video.preload = 'metadata';
 
-        video.onloadedmetadata = () => {
-          const newVideo = {
-            id: `video-${Date.now()}-${Math.random()}`,
-            type: 'video',
-            url,
-            title: file.name,
-            file: file,
-            duration: video.duration // Store video duration
-          };
-          console.log('➕ Adding to uploadedMedia:', newVideo);
-          onUploadedMediaChange(prev => [...prev, newVideo]);
-          showToast('Video uploaded successfully', 'success');
+        video.onloadedmetadata = async () => {
+          try {
+            console.log('📤 Uploading video to library:', file.name);
 
-          // DON'T revoke the URL - we need it for playback on canvas
-          // The URL will be cleaned up when the component unmounts or video is deleted
+            // Upload to video library
+            const libraryResponse = await videoLibrary.upload(file, file.name, video.duration);
+
+            if (libraryResponse.success && libraryResponse.video) {
+              console.log('✅ Video saved to library:', libraryResponse.video);
+
+              const newVideo = {
+                id: libraryResponse.video.video_id,
+                type: 'video',
+                url: libraryResponse.video.url, // Use library URL (starts with /api/)
+                title: libraryResponse.video.name,
+                duration: libraryResponse.video.duration,
+                libraryId: libraryResponse.video.video_id, // Track library ID for deletion
+                // No file property - it's in library now
+              };
+
+              console.log('➕ Adding to uploadedMedia:', newVideo);
+              onUploadedMediaChange(prev => [...prev, newVideo]);
+              showToast('Video uploaded to library', 'success');
+
+              // Revoke blob URL since we have library URL now
+              URL.revokeObjectURL(url);
+            } else {
+              throw new Error('Failed to upload video to library');
+            }
+          } catch (error) {
+            console.error('❌ Error uploading video to library:', error);
+
+            // Fallback: Add with blob URL (old behavior)
+            const newVideo = {
+              id: `video-${Date.now()}-${Math.random()}`,
+              type: 'video',
+              url,
+              title: file.name,
+              file: file,
+              duration: video.duration
+            };
+            onUploadedMediaChange(prev => [...prev, newVideo]);
+            showToast('Video uploaded (not saved to library)', 'warning');
+          }
         };
 
         video.src = url;
       }
-    });
+    }
 
     // Reset file input to allow re-uploading the same file
     event.target.value = '';
@@ -289,34 +319,51 @@ const MediaPanel = ({
 
                     {/* Delete Icon - Always show */}
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        // If it's audio, find the audio track and delete from both timeline and media library
-                        if (media.type === 'audio') {
-                          const audioTrack = audioTracks.find(track => track.url === media.url);
-                          if (audioTrack && onAudioDeleteRequest) {
-                            // Delete from both timeline and media library
-                            onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+
+                        try {
+                          // Delete from backend library if it has a libraryId
+                          if (media.libraryId) {
+                            console.log(`🗑️ Deleting from library: ${media.libraryId}`);
+                            if (media.type === 'video') {
+                              await videoLibrary.delete(media.libraryId);
+                            } else if (media.type === 'image') {
+                              await imageLibrary.delete(media.libraryId);
+                            }
+                            console.log('✅ Deleted from library');
+                          }
+
+                          // If it's audio, find the audio track and delete from both timeline and media library
+                          if (media.type === 'audio') {
+                            const audioTrack = audioTracks.find(track => track.url === media.url);
+                            if (audioTrack && onAudioDeleteRequest) {
+                              // Delete from both timeline and media library
+                              onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+                            } else {
+                              // Audio not on timeline, just delete from media library
+                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                              showToast('Media deleted', 'success');
+                            }
+                          } else if (media.type === 'video') {
+                            // For video, find the video track and delete from both timeline and media library
+                            const videoTrack = videoTracks.find(track => track.url === media.url);
+                            if (videoTrack && onVideoDeleteRequest) {
+                              // Delete from both timeline and media library
+                              onVideoDeleteRequest(videoTrack.id, media.title, media.id);
+                            } else {
+                              // Video not on timeline, just delete from media library
+                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                              showToast('Media deleted from library', 'success');
+                            }
                           } else {
-                            // Audio not on timeline, just delete from media library
+                            // For other media types, just delete from media library
                             onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                             showToast('Media deleted', 'success');
                           }
-                        } else if (media.type === 'video') {
-                          // For video, find the video track and delete from both timeline and media library
-                          const videoTrack = videoTracks.find(track => track.url === media.url);
-                          if (videoTrack && onVideoDeleteRequest) {
-                            // Delete from both timeline and media library
-                            onVideoDeleteRequest(videoTrack.id, media.title, media.id);
-                          } else {
-                            // Video not on timeline, just delete from media library
-                            onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                            showToast('Media deleted', 'success');
-                          }
-                        } else {
-                          // For other media types, just delete from media library
-                          onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                          showToast('Media deleted', 'success');
+                        } catch (error) {
+                          console.error('❌ Error deleting media:', error);
+                          showToast('Failed to delete media from library', 'error');
                         }
                       }}
                       className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"

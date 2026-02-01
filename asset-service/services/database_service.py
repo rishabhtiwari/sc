@@ -26,6 +26,10 @@ class DatabaseService:
         self.news_db = self.client['news']
         self.audio_library = self.news_db.audio_library
 
+        # Image and Video libraries
+        self.image_library = self.news_db.image_library
+        self.video_library = self.news_db.video_library
+
         self._ensure_indexes()
 
     def _ensure_indexes(self):
@@ -375,6 +379,172 @@ class DatabaseService:
 
         except PyMongoError as e:
             logger.error(f"Error listing audio library: {e}")
+            raise
+
+    # ========== Image Library Methods ==========
+
+    def create_image_library_entry(self, image_data: Dict[str, Any]) -> str:
+        """Create a new image library entry"""
+        try:
+            image_data["created_at"] = datetime.utcnow()
+            image_data["updated_at"] = datetime.utcnow()
+
+            result = self.image_library.insert_one(image_data)
+            logger.info(f"Created image library entry: {image_data.get('image_id')}")
+            return image_data["image_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating image library entry: {e}")
+            raise
+
+    def list_image_library(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        folder: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List image library entries"""
+        try:
+            query = {
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            if folder:
+                query["folder"] = folder
+
+            images = list(
+                self.image_library.find(query, {"_id": 0})
+                .sort("created_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return images
+
+        except PyMongoError as e:
+            logger.error(f"Error listing image library: {e}")
+            raise
+
+    def delete_image_library_entry(
+        self,
+        image_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """Soft delete an image library entry"""
+        try:
+            query = {
+                "image_id": image_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            result = self.image_library.update_one(
+                query,
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting image library entry: {e}")
+            raise
+
+    # ========== Video Library Methods ==========
+
+    def create_video_library_entry(self, video_data: Dict[str, Any]) -> str:
+        """Create a new video library entry"""
+        try:
+            video_data["created_at"] = datetime.utcnow()
+            video_data["updated_at"] = datetime.utcnow()
+
+            result = self.video_library.insert_one(video_data)
+            logger.info(f"Created video library entry: {video_data.get('video_id')}")
+            return video_data["video_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating video library entry: {e}")
+            raise
+
+    def list_video_library(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        folder: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List video library entries"""
+        try:
+            query = {
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            if folder:
+                query["folder"] = folder
+
+            videos = list(
+                self.video_library.find(query, {"_id": 0})
+                .sort("created_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return videos
+
+        except PyMongoError as e:
+            logger.error(f"Error listing video library: {e}")
+            raise
+
+    def delete_video_library_entry(
+        self,
+        video_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """Soft delete a video library entry"""
+        try:
+            query = {
+                "video_id": video_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            result = self.video_library.update_one(
+                query,
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting video library entry: {e}")
             raise
 
     def list_assets(

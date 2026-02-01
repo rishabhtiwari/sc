@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import AuthenticatedVideo from '../../common/AuthenticatedVideo';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Canvas Element Component
@@ -253,6 +254,22 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
           filter: filters.length > 0 ? filters.join(' ') : 'none'
         };
 
+        // Check if this is an API URL that needs authentication
+        const isApiImageUrl = element.src && element.src.startsWith('/api/');
+
+        if (isApiImageUrl) {
+          // Use AuthenticatedImage for API URLs (library images)
+          return (
+            <AuthenticatedImage
+              src={element.src}
+              alt="Canvas element"
+              style={imageStyle}
+              draggable={false}
+            />
+          );
+        }
+
+        // Regular image for blob URLs or external URLs
         return (
           <img
             src={element.src}

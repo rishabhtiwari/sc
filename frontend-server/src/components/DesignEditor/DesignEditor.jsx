@@ -406,12 +406,13 @@ const DesignEditor = () => {
     }
 
     // Add to uploadedAudio (so it appears in "Your Media")
+    // Note: Don't add 'file' property for library audio - it's already uploaded
     const newAudio = {
       id: `audio-${Date.now()}-${Math.random()}`,
       type: 'audio',
       url: url,
       title: title,
-      file: { name: title }
+      // No file property - this is from library, already uploaded
     };
     console.log('📁 Adding to uploadedAudio:', newAudio);
     setUploadedAudio(prev => [...prev, newAudio]);
@@ -857,7 +858,7 @@ const DesignEditor = () => {
               });
 
               if ((element.type === 'video' || element.type === 'image') && element.src) {
-                // If it's a blob URL, upload to asset service
+                // Only upload if it's a blob URL (local file)
                 if (element.src.startsWith('blob:')) {
                   if (element.file) {
                     console.log(`  📤 Uploading ${element.type}:`, element.file.name);
@@ -888,6 +889,13 @@ const DesignEditor = () => {
                   } else {
                     console.warn(`  ⚠️ ${element.type} has blob URL but no file object!`, element.id);
                   }
+                } else if (element.src.startsWith('/api/')) {
+                  // Media from library - already uploaded, just keep the URL
+                  console.log(`  ℹ️ ${element.type} from library, keeping URL:`, element.src.substring(0, 50));
+                  return {
+                    ...element,
+                    file: undefined // Remove any file reference
+                  };
                 } else {
                   console.log(`  ℹ️ ${element.type} already has non-blob URL`);
                 }
@@ -928,6 +936,7 @@ const DesignEditor = () => {
             urlType: track.url?.substring(0, 10)
           });
 
+          // Only upload if it's a blob URL (local file)
           if (track.url && track.url.startsWith('blob:')) {
             if (track.file) {
               console.log(`  📤 Uploading audio:`, track.file.name);
@@ -948,8 +957,15 @@ const DesignEditor = () => {
             } else {
               console.warn(`  ⚠️ Audio has blob URL but no file!`, track.id);
             }
+          } else if (track.url && track.url.startsWith('/api/')) {
+            // Audio from library - already uploaded, just keep the URL
+            console.log(`  ℹ️ Audio from library, keeping URL:`, track.url.substring(0, 50));
+            return {
+              ...track,
+              file: undefined // Remove any file reference
+            };
           } else {
-            console.log(`  ℹ️ Audio already has non-blob URL or no URL`);
+            console.log(`  ℹ️ Audio has unknown URL type:`, track.url?.substring(0, 50));
           }
           return track;
         })
