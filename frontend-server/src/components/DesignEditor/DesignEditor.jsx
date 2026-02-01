@@ -418,6 +418,29 @@ const DesignEditor = () => {
           )}
         </div>
 
+        {/* Page Navigation */}
+        {pages.length > 1 && (
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center gap-3">
+            <button
+              onClick={handlePreviousPage}
+              disabled={currentPageIndex === 0}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            >
+              ← Previous
+            </button>
+            <span className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-100 rounded-lg">
+              Slide {currentPageIndex + 1} / {pages.length}
+            </span>
+            <button
+              onClick={handleNextPage}
+              disabled={currentPageIndex === pages.length - 1}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
         {/* Canvas */}
         <Canvas
           elements={currentPage?.elements || []}

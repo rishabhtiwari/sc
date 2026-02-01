@@ -28,13 +28,44 @@ export const usePageManagement = (pages, setPages) => {
   };
 
   /**
-   * Add multiple pages at once
+   * Add multiple pages at once (for slide generation)
+   * @param {Array} slidePages - Array of slide objects with elements, background, etc.
    */
-  const handleAddMultiplePages = (count) => {
-    const newPages = Array.from({ length: count }, (_, i) => 
-      createDefaultPage(pages.length + i)
-    );
-    setPages(prevPages => [...prevPages, ...newPages]);
+  const handleAddMultiplePages = (slidePages) => {
+    console.log('📄 handleAddMultiplePages called with', slidePages?.length, 'slides');
+    console.log('📄 Slide pages:', slidePages);
+
+    if (!slidePages || slidePages.length === 0) {
+      console.warn('⚠️ No slide pages provided');
+      return;
+    }
+
+    setPages(prevPages => {
+      // Calculate start time for new slides (position at end of existing slides)
+      const existingDuration = prevPages.reduce((sum, p) => {
+        const pStart = p.startTime !== undefined ? p.startTime : 0;
+        const pDur = p.duration || 5;
+        return Math.max(sum, pStart + pDur);
+      }, 0);
+
+      const newPages = slidePages.map((slide, index) => ({
+        id: slide.id || `page-${Date.now()}-${index}`,
+        name: slide.name || `Slide ${prevPages.length + index + 1}`,
+        elements: slide.elements || [],
+        background: slide.background || { type: 'solid', color: '#ffffff' },
+        duration: slide.duration || 5,
+        startTime: existingDuration + (index * 5), // Position new slides sequentially after existing ones
+        transition: slide.transition || 'fade'
+      }));
+
+      console.log('📄 Created new pages:', newPages);
+      console.log('📄 Current pages before update:', prevPages);
+
+      const updatedPages = [...prevPages, ...newPages];
+      console.log('📄 Updated pages:', updatedPages);
+
+      return updatedPages;
+    });
   };
 
   /**
