@@ -1028,12 +1028,14 @@ const DesignEditor = () => {
       });
 
       // Log detailed element data to verify icons/stickers are included
-      console.log('📦 Detailed project data:');
+      console.log('📦 Detailed project data being sent to backend:');
       projectData.pages?.forEach((page, index) => {
         console.log(`  📄 Page ${index}:`, {
           name: page.name,
-          elementCount: page.elements?.length || 0,
-          elements: page.elements?.map(el => ({
+          elementCount: page.elements?.length || 0
+        });
+        page.elements?.forEach((el, elIndex) => {
+          console.log(`    🔹 Element ${elIndex}:`, {
             type: el.type,
             id: el.id,
             icon: el.icon,
@@ -1042,7 +1044,11 @@ const DesignEditor = () => {
             width: el.width,
             height: el.height,
             text: el.text?.substring(0, 20)
-          }))
+          });
+          // Log full element for icons/stickers
+          if (el.type === 'icon' || el.type === 'sticker') {
+            console.log(`      🔍 Full ${el.type} being saved:`, el);
+          }
         });
       });
 
@@ -1204,6 +1210,10 @@ const DesignEditor = () => {
             text: el.text?.substring(0, 30),
             hasSrc: !!el.src
           });
+          // Log full element object for icons/stickers to debug
+          if (el.type === 'icon' || el.type === 'sticker') {
+            console.log(`      🔍 Full ${el.type} element:`, el);
+          }
         });
       });
 
