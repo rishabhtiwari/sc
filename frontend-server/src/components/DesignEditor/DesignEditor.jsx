@@ -486,13 +486,29 @@ const DesignEditor = () => {
               }
             });
 
+            console.log('📊 Response status:', response.status);
+            console.log('📊 Response headers:', Object.fromEntries(response.headers.entries()));
+
             if (!response.ok) {
+              const errorText = await response.text();
+              console.error('❌ Fetch failed:', errorText);
               throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
             const blob = await response.blob();
+            console.log('📦 Blob created:', {
+              size: blob.size,
+              type: blob.type,
+              trackId: track.id
+            });
+
+            if (blob.size === 0) {
+              console.error('❌ Blob is empty!');
+              return;
+            }
+
             const blobUrl = URL.createObjectURL(blob);
-            console.log('✅ Created blob URL for audio:', track.id);
+            console.log('✅ Created blob URL for audio:', track.id, blobUrl);
 
             const audio = new Audio(blobUrl);
 
@@ -502,6 +518,14 @@ const DesignEditor = () => {
 
             audio.addEventListener('error', (e) => {
               console.error('❌ Audio loading error for:', track.id, e);
+              console.error('❌ Audio error details:', {
+                error: audio.error,
+                code: audio.error?.code,
+                message: audio.error?.message,
+                src: audio.src,
+                networkState: audio.networkState,
+                readyState: audio.readyState
+              });
             });
 
             audio.volume = (track.volume || 100) / 100;
