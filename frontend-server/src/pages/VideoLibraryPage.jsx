@@ -80,7 +80,7 @@ const VideoLibraryPage = () => {
           }
         }
       });
-      showToast('Video added to timeline', 'success');
+      showToast('Video added to media library', 'success');
     }
   };
 

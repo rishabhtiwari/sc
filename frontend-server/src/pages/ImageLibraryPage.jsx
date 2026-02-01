@@ -114,7 +114,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
           }
         }
       });
-      showToast('Image added to canvas', 'success');
+      showToast('Image added to media library', 'success');
     } else {
       console.log('🖼️ [ImageLibrary] No action - not in modal or fromEditor mode');
     }

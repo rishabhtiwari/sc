@@ -96,7 +96,7 @@ const AudioLibraryPage = () => {
           }
         }
       });
-      showToast('Audio added to timeline', 'success');
+      showToast('Audio added to media library', 'success');
     }
   };
 

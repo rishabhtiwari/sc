@@ -1213,16 +1213,7 @@ const DesignEditor = () => {
     processedAssetRef.current = assetKey;
 
     if (addAsset.type === 'image') {
-      console.log('🖼️ Adding image to canvas and media list');
-
-      // Add image to canvas
-      handleAddElement({
-        type: 'image',
-        src: addAsset.src,
-        name: addAsset.name,
-        width: 300,
-        height: 200
-      });
+      console.log('🖼️ Adding image to media list only (not to canvas)');
 
       // Add to uploaded video list (which contains both images and videos)
       setUploadedVideo(prev => {
@@ -1237,93 +1228,43 @@ const DesignEditor = () => {
             libraryId: addAsset.libraryId
           }];
           console.log('✅ Added image to media list. New count:', newList.length);
+          console.log('📋 Media list now contains:', newList.map(v => ({ title: v.title, type: v.type })));
           return newList;
         }
         console.log('⚠️ Image already in media list');
         return prev;
       });
 
-      showToast('Image added to canvas', 'success');
+      showToast('Image added to media library', 'success');
     } else if (addAsset.type === 'audio') {
-      console.log('🎵 Adding audio to timeline and media list');
+      console.log('🎵 Adding audio to media list only (not to timeline)');
 
-      // Add to audio tracks directly since we already have the URL
-      const trackId = `audio-${Date.now()}`;
-      const audio = new Audio(addAsset.url);
-
-      audio.addEventListener('loadedmetadata', () => {
-        setAudioTracks(prevTracks => {
-          console.log('📊 Current audio tracks count:', prevTracks.length);
-          let startTime = 0;
-          if (prevTracks.length > 0) {
-            const maxEndTime = Math.max(...prevTracks.map(track =>
-              (track.startTime || 0) + (track.duration || 0)
-            ));
-            startTime = maxEndTime;
-          }
-
-          const newTrack = {
-            id: trackId,
-            name: addAsset.title || 'Library Audio',
+      // Add to uploaded audio list only
+      setUploadedAudio(prev => {
+        console.log('📊 Current uploadedAudio count:', prev.length);
+        const exists = prev.some(a => a.url === addAsset.url);
+        if (!exists) {
+          const newList = [...prev, {
+            id: `media-${Date.now()}`,
             url: addAsset.url,
-            duration: addAsset.duration || audio.duration,
-            startTime: startTime,
-            volume: 100,
-            fadeIn: 0,
-            fadeOut: 0,
-            playbackSpeed: 1,
-            type: 'music'
-          };
-
-          audioRefs.current[trackId] = audio;
-          audio.volume = 1.0;
-
-          console.log('✅ Audio track added from library:', newTrack);
-          return [...prevTracks, newTrack];
-        });
-
-        // Add to uploaded audio list
-        setUploadedAudio(prev => {
-          console.log('📊 Current uploadedAudio count:', prev.length);
-          const exists = prev.some(a => a.url === addAsset.url);
-          if (!exists) {
-            const newList = [...prev, {
-              id: trackId,
-              url: addAsset.url,
-              title: addAsset.title || 'Library Audio',
-              type: 'audio',
-              libraryId: addAsset.libraryId
-            }];
-            console.log('✅ Added audio to media list. New count:', newList.length);
-            return newList;
-          }
-          console.log('⚠️ Audio already in media list');
-          return prev;
-        });
-
-        showToast('Audio added to timeline', 'success');
+            title: addAsset.title || 'Library Audio',
+            type: 'audio',
+            duration: addAsset.duration,
+            libraryId: addAsset.libraryId
+          }];
+          console.log('✅ Added audio to media list. New count:', newList.length);
+          console.log('📋 Audio list now contains:', newList.map(a => ({ title: a.title })));
+          return newList;
+        }
+        console.log('⚠️ Audio already in media list');
+        return prev;
       });
 
-      audio.addEventListener('error', (e) => {
-        console.error('❌ Audio loading error:', e);
-        showToast('Failed to load audio', 'error');
-      });
-
-      audio.src = addAsset.url;
+      showToast('Audio added to media library', 'success');
     } else if (addAsset.type === 'video') {
-      console.log('🎬 Adding video to canvas and media list');
+      console.log('🎬 Adding video to media list only (not to canvas)');
 
-      // Add video to canvas
-      handleAddElement({
-        type: 'video',
-        src: addAsset.src,
-        name: addAsset.name,
-        duration: addAsset.duration,
-        width: 640,
-        height: 360
-      });
-
-      // Add to uploaded video list
+      // Add to uploaded video list only
       setUploadedVideo(prev => {
         console.log('📊 Current uploadedVideo count:', prev.length);
         const exists = prev.some(v => v.url === addAsset.src);
@@ -1337,13 +1278,14 @@ const DesignEditor = () => {
             libraryId: addAsset.libraryId
           }];
           console.log('✅ Added video to media list. New count:', newList.length);
+          console.log('📋 Video list now contains:', newList.map(v => ({ title: v.title, type: v.type })));
           return newList;
         }
         console.log('⚠️ Video already in media list');
         return prev;
       });
 
-      showToast('Video added to canvas', 'success');
+      showToast('Video added to media library', 'success');
     }
   }, [location.state]);
 
