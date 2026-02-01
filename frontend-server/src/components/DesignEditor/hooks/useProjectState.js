@@ -178,14 +178,20 @@ export const useProjectState = ({
 
   /**
    * Auto-load project from URL on mount
+   * Only load from backend if there's NO sessionStorage (fresh load)
+   * If sessionStorage exists, it's the source of truth (has most recent changes)
    */
   useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
-    if (projectId) {
-      console.log('📂 Loading project from URL:', projectId);
+    const hasSessionStorage = sessionStorage.getItem('designEditor_inMemoryState');
+
+    if (projectId && !hasSessionStorage) {
+      console.log('📂 Loading project from URL (no sessionStorage):', projectId);
       handleLoadProject(projectId).catch(error => {
         console.error('Failed to load project from URL:', error);
       });
+    } else if (projectId && hasSessionStorage) {
+      console.log('⏭️ Skipping project load - sessionStorage exists (source of truth)');
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
