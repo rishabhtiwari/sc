@@ -37,8 +37,8 @@ const DesignEditor = () => {
     return () => console.log('🎨 DesignEditor unmounted');
   }, []);
 
-  // UI State
-  const [selectedTool, setSelectedTool] = useState(null);
+  // UI State - Default to 'text' tool selected (sidebar open)
+  const [selectedTool, setSelectedTool] = useState('text');
   const [zoom, setZoom] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
 
@@ -502,12 +502,20 @@ const DesignEditor = () => {
               const originalDuration = audio.duration; // Original audio file duration
               const displayDuration = track.duration; // Stretched/trimmed duration on timeline
 
+              // Skip if audio metadata not loaded yet (duration is NaN)
+              if (!isFinite(originalDuration) || originalDuration <= 0) {
+                return;
+              }
+
               if (trackTime >= 0 && trackTime <= displayDuration) {
                 if (audio.paused) {
                   // Calculate actual audio position when starting playback
                   const actualAudioTime = trackTime % originalDuration;
-                  audio.currentTime = actualAudioTime;
-                  audio.play().catch(err => console.error('Audio play error:', err));
+                  // Validate the calculated time before setting
+                  if (isFinite(actualAudioTime) && actualAudioTime >= 0) {
+                    audio.currentTime = actualAudioTime;
+                    audio.play().catch(err => console.error('Audio play error:', err));
+                  }
                 } else {
                   // Check if audio needs to loop (reached end of original duration)
                   if (audio.currentTime >= originalDuration - 0.05) {
@@ -521,6 +529,42 @@ const DesignEditor = () => {
                 audio.pause();
               }
             }
+          });
+
+          // Update video elements on canvas
+          pages.forEach((page, pageIndex) => {
+            page.elements.forEach(element => {
+              if (element.type === 'video') {
+                const videoRef = videoElementRefs.current[element.id];
+                if (videoRef && isFinite(videoRef.duration) && videoRef.duration > 0) {
+                  // Calculate if this video should be playing based on page timing
+                  const pageStartTime = pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
+                  const pageEndTime = pageStartTime + (page.duration || 5);
+
+                  if (newTime >= pageStartTime && newTime < pageEndTime) {
+                    // Video should be playing
+                    const videoTime = newTime - pageStartTime;
+
+                    if (videoRef.paused) {
+                      // Start playing the video
+                      if (isFinite(videoTime) && videoTime >= 0) {
+                        videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                        videoRef.play().catch(err => console.error('Video play error:', err));
+                      }
+                    } else {
+                      // Sync video time if it drifts too much
+                      const drift = Math.abs(videoRef.currentTime - videoTime);
+                      if (drift > 0.5 && isFinite(videoTime)) {
+                        videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                      }
+                    }
+                  } else if (!videoRef.paused) {
+                    // Video should not be playing
+                    videoRef.pause();
+                  }
+                }
+              }
+            });
           });
 
           return newTime;

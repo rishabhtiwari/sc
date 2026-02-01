@@ -68,15 +68,23 @@ export const useVideoPlayback = (pages, currentPageIndex) => {
    */
   const handleSeek = (time) => {
     console.log('⏩ Seeking to', time);
+
+    // Validate time is a finite number
+    if (!isFinite(time) || time < 0) {
+      console.warn('⚠️ Invalid seek time:', time);
+      return;
+    }
+
     const videoElements = getVideoElements();
-    
+
     videoElements.forEach(videoEl => {
       const videoRef = videoElementRefs.current[videoEl.id];
-      if (videoRef) {
-        videoRef.currentTime = time;
+      if (videoRef && isFinite(videoRef.duration)) {
+        // Only set currentTime if video metadata is loaded
+        videoRef.currentTime = Math.min(time, videoRef.duration);
       }
     });
-    
+
     setCurrentTime(time);
   };
 
