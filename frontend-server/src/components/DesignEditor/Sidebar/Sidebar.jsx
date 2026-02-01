@@ -113,7 +113,22 @@ const Sidebar = ({
   return (
     <div className="flex h-full bg-white border-r border-gray-200 relative">
       {/* Tool Icons Bar */}
-      <div className="w-20 bg-gray-50 border-r border-gray-200 flex flex-col items-center pt-16 gap-2">
+      <div className="w-20 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-2">
+
+        {/* Reopen Button - Show when panel is closed, positioned above AI icon */}
+        {!expandedPanel && (
+          <button
+            onClick={() => {
+              // Reopen the last selected tool or default to 'text'
+              const toolToOpen = selectedTool || 'text';
+              handleToolClick(toolToOpen);
+            }}
+            className="w-14 h-14 flex items-center justify-center bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-all font-bold text-xl mb-2"
+            title="Open sidebar"
+          >
+            »»
+          </button>
+        )}
         {tools.map((tool) => (
           <button
             key={tool.id}
@@ -180,21 +195,6 @@ const Sidebar = ({
             />
           </div>
         </div>
-      )}
-
-      {/* Reopen Button - Show when panel is closed, positioned above AI section */}
-      {!expandedPanel && (
-        <button
-          onClick={() => {
-            // Reopen the last selected tool or default to 'text'
-            const toolToOpen = selectedTool || 'text';
-            handleToolClick(toolToOpen);
-          }}
-          className="absolute left-20 top-2 z-10 bg-blue-600 text-white px-2 py-3 rounded-r-lg shadow-lg hover:bg-blue-700 transition-all font-bold text-xl"
-          title="Open sidebar"
-        >
-          »»
-        </button>
       )}
     </div>
   );

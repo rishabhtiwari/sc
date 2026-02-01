@@ -442,21 +442,33 @@ const DesignEditor = () => {
    * Handle play/pause for timeline
    */
   const handlePlay = () => {
-    handlePlayPause();
+    console.log('▶️ Play button clicked');
+    setIsPlaying(true);
   };
 
   const handlePause = () => {
-    if (isPlaying) {
-      handlePlayPause();
+    console.log('⏸️ Pause button clicked');
+    setIsPlaying(false);
 
-      // Pause all audio elements
-      audioTracks.forEach(track => {
-        const audio = audioRefs.current[track.id];
-        if (audio && !audio.paused) {
-          audio.pause();
+    // Pause all audio elements
+    audioTracks.forEach(track => {
+      const audio = audioRefs.current[track.id];
+      if (audio && !audio.paused) {
+        audio.pause();
+      }
+    });
+
+    // Pause all video elements
+    pages.forEach(page => {
+      page.elements.forEach(element => {
+        if (element.type === 'video') {
+          const videoRef = videoElementRefs.current[element.id];
+          if (videoRef && !videoRef.paused) {
+            videoRef.pause();
+          }
         }
       });
-    }
+    });
   };
 
   /**
@@ -466,6 +478,7 @@ const DesignEditor = () => {
     let animationFrame;
 
     if (isPlaying) {
+      console.log('🎬 Playback loop started');
       const updatePlayhead = () => {
         setCurrentTime(prevTime => {
           const newTime = prevTime + 0.016; // ~60fps
@@ -513,6 +526,7 @@ const DesignEditor = () => {
                   const actualAudioTime = trackTime % originalDuration;
                   // Validate the calculated time before setting
                   if (isFinite(actualAudioTime) && actualAudioTime >= 0) {
+                    console.log(`🎵 Starting audio track ${track.id} at ${actualAudioTime.toFixed(2)}s`);
                     audio.currentTime = actualAudioTime;
                     audio.play().catch(err => console.error('Audio play error:', err));
                   }
@@ -548,6 +562,7 @@ const DesignEditor = () => {
                     if (videoRef.paused) {
                       // Start playing the video
                       if (isFinite(videoTime) && videoTime >= 0) {
+                        console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s`);
                         videoRef.currentTime = Math.min(videoTime, videoRef.duration);
                         videoRef.play().catch(err => console.error('Video play error:', err));
                       }
