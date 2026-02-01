@@ -5,7 +5,7 @@ Proxy routes for design editor project management
 from flask import Blueprint, request, jsonify, Response
 import requests
 import logging
-from utils.request_utils import get_request_headers_with_context
+from middleware.jwt_middleware import get_request_headers_with_context
 
 logger = logging.getLogger(__name__)
 
