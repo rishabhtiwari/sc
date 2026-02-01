@@ -367,6 +367,71 @@ const DesignEditor = () => {
     }
   };
 
+  /**
+   * Update playhead position during playback
+   */
+  useEffect(() => {
+    let animationFrame;
+
+    if (isPlaying) {
+      const updatePlayhead = () => {
+        setCurrentTime(prevTime => {
+          const newTime = prevTime + 0.016; // ~60fps
+
+          // Calculate total duration
+          const totalDuration = (() => {
+            const audioDuration = audioTracks.length > 0
+              ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+              : 0;
+            const slidesDuration = pages.length > 0
+              ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
+              : 0;
+            return Math.max(audioDuration, slidesDuration, 30);
+          })();
+
+          // Stop playback when reaching the end
+          if (newTime >= totalDuration) {
+            setIsPlaying(false);
+            return totalDuration;
+          }
+
+          return newTime;
+        });
+
+        animationFrame = requestAnimationFrame(updatePlayhead);
+      };
+
+      animationFrame = requestAnimationFrame(updatePlayhead);
+    }
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isPlaying, audioTracks, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Auto-navigate to the slide that corresponds to current playhead position
+   */
+  useEffect(() => {
+    if (pages.length > 0) {
+      // Calculate which slide should be visible based on current time
+      let accumulatedTime = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const slideDuration = pages[i].duration || 5;
+        if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
+          if (currentPageIndex !== i) {
+            console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
+            setCurrentPageIndex(i);
+          }
+          break;
+        }
+        accumulatedTime += slideDuration;
+      }
+    }
+  }, [currentTime, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
     setAudioDeleteDialog({
       isOpen: true,

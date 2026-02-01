@@ -63,21 +63,21 @@ export const useMediaManagement = () => {
    * Delete audio from media list
    */
   const handleDeleteAudio = (audioId) => {
-    setUploadedAudio(prev => prev.filter(a => a.audio_id !== audioId));
+    setUploadedAudio(prev => prev.filter(a => a.id !== audioId && a.audio_id !== audioId));
   };
 
   /**
    * Delete image from media list
    */
   const handleDeleteImage = (imageId) => {
-    setUploadedImage(prev => prev.filter(i => i.image_id !== imageId));
+    setUploadedImage(prev => prev.filter(i => i.id !== imageId && i.image_id !== imageId));
   };
 
   /**
    * Delete video from media list
    */
   const handleDeleteVideo = (videoId) => {
-    setUploadedVideo(prev => prev.filter(v => v.video_id !== videoId));
+    setUploadedVideo(prev => prev.filter(v => v.id !== videoId && v.video_id !== videoId));
   };
 
   /**

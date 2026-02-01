@@ -15,6 +15,7 @@ const MediaPanel = ({
   onAudioDeleteRequest,
   videoTracks = [],
   onVideoDeleteRequest,
+  onImageDeleteRequest,
   uploadedMedia = [],
   onUploadedMediaChange,
   onOpenAudioLibrary,
@@ -192,6 +193,7 @@ const MediaPanel = ({
               console.log('✅ Video duration extracted:', video.duration);
               onAddElement({
                 type: 'video',
+                name: media.title || media.file?.name || 'Video',
                 src: media.url,
                 width: 640,
                 height: 360,
@@ -222,6 +224,7 @@ const MediaPanel = ({
       } else {
         onAddElement({
           type: 'video',
+          name: media.title || media.file?.name || 'Video',
           src: media.url,
           width: 640,
           height: 360,
@@ -406,6 +409,15 @@ const MediaPanel = ({
                               // Video not on timeline, just delete from media library
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
                               showToast('Media deleted from library', 'success');
+                            }
+                          } else if (media.type === 'image') {
+                            // For image, delete from both canvas and media library
+                            if (onImageDeleteRequest) {
+                              onImageDeleteRequest(media.url, media.title, media.id);
+                            } else {
+                              // Fallback: just delete from media library
+                              onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                              showToast('Image deleted from library', 'success');
                             }
                           } else {
                             // For other media types, just delete from media library

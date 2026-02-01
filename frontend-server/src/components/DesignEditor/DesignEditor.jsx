@@ -128,6 +128,11 @@ const DesignEditor = () => {
     unregisterVideoRef
   } = useVideoPlayback(pages, currentPageIndex);
 
+  // Delete Dialog States
+  const [audioDeleteDialog, setAudioDeleteDialog] = useState({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
+  const [videoDeleteDialog, setVideoDeleteDialog] = useState({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
+  const [imageDeleteDialog, setImageDeleteDialog] = useState({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });
+
   // Session Storage Hook (auto-save/restore)
   useSessionStorage({
     pages,
@@ -149,21 +154,6 @@ const DesignEditor = () => {
 
   // Track processed assets to prevent duplicate processing
   const processedAssetRef = useRef(null);
-
-  // Delete confirmation dialogs
-  const [audioDeleteDialog, setAudioDeleteDialog] = useState({
-    isOpen: false,
-    audioId: null,
-    audioTitle: null,
-    mediaId: null
-  });
-
-  const [videoDeleteDialog, setVideoDeleteDialog] = useState({
-    isOpen: false,
-    videoId: null,
-    videoTitle: null,
-    mediaId: null
-  });
 
   /**
    * Handle adding asset from library (audio, image, video)
@@ -367,6 +357,71 @@ const DesignEditor = () => {
     }
   };
 
+  /**
+   * Update playhead position during playback
+   */
+  useEffect(() => {
+    let animationFrame;
+
+    if (isPlaying) {
+      const updatePlayhead = () => {
+        setCurrentTime(prevTime => {
+          const newTime = prevTime + 0.016; // ~60fps
+
+          // Calculate total duration
+          const totalDuration = (() => {
+            const audioDuration = audioTracks.length > 0
+              ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+              : 0;
+            const slidesDuration = pages.length > 0
+              ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
+              : 0;
+            return Math.max(audioDuration, slidesDuration, 30);
+          })();
+
+          // Stop playback when reaching the end
+          if (newTime >= totalDuration) {
+            setIsPlaying(false);
+            return totalDuration;
+          }
+
+          return newTime;
+        });
+
+        animationFrame = requestAnimationFrame(updatePlayhead);
+      };
+
+      animationFrame = requestAnimationFrame(updatePlayhead);
+    }
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [isPlaying, audioTracks, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Auto-navigate to the slide that corresponds to current playhead position
+   */
+  useEffect(() => {
+    if (pages.length > 0) {
+      // Calculate which slide should be visible based on current time
+      let accumulatedTime = 0;
+      for (let i = 0; i < pages.length; i++) {
+        const slideDuration = pages[i].duration || 5;
+        if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
+          if (currentPageIndex !== i) {
+            console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
+            setCurrentPageIndex(i);
+          }
+          break;
+        }
+        accumulatedTime += slideDuration;
+      }
+    }
+  }, [currentTime, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
     setAudioDeleteDialog({
       isOpen: true,
@@ -423,6 +478,54 @@ const DesignEditor = () => {
   };
 
   /**
+   * Handle image delete request
+   */
+  const handleImageDeleteRequest = (imageUrl, imageTitle, mediaId) => {
+    // Find all image elements with this URL across all pages
+    const imageElements = [];
+    pages.forEach((page, pageIndex) => {
+      page.elements.forEach(element => {
+        if (element.type === 'image' && element.src === imageUrl) {
+          imageElements.push({ element, pageIndex });
+        }
+      });
+    });
+
+    if (imageElements.length > 0) {
+      // If image is on canvas, show confirmation dialog
+      setImageDeleteDialog({
+        isOpen: true,
+        imageElements,
+        imageTitle,
+        mediaId
+      });
+    } else {
+      // Image not on canvas, just delete from media library
+      handleDeleteImage(mediaId);
+      showToast('Image deleted from library', 'success');
+    }
+  };
+
+  const confirmImageDelete = () => {
+    const { imageElements, mediaId } = imageDeleteDialog;
+
+    // Remove all instances from canvas
+    if (imageElements && imageElements.length > 0) {
+      imageElements.forEach(({ element }) => {
+        handleDeleteElement(element.id);
+      });
+    }
+
+    // Remove from media list
+    if (mediaId) {
+      handleDeleteImage(mediaId);
+    }
+
+    setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });
+    showToast('Image deleted', 'success');
+  };
+
+  /**
    * Handle save with toast notification
    */
   const handleSaveWithToast = async () => {
@@ -470,6 +573,7 @@ const DesignEditor = () => {
           onAudioDeleteRequest={handleAudioDeleteRequest}
           videoTracks={videoTracks}
           onVideoDeleteRequest={handleVideoDeleteRequest}
+          onImageDeleteRequest={handleImageDeleteRequest}
           uploadedAudio={uploadedAudio}
           onUploadedAudioChange={setUploadedAudio}
           uploadedImage={uploadedImage}
@@ -682,6 +786,24 @@ const DesignEditor = () => {
         message={`Are you sure you want to delete "${videoDeleteDialog.videoTitle}"?`}
         warningMessage="This will permanently delete the video from both the timeline and media library."
         confirmText="Delete Video"
+        cancelText="Cancel"
+        variant="danger"
+      />
+
+      {/* Delete Image Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={imageDeleteDialog.isOpen}
+        onClose={() => setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null })}
+        onConfirm={confirmImageDelete}
+        title="Delete Image"
+        description="This action cannot be undone"
+        message={`Are you sure you want to delete "${imageDeleteDialog.imageTitle}"?`}
+        warningMessage={
+          imageDeleteDialog.imageElements && imageDeleteDialog.imageElements.length > 0
+            ? `This image is used in ${imageDeleteDialog.imageElements.length} place(s) on the canvas. It will be removed from all locations.`
+            : "This will permanently delete the image from the media library."
+        }
+        confirmText="Delete Image"
         cancelText="Cancel"
         variant="danger"
       />

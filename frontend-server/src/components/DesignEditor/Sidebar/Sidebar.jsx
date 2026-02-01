@@ -23,6 +23,7 @@ const Sidebar = ({
   onAudioDeleteRequest,
   videoTracks,
   onVideoDeleteRequest,
+  onImageDeleteRequest,
   uploadedAudio,
   onUploadedAudioChange,
   uploadedImage,
@@ -144,6 +145,7 @@ const Sidebar = ({
               onAudioDeleteRequest={onAudioDeleteRequest}
               videoTracks={videoTracks}
               onVideoDeleteRequest={onVideoDeleteRequest}
+              onImageDeleteRequest={onImageDeleteRequest}
               uploadedMedia={
                 expandedPanel === 'audio' ? uploadedAudio :
                 expandedPanel === 'images' ? uploadedImage :
