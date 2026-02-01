@@ -45,6 +45,11 @@ RUN /app/venv/bin/pip install --no-cache-dir --ignore-installed blinker \
     num2words \
     semantic-text-splitter
 
+# Install Silero VAD for audio trimming (removes trailing artifacts)
+# This is a lightweight PyTorch-based VAD model
+RUN /app/venv/bin/pip install --no-cache-dir \
+    torchaudio
+
 # Install Bark and its dependencies (transformers, etc.) with compatible versions
 RUN /app/venv/bin/pip install --no-cache-dir \
     "transformers>=4.31.0,<4.36.0" \
@@ -83,7 +88,7 @@ RUN npm install
 COPY . .
 
 # Make Python scripts executable
-RUN chmod +x /app/utils/text_chunker.py /app/utils/text_chunker_v2.py /app/utils/audio_merger.py
+RUN chmod +x /app/utils/text_chunker.py /app/utils/text_chunker_v2.py /app/utils/audio_merger.py /app/utils/vad_trimmer.py
 
 # Set environment variables for GPU
 ENV CUDA_VISIBLE_DEVICES=0

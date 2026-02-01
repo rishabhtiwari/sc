@@ -16,6 +16,36 @@ logger = logging.getLogger(__name__)
 IOPAINT_SERVICE_URL = 'http://ichat-iopaint:8096'
 
 
+@image_bp.route('/image/config', methods=['GET'])
+def get_image_config():
+    """Get image cleaning configuration"""
+    try:
+        headers = get_request_headers_with_context()
+        response = requests.get(f'{IOPAINT_SERVICE_URL}/api/image-config', headers=headers, timeout=300)
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except Exception as e:
+        logger.error(f"Error proxying to IOPaint image-config GET: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@image_bp.route('/image/config', methods=['PUT'])
+def update_image_config():
+    """Update image cleaning configuration"""
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+        response = requests.put(
+            f'{IOPAINT_SERVICE_URL}/api/image-config',
+            json=request.get_json(),
+            headers=headers,
+            timeout=300
+        )
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except Exception as e:
+        logger.error(f"Error proxying to IOPaint image-config PUT: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @image_bp.route('/image/stats', methods=['GET'])
 @image_bp.route('/stats', methods=['GET'])
 def get_image_stats():

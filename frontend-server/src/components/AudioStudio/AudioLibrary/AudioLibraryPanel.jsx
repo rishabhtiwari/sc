@@ -8,7 +8,7 @@ import AudioGrid from './AudioGrid';
  * Audio Library Panel Component
  * Sidebar panel showing saved audio files
  */
-const AudioLibraryPanel = ({ refreshTrigger }) => {
+const AudioLibraryPanel = ({ refreshTrigger, onAddToCanvas }) => {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { audioFiles, loading, fetchAudioFiles, deleteAudio } = useAudioLibrary();
@@ -128,6 +128,7 @@ const AudioLibraryPanel = ({ refreshTrigger }) => {
           <AudioGrid
             audioFiles={filteredAudioFiles}
             onDelete={handleDelete}
+            onAddToCanvas={onAddToCanvas}
           />
         )}
       </div>

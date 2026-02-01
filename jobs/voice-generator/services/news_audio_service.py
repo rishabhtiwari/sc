@@ -135,6 +135,11 @@ class NewsAudioService:
             self.logger.info(f"🎭 Voice selected: {voice_to_use}")
             result['voice_used'] = voice_to_use
 
+            # Get speed from voice config
+            voice_config = self._get_voice_config(customer_id=customer_id)
+            speed = voice_config.get('speed', 1.2)  # Default to 1.2x if not set
+            self.logger.info(f"⚡ Speech speed: {speed}x")
+
             # Create public directory structure
             import os
             public_dir = "/app/public"
@@ -157,8 +162,8 @@ class NewsAudioService:
 
                 self.logger.info(f"🔊 Generating {field_name} audio for article {article_id}")
 
-                # Generate audio via audio-generation service with voice and language
-                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use, language)
+                # Generate audio via audio-generation service with voice, language, and speed
+                audio_result = self._call_audio_generation_service(text_content.strip(), model, voice_to_use, language, speed)
 
                 if audio_result['success']:
                     # Move generated file to our structure
@@ -441,6 +446,7 @@ class NewsAudioService:
             self.logger.warning("Using safe CPU defaults due to error")
             return {
                 'language': 'en',
+                'speed': 1.2,  # Default speed: 1.2x for news
                 'models': {},  # Empty - models will be selected based on GPU availability via API
                 'voices': {
                     'en': {
@@ -658,7 +664,7 @@ class NewsAudioService:
             self.logger.warning(f"⚠️ Error determining alternating voice: {str(e)}, using default")
             return lang_voice_config.get('defaultVoice', 'am_adam')
 
-    def _call_audio_generation_service(self, text: str, model: str, voice: str = None, language: str = 'en') -> Dict[str, Any]:
+    def _call_audio_generation_service(self, text: str, model: str, voice: str = None, language: str = 'en', speed: float = 1.2) -> Dict[str, Any]:
         """
         Call the audio-generation service to generate TTS
 
@@ -667,6 +673,7 @@ class NewsAudioService:
             model: TTS model to use
             voice: Voice to use for generation (optional)
             language: Language code for generation (e.g., 'en', 'hi', 'es') - used by universal models like Coqui XTTS
+            speed: Speech speed multiplier (default: 1.2 for news - 20% faster)
 
         Returns:
             Dictionary with generation results
@@ -678,7 +685,8 @@ class NewsAudioService:
                 'model': model,
                 'format': 'wav',
                 'voice': voice or self.config.DEFAULT_MALE_VOICE,  # Use provided voice or default
-                'language': language  # Add language parameter for universal models
+                'language': language,  # Add language parameter for universal models
+                'speed': speed  # Add speed parameter for news audio (1.2x = 20% faster)
             }
 
             self.logger.info(f"🔊 Calling audio generation service: {url}")

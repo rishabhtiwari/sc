@@ -5,6 +5,7 @@ import { imageService } from '../services';
 import StatsDisplay from '../components/ImageCleaning/StatsDisplay';
 import ImageCanvas from '../components/ImageCleaning/ImageCanvas';
 import ControlPanel from '../components/ImageCleaning/ControlPanel';
+import AuthenticatedImage from '../components/common/AuthenticatedImage';
 
 /**
  * Image Cleaning Page - Remove watermarks from news images
@@ -21,7 +22,52 @@ const ImageCleaningPage = () => {
   const [clearMaskTrigger, setClearMaskTrigger] = useState(0);
   const [autoDetectTrigger, setAutoDetectTrigger] = useState(0);
 
+  // Image config state
+  const [imageConfig, setImageConfig] = useState({ auto_mark_cleaned: false });
+  const [configLoading, setConfigLoading] = useState(false);
+
   const { showToast } = useToast();
+
+  // Load image configuration
+  const loadImageConfig = async () => {
+    setConfigLoading(true);
+    try {
+      const response = await imageService.getImageConfig();
+      const data = response.data?.data || response.data;
+      setImageConfig({
+        auto_mark_cleaned: data.auto_mark_cleaned || false,
+      });
+    } catch (error) {
+      console.error('Failed to load image config:', error);
+      showToast('Failed to load image settings', 'error');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  // Toggle auto-mark cleaned setting
+  const toggleAutoMarkCleaned = async () => {
+    const newValue = !imageConfig.auto_mark_cleaned;
+
+    try {
+      setConfigLoading(true);
+      await imageService.updateImageConfig({ auto_mark_cleaned: newValue });
+      setImageConfig({ auto_mark_cleaned: newValue });
+      showToast(
+        newValue
+          ? 'Auto-mark enabled: Images will be marked as cleaned automatically'
+          : 'Auto-mark disabled: Manual watermark removal required',
+        'success'
+      );
+      // Reload stats as this might affect pending count
+      loadStats();
+    } catch (error) {
+      console.error('Failed to update image config:', error);
+      showToast('Failed to update settings', 'error');
+    } finally {
+      setConfigLoading(false);
+    }
+  };
 
   // Load statistics
   const loadStats = async () => {
@@ -62,36 +108,16 @@ const ImageCleaningPage = () => {
         title: data.title || 'Untitled',
         source: data.source?.name || 'Unknown',
         url: data.image_url,
+        originalUrl: data.original_image_url,
       });
 
-      // Load image as base64
+      // Just set the image URL - no need to convert to base64 yet
+      // The ImageCanvas component will handle loading
       if (data.image_url) {
-        console.log('Loading image from URL:', data.image_url);
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height);
-          try {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            const dataUrl = canvas.toDataURL('image/png');
-            console.log('Canvas data URL created, length:', dataUrl.length);
-            setImageData(dataUrl);
-            setHasMask(false);
-            showToast('Image loaded successfully', 'success');
-          } catch (err) {
-            console.error('Error converting image to canvas:', err);
-            showToast('Failed to process image: ' + err.message, 'error');
-          }
-        };
-        img.onerror = (err) => {
-          console.error('Image load error:', err);
-          showToast('Failed to load image', 'error');
-        };
-        img.src = data.image_url;
+        console.log('Setting image URL:', data.image_url);
+        setImageData(data.image_url);
+        setHasMask(false);
+        showToast('Image loaded successfully', 'success');
       } else {
         showToast('No image URL provided', 'warning');
       }
@@ -137,9 +163,12 @@ const ImageCleaningPage = () => {
       }
 
       console.log('[Process] Sending process request for doc_id:', currentImage.id);
+      console.log('[Process] Using image URL:', currentImage.url);
+
+      // Send image_url instead of image_data to avoid transferring large base64 data
       const response = await imageService.processImage({
         doc_id: currentImage.id,
-        image_data: canvasData.imageData,
+        image_url: currentImage.url,  // Use URL instead of base64 data
         mask_data: canvasData.maskData,
       });
 
@@ -182,24 +211,33 @@ const ImageCleaningPage = () => {
 
     setLoading(true);
     try {
-      console.log('[Save] Getting canvas data...');
-      // Get current image data
-      const canvasData = window.getImageCanvasData?.();
-      console.log('[Save] Canvas data:', canvasData ? 'present' : 'null');
-      if (!canvasData) {
-        throw new Error('Failed to get canvas data');
+      console.log('[Save] Auto-mark mode:', imageConfig.auto_mark_cleaned);
+
+      let saveData = {
+        doc_id: currentImage.id,
+      };
+
+      // Only include image_data if NOT in auto-mark mode
+      if (!imageConfig.auto_mark_cleaned) {
+        console.log('[Save] Getting canvas data for manual cleaning...');
+        const canvasData = window.getImageCanvasData?.();
+        console.log('[Save] Canvas data:', canvasData ? 'present' : 'null');
+        if (!canvasData) {
+          throw new Error('Failed to get canvas data');
+        }
+        saveData.image_data = canvasData.imageData;
+        console.log('[Save] Image data length:', canvasData.imageData?.length);
       }
 
       console.log('[Save] Saving image for doc_id:', currentImage.id);
-      console.log('[Save] Image data length:', canvasData.imageData?.length);
-
-      const response = await imageService.saveImage({
-        doc_id: currentImage.id,
-        image_data: canvasData.imageData,
-      });
+      const response = await imageService.saveImage(saveData);
 
       console.log('[Save] Save response:', response.data);
-      showToast('Image saved and marked as done!', 'success');
+
+      const message = response.data?.auto_marked
+        ? 'Image marked as cleaned (auto-mark mode)!'
+        : 'Image saved and marked as done!';
+      showToast(message, 'success');
 
       // Load next image
       await loadStats();
@@ -243,33 +281,107 @@ const ImageCleaningPage = () => {
   // Load initial data
   useEffect(() => {
     loadStats();
+    loadImageConfig();
   }, []);
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">🎨 Image Cleaning</h1>
-        <p className="text-gray-600">Remove watermarks from news images using AI-powered inpainting</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">🎨 Image Cleaning</h1>
+          <p className="text-gray-600">Remove watermarks from news images using AI-powered inpainting</p>
+        </div>
+
+        {/* Settings Toggle */}
+        <Card className="p-4 bg-blue-50 border-blue-200">
+          <div className="flex items-center space-x-3">
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                Auto-Mark Images as Cleaned
+              </h3>
+              <p className="text-xs text-gray-600">
+                {imageConfig.auto_mark_cleaned
+                  ? 'Images are automatically marked as cleaned without watermark removal'
+                  : 'Manual watermark removal required for each image'}
+              </p>
+            </div>
+            <button
+              onClick={toggleAutoMarkCleaned}
+              disabled={configLoading}
+              className={`
+                relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+                ${imageConfig.auto_mark_cleaned ? 'bg-blue-600' : 'bg-gray-300'}
+                ${configLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              `}
+              aria-label="Toggle auto-mark cleaned"
+            >
+              <span
+                className={`
+                  inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                  ${imageConfig.auto_mark_cleaned ? 'translate-x-6' : 'translate-x-1'}
+                `}
+              />
+            </button>
+          </div>
+        </Card>
       </div>
 
       {/* Statistics */}
       <StatsDisplay stats={stats} loading={statsLoading} />
 
+      {/* Auto-Mark Mode Notice */}
+      {imageConfig.auto_mark_cleaned && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-yellow-700">
+                <strong>Auto-Mark Mode Active:</strong> Images will be marked as cleaned without watermark removal.
+                Click "Save & Next" to mark the current image as cleaned and proceed to the next one.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Canvas Area */}
         <div className="lg:col-span-2">
-          <Card title="Image Editor">
+          <Card title={imageConfig.auto_mark_cleaned ? "Image Preview (Auto-Mark Mode)" : "Image Editor"}>
             <div className="relative" style={{ height: '600px' }}>
-              <ImageCanvas
-                image={imageData}
-                brushSize={brushSize}
-                onMaskChange={setHasMask}
-                clearMask={clearMaskTrigger}
-                autoDetect={autoDetectTrigger}
-              />
-              
+              {imageConfig.auto_mark_cleaned ? (
+                // Auto-mark mode: Just show the image without editing tools
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  {imageData ? (
+                    <AuthenticatedImage
+                      src={imageData}
+                      alt="Preview"
+                      className="max-w-full max-h-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-center text-gray-500">
+                      <p className="text-lg mb-2">No image loaded</p>
+                      <p className="text-sm">Click "Load Next Image" to start</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Manual mode: Show editing canvas
+                <ImageCanvas
+                  image={imageData}
+                  brushSize={brushSize}
+                  onMaskChange={setHasMask}
+                  clearMask={clearMaskTrigger}
+                  autoDetect={autoDetectTrigger}
+                />
+              )}
+
               {/* Loading Overlay */}
               {(loading || processing) && (
                 <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10">
@@ -301,6 +413,7 @@ const ImageCleaningPage = () => {
               onSkip={handleSkip}
               loading={loading}
               processing={processing}
+              autoMarkMode={imageConfig.auto_mark_cleaned}
             />
           </Card>
         </div>

@@ -767,6 +767,22 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - MODEL_CACHE_DIR=/app/data/models
+      # Coqui XTTS-v2 Generation Parameters (to reduce hallucinations)
+      # Lower temperature = more consistent, less creative (reduces weird sounds at end)
+      # Recommended range: 0.6-0.7 for minimal hallucinations
+      - COQUI_TEMPERATURE=0.6
+      # Length penalty: 1.0 = neutral, >1.0 = longer, <1.0 = shorter
+      # Higher value = stricter control, prevents adding extra sounds
+      - COQUI_LENGTH_PENALTY=1.5
+      # Repetition penalty: higher = less repetition (reduces artifacts)
+      - COQUI_REPETITION_PENALTY=2.0
+      # Top-k sampling: limits to top k most probable tokens
+      - COQUI_TOP_K=50
+      # Top-p (nucleus) sampling: limits to tokens with cumulative probability <= top_p
+      - COQUI_TOP_P=0.85
+      # VAD (Voice Activity Detection) trimming: automatically removes trailing artifacts
+      # Set to 'false' to disable (enabled by default)
+      - ENABLE_VAD_TRIMMING=true
     networks:
       - ichat-network
     healthcheck:
@@ -940,6 +956,47 @@ services:
           memory: 8G
         reservations:
           memory: 2G
+
+  # Image Auto-Marker Job - BaseJob implementation for automatic image marking
+  job-image-auto-marker:
+    build:
+      context: ./jobs
+      dockerfile: ./image-auto-marker/Dockerfile
+    container_name: ichat-image-auto-marker
+    ports:
+      - "8102:8102"
+    environment:
+      - FLASK_PORT=8102
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      - JOB_INTERVAL_MINUTES=5  # Run every 5 minutes
+      - AUTO_MARK_BATCH_SIZE=50  # Process 50 images per run
+      - OUTPUT_DIR=/app/output  # Directory to save downloaded images
+      - LOG_FILE=/var/log/image-auto-marker.log
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./jobs/image-auto-marker/logs:/var/log
+      - ./jobs/watermark-remover/public:/app/output  # Share output dir with IOPaint
+    networks:
+      - ichat-network
+    depends_on:
+      - ichat-mongodb
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8102/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    labels:
+      - "com.news-automation.service=image-auto-marker"
+      - "com.news-automation.version=1.0.0"
+      - "com.news-automation.description=Automatic Image Marking Job (BaseJob)"
 
   # YouTube Uploader Service
   youtube-uploader:

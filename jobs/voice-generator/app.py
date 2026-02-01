@@ -631,6 +631,7 @@ def get_voice_config():
 
                 default_config = {
                     'language': 'en',  # Primary language
+                    'speed': 1.2,  # Default speed: 1.2x for news (20% faster)
                     'models': {
                         'en': 'coqui-xtts',
                         'hi': 'coqui-xtts'
@@ -745,6 +746,10 @@ def update_voice_config():
             if 'language' in data:
                 update_data['language'] = data['language']
 
+            # Handle speed field
+            if 'speed' in data:
+                update_data['speed'] = data['speed']
+
             # Handle models object
             if 'models' in data:
                 update_data['models'] = data['models']
@@ -770,6 +775,7 @@ def update_voice_config():
             # Create new config with default structure
             new_config = {
                 'language': data.get('language', 'en'),
+                'speed': data.get('speed', 1.2),  # Default speed: 1.2x for news
                 'models': data.get('models', {
                     'en': 'kokoro-82m',
                     'hi': 'mms-tts-hin'

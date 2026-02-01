@@ -453,22 +453,24 @@ class PromptTemplateHandler:
             item_texts = []
             for item in value:
                 if isinstance(item, str):
-                    item_texts.append(item)
+                    # Plain string items - add as list items
+                    item_texts.append(f"- {item}")
                 elif isinstance(item, dict):
                     # Handle objects in array (e.g., key_features with feature_name and description)
                     if 'feature_name' in item and 'description' in item:
-                        item_texts.append(f"{item['feature_name']}: {item['description']}")
+                        # Format as markdown list with bold feature name
+                        item_texts.append(f"- **{item['feature_name']}**: {item['description']}")
                     elif 'name' in item and 'description' in item:
-                        item_texts.append(f"{item['name']}: {item['description']}")
+                        item_texts.append(f"- **{item['name']}**: {item['description']}")
                     elif 'title' in item and 'content' in item:
-                        item_texts.append(f"{item['title']}: {item['content']}")
+                        item_texts.append(f"- **{item['title']}**: {item['content']}")
                     else:
                         # Generic object: join all string values
                         obj_values = [str(v) for v in item.values() if v]
                         if obj_values:
-                            item_texts.append(': '.join(obj_values))
+                            item_texts.append(f"- {': '.join(obj_values)}")
 
-            return '\n'.join(item_texts) if item_texts else ''
+            return '\n\n'.join(item_texts) if item_texts else ''
 
         elif isinstance(value, dict):
             # Handle nested objects

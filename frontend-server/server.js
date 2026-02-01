@@ -39,6 +39,76 @@ app.get('/health', (req, res) => {
     });
 });
 
+// Special route for asset upload (must come before general API proxy)
+// This proxies to API server which then forwards to asset-service
+app.post('/api/assets/upload', upload.single('file'), async (req, res) => {
+    try {
+        console.log('📤 Asset upload request received at frontend-server');
+        console.log('File:', req.file ? `${req.file.originalname} (${req.file.size} bytes)` : 'NO FILE');
+        console.log('Form data:', req.body);
+        console.log('Headers:', {
+            authorization: req.headers['authorization'] ? 'Present' : 'Missing',
+            'x-customer-id': req.headers['x-customer-id'] || 'Missing',
+            'x-user-id': req.headers['x-user-id'] || 'Missing'
+        });
+
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        // Create FormData to forward to API server
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype
+        });
+
+        // Forward all form fields
+        Object.keys(req.body).forEach(key => {
+            formData.append(key, req.body[key]);
+        });
+
+        // Prepare headers
+        const headers = {
+            ...formData.getHeaders() // This sets Content-Type with boundary
+        };
+
+        // Forward authentication and multi-tenant headers
+        if (req.headers['authorization']) {
+            headers['Authorization'] = req.headers['authorization'];
+        }
+        if (req.headers['x-customer-id']) {
+            headers['X-Customer-ID'] = req.headers['x-customer-id'];
+        }
+        if (req.headers['x-user-id']) {
+            headers['X-User-ID'] = req.headers['x-user-id'];
+        }
+
+        console.log('🔄 Forwarding to API server:', `${API_SERVER_URL}/api/assets/upload`);
+
+        // Forward to API server
+        const response = await axios.post(
+            `${API_SERVER_URL}/api/assets/upload`,
+            formData,
+            {
+                headers: headers,
+                timeout: 120000, // 2 minutes
+                validateStatus: () => true // Don't throw on any status code
+            }
+        );
+
+        console.log('✅ API server response:', response.status);
+        if (response.status !== 200) {
+            console.error('❌ API server error:', response.data);
+        }
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error('❌ Error proxying asset upload:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Special route for background audio file upload (must come before general API proxy)
 // This proxies to API server (not directly to video-generator) to maintain API Gateway pattern
 app.post('/api/videos/background-audio', upload.single('file'), async (req, res) => {

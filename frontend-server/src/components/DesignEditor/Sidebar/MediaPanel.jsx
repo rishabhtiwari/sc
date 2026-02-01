@@ -1,0 +1,313 @@
+import React, { useRef } from 'react';
+import { useToast } from '../../../hooks/useToast';
+
+/**
+ * Media Panel
+ * Features: Upload videos, audio, stock media
+ */
+const MediaPanel = ({
+  onAddElement,
+  onAddAudioTrack,
+  panelType,
+  audioTracks = [],
+  onAudioSelect,
+  onAudioDeleteRequest,
+  videoTracks = [],
+  onVideoDeleteRequest,
+  uploadedMedia = [],
+  onUploadedMediaChange,
+  onOpenAudioLibrary
+}) => {
+  const videoInputRef = useRef(null);
+  const audioInputRef = useRef(null);
+  const { showToast } = useToast();
+
+  // Determine if we should show video or audio based on panel type
+  const isAudioPanel = panelType === 'audio';
+  const isVideoPanel = panelType === 'video';
+
+  const handleVideoUpload = (event) => {
+    console.log('🎥 handleVideoUpload called');
+    const files = Array.from(event.target.files);
+    console.log('📁 Files:', files.length);
+
+    files.forEach((file) => {
+      if (file.type.startsWith('video/')) {
+        const url = URL.createObjectURL(file);
+
+        // Create video element to get duration
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+
+        video.onloadedmetadata = () => {
+          const newVideo = {
+            id: `video-${Date.now()}-${Math.random()}`,
+            type: 'video',
+            url,
+            title: file.name,
+            file: file,
+            duration: video.duration // Store video duration
+          };
+          console.log('➕ Adding to uploadedMedia:', newVideo);
+          onUploadedMediaChange(prev => [...prev, newVideo]);
+          showToast('Video uploaded successfully', 'success');
+
+          // DON'T revoke the URL - we need it for playback on canvas
+          // The URL will be cleaned up when the component unmounts or video is deleted
+        };
+
+        video.src = url;
+      }
+    });
+
+    // Reset file input to allow re-uploading the same file
+    event.target.value = '';
+  };
+
+  const handleAudioUpload = (event) => {
+    console.log('🎵 handleAudioUpload called');
+    const files = Array.from(event.target.files);
+    console.log('📁 Files:', files.length);
+
+    files.forEach((file) => {
+      if (file.type.startsWith('audio/')) {
+        const url = URL.createObjectURL(file);
+        const newAudio = {
+          id: `audio-${Date.now()}-${Math.random()}`,
+          type: 'audio',
+          url,
+          title: file.name,
+          file: file // Store file reference
+        };
+        console.log('➕ Adding to uploadedMedia:', newAudio);
+        onUploadedMediaChange(prev => [...prev, newAudio]);
+
+        // Add to audio timeline if callback provided
+        if (onAddAudioTrack) {
+          console.log('🎬 Calling onAddAudioTrack for:', file.name);
+          onAddAudioTrack(file, url);
+          showToast('Audio added to timeline', 'success');
+        } else {
+          showToast('Audio uploaded successfully', 'success');
+        }
+      }
+    });
+
+    // Reset file input to allow re-uploading the same file
+    event.target.value = '';
+  };
+
+  const handleAddMedia = (media) => {
+    console.log('🔍 handleAddMedia called for:', media);
+    console.log('🔍 Current audioTracks:', audioTracks);
+
+    // If it's audio, add to timeline instead of canvas
+    if (media.type === 'audio') {
+      // Check if this audio is already on the timeline
+      const existingTrack = audioTracks.find(track => track.url === media.url);
+      console.log('🔍 Existing track:', existingTrack);
+
+      if (!existingTrack && onAddAudioTrack) {
+        console.log('✅ Calling onAddAudioTrack for:', media.title);
+        // Re-create the file object from the media
+        const file = media.file || { name: media.title };
+        onAddAudioTrack(file, media.url);
+        showToast('Audio added to timeline', 'success');
+      } else if (existingTrack) {
+        console.log('⚠️ Audio already on timeline:', media.title);
+        showToast('Audio already on timeline', 'info');
+      } else {
+        console.log('❌ onAddAudioTrack not available');
+      }
+    } else if (media.type === 'video') {
+      // For video, add to canvas as an element
+      onAddElement({
+        type: 'video',
+        src: media.url,
+        width: 640,
+        height: 360,
+        duration: media.duration, // Pass video duration
+        file: media.file
+      });
+      showToast('Video added to canvas', 'success');
+    } else {
+      // For other media types
+      onAddElement({
+        type: media.type,
+        src: media.url,
+        width: 300,
+        height: 200
+      });
+      showToast(`${media.type} added to canvas`, 'success');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Upload Video - Only show on video tab */}
+      {!isAudioPanel && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">🎬 Upload Video</h3>
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            multiple
+            onChange={handleVideoUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => videoInputRef.current?.click()}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Video
+          </button>
+          <p className="text-xs text-gray-500 text-center">MP4, MOV, AVI up to 100MB</p>
+        </div>
+      )}
+
+      {/* Upload Audio - Only show on audio tab */}
+      {!isVideoPanel && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">🎵 Upload Audio</h3>
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            multiple
+            onChange={handleAudioUpload}
+            className="hidden"
+          />
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Audio
+          </button>
+          <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
+        </div>
+      )}
+
+      {/* Browse Audio Library Button - Only show on audio tab */}
+      {isAudioPanel && onOpenAudioLibrary && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">📁 Audio Library</h3>
+          <button
+            onClick={onOpenAudioLibrary}
+            className="w-full px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span className="text-xl">📁</span>
+            Browse Audio Library
+          </button>
+          <p className="text-xs text-gray-500 text-center">Access your saved audio files</p>
+        </div>
+      )}
+
+      {/* Uploaded Media */}
+      {uploadedMedia.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-gray-900">Your Media</h3>
+          <div className="space-y-2">
+            {uploadedMedia.map((media) => (
+              <div
+                key={media.id}
+                className="p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl">
+                    {media.type === 'video' ? '🎬' : '🎵'}
+                  </div>
+                  <div
+                    className="flex-1 min-w-0 cursor-pointer"
+                    onClick={() => handleAddMedia(media)}
+                  >
+                    <div className="text-sm font-medium text-gray-900 truncate">
+                      {media.title}
+                    </div>
+                    <div className="text-xs text-gray-500 capitalize">{media.type}</div>
+                  </div>
+
+                  {/* Action Icons */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Properties Icon - Only show for audio on timeline */}
+                    {media.type === 'audio' && audioTracks.find(track => track.url === media.url) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Find the corresponding audio track
+                          const audioTrack = audioTracks.find(track => track.url === media.url);
+                          if (audioTrack && onAudioSelect) {
+                            onAudioSelect(audioTrack.id);
+                          }
+                        }}
+                        className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                        title="Edit properties"
+                      >
+                        ⚙️
+                      </button>
+                    )}
+
+                    {/* Delete Icon - Always show */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // If it's audio, find the audio track and delete from both timeline and media library
+                        if (media.type === 'audio') {
+                          const audioTrack = audioTracks.find(track => track.url === media.url);
+                          if (audioTrack && onAudioDeleteRequest) {
+                            // Delete from both timeline and media library
+                            onAudioDeleteRequest(audioTrack.id, media.title, media.id);
+                          } else {
+                            // Audio not on timeline, just delete from media library
+                            onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                            showToast('Media deleted', 'success');
+                          }
+                        } else if (media.type === 'video') {
+                          // For video, find the video track and delete from both timeline and media library
+                          const videoTrack = videoTracks.find(track => track.url === media.url);
+                          if (videoTrack && onVideoDeleteRequest) {
+                            // Delete from both timeline and media library
+                            onVideoDeleteRequest(videoTrack.id, media.title, media.id);
+                          } else {
+                            // Video not on timeline, just delete from media library
+                            onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                            showToast('Media deleted', 'success');
+                          }
+                        } else {
+                          // For other media types, just delete from media library
+                          onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
+                          showToast('Media deleted', 'success');
+                        }
+                      }}
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded text-sm transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete media"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stock Media */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-gray-900">Stock Media</h3>
+        <div className="text-sm text-gray-500 text-center py-8">
+          Stock media library coming soon
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MediaPanel;
+

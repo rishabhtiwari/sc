@@ -436,7 +436,7 @@ class NewsQueryService:
 
             # Only update fields that are provided and allowed
             allowed_fields = [
-                'title', 'description', 'content', 'status',
+                'title', 'description', 'short_summary', 'content', 'status',
                 'category', 'lang', 'author', 'urlToImage'
             ]
 

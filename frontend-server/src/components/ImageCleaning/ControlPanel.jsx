@@ -18,6 +18,7 @@ const ControlPanel = ({
   onReplaceImage,
   loading,
   processing,
+  autoMarkMode = false,
 }) => {
   return (
     <div className="space-y-4">
@@ -33,7 +34,7 @@ const ControlPanel = ({
       )}
 
       {/* Instructions */}
-      {currentImage && (
+      {currentImage && !autoMarkMode && (
         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-sm font-semibold text-blue-900 mb-2">📝 Instructions:</p>
           <ul className="text-xs text-blue-700 space-y-1">
@@ -44,10 +45,21 @@ const ControlPanel = ({
         </div>
       )}
 
-      {/* Brush Size Control */}
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-gray-700">
-          Brush Size: {brushSize}px
+      {/* Auto-Mark Mode Instructions */}
+      {currentImage && autoMarkMode && (
+        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-sm font-semibold text-green-900 mb-2">✅ Auto-Mark Mode:</p>
+          <p className="text-xs text-green-700">
+            Images are automatically marked as cleaned. Click "Save & Next" to mark this image and load the next one.
+          </p>
+        </div>
+      )}
+
+      {/* Brush Size Control - Only show in manual mode */}
+      {!autoMarkMode && (
+        <div className="space-y-2">
+          <label className="block text-sm font-semibold text-gray-700">
+            Brush Size: {brushSize}px
         </label>
         <input
           type="range"
@@ -62,6 +74,8 @@ const ControlPanel = ({
           }}
         />
       </div>
+
+      )}
 
       {/* Action Buttons */}
       <div className="space-y-3">
@@ -79,49 +93,53 @@ const ControlPanel = ({
           </Button>
         </div>
 
-        {/* Mask Tools */}
-        <div className="border-t pt-3">
-          <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Mask Tools</p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="info"
-              icon="🔍"
-              onClick={onAutoDetect}
-              disabled={!currentImage || loading}
-              size="sm"
-              className="shadow-sm hover:shadow-md"
-            >
-              Auto-detect
-            </Button>
+        {/* Mask Tools - Only show in manual mode */}
+        {!autoMarkMode && (
+          <div className="border-t pt-3">
+            <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Mask Tools</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant="info"
+                icon="🔍"
+                onClick={onAutoDetect}
+                disabled={!currentImage || loading}
+                size="sm"
+                className="shadow-sm hover:shadow-md"
+              >
+                Auto-detect
+              </Button>
 
+              <Button
+                variant="secondary"
+                icon="🗑️"
+                onClick={onClearMask}
+                disabled={!currentImage || !hasMask || loading}
+                size="sm"
+                className="shadow-sm hover:shadow-md"
+              >
+                Clear Mask
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Processing - Only show in manual mode */}
+        {!autoMarkMode && (
+          <div className="border-t pt-3">
+            <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Processing</p>
             <Button
-              variant="secondary"
-              icon="🗑️"
-              onClick={onClearMask}
+              variant="primary"
+              icon="✨"
+              onClick={onProcess}
               disabled={!currentImage || !hasMask || loading}
+              loading={processing}
               size="sm"
-              className="shadow-sm hover:shadow-md"
+              className="w-full shadow-sm hover:shadow-md"
             >
-              Clear Mask
+              Remove Watermark
             </Button>
           </div>
-        </div>
-
-        {/* Processing */}
-        <div className="border-t pt-3">
-          <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Processing</p>
-          <Button
-            variant="primary"
-            icon="✨"
-            onClick={onProcess}
-            disabled={!currentImage || !hasMask || loading}
-            loading={processing}
-            size="sm"
-            className="w-full shadow-sm hover:shadow-md"
-          >
-            Remove Watermark
-          </Button>
-        </div>
+        )}
 
         {/* Actions */}
         <div className="border-t pt-3">
@@ -129,13 +147,13 @@ const ControlPanel = ({
           <div className="space-y-2">
             <Button
               variant="success"
-              icon="💾"
+              icon={autoMarkMode ? "✅" : "💾"}
               onClick={onSave}
               disabled={!currentImage || loading}
               size="sm"
               className="w-full shadow-sm hover:shadow-md"
             >
-              Save & Mark Done
+              {autoMarkMode ? "Save & Next" : "Save & Mark Done"}
             </Button>
 
             <div className="grid grid-cols-2 gap-2">

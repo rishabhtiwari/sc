@@ -9,17 +9,26 @@ const Layout = ({ children, user, onLogout }) => {
   const navigate = useNavigate();
   const userMenuRef = useRef(null);
 
+  // Auto-collapse sidebar when navigating to Design Editor
+  useEffect(() => {
+    if (location.pathname === '/design-editor') {
+      setSidebarOpen(false);
+    }
+  }, [location.pathname]);
+
   const navItems = [
     { path: '/', icon: '📊', label: 'Dashboard' },
     { path: '/news-fetcher', icon: '📰', label: 'News Fetcher' },
     { path: '/image-processing', icon: '🖼️', label: 'Image Processing' },
     { path: '/voice-llm', icon: '🎤', label: 'Audio Processing' },
     { path: '/audio-studio', icon: '🎙️', label: 'Audio Studio' },
+    { path: '/text-studio', icon: '📝', label: 'Text Studio' },
+    { path: '/design-editor', icon: '🎨', label: 'Design Editor' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
     { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
     {
       id: 'templates',
-      icon: '🎨',
+      icon: '📋',
       label: 'Templates',
       subItems: [
         { path: '/templates/prompt', icon: '📝', label: 'Prompt Templates' },
@@ -357,23 +366,6 @@ const Layout = ({ children, user, onLogout }) => {
 
         {/* Page Content */}
         <div className="p-6">
-          {/* Debug indicator - remove after confirming */}
-          <div style={{
-            position: 'fixed',
-            bottom: '10px',
-            right: '10px',
-            backgroundColor: '#f0f4f8',
-            border: '2px solid #2563eb',
-            padding: '8px 12px',
-            borderRadius: '8px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            color: '#2563eb',
-            zIndex: 9999,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }}>
-            ✓ Blue BG Active
-          </div>
           {children}
         </div>
       </main>

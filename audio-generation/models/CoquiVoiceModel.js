@@ -5,6 +5,11 @@ import FormData from 'form-data';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { spawn } from 'child_process';
+import { promisify } from 'util';
+
+const writeFile = promisify(fs.writeFile);
+const unlink = promisify(fs.unlink);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,6 +32,25 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         // Text chunker version: 'v1' (spaCy) or 'v2' (semantic_text_splitter)
         // v2 is recommended for better performance and no duplication issues
         this.chunkerVersion = config.chunkerVersion || process.env.TEXT_CHUNKER_VERSION || 'v2';
+
+        // TTS Generation Parameters (to reduce hallucinations and improve quality)
+        // Based on research: https://github.com/coqui-ai/TTS/issues/3277
+        // Lower temperature = more consistent, less creative (reduces weird sounds)
+        // Recommended: 0.6-0.7 for minimal hallucinations
+        this.temperature = parseFloat(config.temperature || process.env.COQUI_TEMPERATURE || '0.6');
+
+        // Length penalty: controls output length (1.0 = neutral, >1.0 = longer, <1.0 = shorter)
+        // Higher value = stricter control, prevents model from adding extra sounds
+        this.lengthPenalty = parseFloat(config.lengthPenalty || process.env.COQUI_LENGTH_PENALTY || '1.5');
+
+        // Repetition penalty: prevents repetition (higher = less repetition, reduces artifacts)
+        this.repetitionPenalty = parseFloat(config.repetitionPenalty || process.env.COQUI_REPETITION_PENALTY || '2.0');
+
+        // Top-k sampling: limits to top k most probable tokens
+        this.topK = parseInt(config.topK || process.env.COQUI_TOP_K || '50');
+
+        // Top-p (nucleus) sampling: limits to tokens with cumulative probability <= top_p
+        this.topP = parseFloat(config.topP || process.env.COQUI_TOP_P || '0.85');
 
         this._loadSpeakersMetadata();
     }
@@ -456,7 +480,15 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             supportsVoiceCloning: true,
             description: 'Coqui TTS XTTS v2 - Multi-lingual TTS with 58 universal speakers supporting 17 languages',
             speakersNote: 'All speakers are universal and can speak any of the 17 supported languages. Specify language in the request.',
-            sampleTexts: this.speakersMetadata?.sample_texts || {}
+            sampleTexts: this.speakersMetadata?.sample_texts || {},
+            // Generation parameters (for reducing hallucinations)
+            generationParams: {
+                temperature: this.temperature,
+                lengthPenalty: this.lengthPenalty,
+                repetitionPenalty: this.repetitionPenalty,
+                topK: this.topK,
+                topP: this.topP
+            }
         };
     }
 
@@ -575,6 +607,14 @@ export class CoquiVoiceModel extends BaseVoiceModel {
         formData.append('speaker_id', speaker);
         formData.append('language_id', language);
 
+        // Add generation parameters to reduce hallucinations
+        // These parameters are supported by xtts-api-server
+        formData.append('temperature', this.temperature.toString());
+        formData.append('length_penalty', this.lengthPenalty.toString());
+        formData.append('repetition_penalty', this.repetitionPenalty.toString());
+        formData.append('top_k', this.topK.toString());
+        formData.append('top_p', this.topP.toString());
+
         const response = await axios.post(
             `${this.coquiServerUrl}/api/tts`,
             formData,
@@ -585,7 +625,93 @@ export class CoquiVoiceModel extends BaseVoiceModel {
             }
         );
 
-        return response.data;
+        let audioBuffer = response.data;
+
+        // Apply VAD trimming to remove trailing artifacts (breathing, weird sounds)
+        // This is enabled by default and can be disabled via environment variable
+        const enableVAD = process.env.ENABLE_VAD_TRIMMING !== 'false';
+        if (enableVAD) {
+            try {
+                audioBuffer = await this._trimAudioWithVAD(audioBuffer);
+            } catch (error) {
+                console.warn('⚠️  VAD trimming failed, using original audio:', error.message);
+                // Continue with original audio if VAD fails
+            }
+        }
+
+        return audioBuffer;
+    }
+
+    /**
+     * Trim audio using VAD (Voice Activity Detection) to remove trailing artifacts
+     * @private
+     */
+    async _trimAudioWithVAD(audioBuffer) {
+        return new Promise((resolve, reject) => {
+            // Create temporary files
+            const tempDir = path.join(__dirname, '..', 'public');
+            const tempInput = path.join(tempDir, `vad_input_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.wav`);
+            const tempOutput = path.join(tempDir, `vad_output_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.wav`);
+
+            // Write audio buffer to temp file
+            fs.writeFileSync(tempInput, audioBuffer);
+
+            // Call Python VAD trimmer
+            const pythonPath = process.env.PYTHON_PATH || '/app/venv/bin/python';
+            const vadScript = path.join(__dirname, '..', 'utils', 'vad_trimmer.py');
+
+            const vadProcess = spawn(pythonPath, [vadScript, tempInput, tempOutput]);
+
+            let stdout = '';
+            let stderr = '';
+
+            vadProcess.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            vadProcess.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            vadProcess.on('close', (code) => {
+                try {
+                    if (code !== 0) {
+                        // Cleanup temp files
+                        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                        return reject(new Error(`VAD process exited with code ${code}: ${stderr}`));
+                    }
+
+                    // Parse result
+                    const result = JSON.parse(stdout);
+
+                    if (!result.success) {
+                        // Cleanup temp files
+                        if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                        if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                        return reject(new Error(result.error || 'VAD trimming failed'));
+                    }
+
+                    // Read trimmed audio
+                    const trimmedBuffer = fs.readFileSync(tempOutput);
+
+                    // Cleanup temp files
+                    if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                    if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+
+                    if (result.trimmed) {
+                        console.log(`✂️  VAD trimmed ${result.removed_ms.toFixed(0)}ms of trailing audio`);
+                    }
+
+                    resolve(trimmedBuffer);
+                } catch (error) {
+                    // Cleanup temp files on error
+                    if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                    if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                    reject(error);
+                }
+            });
+        });
     }
 
     /**

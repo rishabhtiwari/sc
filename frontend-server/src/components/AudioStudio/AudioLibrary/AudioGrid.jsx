@@ -5,7 +5,7 @@ import AudioCard from './AudioCard';
  * Audio Grid Component
  * Grid layout for audio files
  */
-const AudioGrid = ({ audioFiles, onDelete }) => {
+const AudioGrid = ({ audioFiles, onDelete, onAddToCanvas }) => {
   return (
     <div className="space-y-3">
       {audioFiles.map((audio) => (
@@ -13,6 +13,7 @@ const AudioGrid = ({ audioFiles, onDelete }) => {
           key={audio.audio_id}
           audio={audio}
           onDelete={onDelete}
+          onAddToCanvas={onAddToCanvas}
         />
       ))}
     </div>

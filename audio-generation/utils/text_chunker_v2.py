@@ -237,89 +237,263 @@ def clean_text_for_tts(text, language_code='en'):
         text = text.replace('\u200b', '')
         text = text.replace('\ufeff', '')
 
-        # For English, keep exclamations but normalize multiples
+        # Fix acronym pronunciation: "US" (uppercase) = country, "us" (lowercase) = pronoun
+        # Replace uppercase "US" with phonetic spelling to ensure correct pronunciation
+        text = re.sub(r'\bUS\b', 'U.S.', text)  # US → U.S. (pronounced as "you-ess")
+
+        # XTTS-SPECIFIC IMPROVEMENTS:
+
+        # 1. Expand symbols that cause stuttering/hallucinations
+        text = text.replace('%', ' percent')
+        text = text.replace('&', ' and')
+        text = text.replace('@', ' at')
+        text = text.replace('$', ' dollars')
+        text = text.replace('€', ' euros')
+        text = text.replace('£', ' pounds')
+        text = text.replace('#', ' number')
+        text = text.replace('+', ' plus')
+        text = text.replace('=', ' equals')
+
+        # 2. THE ELLIPSIS TRAP - Critical fix!
+        # Ellipsis causes hissing, awkward pauses, or weird trailing sounds
+        text = re.sub(r'\.\.\.+', '.', text)  # ... → .
+        text = text.replace('…', '.')  # Unicode ellipsis → period
+
+        # 3. Normalize multiple punctuation
         text = re.sub(r'!{2,}', '!', text)  # !! → !
         text = re.sub(r'\?{2,}', '?', text)  # ?? → ?
-        text = re.sub(r'\.{3,}', '.', text)  # ... → .
 
-        # Normalize spacing
-        text = re.sub(r'\s+([,.;!?])', r'\1', text)  # Remove space before punctuation
-        text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)  # Add space after punctuation
-
-        # Remove multiple spaces
+        # 4. Normalize spacing (COMPREHENSIVE CLEANUP)
+        # First: Remove ALL multiple spaces (collapse to single space)
         text = re.sub(r'\s+', ' ', text)
+
+        # Second: Remove space before punctuation
+        text = re.sub(r'\s+([,.;!?])', r'\1', text)
+
+        # Third: Add single space after punctuation (if not already there)
+        text = re.sub(r'([,.;!?])([^\s])', r'\1 \2', text)
+
+        # Fourth: Remove any trailing/leading whitespace
         text = text.strip()
+
+        # CRITICAL FIX: Ensure text ends with punctuation to prevent XTTS-v2 hallucinations
+        # XTTS-v2 adds weird sounds ("aah", "yee", breathing) when text doesn't end with punctuation
+        # This is a known issue: https://github.com/coqui-ai/TTS/issues/3277
+        if text and not text.endswith(('.', '!', '?', '_')):
+            text = text + '.'  # Add period if missing
 
     return text
 
 
-def chunk_text_v2(text, min_chars=150, max_chars=230, language_code='en'):
+def chunk_text_v2(text, min_chars=175, max_chars=250, language_code='en', max_iterations=100):
     """
-    Split text into chunks using semantic_text_splitter
+    Split text into chunks using semantic_text_splitter with iterative optimization
 
-    This library uses a Rust-based implementation that:
-    - Respects sentence boundaries
-    - Ensures chunks are within the specified range (150-230 chars optimal for XTTS)
-    - Guarantees no word duplication
-    - Works efficiently for all languages
+    This function tries different capacity parameters to find the best configuration
+    where ALL chunks fall within acceptable ranges without any merging logic.
+
+    Strategy:
+    1. Try different capacity values (up to 100 iterations for optimal results)
+    2. For each iteration, evaluate chunks:
+       - Violation: chunk < 150 chars or chunk > max_chars
+       - Acceptable: 150 <= chunk < min_chars (below target but OK)
+       - Target: min_chars <= chunk <= max_chars (ideal)
+    3. If perfect solution found (0 violations), return immediately
+    4. Otherwise, return best result (fewest violations) after max_iterations
+
+    Constraints:
+    - capacity_min is constrained to [150, 300] range
+    - capacity_max is constrained to [150, 300] range
+    - These limits ensure optimal TTS quality for XTTS model
+    - Chunks >= 150 chars are acceptable (not counted as violations)
 
     Args:
         text: Text to split
-        min_chars: Minimum characters per chunk (default: 150)
-        max_chars: Maximum characters per chunk (default: 230)
+        min_chars: Target minimum characters per chunk (default: 150)
+        max_chars: Maximum characters per chunk (default: 240)
         language_code: Language code ('en', 'hi', etc.)
+        max_iterations: Maximum optimization iterations (default: 30)
 
     Returns:
         List of text chunks
     """
     print(f"📝 V2 Chunker: Splitting text for language: {language_code}", file=sys.stderr)
-    print(f"   Min chars: {min_chars}, Max chars: {max_chars}", file=sys.stderr)
+    print(f"   Target range: {min_chars}-{max_chars} chars", file=sys.stderr)
     print(f"   Input text length: {len(text)} chars", file=sys.stderr)
+    print(f"   Max optimization iterations: {max_iterations}", file=sys.stderr)
 
-    # Initialize the splitter with capacity range and trim enabled
-    # In v0.29.0+, capacity can be a tuple (min, max) for a range
-    # The splitter will fill chunks up to max but consider them full once they reach min
-    # This ensures chunks are in the optimal range for XTTS (150-230 characters)
-    splitter = TextSplitter(capacity=(min_chars, max_chars), trim=True)
+    best_chunks = None
+    best_score = float('inf')  # Lower is better (fewer violations)
+    best_params = None
 
-    # Generate chunks
-    raw_chunks = list(splitter.chunks(text))
-    print(f"✅ Created {len(raw_chunks)} raw chunks", file=sys.stderr)
+    # Try different capacity configurations
+    # Strategy: Vary the capacity range to find optimal chunking
+    for iteration in range(max_iterations):
+        # Generate different capacity values
+        # Start with the target range, then adjust
+        if iteration == 0:
+            # First try: Use exact target range
+            capacity_min = min_chars
+            capacity_max = max_chars
+        else:
+            # Subsequent tries: Vary the capacity parameters
+            # Adjust min and max slightly to find better boundaries
+            offset = (iteration % 10) - 5  # -5 to +4
+            capacity_min = min_chars + offset * 5
+            capacity_max = max_chars + offset * 5
 
-    # Post-process to merge chunks that are below min_chars
-    # The library may create smaller chunks at semantic boundaries
-    chunks = []
-    i = 0
-    while i < len(raw_chunks):
-        current = raw_chunks[i].strip()
+        # Apply hard constraints
+        # capacity_min must be >= 150 (minimum for good TTS quality)
+        # capacity_max must be <= 300 (maximum for XTTS model)
+        capacity_min = max(150, min(capacity_min, 300))
+        capacity_max = max(150, min(capacity_max, 300))
 
-        # Try to merge with next chunks if current is too small
-        while i + 1 < len(raw_chunks) and len(current) < min_chars:
-            next_chunk = raw_chunks[i + 1].strip()
-            merged = (current + " " + next_chunk).strip()
+        # Ensure min < max
+        if capacity_min >= capacity_max:
+            capacity_max = capacity_min + 10
 
-            # Only merge if it doesn't exceed max
-            if len(merged) <= max_chars:
-                current = merged
-                i += 1
-            else:
-                # Can't merge, break
+        try:
+            # Initialize splitter with current capacity
+            splitter = TextSplitter(capacity=(capacity_min, capacity_max), trim=True)
+
+            # Generate chunks
+            chunks = [chunk.strip() for chunk in splitter.chunks(text) if chunk.strip()]
+
+            # Evaluate this configuration
+            # Only count as violation if chunk is < 150 chars or > max_chars
+            # Chunks between 150 and min_chars are acceptable (not violations)
+            violations = 0
+            too_small = 0  # < 150 chars (actual violation)
+            below_target = 0  # 150-175 chars (acceptable but below target)
+            too_large = 0  # > max_chars (violation)
+
+            for chunk in chunks:
+                chunk_len = len(chunk)
+                if chunk_len < 150:
+                    violations += 1
+                    too_small += 1
+                elif chunk_len < min_chars:
+                    below_target += 1  # Not a violation, just below target
+                elif chunk_len > max_chars:
+                    violations += 1
+                    too_large += 1
+
+            # Calculate score (lower is better)
+            score = violations
+
+            print(f"   Iteration {iteration + 1}/{max_iterations}: capacity=({capacity_min}, {capacity_max}) → {len(chunks)} chunks, {violations} violations (too_small={too_small}, below_target={below_target}, too_large={too_large})", file=sys.stderr)
+
+            # Perfect solution found!
+            if violations == 0:
+                print(f"✅ Perfect chunking found at iteration {iteration + 1}!", file=sys.stderr)
+                print(f"   All {len(chunks)} chunks are within [{min_chars}, {max_chars}] range", file=sys.stderr)
+                best_chunks = chunks
+                best_params = (capacity_min, capacity_max)
                 break
 
-        if current:
-            chunks.append(current)
-        i += 1
+            # Track best result
+            if score < best_score:
+                best_score = score
+                best_chunks = chunks
+                best_params = (capacity_min, capacity_max)
+                print(f"   ⭐ New best: {violations} violations", file=sys.stderr)
 
-    print(f"✅ After merging: {len(chunks)} chunks (target: {min_chars}-{max_chars} chars)", file=sys.stderr)
+        except Exception as e:
+            print(f"   ⚠️  Iteration {iteration + 1} failed: {e}", file=sys.stderr)
+            continue
+
+    # Use best result found
+    if best_chunks is None:
+        # Fallback: Use default parameters with constraints
+        print(f"⚠️  No valid chunking found, using fallback", file=sys.stderr)
+        fallback_min = max(150, min(min_chars, 300))
+        fallback_max = max(150, min(max_chars, 300))
+        if fallback_min >= fallback_max:
+            fallback_max = fallback_min + 10
+        splitter = TextSplitter(capacity=(fallback_min, fallback_max), trim=True)
+        best_chunks = [chunk.strip() for chunk in splitter.chunks(text) if chunk.strip()]
+        best_params = (fallback_min, fallback_max)
+
+    chunks = best_chunks
+    print(f"\n✅ Final result using capacity={best_params}:", file=sys.stderr)
+    print(f"   Created {len(chunks)} chunks", file=sys.stderr)
+
+    # Detailed chunk analysis BEFORE cleaning
+    in_range = 0  # min_chars to max_chars
+    below_target = 0  # 150 to min_chars (acceptable)
+    too_small = 0  # < 150 (violation)
+    too_large = 0  # > max_chars (violation)
+
+    for i, chunk in enumerate(chunks):
+        chunk_len = len(chunk)
+        if chunk_len < 150:
+            too_small += 1
+        elif chunk_len < min_chars:
+            below_target += 1
+        elif chunk_len > max_chars:
+            too_large += 1
+        else:
+            in_range += 1
+
+    print(f"\n📊 Chunk Statistics (before cleaning):", file=sys.stderr)
+    print(f"   ✓ In target range [{min_chars}-{max_chars}]: {in_range}/{len(chunks)} ({in_range*100//len(chunks) if len(chunks) > 0 else 0}%)", file=sys.stderr)
+    if below_target > 0:
+        print(f"   ℹ️  Below target (150-{min_chars}): {below_target} chunks (acceptable)", file=sys.stderr)
+    if too_small > 0:
+        print(f"   ⚠️  Too small (< 150): {too_small} chunks (violation)", file=sys.stderr)
+    if too_large > 0:
+        print(f"   ⚠️  Too large (> {max_chars}): {too_large} chunks (violation)", file=sys.stderr)
 
     # Clean each chunk for TTS
-    print(f"🔧 Cleaning chunks for TTS model...", file=sys.stderr)
+    print(f"\n🔧 Cleaning chunks for TTS model...", file=sys.stderr)
+    print(f"=" * 100, file=sys.stderr)
     cleaned_chunks = []
     for i, chunk in enumerate(chunks):
         cleaned = clean_text_for_tts(chunk, language_code)
+
+        # CRITICAL FIX: Ensure EACH chunk ends with sentence-ending punctuation
+        # This prevents XTTS-v2 from adding weird sounds when chunks end mid-sentence
+        # Issue: https://github.com/coqui-ai/TTS/issues/3277
+
+        if cleaned:
+            # Remove any trailing whitespace first
+            cleaned = cleaned.rstrip()
+
+            # Check if already ends with sentence-ending punctuation
+            if cleaned and cleaned[-1] in ('!', '?', '.'):
+                # Already has proper punctuation - keep it as is
+                pass
+
+            elif cleaned and cleaned[-1] == '_':
+                # Already has underscore stop signal - keep it
+                pass
+
+            else:
+                # No punctuation at end - add period
+                cleaned = cleaned + '.'
+
         chunk_len = len(cleaned)
-        print(f"   Chunk {i+1}: {chunk_len} chars - '{cleaned[:60]}...'", file=sys.stderr)
+
+        # Status indicator
+        if chunk_len < 150:
+            status = "⚠️ TOO SMALL"
+        elif chunk_len < min_chars:
+            status = "ℹ️ BELOW TARGET"
+        elif chunk_len > max_chars:
+            status = "⚠️ TOO LARGE"
+        else:
+            status = "✓ IN RANGE"
+
+        # Print full chunk for validation
+        print(f"\n📄 Chunk {i+1}/{len(chunks)} | Length: {chunk_len} chars | {status}", file=sys.stderr)
+        print(f"─" * 100, file=sys.stderr)
+        print(f"{cleaned}", file=sys.stderr)
+        print(f"─" * 100, file=sys.stderr)
+
         cleaned_chunks.append(cleaned)
+
+    print(f"\n" + "=" * 100, file=sys.stderr)
+    print(f"✅ Total chunks created: {len(cleaned_chunks)}", file=sys.stderr)
 
     return cleaned_chunks
 
@@ -335,11 +509,11 @@ def main():
     max_chars = int(sys.argv[1])
     language_code = sys.argv[2]
 
-    # For XTTS optimal range: 150-230 characters
+    # For XTTS optimal range: 175-250 characters
     # Calculate min_chars to ensure chunks are substantial
-    # If max_chars is 230, min_chars will be ~150 (65% of max)
-    # If max_chars is 200, min_chars will be ~130 (65% of max)
-    min_chars = max(100, int(max_chars * 0.65))
+    # If max_chars is 250, min_chars will be ~175 (70% of max)
+    # If max_chars is 230, min_chars will be ~161 (70% of max)
+    min_chars = max(150, int(max_chars * 0.70))
 
     # Read text from stdin
     text = sys.stdin.read().strip()

@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
  * Audio Card Component
  * Individual audio file card with playback and actions
  */
-const AudioCard = ({ audio, onDelete }) => {
+const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
@@ -196,7 +196,37 @@ const AudioCard = ({ audio, onDelete }) => {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowMenu(false)}
                   />
-                  <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                    {onAddToCanvas && (
+                      <button
+                        onClick={() => {
+                          console.log('🎵 Add to Timeline clicked:', {
+                            title: audio.name,
+                            audioUrl: audioUrl,
+                            duration: audio.duration,
+                            loading: loading
+                          });
+
+                          if (!audioUrl) {
+                            console.error('❌ Audio URL not ready yet!');
+                            return;
+                          }
+
+                          onAddToCanvas({
+                            title: audio.name,
+                            url: audioUrl,
+                            audio_url: audioUrl,
+                            duration: audio.duration
+                          });
+                          setShowMenu(false);
+                        }}
+                        disabled={!audioUrl || loading}
+                        className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span>➕</span>
+                        <span>Add to Timeline</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleDownload}
                       className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"

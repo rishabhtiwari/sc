@@ -64,9 +64,19 @@ COPY watermark-remover/iopaint_ui_service.py /app/iopaint_ui_service.py
 RUN mkdir -p /app/output /root/.cache && \
     chmod 777 /app/output /root/.cache
 
-# Set environment variables for GPU
+# Set environment variables for GPU optimization
 ENV CUDA_VISIBLE_DEVICES=0
-ENV PYTORCH_ALLOC_CONF=max_split_size_mb:512
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+ENV CUDA_LAUNCH_BLOCKING=0
+ENV TORCH_CUDNN_V8_API_ENABLED=1
+
+# Performance optimizations
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+ENV NUMEXPR_NUM_THREADS=4
+
+# Disable debug mode for better performance
+ENV DEBUG_MASKS=false
 
 # Expose port
 EXPOSE 8096

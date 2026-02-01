@@ -12,6 +12,11 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
+    // Detect FormData and remove Content-Type to let browser set it with boundary
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+    }
+
     // Add auth token
     const token = localStorage.getItem('auth_token');
     if (token) {
