@@ -87,6 +87,11 @@ export const useProjectState = ({
       setIsLoading(true);
       console.log('📂 Loading project:', projectId);
 
+      // Clear sessionStorage when explicitly loading a project
+      // This ensures we get fresh data from backend, not cached state
+      sessionStorage.removeItem('designEditor_inMemoryState');
+      console.log('🗑️ Cleared sessionStorage - loading fresh project from backend');
+
       const project = await projectService.loadProject(projectId);
       
       console.log('📂 Loaded project:', project);

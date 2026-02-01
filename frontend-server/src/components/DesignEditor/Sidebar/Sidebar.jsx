@@ -96,20 +96,21 @@ const Sidebar = ({
   ];
 
   const handleToolClick = (toolId) => {
-    if (expandedPanel === toolId) {
-      setExpandedPanel(null);
-      onSelectTool(null);
-    } else {
-      setExpandedPanel(toolId);
-      onSelectTool(toolId);
-    }
+    // Always open the clicked tool panel (don't toggle)
+    setExpandedPanel(toolId);
+    onSelectTool(toolId);
+  };
+
+  const handleClosePanel = () => {
+    setExpandedPanel(null);
+    onSelectTool(null);
   };
 
   const activeTool = tools.find(t => t.id === expandedPanel);
   const ActivePanel = activeTool?.panel;
 
   return (
-    <div className="flex h-full bg-white border-r border-gray-200">
+    <div className="flex h-full bg-white border-r border-gray-200 relative">
       {/* Tool Icons Bar */}
       <div className="w-20 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-2">
         {tools.map((tool) => (
@@ -135,9 +136,18 @@ const Sidebar = ({
       {/* Expanded Tool Panel */}
       {expandedPanel && ActivePanel && (
         <div className="w-80 bg-white overflow-y-auto">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">{activeTool.name}</h2>
-            <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">{activeTool.name}</h2>
+              <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
+            </div>
+            <button
+              onClick={handleClosePanel}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-900 font-bold text-xl"
+              title="Close panel"
+            >
+              ««
+            </button>
           </div>
           <div className="p-4">
             <ActivePanel
@@ -169,6 +179,21 @@ const Sidebar = ({
             />
           </div>
         </div>
+      )}
+
+      {/* Reopen Button - Show when panel is closed */}
+      {!expandedPanel && (
+        <button
+          onClick={() => {
+            // Reopen the last selected tool or default to 'text'
+            const toolToOpen = selectedTool || 'text';
+            handleToolClick(toolToOpen);
+          }}
+          className="absolute left-20 top-4 z-10 bg-blue-600 text-white px-2 py-3 rounded-r-lg shadow-lg hover:bg-blue-700 transition-all font-bold text-xl"
+          title="Open sidebar"
+        >
+          »»
+        </button>
       )}
     </div>
   );

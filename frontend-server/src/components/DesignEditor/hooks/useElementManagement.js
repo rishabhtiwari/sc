@@ -72,7 +72,7 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
     setPages(prevPages => {
       const updatedPages = [...prevPages];
       const currentPage = updatedPages[currentPageIndex];
-      
+
       updatedPages[currentPageIndex] = {
         ...currentPage,
         elements: currentPage.elements.map(el =>
@@ -82,6 +82,11 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
 
       return updatedPages;
     });
+
+    // Also update selectedElement if it's the one being updated
+    if (selectedElement && selectedElement.id === elementId) {
+      setSelectedElement(prev => ({ ...prev, ...updates }));
+    }
   };
 
   /**
