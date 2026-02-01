@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import Sidebar from './Sidebar/Sidebar';
 import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
@@ -37,8 +37,55 @@ const DesignEditor = () => {
   const [selectedAudioTrack, setSelectedAudioTrack] = useState(null);
   const audioRefs = useRef({});
 
-  // Video Timeline State
-  const [videoTracks, setVideoTracks] = useState([]);
+  // Video Timeline State - Computed from page elements (derived state)
+  const videoTracks = useMemo(() => {
+    console.log('🔄 Computing video tracks from pages...');
+    const tracks = [];
+    let cumulativeTime = 0;
+
+    pages.forEach((page, pageIndex) => {
+      const pageStartTime = cumulativeTime;
+      const videoElements = (page.elements || []).filter(el => el.type === 'video');
+
+      console.log(`  📄 Page ${pageIndex} (${page.name}): ${videoElements.length} video(s)`);
+
+      videoElements.forEach((element, elementIndex) => {
+        const videoDuration = element.duration || 0;
+        const pageDuration = page.duration || 5;
+
+        // Video is constrained to the slide's time range
+        const effectiveDuration = Math.min(videoDuration, pageDuration);
+        const trimEnd = videoDuration > pageDuration ? videoDuration - pageDuration : 0;
+
+        const track = {
+          id: element.id,
+          elementId: element.id,
+          name: element.file?.name || element.name || `Video ${tracks.length + 1}`,
+          url: element.src,
+          src: element.src,
+          file: element.file,
+          startTime: pageStartTime,
+          duration: effectiveDuration,
+          originalDuration: videoDuration,
+          trimStart: 0,
+          trimEnd: trimEnd,
+          volume: element.volume || 100,
+          playbackSpeed: element.playbackSpeed || 1,
+          slideIndex: pageIndex,
+          videoType: 'video'
+        };
+
+        tracks.push(track);
+        console.log(`    🎬 Video ${elementIndex}: ${track.name} (${effectiveDuration}s at ${pageStartTime}s)`);
+      });
+
+      cumulativeTime += pageDuration;
+    });
+
+    console.log(`✅ Computed ${tracks.length} video track(s) from pages`);
+    return tracks;
+  }, [pages]);
+
   const [selectedVideoTrack, setSelectedVideoTrack] = useState(null);
   const videoRefs = useRef({});
 
@@ -81,7 +128,14 @@ const DesignEditor = () => {
    * Handle adding element to canvas (adds to current page)
    */
   const handleAddElement = (element) => {
-    console.log('🎨 handleAddElement called with:', element);
+    console.log('🎨 handleAddElement called with:', {
+      type: element.type,
+      hasSrc: !!element.src,
+      hasFile: !!element.file,
+      duration: element.duration,
+      width: element.width,
+      height: element.height
+    });
 
     const newElement = {
       id: `element-${Date.now()}`,
@@ -89,6 +143,13 @@ const DesignEditor = () => {
       x: element.x || 100,
       y: element.y || 100,
     };
+
+    console.log('✅ Created new element:', {
+      id: newElement.id,
+      type: newElement.type,
+      hasSrc: !!newElement.src,
+      hasFile: !!newElement.file
+    });
 
     // Calculate start time for video on timeline based on current slide position
     let slideStartTime = 0;
@@ -103,6 +164,15 @@ const DesignEditor = () => {
           ...page,
           elements: [...(page.elements || []), newElement]
         };
+
+        console.log(`📄 Adding element to page ${index}:`, {
+          pageId: page.id,
+          pageName: page.name,
+          oldElementCount: page.elements?.length || 0,
+          newElementCount: updatedPage.elements.length,
+          newElementId: newElement.id,
+          newElementType: newElement.type
+        });
 
         // If adding a video element, auto-adjust slide duration to match video length
         if (element.type === 'video') {
@@ -121,48 +191,18 @@ const DesignEditor = () => {
       return page;
     });
 
+    console.log('✅ Pages updated. Total pages:', updatedPages.length);
+    console.log('✅ Current page elements:', updatedPages[currentPageIndex].elements.length);
+
     setPages(updatedPages);
     setCanvasElements([...canvasElements, newElement]); // Keep for backward compatibility
     setSelectedElement(newElement);
 
-    // If adding a video element, also add it to the video timeline
+    // Video tracks are now computed from page elements automatically via useMemo
+    // No need to manually add to videoTracks state
     if (element.type === 'video' && element.duration) {
-      // Get the updated slide duration (which was just set to match video duration)
-      const currentSlide = updatedPages[currentPageIndex];
-      const slideDuration = currentSlide.duration || 5;
-
-      // Video track duration should match the slide duration
-      // If video is longer than slide, it will be trimmed
-      // If video is shorter than slide, it will play and then show last frame
-      const videoTrackDuration = Math.min(element.duration, slideDuration);
-      const trimEnd = element.duration > slideDuration ? element.duration - slideDuration : 0;
-
-      const videoTrack = {
-        id: newElement.id,
-        elementId: newElement.id, // Link to canvas element
-        name: element.file?.name || 'Video',
-        url: element.src, // Use 'url' for consistency with VideoBlock
-        src: element.src, // Keep src for compatibility
-        file: element.file,
-        startTime: slideStartTime,
-        duration: videoTrackDuration, // Constrained to slide duration
-        originalDuration: element.duration, // Store original for trimming
-        trimStart: 0, // How much trimmed from start
-        trimEnd: trimEnd, // Trim from end if video is longer than slide
-        volume: element.volume || 100,
-        playbackSpeed: element.playbackSpeed || 1,
-        slideIndex: currentPageIndex,
-        videoType: 'video' // Can be 'video', 'b-roll', etc.
-      };
-
-      console.log('🎬 Adding video to timeline:', {
-        ...videoTrack,
-        slideDuration,
-        videoOriginalDuration: element.duration,
-        trimmed: trimEnd > 0
-      });
-      setVideoTracks(prev => [...prev, videoTrack]);
-      setSelectedVideoTrack(videoTrack.id);
+      console.log('✅ Video element added to page. Video tracks will be computed automatically.');
+      setSelectedVideoTrack(newElement.id);
     }
   };
 
@@ -472,51 +512,25 @@ const DesignEditor = () => {
   };
 
   /**
-   * Handle video track update
+   * Handle video track update - Updates the video element in the page
    */
   const handleVideoUpdate = (trackId, updates) => {
-    console.log('🎬 Updating video track:', trackId, updates);
+    console.log('🎬 Updating video element:', trackId, updates);
 
-    setVideoTracks(prevTracks => {
-      const updatedTracks = prevTracks.map(track =>
-        track.id === trackId ? { ...track, ...updates } : track
-      );
-      return updatedTracks;
-    });
+    // Update the video element in the corresponding page
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.map(el =>
+        el.id === trackId ? { ...el, ...updates } : el
+      )
+    })));
 
-    // Also update the canvas element if properties changed
-    if (updates.volume !== undefined || updates.playbackSpeed !== undefined ||
-        updates.loop !== undefined || updates.muted !== undefined) {
-      const track = videoTracks.find(t => t.id === trackId);
-      if (track?.elementId) {
-        handleUpdateElement(track.elementId, updates);
-      }
-    }
-
-    // If duration changed (trimming), update the canvas element and slide duration
-    if (updates.duration !== undefined) {
-      const track = videoTracks.find(t => t.id === trackId);
-      if (track?.elementId) {
-        handleUpdateElement(track.elementId, { duration: updates.duration });
-
-        // Update slide duration if this is the only/main video on the slide
-        const updatedPages = pages.map((page, index) => {
-          if (index === track.slideIndex) {
-            return {
-              ...page,
-              duration: Math.ceil(updates.duration)
-            };
-          }
-          return page;
-        });
-        setPages(updatedPages);
-      }
-    }
+    // Video tracks will be recomputed automatically via useMemo
+    console.log('✅ Video element updated. Video tracks will be recomputed automatically.');
   };
 
   /**
-   * Handle video track delete
-   * Removes from BOTH timeline AND canvas element
+   * Handle video track delete - Removes the video element from the page
    */
   const handleVideoDelete = (trackId) => {
     const track = videoTracks.find(t => t.id === trackId);
@@ -526,13 +540,11 @@ const DesignEditor = () => {
       URL.revokeObjectURL(track.url);
     }
 
-    // Remove from timeline
-    setVideoTracks(videoTracks.filter(t => t.id !== trackId));
-
-    // Remove canvas element
-    if (track?.elementId) {
-      handleDeleteElement(track.elementId);
-    }
+    // Remove video element from page
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.filter(el => el.id !== trackId)
+    })));
 
     // Remove from uploaded media list (match by URL)
     if (track?.src) {
@@ -551,6 +563,9 @@ const DesignEditor = () => {
     if (selectedVideoTrack === trackId) {
       setSelectedVideoTrack(null);
     }
+
+    // Video tracks will be recomputed automatically via useMemo
+    console.log('✅ Video element deleted. Video tracks will be recomputed automatically.');
   };
 
   /**
@@ -649,35 +664,10 @@ const DesignEditor = () => {
     );
     setPages(newPages);
 
-    // If duration is being updated, also update video tracks on this slide
+    // Video tracks will be recomputed automatically from page elements via useMemo
     if (updates.duration !== undefined) {
-      const newDuration = updates.duration;
-      console.log('📊 Slide duration updated to:', newDuration, 'for slide:', slideIndex);
-
-      // Update video tracks that belong to this slide
-      setVideoTracks(prevTracks => prevTracks.map(track => {
-        if (track.slideIndex === slideIndex) {
-          // Constrain video track duration to new slide duration
-          const constrainedDuration = Math.min(track.originalDuration, newDuration);
-          const trimEnd = track.originalDuration > newDuration ? track.originalDuration - newDuration : 0;
-
-          console.log('🎬 Updating video track duration:', {
-            trackId: track.id,
-            oldDuration: track.duration,
-            newDuration: constrainedDuration,
-            slideDuration: newDuration,
-            originalDuration: track.originalDuration,
-            trimEnd
-          });
-
-          return {
-            ...track,
-            duration: constrainedDuration,
-            trimEnd: trimEnd
-          };
-        }
-        return track;
-      }));
+      console.log('📊 Slide duration updated to:', updates.duration, 'for slide:', slideIndex);
+      console.log('✅ Video tracks will be recomputed automatically to match new slide duration.');
     }
   };
 
@@ -743,23 +733,49 @@ const DesignEditor = () => {
    */
   const prepareProjectData = async () => {
     try {
+      console.log('💾 Preparing project data...');
+      console.log('📄 Pages to process:', pages.length);
+
       // Process pages and upload any blob URLs
       const processedPages = await Promise.all(
-        pages.map(async (page) => {
+        pages.map(async (page, pageIndex) => {
+          console.log(`📄 Processing page ${pageIndex}:`, {
+            id: page.id,
+            name: page.name,
+            elementCount: page.elements?.length || 0
+          });
+
           const processedElements = await Promise.all(
-            page.elements.map(async (element) => {
+            page.elements.map(async (element, elementIndex) => {
+              console.log(`  🔍 Element ${elementIndex}:`, {
+                type: element.type,
+                id: element.id,
+                hasSrc: !!element.src,
+                hasFile: !!element.file,
+                srcType: element.src?.substring(0, 10)
+              });
+
               if ((element.type === 'video' || element.type === 'image') && element.src) {
                 // If it's a blob URL, upload to asset service
                 if (element.src.startsWith('blob:')) {
                   if (element.file) {
+                    console.log(`  📤 Uploading ${element.type}:`, element.file.name);
                     const asset = await projectService.uploadAsset(element.file, element.type);
+                    console.log(`  ✅ Uploaded successfully:`, {
+                      asset_id: asset.asset_id,
+                      url: asset.storage?.url?.substring(0, 50)
+                    });
                     return {
                       ...element,
                       assetId: asset.asset_id,
                       src: asset.storage.url,
                       file: undefined // Remove file object from saved data
                     };
+                  } else {
+                    console.warn(`  ⚠️ ${element.type} has blob URL but no file object!`, element.id);
                   }
+                } else {
+                  console.log(`  ℹ️ ${element.type} already has non-blob URL`);
                 }
                 // If already has assetId, keep it
                 return element;
@@ -767,6 +783,8 @@ const DesignEditor = () => {
               return element;
             })
           );
+
+          console.log(`  ✅ Page ${pageIndex} processed: ${processedElements.length} elements`);
 
           // Process background if it has video or image
           let processedBackground = { ...page.background };
@@ -782,6 +800,8 @@ const DesignEditor = () => {
           };
         })
       );
+
+      console.log('✅ All pages processed:', processedPages.length);
 
       // Process audio tracks
       const processedAudioTracks = await Promise.all(
@@ -801,23 +821,8 @@ const DesignEditor = () => {
         })
       );
 
-      // Process video tracks
-      const processedVideoTracks = await Promise.all(
-        videoTracks.map(async (track) => {
-          if (track.url && track.url.startsWith('blob:')) {
-            if (track.file) {
-              const asset = await projectService.uploadAsset(track.file, 'video');
-              return {
-                ...track,
-                assetId: asset.asset_id,
-                url: asset.storage.url,
-                file: undefined
-              };
-            }
-          }
-          return track;
-        })
-      );
+      // Video tracks are no longer stored separately - they're part of page elements
+      console.log('✅ Videos are stored in page elements (not separate videoTracks)');
 
       // Calculate total duration
       const audioDuration = processedAudioTracks.length > 0
@@ -841,7 +846,8 @@ const DesignEditor = () => {
         },
         pages: processedPages,
         audioTracks: processedAudioTracks,
-        videoTracks: processedVideoTracks,
+        // videoTracks are no longer stored separately - they're in page elements
+        videoTracks: [],
         status: 'draft',
         tags: []
       };
@@ -859,7 +865,31 @@ const DesignEditor = () => {
       setIsSaving(true);
       showToast('Saving project...', 'info');
 
+      // Log current state before saving
+      console.log('💾 Current state before save:');
+      console.log('  📄 Pages:', pages.length);
+      pages.forEach((page, index) => {
+        console.log(`    Page ${index} (${page.name}):`, {
+          id: page.id,
+          elementCount: page.elements?.length || 0,
+          elements: page.elements?.map(el => ({
+            id: el.id,
+            type: el.type,
+            hasSrc: !!el.src,
+            hasFile: !!el.file
+          }))
+        });
+      });
+      console.log('  🎬 Video tracks (computed):', videoTracks.length);
+      console.log('  🎵 Audio tracks:', audioTracks.length);
+
       const projectData = await prepareProjectData();
+
+      console.log('💾 Project data prepared:', {
+        pages: projectData.pages?.length,
+        audioTracks: projectData.audioTracks?.length,
+        note: 'Videos are stored in page elements'
+      });
 
       let savedProject;
       if (currentProject?.project_id) {
@@ -955,7 +985,7 @@ const DesignEditor = () => {
       // Restore state
       setPages(project.pages || []);
       setAudioTracks(project.audioTracks || []);
-      setVideoTracks(project.videoTracks || []);
+      // videoTracks are computed from pages automatically via useMemo
       setCurrentProject(project);
       setCurrentPageIndex(0);
       setCurrentTime(0);
