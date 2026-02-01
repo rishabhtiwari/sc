@@ -20,24 +20,49 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
     { id: 4, url: 'https://via.placeholder.com/300x200/EF4444/FFFFFF?text=Sample+4', title: 'Sample 4' },
   ];
 
-  const handleFileUpload = (event) => {
+  const handleFileUpload = async (event) => {
     const files = Array.from(event.target.files);
-    
-    files.forEach((file) => {
+
+    for (const file of files) {
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const newImage = {
-            id: `upload-${Date.now()}-${Math.random()}`,
-            url: e.target.result,
-            title: file.name
+        try {
+          console.log('📤 Uploading image to library:', file.name);
+
+          // Upload to image library
+          const libraryResponse = await imageLibrary.upload(file, file.name);
+
+          if (libraryResponse.success && libraryResponse.image) {
+            console.log('✅ Image uploaded to library:', libraryResponse.image);
+
+            const newImage = {
+              id: libraryResponse.image.image_id,
+              url: libraryResponse.image.url, // Use library URL (starts with /api/)
+              title: libraryResponse.image.name,
+              libraryId: libraryResponse.image.image_id, // Track library ID for deletion
+              // No file property - it's in library now
+            };
+
+            setUploadedImages(prev => [...prev, newImage]);
+            showToast('Image uploaded to library', 'success');
+          }
+        } catch (error) {
+          console.error('❌ Error uploading image to library:', error);
+
+          // Fallback: Add with data URL (old behavior)
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const newImage = {
+              id: `upload-${Date.now()}-${Math.random()}`,
+              url: e.target.result,
+              title: file.name
+            };
+            setUploadedImages(prev => [...prev, newImage]);
+            showToast('Image uploaded (not saved to library)', 'warning');
           };
-          setUploadedImages(prev => [...prev, newImage]);
-          showToast('Image uploaded successfully', 'success');
-        };
-        reader.readAsDataURL(file);
+          reader.readAsDataURL(file);
+        }
       }
-    });
+    }
   };
 
   const handleAddImage = (imageUrl) => {
@@ -48,6 +73,26 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
       height: 200
     });
     showToast('Image added to canvas', 'success');
+  };
+
+  const handleDeleteImage = async (image, event) => {
+    event.stopPropagation(); // Prevent triggering handleAddImage
+
+    try {
+      // Delete from backend library if it has a libraryId
+      if (image.libraryId) {
+        console.log(`🗑️ Deleting image from library: ${image.libraryId}`);
+        await imageLibrary.delete(image.libraryId);
+        console.log('✅ Deleted from library');
+      }
+
+      // Remove from UI state
+      setUploadedImages(prev => prev.filter(img => img.id !== image.id));
+      showToast('Image deleted', 'success');
+    } catch (error) {
+      console.error('❌ Error deleting image:', error);
+      showToast('Failed to delete image from library', 'error');
+    }
   };
 
   return (
@@ -97,18 +142,27 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
             {uploadedImages.map((image) => (
               <div
                 key={image.id}
-                onClick={() => handleAddImage(image.url)}
-                className="relative group cursor-pointer rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500 transition-all"
+                className="relative group rounded-lg overflow-hidden border border-gray-200 hover:border-blue-500 transition-all"
               >
                 <img
                   src={image.url}
                   alt={image.title}
-                  className="w-full h-24 object-cover"
+                  className="w-full h-24 object-cover cursor-pointer"
+                  onClick={() => handleAddImage(image.url)}
                 />
-                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center">
-                  <span className="text-white opacity-0 group-hover:opacity-100 text-sm font-medium">
-                    Add to canvas
-                  </span>
+                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => handleAddImage(image.url)}
+                    className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Add
+                  </button>
+                  <button
+                    onClick={(e) => handleDeleteImage(image, e)}
+                    className="px-2 py-1 bg-red-600 text-white rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    🗑️
+                  </button>
                 </div>
               </div>
             ))}
