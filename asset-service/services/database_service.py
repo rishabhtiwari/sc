@@ -20,6 +20,7 @@ class DatabaseService:
         self.client = MongoClient(settings.MONGODB_URL)
         self.db = self.client[settings.MONGODB_DB_NAME]
         self.assets = self.db.assets
+        self.projects = self.db.projects  # Add projects collection
 
         # Audio library uses the news database
         self.news_db = self.client['news']
@@ -52,6 +53,9 @@ class DatabaseService:
                 ("customer_id", ASCENDING),
                 ("metadata.folder", ASCENDING)
             ])
+
+            # Note: Project indexes are created by migration 056_create_projects_collection.js
+            # No need to create them here to avoid duplication
 
             logger.info("Database indexes created successfully")
 
@@ -441,6 +445,185 @@ class DatabaseService:
 
         except PyMongoError as e:
             logger.error(f"Error searching assets: {e}")
+            raise
+
+    # ==================== Project Methods ====================
+
+    def create_project(self, project_data: Dict[str, Any]) -> str:
+        """
+        Create a new project
+
+        Args:
+            project_data: Project metadata
+
+        Returns:
+            Project ID
+        """
+        try:
+            project_data["created_at"] = datetime.utcnow()
+            project_data["updated_at"] = datetime.utcnow()
+
+            result = self.projects.insert_one(project_data)
+            logger.info(f"Created project: {project_data.get('project_id')}")
+            return project_data["project_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating project: {e}")
+            raise
+
+    def get_project(
+        self,
+        project_id: str,
+        customer_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a project by ID
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+
+        Returns:
+            Project data or None
+        """
+        try:
+            project = self.projects.find_one(
+                {
+                    "project_id": project_id,
+                    "customer_id": customer_id,
+                    "deleted_at": None
+                },
+                {"_id": 0}
+            )
+            return project
+
+        except PyMongoError as e:
+            logger.error(f"Error getting project: {e}")
+            raise
+
+    def update_project(
+        self,
+        project_id: str,
+        customer_id: str,
+        update_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Update a project
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+            update_data: Fields to update
+
+        Returns:
+            True if updated
+        """
+        try:
+            update_data["updated_at"] = datetime.utcnow()
+
+            result = self.projects.update_one(
+                {
+                    "project_id": project_id,
+                    "customer_id": customer_id
+                },
+                {"$set": update_data}
+            )
+
+            if result.modified_count > 0:
+                logger.info(f"Updated project: {project_id}")
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error updating project: {e}")
+            raise
+
+    def list_projects(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        List projects with filters
+
+        Args:
+            customer_id: Customer ID
+            user_id: Optional user ID filter
+            status: Optional status filter
+            skip: Number of records to skip
+            limit: Maximum number of records
+
+        Returns:
+            List of projects
+        """
+        try:
+            query = {
+                "customer_id": customer_id,
+                "deleted_at": None
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+            if status:
+                query["status"] = status
+
+            projects = list(
+                self.projects.find(query, {"_id": 0})
+                .sort("updated_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return projects
+
+        except PyMongoError as e:
+            logger.error(f"Error listing projects: {e}")
+            raise
+
+    def delete_project(
+        self,
+        project_id: str,
+        customer_id: str,
+        hard: bool = False
+    ) -> bool:
+        """
+        Delete a project (soft or hard delete)
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+            hard: If True, permanently delete; if False, soft delete
+
+        Returns:
+            True if deleted
+        """
+        try:
+            if hard:
+                result = self.projects.delete_one({
+                    "project_id": project_id,
+                    "customer_id": customer_id
+                })
+                deleted = result.deleted_count > 0
+            else:
+                result = self.projects.update_one(
+                    {
+                        "project_id": project_id,
+                        "customer_id": customer_id
+                    },
+                    {"$set": {"deleted_at": datetime.utcnow()}}
+                )
+                deleted = result.modified_count > 0
+
+            if deleted:
+                logger.info(f"Deleted project: {project_id} (hard={hard})")
+
+            return deleted
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting project: {e}")
             raise
 
 

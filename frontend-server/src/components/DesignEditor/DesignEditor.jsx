@@ -4,8 +4,10 @@ import Canvas from './Canvas/Canvas';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import AudioLibrary from './AudioLibrary/AudioLibrary';
+import ProjectBrowser from './ProjectBrowser/ProjectBrowser';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { useToast } from '../../hooks/useToast';
+import projectService from '../../services/projectService';
 
 /**
  * Main Design Editor Component
@@ -66,6 +68,12 @@ const DesignEditor = () => {
 
   // Audio Library Modal State
   const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
+
+  // Project State
+  const [currentProject, setCurrentProject] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showProjectBrowser, setShowProjectBrowser] = useState(false);
 
   const { showToast } = useToast();
 
@@ -677,6 +685,179 @@ const DesignEditor = () => {
   };
 
   /**
+   * Prepare project data for saving
+   * Uploads blob URLs to asset service and replaces with asset IDs
+   */
+  const prepareProjectData = async () => {
+    try {
+      // Process pages and upload any blob URLs
+      const processedPages = await Promise.all(
+        pages.map(async (page) => {
+          const processedElements = await Promise.all(
+            page.elements.map(async (element) => {
+              if ((element.type === 'video' || element.type === 'image') && element.src) {
+                // If it's a blob URL, upload to asset service
+                if (element.src.startsWith('blob:')) {
+                  if (element.file) {
+                    const asset = await projectService.uploadAsset(element.file, element.type);
+                    return {
+                      ...element,
+                      assetId: asset.asset_id,
+                      src: asset.storage.url,
+                      file: undefined // Remove file object from saved data
+                    };
+                  }
+                }
+                // If already has assetId, keep it
+                return element;
+              }
+              return element;
+            })
+          );
+
+          // Process background if it has video or image
+          let processedBackground = { ...page.background };
+          if (page.background.videoAssetId || page.background.imageAssetId) {
+            // Already has asset IDs, keep them
+            processedBackground = page.background;
+          }
+
+          return {
+            ...page,
+            elements: processedElements,
+            background: processedBackground
+          };
+        })
+      );
+
+      // Process audio tracks
+      const processedAudioTracks = await Promise.all(
+        audioTracks.map(async (track) => {
+          if (track.url && track.url.startsWith('blob:')) {
+            if (track.file) {
+              const asset = await projectService.uploadAsset(track.file, 'audio');
+              return {
+                ...track,
+                assetId: asset.asset_id,
+                url: asset.storage.url,
+                file: undefined
+              };
+            }
+          }
+          return track;
+        })
+      );
+
+      // Process video tracks
+      const processedVideoTracks = await Promise.all(
+        videoTracks.map(async (track) => {
+          if (track.url && track.url.startsWith('blob:')) {
+            if (track.file) {
+              const asset = await projectService.uploadAsset(track.file, 'video');
+              return {
+                ...track,
+                assetId: asset.asset_id,
+                url: asset.storage.url,
+                file: undefined
+              };
+            }
+          }
+          return track;
+        })
+      );
+
+      // Calculate total duration
+      const audioDuration = processedAudioTracks.length > 0
+        ? Math.max(...processedAudioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
+        : 0;
+      const slidesDuration = processedPages.reduce((sum, page) => sum + (page.duration || 5), 0);
+      const totalDuration = Math.max(audioDuration, slidesDuration, 30);
+
+      return {
+        name: currentProject?.name || `Project ${new Date().toLocaleDateString()}`,
+        description: currentProject?.description || '',
+        settings: {
+          canvas: {
+            width: 1920,
+            height: 1080,
+            backgroundColor: '#ffffff'
+          },
+          duration: totalDuration,
+          fps: 30,
+          quality: 'high'
+        },
+        pages: processedPages,
+        audioTracks: processedAudioTracks,
+        videoTracks: processedVideoTracks,
+        status: 'draft',
+        tags: []
+      };
+    } catch (error) {
+      console.error('Error preparing project data:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Handle save project
+   */
+  const handleSaveProject = async () => {
+    try {
+      setIsSaving(true);
+      showToast('Saving project...', 'info');
+
+      const projectData = await prepareProjectData();
+
+      let savedProject;
+      if (currentProject?.project_id) {
+        // Update existing project
+        savedProject = await projectService.updateProject(currentProject.project_id, projectData);
+        showToast('Project updated successfully', 'success');
+      } else {
+        // Create new project
+        savedProject = await projectService.saveProject(projectData);
+        showToast('Project saved successfully', 'success');
+      }
+
+      setCurrentProject(savedProject);
+    } catch (error) {
+      console.error('Error saving project:', error);
+      showToast(`Failed to save project: ${error.message}`, 'error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  /**
+   * Handle load project
+   */
+  const handleLoadProject = async (projectId) => {
+    try {
+      setIsLoading(true);
+      showToast('Loading project...', 'info');
+
+      const project = await projectService.loadProject(projectId);
+
+      // Restore state
+      setPages(project.pages || []);
+      setAudioTracks(project.audioTracks || []);
+      setVideoTracks(project.videoTracks || []);
+      setCurrentProject(project);
+      setCurrentPageIndex(0);
+      setCurrentTime(0);
+      setIsPlaying(false);
+
+      showToast('Project loaded successfully', 'success');
+      setShowProjectBrowser(false);
+    } catch (error) {
+      console.error('Error loading project:', error);
+      showToast(`Failed to load project: ${error.message}`, 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
    * Update playhead position during playback
    */
   useEffect(() => {
@@ -923,6 +1104,49 @@ const DesignEditor = () => {
 
       {/* Main Canvas Area */}
       <div className="flex-1 flex flex-col">
+        {/* Project Toolbar */}
+        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleSaveProject}
+              disabled={isSaving}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Save Project
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowProjectBrowser(true)}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+              </svg>
+              Load Project
+            </button>
+          </div>
+          {currentProject && (
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Project:</span> {currentProject.name}
+            </div>
+          )}
+        </div>
+
         {/* Page Navigation */}
         {pages.length > 1 && (
           <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center gap-3">
@@ -1114,6 +1338,13 @@ const DesignEditor = () => {
         isOpen={isAudioLibraryOpen}
         onClose={() => setIsAudioLibraryOpen(false)}
         onAddToCanvas={handleAddFromLibrary}
+      />
+
+      {/* Project Browser Modal */}
+      <ProjectBrowser
+        isOpen={showProjectBrowser}
+        onClose={() => setShowProjectBrowser(false)}
+        onLoadProject={handleLoadProject}
       />
     </div>
   );

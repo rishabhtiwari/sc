@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from config.settings import settings
-from routes import asset_routes, audio_library_routes
+from routes import asset_routes, audio_library_routes, project_routes
 
 # Configure logging
 logging.basicConfig(
@@ -83,6 +83,12 @@ app.include_router(
     audio_library_routes.router,
     prefix="/api/audio-studio",
     tags=["Audio Studio"]
+)
+
+app.include_router(
+    project_routes.router,
+    prefix="/api",
+    tags=["Projects"]
 )
 
 
