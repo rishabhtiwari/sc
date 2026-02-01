@@ -13,19 +13,28 @@ export const imageLibrary = {
    */
   async upload(file, name = null) {
     try {
+      console.log('🔍 imageLibrary.upload called with:', { file, name, fileType: file?.type, fileSize: file?.size });
+
       const formData = new FormData();
       formData.append('file', file);
+
+      // Log FormData contents
+      console.log('📦 FormData created, has file:', formData.has('file'));
 
       // Send name as query parameter (backend expects it as Query param)
       const params = new URLSearchParams();
       params.append('name', name || file.name);
 
+      console.log('🚀 Sending POST request to:', `/image-library/library?${params.toString()}`);
+
       // Don't set Content-Type header - let browser set it with boundary
       const response = await api.post(`/image-library/library?${params.toString()}`, formData);
 
+      console.log('✅ Upload successful:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error uploading image to library:', error);
+      console.error('❌ Error uploading image to library:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     }
   },

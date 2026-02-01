@@ -325,6 +325,103 @@ app.post('/api/templates/upload/logo', upload.single('file'), async (req, res) =
     }
 });
 
+// Special routes for image and video library uploads (must come before general API proxy)
+app.post('/api/image-library/library', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        // Extract query parameters (name, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/image-library/library${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying image library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Image library upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'Image library upload proxy error',
+            message: error.message
+        });
+    }
+});
+
+app.post('/api/video-library/library', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        const FormData = require('form-data');
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        // Extract query parameters (name, duration, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/video-library/library${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying video library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Video library upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'Video library upload proxy error',
+            message: error.message
+        });
+    }
+});
+
 // Special route for product media file uploads (must come before general API proxy)
 // This proxies to API server to maintain API Gateway pattern
 app.post('/api/products/:productId/upload-media', upload.array('files', 20), async (req, res) => {
