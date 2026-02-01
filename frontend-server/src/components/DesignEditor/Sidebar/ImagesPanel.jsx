@@ -65,10 +65,15 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
     }
   };
 
-  const handleAddImage = (imageUrl) => {
+  const handleAddImage = (image) => {
+    // Support both old format (just URL string) and new format (image object)
+    const imageUrl = typeof image === 'string' ? image : image.url;
+    const libraryId = typeof image === 'object' ? image.libraryId : null;
+
     onAddElement({
       type: 'image',
       src: imageUrl,
+      libraryId: libraryId, // Include libraryId for tracking
       width: 300,
       height: 200
     });
@@ -148,11 +153,11 @@ const ImagesPanel = ({ onAddElement, onOpenImageLibrary }) => {
                   src={image.url}
                   alt={image.title}
                   className="w-full h-24 object-cover cursor-pointer"
-                  onClick={() => handleAddImage(image.url)}
+                  onClick={() => handleAddImage(image)}
                 />
                 <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center gap-2">
                   <button
-                    onClick={() => handleAddImage(image.url)}
+                    onClick={() => handleAddImage(image)}
                     className="px-2 py-1 bg-blue-600 text-white rounded text-xs font-medium opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     Add
