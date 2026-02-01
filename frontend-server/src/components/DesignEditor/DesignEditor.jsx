@@ -420,22 +420,12 @@ const DesignEditor = () => {
 
         {/* Canvas */}
         <Canvas
-          pages={pages}
-          currentPageIndex={currentPageIndex}
+          elements={currentPage?.elements || []}
           selectedElement={selectedElement}
           onSelectElement={handleSelectElement}
-          onDeselectElement={handleDeselectElement}
           onUpdateElement={handleUpdateElement}
           onDeleteElement={handleDeleteElement}
-          onPageChange={handlePageChange}
-          onAddPage={handleAddPage}
-          onDeletePage={handleDeletePage}
-          onDuplicatePage={handleDuplicatePage}
-          zoom={zoom}
-          onZoomChange={setZoom}
-          videoElementRefs={videoElementRefs}
-          registerVideoRef={registerVideoRef}
-          unregisterVideoRef={unregisterVideoRef}
+          background={currentPage?.background}
         />
 
         {/* Audio Timeline */}
