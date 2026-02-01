@@ -229,21 +229,63 @@ const DesignEditor = () => {
   /**
    * Handle audio track operations
    */
-  const handleAddAudioTrack = (audioData) => {
-    const newTrack = {
-      id: `audio-track-${Date.now()}`,
-      name: audioData.title || 'Audio Track',
-      src: audioData.audio_url || audioData.url,
-      duration: audioData.duration || 0,
-      startTime: 0,
-      volume: 100,
-      fadeIn: 0,
-      fadeOut: 0,
-      type: audioData.type || 'music'
-    };
+  const handleAddAudioTrack = (audioFile, audioUrl) => {
+    console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
 
-    setAudioTracks(prev => [...prev, newTrack]);
-    showToast('Audio added to timeline', 'success');
+    // Create audio element to get duration
+    const audio = new Audio(audioUrl);
+    const trackId = `audio-${Date.now()}`;
+
+    console.log('🎬 Created audio element with ID:', trackId);
+
+    audio.addEventListener('loadedmetadata', () => {
+      console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
+      setAudioTracks(prevTracks => {
+        // Calculate the end time of the last audio track
+        let startTime = 0;
+        if (prevTracks.length > 0) {
+          // Find the maximum end time among all existing tracks
+          const maxEndTime = Math.max(...prevTracks.map(track =>
+            (track.startTime || 0) + (track.duration || 0)
+          ));
+          startTime = maxEndTime; // Position new audio at the end
+        }
+
+        const newTrack = {
+          id: trackId,
+          name: audioFile.name || 'Audio Track',
+          src: audioUrl,
+          duration: audio.duration,
+          startTime: startTime,
+          volume: 100,
+          fadeIn: 0,
+          fadeOut: 0,
+          type: audioFile.name?.toLowerCase().includes('voiceover')
+            ? 'voiceover'
+            : audioFile.name?.toLowerCase().includes('sfx')
+            ? 'sfx'
+            : 'music' // Auto-detect type from filename
+        };
+
+        const updatedTracks = [...prevTracks, newTrack];
+        console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
+        return updatedTracks;
+      });
+
+      // Set initial volume
+      audio.volume = 1.0; // 100%
+      showToast('Audio added to timeline', 'success');
+    });
+
+    audio.addEventListener('error', (e) => {
+      console.error('❌ Audio loading error:', e);
+      console.error('❌ Audio error details:', {
+        error: audio.error,
+        code: audio.error?.code,
+        message: audio.error?.message,
+        src: audio.src
+      });
+    });
   };
 
   /**

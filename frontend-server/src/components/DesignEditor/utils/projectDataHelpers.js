@@ -147,25 +147,60 @@ export const prepareProjectData = async (
   // Process audio tracks (similar to elements)
   const processedAudioTracks = [];
   for (const track of audioTracks) {
-    if (track.src && isBlobUrl(track.src)) {
+    const audioUrl = track.src || track.url;
+
+    if (audioUrl && isBlobUrl(audioUrl)) {
       try {
         const uploadResult = await uploadBlobToAsset(
-          track.src,
+          audioUrl,
           'audio',
           track.name || `audio-${Date.now()}`
         );
 
         processedAudioTracks.push({
-          ...track,
-          src: uploadResult.url,
-          assetId: uploadResult.asset_id
+          id: track.id,
+          name: track.name,
+          url: uploadResult.url,
+          assetId: uploadResult.asset_id,
+          type: track.type || 'music',
+          startTime: track.startTime || 0,
+          duration: track.duration || 0,
+          volume: track.volume || 100,
+          fadeIn: track.fadeIn || 0,
+          fadeOut: track.fadeOut || 0,
+          playbackSpeed: track.playbackSpeed || 1
         });
       } catch (error) {
         console.error('Failed to upload audio track:', error);
-        processedAudioTracks.push(track);
+        // Still include the track but with blob URL (will fail validation)
+        processedAudioTracks.push({
+          id: track.id,
+          name: track.name,
+          url: audioUrl,
+          type: track.type || 'music',
+          startTime: track.startTime || 0,
+          duration: track.duration || 0,
+          volume: track.volume || 100,
+          fadeIn: track.fadeIn || 0,
+          fadeOut: track.fadeOut || 0,
+          playbackSpeed: track.playbackSpeed || 1
+        });
       }
     } else {
-      processedAudioTracks.push(track);
+      // Map src to url for backend compatibility
+      processedAudioTracks.push({
+        id: track.id,
+        name: track.name,
+        url: audioUrl,
+        assetId: track.assetId,
+        type: track.type || 'music',
+        startTime: track.startTime || 0,
+        duration: track.duration || 0,
+        volume: track.volume || 100,
+        fadeIn: track.fadeIn || 0,
+        fadeOut: track.fadeOut || 0,
+        playbackSpeed: track.playbackSpeed || 1
+      });
     }
   }
 
