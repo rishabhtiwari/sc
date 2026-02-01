@@ -969,6 +969,11 @@ const DesignEditor = () => {
         audioTracks: processedAudioTracks,
         // videoTracks are no longer stored separately - they're in page elements
         videoTracks: [],
+        // Store media lists for sidebar (includes library assets not yet used in project)
+        mediaLibrary: {
+          uploadedAudio: uploadedAudio,
+          uploadedVideo: uploadedVideo
+        },
         status: 'draft',
         tags: []
       };
@@ -1034,9 +1039,14 @@ const DesignEditor = () => {
 
   /**
    * Extract media items from loaded project to populate sidebar media lists
+   * This merges project media with any existing media in state (e.g., from library)
    */
-  const extractMediaFromProject = (project) => {
+  const extractMediaFromProject = (project, existingAudio = [], existingVideo = []) => {
     console.log('📦 Extracting media from project:', project);
+    console.log('📦 Existing media in state:', {
+      audio: existingAudio.length,
+      video: existingVideo.length
+    });
 
     // Extract audio from audio tracks
     const audioItems = (project.audioTracks || []).map(track => ({
@@ -1057,19 +1067,20 @@ const DesignEditor = () => {
       duration: track.duration || track.originalDuration,
     }));
 
-    // Extract videos from page elements
-    const videoFromElements = [];
+    // Extract videos and images from page elements
+    const mediaFromElements = [];
     (project.pages || []).forEach(page => {
       (page.elements || []).forEach(el => {
-        if (el.type === 'video' && el.src) {
+        if ((el.type === 'video' || el.type === 'image') && (el.src || el.url)) {
+          const url = el.src || el.url;
           // Check if not already in videoFromTracks
-          const exists = videoFromTracks.some(v => v.url === el.src);
+          const exists = videoFromTracks.some(v => v.url === url);
           if (!exists) {
-            videoFromElements.push({
-              id: el.id || `video-${Date.now()}-${Math.random()}`,
-              type: 'video',
-              url: el.src,
-              title: 'Video Element',
+            mediaFromElements.push({
+              id: el.id || `${el.type}-${Date.now()}-${Math.random()}`,
+              type: el.type,
+              url: url,
+              title: el.name || `${el.type} Element`,
               duration: el.duration,
             });
           }
@@ -1077,17 +1088,35 @@ const DesignEditor = () => {
       });
     });
 
-    // Combine all videos
-    const allVideos = [...videoFromTracks, ...videoFromElements];
+    // Combine project videos with existing videos (from library)
+    const projectVideos = [...videoFromTracks, ...mediaFromElements];
+    const mergedVideos = [...existingVideo];
 
-    console.log('📦 Extracted media:', {
-      audio: audioItems.length,
-      video: allVideos.length
+    // Add project videos that don't already exist
+    projectVideos.forEach(pv => {
+      const exists = mergedVideos.some(ev => ev.url === pv.url);
+      if (!exists) {
+        mergedVideos.push(pv);
+      }
+    });
+
+    // Merge audio similarly
+    const mergedAudio = [...existingAudio];
+    audioItems.forEach(pa => {
+      const exists = mergedAudio.some(ea => ea.url === pa.url);
+      if (!exists) {
+        mergedAudio.push(pa);
+      }
+    });
+
+    console.log('📦 Merged media:', {
+      audio: mergedAudio.length,
+      video: mergedVideos.length
     });
 
     return {
-      audio: audioItems,
-      video: allVideos
+      audio: mergedAudio,
+      video: mergedVideos
     };
   };
 
@@ -1112,14 +1141,43 @@ const DesignEditor = () => {
       setCurrentTime(0);
       setIsPlaying(false);
 
-      // Extract and populate media lists for sidebar
-      const media = extractMediaFromProject(project);
-      setUploadedAudio(media.audio);
-      setUploadedVideo(media.video);
+      // Restore media library if saved in project, otherwise extract from project content
+      let mediaToRestore;
+      if (project.mediaLibrary) {
+        console.log('📚 Restoring saved media library from project');
+        // Merge saved media library with any existing media (from library navigation)
+        mediaToRestore = {
+          audio: [...uploadedAudio],
+          video: [...uploadedVideo]
+        };
+
+        // Add saved media that doesn't already exist
+        (project.mediaLibrary.uploadedAudio || []).forEach(savedAudio => {
+          const exists = mediaToRestore.audio.some(a => a.url === savedAudio.url);
+          if (!exists) {
+            mediaToRestore.audio.push(savedAudio);
+          }
+        });
+
+        (project.mediaLibrary.uploadedVideo || []).forEach(savedVideo => {
+          const exists = mediaToRestore.video.some(v => v.url === savedVideo.url);
+          if (!exists) {
+            mediaToRestore.video.push(savedVideo);
+          }
+        });
+      } else {
+        console.log('📦 No saved media library, extracting from project content');
+        // Extract and populate media lists for sidebar from project content
+        // Pass existing media to merge with project media (in case assets were added from library)
+        mediaToRestore = extractMediaFromProject(project, uploadedAudio, uploadedVideo);
+      }
+
+      setUploadedAudio(mediaToRestore.audio);
+      setUploadedVideo(mediaToRestore.video);
 
       console.log('✅ Media lists populated:', {
-        uploadedAudio: media.audio.length,
-        uploadedVideo: media.video.length
+        uploadedAudio: mediaToRestore.audio.length,
+        uploadedVideo: mediaToRestore.video.length
       });
 
       showToast('Project loaded successfully', 'success');
@@ -1151,18 +1209,20 @@ const DesignEditor = () => {
   }, [location]);
 
   /**
-   * Debug: Log media list changes
+   * Debug: Log media list changes (in-memory state)
    */
   useEffect(() => {
-    console.log('📊 Media lists updated:', {
+    console.log('📊 In-memory state updated:', {
       uploadedAudio: uploadedAudio.length,
       uploadedVideo: uploadedVideo.length,
       pages: pages.length,
       audioTracks: audioTracks.length,
+      hasProject: !!currentProject,
+      projectId: currentProject?.project_id,
       audioDetails: uploadedAudio.map(a => ({ title: a.title, url: a.url?.substring(0, 50) })),
       videoDetails: uploadedVideo.map(v => ({ title: v.title, type: v.type, url: v.url?.substring(0, 50) }))
     });
-  }, [uploadedAudio, uploadedVideo, pages, audioTracks]);
+  }, [uploadedAudio, uploadedVideo, pages, audioTracks, currentProject]);
 
   /**
    * Handle loading project from URL query parameter
