@@ -349,11 +349,13 @@ const DesignEditor = () => {
           id: trackId,
           name: audioFile.name,
           url: audioUrl,
+          file: audioFile, // Store file object for upload during save
           duration: audio.duration,
           startTime: startTime, // Auto-position at end of existing audio
           volume: 100, // Default volume 100%
           fadeIn: 0,
           fadeOut: 0,
+          playbackSpeed: 1, // Default playback speed
           type: audioFile.name.toLowerCase().includes('voice') || audioFile.name.toLowerCase().includes('speech')
             ? 'voiceover'
             : audioFile.name.toLowerCase().includes('sfx') || audioFile.name.toLowerCase().includes('effect')
