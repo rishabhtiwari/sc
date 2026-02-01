@@ -45,13 +45,13 @@ const DesignEditor = () => {
 
     pages.forEach((page, pageIndex) => {
       const pageStartTime = cumulativeTime;
+      const pageDuration = page.duration || 5; // Define pageDuration at page level
       const videoElements = (page.elements || []).filter(el => el.type === 'video');
 
       console.log(`  📄 Page ${pageIndex} (${page.name}): ${videoElements.length} video(s)`);
 
       videoElements.forEach((element, elementIndex) => {
         const videoDuration = element.duration || 0;
-        const pageDuration = page.duration || 5;
 
         // Video is constrained to the slide's time range
         const effectiveDuration = Math.min(videoDuration, pageDuration);
