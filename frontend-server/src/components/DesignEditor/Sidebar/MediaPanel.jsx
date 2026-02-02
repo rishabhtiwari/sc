@@ -251,6 +251,7 @@ const MediaPanel = ({
                 width: 640,
                 height: 360,
                 duration: video.duration,
+                originalDuration: video.duration, // Store natural duration for looping
                 trimStart: 0,
                 trimEnd: video.duration,
                 playbackSpeed: 1,
@@ -285,6 +286,7 @@ const MediaPanel = ({
           width: 640,
           height: 360,
           duration: media.duration,
+          originalDuration: media.duration, // Store natural duration for looping
           trimStart: 0,
           trimEnd: media.duration,
           playbackSpeed: 1,

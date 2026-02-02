@@ -475,42 +475,76 @@ export const extractMediaFromProject = (project) => {
 
   console.log('📦 No saved media library, extracting from project content');
 
+  // Track unique URLs to avoid duplicates
+  const uniqueImages = new Map();
+  const uniqueVideos = new Map();
+
   // Extract from pages/elements
   if (project.pages) {
     project.pages.forEach(page => {
       page.elements?.forEach(element => {
         if (element.type === 'image' && element.src) {
-          extractedMedia.image.push({
-            image_id: element.assetId || element.id,
-            url: element.src,
-            name: element.name || 'Image',
-            title: element.name || 'Image'
-          });
+          // Only add if we haven't seen this URL before
+          if (!uniqueImages.has(element.src)) {
+            uniqueImages.set(element.src, {
+              image_id: element.assetId || element.libraryId || element.id,
+              id: element.assetId || element.libraryId || element.id,
+              url: element.src,
+              name: element.name || 'Image',
+              title: element.name || 'Image',
+              type: 'image',
+              libraryId: element.libraryId || element.image_id,
+              assetId: element.assetId || element.libraryId
+            });
+          }
         } else if (element.type === 'video' && element.src) {
-          extractedMedia.video.push({
-            video_id: element.assetId || element.id,
-            url: element.src,
-            name: element.name || 'Video',
-            title: element.name || 'Video',
-            duration: element.duration
-          });
+          // Only add if we haven't seen this URL before
+          if (!uniqueVideos.has(element.src)) {
+            uniqueVideos.set(element.src, {
+              video_id: element.assetId || element.libraryId || element.id,
+              id: element.assetId || element.libraryId || element.id,
+              url: element.src,
+              name: element.name || 'Video',
+              title: element.name || 'Video',
+              type: 'video',
+              duration: element.duration,
+              originalDuration: element.originalDuration,
+              libraryId: element.libraryId || element.video_id,
+              assetId: element.assetId || element.libraryId
+            });
+          }
         }
       });
     });
   }
 
-  // Extract from audio tracks
+  // Convert Maps to arrays
+  extractedMedia.image = Array.from(uniqueImages.values());
+  extractedMedia.video = Array.from(uniqueVideos.values());
+
+  // Extract from audio tracks (with deduplication)
+  const uniqueAudio = new Map();
   if (project.audioTracks) {
     project.audioTracks.forEach(track => {
-      extractedMedia.audio.push({
-        audio_id: track.assetId || track.id,
-        url: track.src || track.audio_url,
-        audio_url: track.src || track.audio_url,
-        title: track.name || 'Audio',
-        duration: track.duration
-      });
+      const audioUrl = track.src || track.url || track.audio_url;
+      // Only add if we haven't seen this URL before
+      if (audioUrl && !uniqueAudio.has(audioUrl)) {
+        uniqueAudio.set(audioUrl, {
+          audio_id: track.assetId || track.libraryId || track.id,
+          id: track.assetId || track.libraryId || track.id,
+          url: audioUrl,
+          audio_url: audioUrl,
+          title: track.name || 'Audio',
+          name: track.name || 'Audio',
+          type: 'audio',
+          duration: track.duration,
+          libraryId: track.libraryId || track.audio_id,
+          assetId: track.assetId || track.libraryId
+        });
+      }
     });
   }
+  extractedMedia.audio = Array.from(uniqueAudio.values());
 
   console.log('📦 Merged media:', {
     audio: extractedMedia.audio.length,

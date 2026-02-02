@@ -232,17 +232,36 @@ def upload_audio_file():
         # Forward query parameters (name, folder, etc.)
         params = request.args.to_dict()
 
-        logger.info(f"Uploading audio file to library for customer {customer_id}, user {user_id}")
+        logger.info(f"📤 Uploading audio file to library for customer {customer_id}, user {user_id}")
+        logger.info(f"Request files: {list(request.files.keys())}")
+        logger.info(f"Request form: {request.form.to_dict()}")
+        logger.info(f"Query params: {params}")
 
-        # Forward multipart form data
+        # Forward multipart form data - properly format files dict
+        files = {}
+        if 'file' in request.files:
+            file = request.files['file']
+            files['file'] = (file.filename, file.stream, file.content_type)
+            logger.info(f"📎 File to forward: filename={file.filename}, content_type={file.content_type}")
+        else:
+            logger.error("❌ No 'file' in request.files!")
+            return jsonify({
+                'success': False,
+                'error': 'No file provided'
+            }), 400
+
         response = requests.post(
             f'{ASSET_SERVICE_URL}/api/audio-studio/library/upload',
             headers=headers,
-            files=request.files,
+            files=files,
             data=request.form,
             params=params,
             timeout=60  # Longer timeout for audio uploads
         )
+
+        logger.info(f"Asset service response: status={response.status_code}")
+        if response.status_code != 200:
+            logger.error(f"Asset service error response: {response.text}")
 
         return jsonify(response.json()), response.status_code
 

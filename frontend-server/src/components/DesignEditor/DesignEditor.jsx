@@ -360,8 +360,9 @@ const DesignEditor = () => {
     setAudioTracks(prevTracks => prevTracks.filter(track => track.id !== trackId));
 
     // Also remove from media library if it exists there
-    if (track && track.src) {
-      setUploadedAudio(prev => prev.filter(audio => audio.url !== track.src));
+    const trackUrl = track?.src || track?.url;
+    if (track && trackUrl) {
+      setUploadedAudio(prev => prev.filter(audio => audio.url !== trackUrl));
     }
   };
 
@@ -656,18 +657,27 @@ const DesignEditor = () => {
                   // Video should be playing
                   const videoTime = newTime - pageStartTime;
 
+                  // Get the original (natural) duration and stretched duration
+                  const originalDuration = element.originalDuration || videoRef.duration;
+                  const stretchedDuration = element.duration || videoRef.duration;
+
+                  // Calculate looped video time if video is stretched beyond its natural duration
+                  // If stretched to 20s and video is 4s, it should loop 5 times
+                  const loopedVideoTime = videoTime % originalDuration;
+
                   if (videoRef.paused) {
                     // Start playing the video
-                    if (isFinite(videoTime) && videoTime >= 0) {
-                      console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
-                      videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                    if (isFinite(loopedVideoTime) && loopedVideoTime >= 0) {
+                      console.log(`🎬 Starting video ${element.id} at ${loopedVideoTime.toFixed(2)}s (looped from ${videoTime.toFixed(2)}s, stretched: ${stretchedDuration.toFixed(2)}s, original: ${originalDuration.toFixed(2)}s)`);
+                      videoRef.currentTime = loopedVideoTime;
                       videoRef.play().catch(err => console.error('Video play error:', err));
                     }
                   } else {
                     // Sync video time if it drifts too much
-                    const drift = Math.abs(videoRef.currentTime - videoTime);
-                    if (drift > 0.5 && isFinite(videoTime)) {
-                      videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                    const drift = Math.abs(videoRef.currentTime - loopedVideoTime);
+                    if (drift > 0.5 && isFinite(loopedVideoTime)) {
+                      console.log(`🔄 Syncing video ${element.id} time: ${loopedVideoTime.toFixed(2)}s (was ${videoRef.currentTime.toFixed(2)}s)`);
+                      videoRef.currentTime = loopedVideoTime;
                     }
                   }
                 } else if (!videoRef.paused) {
@@ -700,9 +710,10 @@ const DesignEditor = () => {
    */
   useEffect(() => {
     audioTracks.forEach(track => {
-      if (!audioRefs.current[track.id] && track.src) {
-        console.log(`🎵 Creating audio element for track: ${track.id}`);
-        const audio = new Audio(track.src);
+      const audioUrl = track.src || track.url; // Support both 'src' and 'url' properties
+      if (!audioRefs.current[track.id] && audioUrl) {
+        console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
+        const audio = new Audio(audioUrl);
         audio.volume = (track.volume || 100) / 100;
         audio.loop = false;
 
