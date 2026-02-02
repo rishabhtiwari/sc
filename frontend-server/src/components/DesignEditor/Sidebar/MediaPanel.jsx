@@ -29,7 +29,7 @@ const MediaPanel = ({
   // Loading states for uploads
   const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
   const [isUploadingAudio, setIsUploadingAudio] = React.useState(false);
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
 
   // Determine if we should show video or audio based on panel type
   const isAudioPanel = panelType === 'audio';
