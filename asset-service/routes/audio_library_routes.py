@@ -392,9 +392,17 @@ async def stream_audio(
         if audio.get("customer_id") != x_customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Extract storage info
+        # Extract storage info - use object_key from storage metadata if available
         bucket = "audio-assets"
-        object_key = f"{audio['customer_id']}/{audio['user_id']}/audio/{audio_id}.wav"
+
+        # Try to get object_key from storage metadata first (for uploaded files)
+        storage_info = audio.get("storage", {})
+        if storage_info and "object_key" in storage_info:
+            object_key = storage_info["object_key"]
+        else:
+            # Fallback: construct from audio metadata (for TTS files)
+            file_format = audio.get("format", "wav")
+            object_key = f"{audio['customer_id']}/{audio['user_id']}/audio/{audio_id}.{file_format}"
 
         logger.info(f"Streaming audio: {audio_id} from {bucket}/{object_key}")
 
@@ -404,12 +412,23 @@ async def stream_audio(
             object_name=object_key
         )
 
+        # Determine media type from format
+        file_format = audio.get("format", "wav")
+        media_type_map = {
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "ogg": "audio/ogg",
+            "m4a": "audio/mp4",
+            "flac": "audio/flac"
+        }
+        media_type = media_type_map.get(file_format, "audio/wav")
+
         # Return as streaming response
         return StreamingResponse(
             BytesIO(audio_data),
-            media_type="audio/wav",
+            media_type=media_type,
             headers={
-                "Content-Disposition": f'inline; filename="{audio_id}.wav"',
+                "Content-Disposition": f'inline; filename="{audio_id}.{file_format}"',
                 "Accept-Ranges": "bytes"
             }
         )

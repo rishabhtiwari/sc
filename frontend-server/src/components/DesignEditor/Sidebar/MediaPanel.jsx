@@ -468,7 +468,7 @@ const MediaPanel = ({
           <input
             ref={audioInputRef}
             type="file"
-            accept="audio/*"
+            accept="audio/mpeg,audio/mp3,audio/wav,audio/wave,audio/ogg,audio/flac"
             multiple
             onChange={handleAudioUpload}
             className="hidden"
@@ -509,7 +509,7 @@ const MediaPanel = ({
               </button>
             )}
           </div>
-          <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG up to 50MB</p>
+          <p className="text-xs text-gray-500 text-center">MP3, WAV, OGG, FLAC up to 50MB</p>
         </div>
       )}
 
