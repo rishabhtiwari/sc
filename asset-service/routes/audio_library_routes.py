@@ -182,8 +182,8 @@ async def upload_audio_file(
             "customer_id": x_customer_id,
             "user_id": x_user_id,
             "name": name or filename,  # Required top-level field
-            "type": "uploaded",  # Required top-level field
-            "source": "upload",  # Required top-level field
+            "type": "sound_effect",  # Required: enum ['voiceover', 'music', 'sound_effect']
+            "source": "uploaded",  # Required: enum ['tts', 'ai_voice', 'ai_music', 'cloned', 'uploaded']
             "url": url,  # Required top-level field (flat, not nested)
             "duration": duration,
             "format": ext,
