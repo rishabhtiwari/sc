@@ -70,6 +70,7 @@ const MediaPanel = ({
                 title: libraryResponse.video.name,
                 duration: libraryResponse.video.duration,
                 libraryId: libraryResponse.video.video_id, // Track library ID for deletion
+                assetId: libraryResponse.video.video_id, // Add assetId to prevent re-upload
                 // No file property - it's in library now
               };
 
@@ -79,6 +80,11 @@ const MediaPanel = ({
 
               // Revoke blob URL since we have library URL now
               URL.revokeObjectURL(url);
+
+              // Reset file input after successful upload to allow re-uploading
+              if (videoInputRef.current) {
+                videoInputRef.current.value = '';
+              }
             } else {
               throw new Error('Failed to upload video to library');
             }
@@ -111,8 +117,8 @@ const MediaPanel = ({
       }
     }
 
-    // Reset file input to allow re-uploading the same file
-    event.target.value = '';
+    // Don't reset file input here - it will be reset after upload completes
+    // Resetting too early can invalidate the File object during async operations
   };
 
   const handleAudioUpload = async (event) => {
@@ -156,6 +162,11 @@ const MediaPanel = ({
 
               // Revoke blob URL after successful upload
               URL.revokeObjectURL(url);
+
+              // Reset file input after successful upload to allow re-uploading
+              if (audioInputRef.current) {
+                audioInputRef.current.value = '';
+              }
             }
           } catch (error) {
             console.error('❌ Error uploading audio to library:', error);
@@ -177,9 +188,8 @@ const MediaPanel = ({
       }
     }
 
-    // Reset file input AFTER processing to allow re-uploading the same file
-    // This must happen after we've created the File references above
-    event.target.value = '';
+    // Don't reset file input here - it will be reset after upload completes
+    // Resetting too early can invalidate the File object during async operations
   };
 
   /**

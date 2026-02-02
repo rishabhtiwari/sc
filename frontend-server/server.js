@@ -325,6 +325,58 @@ app.post('/api/templates/upload/logo', upload.single('file'), async (req, res) =
     }
 });
 
+// Audio Library Upload - Handle multipart/form-data file uploads
+// Pattern matches video library upload for consistency
+app.post('/api/audio-studio/library/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            console.error('❌ No file in request');
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        // Extract query parameters (name, duration, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/audio-studio/library/upload${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying audio library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        console.log(`✅ Audio library upload response: status=${response.status}`);
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Audio library upload proxy error: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            error: 'Audio library upload proxy error',
+            message: error.message
+        });
+    }
+});
+
 // Special routes for image and video library uploads (must come before general API proxy)
 app.post('/api/image-library/library', upload.single('file'), async (req, res) => {
     try {
