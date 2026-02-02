@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef } from 'react';
 
 /**
  * AuthenticatedVideo Component
  * Fetches videos with JWT authentication and displays them using blob URLs
  * This is necessary because <video> tags don't send Authorization headers
  */
-const AuthenticatedVideo = ({ 
-  src, 
-  className = '', 
+const AuthenticatedVideo = forwardRef(({
+  src,
+  className = '',
   fallback = null,
   onError = null,
   controls = false,
   preload = 'metadata',
   onMouseEnter = null,
   onMouseLeave = null,
-  ...props 
-}) => {
+  ...props
+}, ref) => {
   const [blobUrl, setBlobUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -157,6 +157,7 @@ const AuthenticatedVideo = ({
 
   return (
     <video
+      ref={ref}
       src={blobUrl}
       className={className}
       controls={controls}
@@ -171,7 +172,9 @@ const AuthenticatedVideo = ({
       {...props}
     />
   );
-};
+});
+
+AuthenticatedVideo.displayName = 'AuthenticatedVideo';
 
 export default AuthenticatedVideo;
 

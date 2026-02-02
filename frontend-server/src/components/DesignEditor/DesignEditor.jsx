@@ -630,36 +630,50 @@ const DesignEditor = () => {
             page.elements.forEach(element => {
               if (element.type === 'video') {
                 const videoRef = videoElementRefs.current[element.id];
-                if (videoRef && isFinite(videoRef.duration) && videoRef.duration > 0) {
-                  // Calculate if this video should be playing based on page timing
-                  // Use explicit startTime if available, otherwise calculate sequentially
-                  const pageStartTime = page.startTime !== undefined
-                    ? page.startTime
-                    : pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
-                  const pageEndTime = pageStartTime + (page.duration || 5);
 
-                  if (newTime >= pageStartTime && newTime < pageEndTime) {
-                    // Video should be playing
-                    const videoTime = newTime - pageStartTime;
+                // Debug logging
+                if (!videoRef) {
+                  console.log(`⚠️ Video ref not found for element ${element.id}`);
+                  console.log('Available video refs:', Object.keys(videoElementRefs.current));
+                  return;
+                }
 
-                    if (videoRef.paused) {
-                      // Start playing the video
-                      if (isFinite(videoTime) && videoTime >= 0) {
-                        console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
-                        videoRef.currentTime = Math.min(videoTime, videoRef.duration);
-                        videoRef.play().catch(err => console.error('Video play error:', err));
-                      }
-                    } else {
-                      // Sync video time if it drifts too much
-                      const drift = Math.abs(videoRef.currentTime - videoTime);
-                      if (drift > 0.5 && isFinite(videoTime)) {
-                        videoRef.currentTime = Math.min(videoTime, videoRef.duration);
-                      }
+                if (!isFinite(videoRef.duration) || videoRef.duration <= 0) {
+                  console.log(`⚠️ Video ${element.id} metadata not loaded yet (duration: ${videoRef.duration})`);
+                  return;
+                }
+
+                // Calculate if this video should be playing based on page timing
+                // Use explicit startTime if available, otherwise calculate sequentially
+                const pageStartTime = page.startTime !== undefined
+                  ? page.startTime
+                  : pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
+                const pageEndTime = pageStartTime + (page.duration || 5);
+
+                console.log(`🎬 Video ${element.id}: currentTime=${newTime.toFixed(2)}s, pageStart=${pageStartTime.toFixed(2)}s, pageEnd=${pageEndTime.toFixed(2)}s, pageIndex=${pageIndex}, currentPageIndex=${currentPageIndex}`);
+
+                if (newTime >= pageStartTime && newTime < pageEndTime) {
+                  // Video should be playing
+                  const videoTime = newTime - pageStartTime;
+
+                  if (videoRef.paused) {
+                    // Start playing the video
+                    if (isFinite(videoTime) && videoTime >= 0) {
+                      console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
+                      videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                      videoRef.play().catch(err => console.error('Video play error:', err));
                     }
-                  } else if (!videoRef.paused) {
-                    // Video should not be playing
-                    videoRef.pause();
+                  } else {
+                    // Sync video time if it drifts too much
+                    const drift = Math.abs(videoRef.currentTime - videoTime);
+                    if (drift > 0.5 && isFinite(videoTime)) {
+                      videoRef.currentTime = Math.min(videoTime, videoRef.duration);
+                    }
                   }
+                } else if (!videoRef.paused) {
+                  // Video should not be playing
+                  console.log(`🎬 Pausing video ${element.id} (outside page time range)`);
+                  videoRef.pause();
                 }
               }
             });
@@ -781,10 +795,17 @@ const DesignEditor = () => {
   const confirmAudioDelete = () => {
     const { audioId, mediaId } = audioDeleteDialog;
 
-    // Remove from timeline if it exists there
-    if (audioId) {
-      setAudioTracks(prev => prev.filter(track => track.id !== audioId));
-    }
+    // Find the media item to get its URL
+    const mediaItem = uploadedAudio.find(audio => audio.id === mediaId);
+    const mediaUrl = mediaItem?.url;
+
+    // Remove from timeline - check by both ID and URL
+    setAudioTracks(prev => prev.filter(track => {
+      // Remove if ID matches OR URL matches
+      if (audioId && track.id === audioId) return false;
+      if (mediaUrl && track.url === mediaUrl) return false;
+      return true;
+    }));
 
     // Remove from media list (NOT from backend library - users must delete from library page)
     if (mediaId) {
@@ -810,13 +831,22 @@ const DesignEditor = () => {
   const confirmVideoDelete = () => {
     const { videoId, mediaId } = videoDeleteDialog;
 
-    // Remove from canvas if it exists there
-    if (videoId) {
-      setPages(prevPages => prevPages.map(page => ({
-        ...page,
-        elements: page.elements.filter(el => el.id !== videoId)
-      })));
-    }
+    // Find the media item to get its URL
+    const mediaItem = uploadedVideo.find(video => video.id === mediaId);
+    const mediaUrl = mediaItem?.url;
+
+    // Remove from canvas - check by both ID and URL
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.filter(el => {
+        // Remove if it's a video element AND (ID matches OR URL matches)
+        if (el.type === 'video') {
+          if (videoId && el.id === videoId) return false;
+          if (mediaUrl && el.src === mediaUrl) return false;
+        }
+        return true;
+      })
+    })));
 
     // Remove from media list (NOT from backend library - users must delete from library page)
     if (mediaId) {
@@ -831,42 +861,34 @@ const DesignEditor = () => {
    * Handle image delete request
    */
   const handleImageDeleteRequest = (imageUrl, imageTitle, mediaId) => {
-    // Find all image elements with this URL across all pages
-    const imageElements = [];
-    pages.forEach((page, pageIndex) => {
-      page.elements.forEach(element => {
-        if (element.type === 'image' && element.src === imageUrl) {
-          imageElements.push({ element, pageIndex });
-        }
-      });
+    // Show confirmation dialog
+    setImageDeleteDialog({
+      isOpen: true,
+      imageUrl,
+      imageTitle,
+      mediaId
     });
-
-    if (imageElements.length > 0) {
-      // If image is on canvas, show confirmation dialog
-      setImageDeleteDialog({
-        isOpen: true,
-        imageElements,
-        imageTitle,
-        mediaId
-      });
-    } else {
-      // Image not on canvas, just delete from media library
-      handleDeleteImage(mediaId);
-      showToast('Image deleted from library', 'success');
-    }
   };
 
   const confirmImageDelete = () => {
-    const { imageElements, mediaId } = imageDeleteDialog;
+    const { imageUrl, mediaId } = imageDeleteDialog;
 
-    // Remove all instances from canvas
-    if (imageElements && imageElements.length > 0) {
-      imageElements.forEach(({ element }) => {
-        setPages(prevPages => prevPages.map(page => ({
-          ...page,
-          elements: page.elements.filter(el => el.id !== element.id)
-        })));
-      });
+    // Find the media item to get its URL if not provided
+    const mediaItem = uploadedImage.find(image => image.id === mediaId);
+    const mediaUrl = imageUrl || mediaItem?.url;
+
+    // Remove all instances from canvas - check by URL
+    if (mediaUrl) {
+      setPages(prevPages => prevPages.map(page => ({
+        ...page,
+        elements: page.elements.filter(el => {
+          // Remove if it's an image element AND URL matches
+          if (el.type === 'image' && el.src === mediaUrl) {
+            return false;
+          }
+          return true;
+        })
+      })));
     }
 
     // Remove from media list (NOT from backend library - users must delete from library page)
@@ -874,7 +896,7 @@ const DesignEditor = () => {
       setUploadedImage(prev => prev.filter(image => image.id !== mediaId));
     }
 
-    setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });
+    setImageDeleteDialog({ isOpen: false, imageUrl: null, imageTitle: null, mediaId: null });
     showToast('Image removed from editor', 'success');
   };
 

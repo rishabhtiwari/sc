@@ -387,6 +387,7 @@ const CanvasElement = ({
           // Use AuthenticatedVideo for API URLs
           return (
             <AuthenticatedVideo
+              ref={videoRef}
               key={element.id}
               src={element.src}
               style={videoStyle}
@@ -395,6 +396,21 @@ const CanvasElement = ({
               playsInline
               preload="auto"
               data-video-element-id={element.id}
+              onLoadedMetadata={(e) => {
+                console.log('🎬 AuthenticatedVideo onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState);
+              }}
+              onCanPlay={(e) => {
+                console.log('🎬 AuthenticatedVideo onCanPlay:', element.id);
+              }}
+              onPlay={(e) => {
+                console.log('✅ AuthenticatedVideo onPlay event:', element.id);
+              }}
+              onPause={(e) => {
+                console.log('⏸️ AuthenticatedVideo onPause event:', element.id);
+              }}
+              onError={(e) => {
+                console.error('❌ AuthenticatedVideo error:', element.id, e);
+              }}
             />
           );
         } else {
