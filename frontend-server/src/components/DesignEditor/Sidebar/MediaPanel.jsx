@@ -513,8 +513,8 @@ const MediaPanel = ({
         </div>
       )}
 
-      {/* Image Section - Only show on media/video panel, not audio panel */}
-      {!isAudioPanel && (
+      {/* Image Section - Only show on media panel, not on video or audio panels */}
+      {!isAudioPanel && !isVideoPanel && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-900">🖼️ Images</h3>
           <input

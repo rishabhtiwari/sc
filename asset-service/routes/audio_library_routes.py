@@ -195,11 +195,11 @@ async def upload_audio_file(
             }
         }
 
-        db_service.save_audio_to_library(audio_doc)
+        db_service.create_audio_library_entry(audio_doc)
         logger.info(f"Audio metadata saved to MongoDB: {audio_id}")
 
         # Generate URL for frontend
-        url = f"/api/assets/download/audio-assets/{x_customer_id}/{x_user_id}/{audio_id}.{ext}"
+        url = f"/api/assets/download/audio-assets/{object_key}"
 
         return {
             "success": True,
