@@ -183,20 +183,23 @@ export const useProjectState = ({
 
   /**
    * Auto-load project from URL on mount
-   * Only load from backend if there's NO sessionStorage (fresh load)
-   * If sessionStorage exists, it's the source of truth (has most recent changes)
+   * If there's a project ID in URL, ALWAYS load it from backend (clear sessionStorage first)
+   * This ensures clicking a project from the Projects page always loads that specific project
    */
   useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
-    const hasSessionStorage = sessionStorage.getItem('designEditor_inMemoryState');
 
-    if (projectId && !hasSessionStorage) {
-      console.log('📂 Loading project from URL (no sessionStorage):', projectId);
+    if (projectId) {
+      console.log('📂 Project ID in URL, loading from backend:', projectId);
+      // Clear sessionStorage to ensure we load fresh data from backend
+      sessionStorage.removeItem('designEditor_inMemoryState');
+      console.log('🗑️ Cleared sessionStorage to load fresh project');
+
       handleLoadProject(projectId).catch(error => {
         console.error('Failed to load project from URL:', error);
       });
-    } else if (projectId && hasSessionStorage) {
-      console.log('⏭️ Skipping project load - sessionStorage exists (source of truth)');
+    } else {
+      console.log('📭 No project ID in URL - will use sessionStorage or start fresh');
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
