@@ -73,6 +73,17 @@ class Element(BaseModel):
     volume: Optional[int] = None
     muted: Optional[bool] = None
     loop: Optional[bool] = None
+    originalDuration: Optional[float] = None  # Natural video duration for looping
+    # Image-specific properties
+    flipX: Optional[bool] = None
+    flipY: Optional[bool] = None
+    borderWidth: Optional[int] = None
+    borderRadius: Optional[int] = None
+    borderColor: Optional[str] = None
+    brightness: Optional[int] = None
+    contrast: Optional[int] = None
+    saturation: Optional[int] = None
+    blur: Optional[int] = None
     # Store all other properties
     properties: Dict[str, Any] = Field(default_factory=dict)
 
