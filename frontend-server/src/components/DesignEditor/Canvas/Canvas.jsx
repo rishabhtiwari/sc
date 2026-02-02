@@ -5,7 +5,16 @@ import CanvasElement from './CanvasElement';
  * Canvas Component - Main design area
  * Features: Drag & drop, resize, rotate elements
  */
-const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, onDeleteElement, background }) => {
+const Canvas = ({
+  elements,
+  selectedElement,
+  onSelectElement,
+  onUpdateElement,
+  onDeleteElement,
+  background,
+  registerVideoRef,
+  unregisterVideoRef
+}) => {
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [zoom, setZoom] = useState(0.5);
@@ -140,6 +149,8 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
                   setIsEditingText(editing);
                 }
               }}
+              registerVideoRef={registerVideoRef}
+              unregisterVideoRef={unregisterVideoRef}
             />
           ))}
 

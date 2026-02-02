@@ -25,6 +25,10 @@ const MediaPanel = ({
   const audioInputRef = useRef(null);
   const { showToast } = useToast();
 
+  // Loading states for uploads
+  const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
+  const [isUploadingAudio, setIsUploadingAudio] = React.useState(false);
+
   // Determine if we should show video or audio based on panel type
   const isAudioPanel = panelType === 'audio';
   const isVideoPanel = panelType === 'video';
@@ -33,6 +37,11 @@ const MediaPanel = ({
     console.log('🎥 handleVideoUpload called');
     const files = Array.from(event.target.files);
     console.log('📁 Files:', files.length);
+
+    if (files.length === 0) return;
+
+    setIsUploadingVideo(true);
+    showToast(`Uploading ${files.length} video(s)...`, 'info');
 
     for (const file of files) {
       if (file.type.startsWith('video/')) {
@@ -64,7 +73,7 @@ const MediaPanel = ({
 
               console.log('➕ Adding to uploadedMedia:', newVideo);
               onUploadedMediaChange(prev => [...prev, newVideo]);
-              showToast('Video uploaded to library', 'success');
+              showToast(`${file.name} uploaded successfully`, 'success');
 
               // Revoke blob URL since we have library URL now
               URL.revokeObjectURL(url);
@@ -84,8 +93,16 @@ const MediaPanel = ({
               duration: video.duration
             };
             onUploadedMediaChange(prev => [...prev, newVideo]);
-            showToast('Video uploaded (not saved to library)', 'warning');
+            showToast(`${file.name} uploaded (not saved to library)`, 'warning');
+          } finally {
+            setIsUploadingVideo(false);
           }
+        };
+
+        video.onerror = () => {
+          console.error('❌ Error loading video metadata');
+          showToast(`Failed to load ${file.name}`, 'error');
+          setIsUploadingVideo(false);
         };
 
         video.src = url;
@@ -100,6 +117,13 @@ const MediaPanel = ({
     console.log('🎵 handleAudioUpload called');
     const files = Array.from(event.target.files);
     console.log('📁 Files:', files.length);
+
+    if (files.length === 0) return;
+
+    setIsUploadingAudio(true);
+    showToast(`Uploading ${files.length} audio file(s)...`, 'info');
+
+    let uploadedCount = 0;
 
     files.forEach((file) => {
       if (file.type.startsWith('audio/')) {
@@ -118,9 +142,14 @@ const MediaPanel = ({
         if (onAddAudioTrack) {
           console.log('🎬 Calling onAddAudioTrack for:', file.name);
           onAddAudioTrack(file, url);
-          showToast('Audio added to timeline', 'success');
-        } else {
-          showToast('Audio uploaded successfully', 'success');
+        }
+
+        uploadedCount++;
+
+        // Show success message after last file
+        if (uploadedCount === files.length) {
+          showToast(`${files.length} audio file(s) uploaded successfully`, 'success');
+          setIsUploadingAudio(false);
         }
       }
     });
@@ -269,12 +298,25 @@ const MediaPanel = ({
           <div className="flex gap-2">
             <button
               onClick={() => videoInputRef.current?.click()}
-              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+              disabled={isUploadingVideo}
+              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Upload
+              {isUploadingVideo ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload
+                </>
+              )}
             </button>
             {onOpenVideoLibrary && (
               <button
@@ -308,12 +350,25 @@ const MediaPanel = ({
           <div className="flex gap-2">
             <button
               onClick={() => audioInputRef.current?.click()}
-              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
+              disabled={isUploadingAudio}
+              className="flex-1 px-3 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              Upload
+              {isUploadingAudio ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload
+                </>
+              )}
             </button>
             {onOpenAudioLibrary && (
               <button

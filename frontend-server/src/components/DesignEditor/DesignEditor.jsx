@@ -37,8 +37,8 @@ const DesignEditor = () => {
     return () => console.log('🎨 DesignEditor unmounted');
   }, []);
 
-  // UI State - Default to 'text' tool selected (sidebar open)
-  const [selectedTool, setSelectedTool] = useState('text');
+  // UI State - Restore selectedTool from navigation state, or default to 'text'
+  const [selectedTool, setSelectedTool] = useState(location.state?.returnTool || 'text');
   const [zoom, setZoom] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
 
@@ -260,6 +260,16 @@ const DesignEditor = () => {
   }, [location]);
 
   /**
+   * Restore selected tool when returning from library
+   */
+  useEffect(() => {
+    if (location.state?.returnTool && location.state.returnTool !== selectedTool) {
+      console.log('🔧 Restoring selected tool:', location.state.returnTool);
+      setSelectedTool(location.state.returnTool);
+    }
+  }, [location.state?.returnTool]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
    * Handle audio track operations
    */
   const handleAddAudioTrack = (audioFile, audioUrl) => {
@@ -353,12 +363,41 @@ const DesignEditor = () => {
    */
   const handleVideoUpdate = (trackId, updates) => {
     console.log('🎬 Updating video element:', trackId, updates);
-    setPages(prevPages => prevPages.map(page => ({
-      ...page,
-      elements: page.elements.map(el =>
-        el.id === trackId ? { ...el, ...updates } : el
-      )
-    })));
+    setPages(prevPages => prevPages.map(page => {
+      // Check if this page contains the video being updated
+      const hasVideo = page.elements.some(el => el.id === trackId);
+
+      if (hasVideo && updates.duration !== undefined) {
+        // If video duration is being updated, also update page duration
+        const updatedElements = page.elements.map(el =>
+          el.id === trackId ? { ...el, ...updates } : el
+        );
+
+        // Find the maximum duration among all video elements on this page
+        const maxVideoDuration = Math.max(
+          ...updatedElements
+            .filter(el => el.type === 'video')
+            .map(el => el.duration || 0),
+          5 // Minimum page duration
+        );
+
+        console.log('📄 Updating page duration to match video:', maxVideoDuration);
+
+        return {
+          ...page,
+          elements: updatedElements,
+          duration: maxVideoDuration
+        };
+      }
+
+      // No duration update needed, just update the element
+      return {
+        ...page,
+        elements: page.elements.map(el =>
+          el.id === trackId ? { ...el, ...updates } : el
+        )
+      };
+    }));
   };
 
   /**
@@ -628,24 +667,26 @@ const DesignEditor = () => {
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
+   * Only during playback - don't auto-switch when user is editing
    */
   useEffect(() => {
-    if (pages.length > 0) {
-      // Calculate which slide should be visible based on current time
-      let accumulatedTime = 0;
-      for (let i = 0; i < pages.length; i++) {
-        const slideDuration = pages[i].duration || 5;
-        if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
-          if (currentPageIndex !== i) {
-            console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
-            setCurrentPageIndex(i);
-          }
-          break;
+    // Only auto-navigate during playback, not when editing
+    if (!isPlaying || pages.length === 0) return;
+
+    // Calculate which slide should be visible based on current time
+    let accumulatedTime = 0;
+    for (let i = 0; i < pages.length; i++) {
+      const slideDuration = pages[i].duration || 5;
+      if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
+        if (currentPageIndex !== i) {
+          console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
+          setCurrentPageIndex(i);
         }
-        accumulatedTime += slideDuration;
+        break;
       }
+      accumulatedTime += slideDuration;
     }
-  }, [currentTime, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentTime, pages, isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
     setAudioDeleteDialog({
@@ -814,19 +855,22 @@ const DesignEditor = () => {
           onOpenAudioLibrary={() => navigate('/audio-studio/library', {
             state: {
               fromEditor: true,
-              returnPath: location.pathname + location.search
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
             }
           })}
           onOpenImageLibrary={() => navigate('/asset-management/images', {
             state: {
               fromEditor: true,
-              returnPath: location.pathname + location.search
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
             }
           })}
           onOpenVideoLibrary={() => navigate('/asset-management/videos', {
             state: {
               fromEditor: true,
-              returnPath: location.pathname + location.search
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
             }
           })}
         />
@@ -892,7 +936,7 @@ const DesignEditor = () => {
 
         {/* Page Navigation */}
         {pages.length > 1 && (
-          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center">
             <div className="flex items-center gap-3">
               <button
                 onClick={handlePreviousPage}
@@ -911,22 +955,22 @@ const DesignEditor = () => {
               >
                 Next →
               </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleDuplicatePage(currentPageIndex)}
-                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
-                title="Duplicate current slide"
-              >
-                +
-              </button>
-              <button
-                onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
-                className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-base shadow-sm"
-                title="Delete current slide"
-              >
-                🗑️
-              </button>
+              <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+                <button
+                  onClick={() => handleDuplicatePage(currentPageIndex)}
+                  className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                  title="Duplicate current slide"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
+                  className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                  title="Delete current slide"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -939,6 +983,8 @@ const DesignEditor = () => {
           onUpdateElement={handleUpdateElement}
           onDeleteElement={handleDeleteElement}
           background={currentPage?.background}
+          registerVideoRef={registerVideoRef}
+          unregisterVideoRef={unregisterVideoRef}
         />
 
         {/* Audio Timeline */}

@@ -127,7 +127,7 @@ const Timeline = ({
 
   return (
     <TimelineContext.Provider value={contextValue}>
-      <div 
+      <div
         ref={timelineRef}
         className="relative h-full bg-gray-50"
         onClick={handleTimelineClick}
@@ -136,10 +136,16 @@ const Timeline = ({
           paddingRight: `${padding.right}px`
         }}
       >
-        {/* Playhead */}
+        {/* Content */}
+        {children}
+
+        {/* Playhead - Rendered AFTER content to appear on top */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-50 pointer-events-none"
-          style={{ left: `${padding.left + timeToPixels(currentTime)}px` }}
+          className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none"
+          style={{
+            left: `${padding.left + timeToPixels(currentTime)}px`,
+            zIndex: 9999
+          }}
         >
           <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-3 h-3 bg-red-500 rounded-full shadow-sm"></div>
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 px-1 py-0.5 bg-red-500 text-white text-xs rounded whitespace-nowrap">
@@ -149,17 +155,17 @@ const Timeline = ({
 
         {/* Timeline End Boundary Marker */}
         <div
-          className="absolute top-0 bottom-0 w-0.5 bg-green-500 z-40 pointer-events-none opacity-30"
-          style={{ left: `${padding.left + timeToPixels(duration)}px` }}
+          className="absolute top-0 bottom-0 w-0.5 bg-green-500 pointer-events-none opacity-30"
+          style={{
+            left: `${padding.left + timeToPixels(duration)}px`,
+            zIndex: 9998
+          }}
           title="Timeline End Boundary"
         >
           <div className="absolute top-0 left-1/2 transform -translate-x-1/2 px-1 py-0.5 bg-green-500 text-white text-xs rounded">
             END
           </div>
         </div>
-
-        {/* Content */}
-        {children}
       </div>
     </TimelineContext.Provider>
   );

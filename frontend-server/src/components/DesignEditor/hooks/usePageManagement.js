@@ -41,8 +41,18 @@ export const usePageManagement = (pages, setPages) => {
     }
 
     setPages(prevPages => {
-      // Calculate start time for new slides (position at end of existing slides)
-      const existingDuration = prevPages.reduce((sum, p) => {
+      // Check if first page is empty (no elements)
+      const firstPageIsEmpty = prevPages.length === 1 &&
+                               prevPages[0].elements.length === 0;
+
+      console.log('📄 First page is empty:', firstPageIsEmpty);
+
+      // If first page is empty, replace it with AI-generated slides
+      // Otherwise, append to existing pages
+      let basePagesToKeep = firstPageIsEmpty ? [] : prevPages;
+
+      // Calculate start time for new slides
+      const existingDuration = basePagesToKeep.reduce((sum, p) => {
         const pStart = p.startTime !== undefined ? p.startTime : 0;
         const pDur = p.duration || 5;
         return Math.max(sum, pStart + pDur);
@@ -50,18 +60,18 @@ export const usePageManagement = (pages, setPages) => {
 
       const newPages = slidePages.map((slide, index) => ({
         id: slide.id || `page-${Date.now()}-${index}`,
-        name: slide.name || `Slide ${prevPages.length + index + 1}`,
+        name: slide.name || `Slide ${basePagesToKeep.length + index + 1}`,
         elements: slide.elements || [],
         background: slide.background || { type: 'solid', color: '#ffffff' },
         duration: slide.duration || 5,
-        startTime: existingDuration + (index * 5), // Position new slides sequentially after existing ones
+        startTime: existingDuration + (index * 5), // Position new slides sequentially
         transition: slide.transition || 'fade'
       }));
 
       console.log('📄 Created new pages:', newPages);
-      console.log('📄 Current pages before update:', prevPages);
+      console.log('📄 Pages to keep:', basePagesToKeep);
 
-      const updatedPages = [...prevPages, ...newPages];
+      const updatedPages = [...basePagesToKeep, ...newPages];
       console.log('📄 Updated pages:', updatedPages);
 
       return updatedPages;

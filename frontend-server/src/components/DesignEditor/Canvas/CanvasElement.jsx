@@ -6,7 +6,16 @@ import AuthenticatedImage from '../../common/AuthenticatedImage';
  * Canvas Element Component
  * Renders different types of elements (text, image, shape, etc.)
  */
-const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditingChange }) => {
+const CanvasElement = ({
+  element,
+  isSelected,
+  zoom,
+  onSelect,
+  onUpdate,
+  onEditingChange,
+  registerVideoRef,
+  unregisterVideoRef
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState(null);
@@ -14,6 +23,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(element.text || '');
   const elementRef = useRef(null);
+  const videoRef = useRef(null);
 
   // Notify parent when editing state changes
   React.useEffect(() => {
@@ -21,6 +31,21 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
       onEditingChange(isEditing);
     }
   }, [isEditing, onEditingChange]);
+
+  // Register/unregister video ref for playback control
+  React.useEffect(() => {
+    if (element.type === 'video' && videoRef.current && registerVideoRef) {
+      console.log('📹 Registering video ref for element:', element.id);
+      registerVideoRef(element.id, videoRef.current);
+
+      return () => {
+        if (unregisterVideoRef) {
+          console.log('📹 Unregistering video ref for element:', element.id);
+          unregisterVideoRef(element.id);
+        }
+      };
+    }
+  }, [element.id, element.type, registerVideoRef, unregisterVideoRef]);
 
   const handleMouseDown = (e) => {
     e.stopPropagation();
@@ -376,6 +401,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
           // Use regular video tag for blob URLs and local files
           return (
             <video
+              ref={videoRef}
               key={element.id}
               src={element.src}
               style={videoStyle}
