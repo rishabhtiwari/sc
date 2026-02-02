@@ -114,14 +114,62 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
    * Update an existing element
    */
   const handleUpdateElement = (elementId, updates) => {
+    console.log('🔄 handleUpdateElement called:', {
+      elementId,
+      updates,
+      updateKeys: Object.keys(updates)
+    });
+
     setPages(prevPages => {
       const updatedPages = [...prevPages];
       const currentPage = updatedPages[currentPageIndex];
 
+      // Find the element being updated
+      const elementBefore = currentPage.elements.find(el => el.id === elementId);
+
+      if (elementBefore?.type === 'image') {
+        console.log('🖼️ Image element BEFORE update:', {
+          id: elementBefore.id,
+          rotation: elementBefore.rotation,
+          opacity: elementBefore.opacity,
+          flipX: elementBefore.flipX,
+          flipY: elementBefore.flipY,
+          borderWidth: elementBefore.borderWidth,
+          borderRadius: elementBefore.borderRadius,
+          borderColor: elementBefore.borderColor,
+          brightness: elementBefore.brightness,
+          contrast: elementBefore.contrast,
+          saturation: elementBefore.saturation,
+          blur: elementBefore.blur
+        });
+      }
+
       // Update the element
-      const newElements = currentPage.elements.map(el =>
-        el.id === elementId ? { ...el, ...updates } : el
-      );
+      const newElements = currentPage.elements.map(el => {
+        if (el.id === elementId) {
+          const updated = { ...el, ...updates };
+
+          if (updated.type === 'image') {
+            console.log('🖼️ Image element AFTER update:', {
+              id: updated.id,
+              rotation: updated.rotation,
+              opacity: updated.opacity,
+              flipX: updated.flipX,
+              flipY: updated.flipY,
+              borderWidth: updated.borderWidth,
+              borderRadius: updated.borderRadius,
+              borderColor: updated.borderColor,
+              brightness: updated.brightness,
+              contrast: updated.contrast,
+              saturation: updated.saturation,
+              blur: updated.blur
+            });
+          }
+
+          return updated;
+        }
+        return el;
+      });
 
       // Recalculate slide duration if a video element was updated
       const updatedElement = newElements.find(el => el.id === elementId);

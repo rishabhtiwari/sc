@@ -115,8 +115,8 @@ export const useProjectState = ({
             text: el.text?.substring(0, 30),
             hasSrc: !!el.src
           });
-          // Log full element object for icons/stickers to debug
-          if (el.type === 'icon' || el.type === 'sticker') {
+          // Log full element object for icons/stickers/images to debug
+          if (el.type === 'icon' || el.type === 'sticker' || el.type === 'image') {
             console.log(`      🔍 Full ${el.type} element:`, el);
           }
         });
