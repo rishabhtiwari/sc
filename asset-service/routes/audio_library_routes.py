@@ -9,10 +9,11 @@ and user_id in headers.
 import logging
 import uuid
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi import APIRouter, HTTPException, Query, Header, File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from io import BytesIO
+import subprocess
 
 from services.database_service import db_service
 from services.audio_library_service import audio_library_service
@@ -91,6 +92,129 @@ async def save_to_library(
 
     except Exception as e:
         logger.error(f"Error saving to library: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/library/upload")
+async def upload_audio_file(
+    file: UploadFile = File(...),
+    name: Optional[str] = Query(None),
+    folder: Optional[str] = Query(None),
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """
+    Upload audio file directly to library
+    Similar to video/image library upload endpoints
+
+    This endpoint:
+    1. Accepts audio file upload (multipart/form-data)
+    2. Extracts duration using ffprobe
+    3. Uploads to MinIO
+    4. Saves metadata to MongoDB
+    """
+    try:
+        # Generate unique audio ID
+        audio_id = str(uuid.uuid4())
+
+        # Read file data
+        file_data = await file.read()
+        file_size = len(file_data)
+
+        # Determine file extension
+        filename = file.filename or "audio.wav"
+        ext = filename.split('.')[-1] if '.' in filename else 'wav'
+
+        # Extract duration using ffprobe
+        duration = 0.0
+        try:
+            # Save to temp file for ffprobe
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}') as temp_file:
+                temp_file.write(file_data)
+                temp_path = temp_file.name
+
+            # Use ffprobe to get duration
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', temp_path],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                duration = float(result.stdout.strip())
+                logger.info(f"Extracted duration: {duration}s")
+
+            # Clean up temp file
+            import os
+            os.unlink(temp_path)
+        except Exception as e:
+            logger.warning(f"Failed to extract duration: {e}")
+            duration = 0.0
+
+        # Upload to MinIO
+        bucket_name = "audio-assets"
+        object_key = f"{x_customer_id}/{x_user_id}/audio/{audio_id}.{ext}"
+
+        storage_service.upload_file(
+            bucket=bucket_name,
+            object_name=object_key,
+            file_data=BytesIO(file_data),
+            length=file_size,
+            content_type=file.content_type or "audio/wav",
+            metadata={
+                "customer_id": x_customer_id,
+                "user_id": x_user_id,
+                "audio_id": audio_id
+            }
+        )
+
+        logger.info(f"Audio uploaded to MinIO: {bucket_name}/{object_key}")
+
+        # Save metadata to MongoDB
+        audio_doc = {
+            "audio_id": audio_id,
+            "customer_id": x_customer_id,
+            "user_id": x_user_id,
+            "storage": {
+                "bucket": bucket_name,
+                "object_key": object_key,
+                "file_size": file_size
+            },
+            "generation_config": {
+                "text": name or filename,  # Use name as text for uploaded files
+                "voice": "uploaded",
+                "voice_name": "Uploaded Audio",
+                "model": "uploaded",
+                "language": "en",
+                "speed": 1.0,
+                "duration": duration,
+                "folder": folder or "",
+                "tags": []
+            }
+        }
+
+        db_service.save_audio_to_library(audio_doc)
+        logger.info(f"Audio metadata saved to MongoDB: {audio_id}")
+
+        # Generate URL for frontend
+        url = f"/api/assets/download/audio-assets/{x_customer_id}/{x_user_id}/{audio_id}.{ext}"
+
+        return {
+            "success": True,
+            "audio": {
+                "audio_id": audio_id,
+                "name": name or filename,
+                "url": url,
+                "duration": duration,
+                "type": "uploaded"
+            },
+            "message": "Audio uploaded successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading audio file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

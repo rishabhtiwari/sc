@@ -370,41 +370,58 @@ const DesignEditor = () => {
    */
   const handleVideoUpdate = (trackId, updates) => {
     console.log('🎬 Updating video element:', trackId, updates);
-    setPages(prevPages => prevPages.map(page => {
-      // Check if this page contains the video being updated
-      const hasVideo = page.elements.some(el => el.id === trackId);
+    setPages(prevPages => {
+      // First pass: Update the video element and page duration
+      const updatedPages = prevPages.map(page => {
+        // Check if this page contains the video being updated
+        const hasVideo = page.elements.some(el => el.id === trackId);
 
-      if (hasVideo && updates.duration !== undefined) {
-        // If video duration is being updated, also update page duration
-        const updatedElements = page.elements.map(el =>
-          el.id === trackId ? { ...el, ...updates } : el
-        );
+        if (hasVideo && updates.duration !== undefined) {
+          // If video duration is being updated, also update page duration
+          const updatedElements = page.elements.map(el =>
+            el.id === trackId ? { ...el, ...updates } : el
+          );
 
-        // Find the maximum duration among all video elements on this page
-        const maxVideoDuration = Math.max(
-          ...updatedElements
-            .filter(el => el.type === 'video')
-            .map(el => el.duration || 0),
-          5 // Minimum page duration
-        );
+          // Find the maximum duration among all video elements on this page
+          const maxVideoDuration = Math.max(
+            ...updatedElements
+              .filter(el => el.type === 'video')
+              .map(el => el.duration || 0),
+            5 // Minimum page duration
+          );
 
-        console.log('📄 Updating page duration to match video:', maxVideoDuration);
+          console.log('📄 Updating page duration to match video:', maxVideoDuration);
 
+          return {
+            ...page,
+            elements: updatedElements,
+            duration: maxVideoDuration
+          };
+        }
+
+        // No duration update needed, just update the element
         return {
           ...page,
-          elements: updatedElements,
-          duration: maxVideoDuration
+          elements: page.elements.map(el =>
+            el.id === trackId ? { ...el, ...updates } : el
+          )
         };
-      }
+      });
 
-      // No duration update needed, just update the element
-      return {
-        ...page,
-        elements: page.elements.map(el =>
-          el.id === trackId ? { ...el, ...updates } : el
-        )
-      };
-    }));
+      // Second pass: Recalculate startTime for all slides to prevent overlap
+      let accumulatedTime = 0;
+      const repositionedPages = updatedPages.map((page, index) => {
+        const pageWithStartTime = {
+          ...page,
+          startTime: accumulatedTime
+        };
+        accumulatedTime += page.duration || 5;
+        return pageWithStartTime;
+      });
+
+      console.log('📐 Repositioned slides to prevent overlap');
+      return repositionedPages;
+    });
   };
 
   /**
@@ -436,9 +453,26 @@ const DesignEditor = () => {
    * Handle slide duration update
    */
   const handleSlideUpdate = (slideIndex, updates) => {
-    setPages(prevPages => prevPages.map((page, index) =>
-      index === slideIndex ? { ...page, ...updates } : page
-    ));
+    setPages(prevPages => {
+      // First pass: Update the specific slide
+      const updatedPages = prevPages.map((page, index) =>
+        index === slideIndex ? { ...page, ...updates } : page
+      );
+
+      // Second pass: Recalculate startTime for all slides to prevent overlap
+      let accumulatedTime = 0;
+      const repositionedPages = updatedPages.map((page) => {
+        const pageWithStartTime = {
+          ...page,
+          startTime: accumulatedTime
+        };
+        accumulatedTime += page.duration || 5;
+        return pageWithStartTime;
+      });
+
+      console.log('📐 Repositioned slides after duration update');
+      return repositionedPages;
+    });
   };
 
   const handleAudioSelect = (audioId) => {
@@ -598,7 +632,10 @@ const DesignEditor = () => {
                 const videoRef = videoElementRefs.current[element.id];
                 if (videoRef && isFinite(videoRef.duration) && videoRef.duration > 0) {
                   // Calculate if this video should be playing based on page timing
-                  const pageStartTime = pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
+                  // Use explicit startTime if available, otherwise calculate sequentially
+                  const pageStartTime = page.startTime !== undefined
+                    ? page.startTime
+                    : pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
                   const pageEndTime = pageStartTime + (page.duration || 5);
 
                   if (newTime >= pageStartTime && newTime < pageEndTime) {
@@ -608,7 +645,7 @@ const DesignEditor = () => {
                     if (videoRef.paused) {
                       // Start playing the video
                       if (isFinite(videoTime) && videoTime >= 0) {
-                        console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s`);
+                        console.log(`🎬 Starting video ${element.id} at ${videoTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
                         videoRef.currentTime = Math.min(videoTime, videoRef.duration);
                         videoRef.play().catch(err => console.error('Video play error:', err));
                       }
@@ -654,6 +691,34 @@ const DesignEditor = () => {
         const audio = new Audio(track.src);
         audio.volume = (track.volume || 100) / 100;
         audio.loop = false;
+
+        // Add event listeners to sync audio state with React state
+        audio.addEventListener('ended', () => {
+          console.log(`🎵 Audio track ${track.id} ended`);
+          // Check if all audio tracks have ended
+          const allAudioEnded = audioTracks.every(t => {
+            const a = audioRefs.current[t.id];
+            return !a || a.ended || a.paused;
+          });
+          if (allAudioEnded) {
+            console.log('⏹️ All audio ended, stopping playback');
+            setIsPlaying(false);
+          }
+        });
+
+        audio.addEventListener('pause', () => {
+          console.log(`⏸️ Audio track ${track.id} paused`);
+        });
+
+        audio.addEventListener('play', () => {
+          console.log(`▶️ Audio track ${track.id} playing`);
+        });
+
+        audio.addEventListener('error', (e) => {
+          console.error(`❌ Audio track ${track.id} error:`, e);
+          setIsPlaying(false);
+        });
+
         audioRefs.current[track.id] = audio;
       }
     });
@@ -666,6 +731,11 @@ const DesignEditor = () => {
         if (audio) {
           audio.pause();
           audio.src = '';
+          // Remove event listeners
+          audio.removeEventListener('ended', () => {});
+          audio.removeEventListener('pause', () => {});
+          audio.removeEventListener('play', () => {});
+          audio.removeEventListener('error', () => {});
         }
         delete audioRefs.current[trackId];
       }
@@ -681,17 +751,21 @@ const DesignEditor = () => {
     if (!isPlaying || pages.length === 0) return;
 
     // Calculate which slide should be visible based on current time
-    let accumulatedTime = 0;
     for (let i = 0; i < pages.length; i++) {
-      const slideDuration = pages[i].duration || 5;
-      if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
+      const page = pages[i];
+      // Use explicit startTime if available, otherwise calculate sequentially
+      const pageStartTime = page.startTime !== undefined
+        ? page.startTime
+        : pages.slice(0, i).reduce((sum, p) => sum + (p.duration || 5), 0);
+      const pageEndTime = pageStartTime + (page.duration || 5);
+
+      if (currentTime >= pageStartTime && currentTime < pageEndTime) {
         if (currentPageIndex !== i) {
-          console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
+          console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
           setCurrentPageIndex(i);
         }
         break;
       }
-      accumulatedTime += slideDuration;
     }
   }, [currentTime, pages, isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 

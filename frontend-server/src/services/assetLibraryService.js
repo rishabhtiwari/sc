@@ -131,72 +131,23 @@ export const videoLibrary = {
  */
 export const audioLibrary = {
   /**
-   * Upload audio file to library
-   * This is a two-step process:
-   * 1. Upload file to get a URL
-   * 2. Save metadata to audio library
+   * Upload audio file directly to library
+   * Similar to video/image library upload
    */
   async upload(file, name = null, duration = 0) {
     try {
-      console.log('🎵 Uploading audio file to library:', name || file.name);
-
-      // Step 1: Upload the file to get a URL
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('asset_type', 'audio');
-      formData.append('name', name || file.name);
 
-      const uploadResponse = await api.post('/assets/upload', formData);
+      // Send name and duration as query parameters (backend expects them as Query params)
+      const params = new URLSearchParams();
+      params.append('name', name || file.name);
+      if (duration) params.append('duration', duration.toString());
 
-      if (!uploadResponse.data || !uploadResponse.data.asset_id) {
-        throw new Error('Failed to upload audio file');
-      }
+      // Don't set Content-Type header - let browser set it with boundary
+      const response = await api.post(`/audio-studio/library/upload?${params.toString()}`, formData);
 
-      const audioUrl = uploadResponse.data.url;
-      const assetId = uploadResponse.data.asset_id;
-
-      console.log('✅ Audio file uploaded, saving to library...');
-
-      // Step 2: Save to audio library with metadata
-      const libraryData = {
-        audio_url: audioUrl,
-        text: name || file.name,
-        duration: duration,
-        voice: 'uploaded',
-        voice_name: 'Uploaded Audio',
-        language: 'en',
-        speed: 1.0,
-        model: 'uploaded',
-        folder: '',
-        tags: []
-      };
-
-      const libraryResponse = await api.post('/audio-studio/library', libraryData);
-
-      if (!libraryResponse.data || !libraryResponse.data.asset_id) {
-        console.warn('Failed to save audio to library, using direct upload');
-        return {
-          success: true,
-          audio: {
-            audio_id: assetId,
-            url: audioUrl,
-            name: name || file.name,
-            duration: duration
-          }
-        };
-      }
-
-      console.log('✅ Audio saved to library:', libraryResponse.data.asset_id);
-
-      return {
-        success: true,
-        audio: {
-          audio_id: libraryResponse.data.asset_id,
-          url: libraryResponse.data.url || audioUrl,
-          name: name || file.name,
-          duration: duration
-        }
-      };
+      return response.data;
     } catch (error) {
       console.error('Error uploading audio to library:', error);
       throw error;

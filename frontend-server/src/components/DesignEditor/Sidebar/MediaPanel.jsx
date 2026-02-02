@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useToast } from '../../../hooks/useToast';
-import { videoLibrary } from '../../../services/assetLibraryService';
+import { videoLibrary, audioLibrary } from '../../../services/assetLibraryService';
 
 /**
  * Media Panel
@@ -113,7 +113,7 @@ const MediaPanel = ({
     event.target.value = '';
   };
 
-  const handleAudioUpload = (event) => {
+  const handleAudioUpload = async (event) => {
     console.log('🎵 handleAudioUpload called');
     const files = Array.from(event.target.files);
     console.log('📁 Files:', files.length);
@@ -123,36 +123,55 @@ const MediaPanel = ({
     setIsUploadingAudio(true);
     showToast(`Uploading ${files.length} audio file(s)...`, 'info');
 
-    let uploadedCount = 0;
-
-    files.forEach((file) => {
+    for (const file of files) {
       if (file.type.startsWith('audio/')) {
         const url = URL.createObjectURL(file);
-        const newAudio = {
-          id: `audio-${Date.now()}-${Math.random()}`,
-          type: 'audio',
-          url,
-          title: file.name,
-          file: file // Store file reference
+        const audio = new Audio();
+
+        audio.onloadedmetadata = async () => {
+          try {
+            console.log('🎵 Audio metadata loaded, duration:', audio.duration);
+
+            // Upload to audio library
+            const libraryResponse = await audioLibrary.upload(file, file.name, audio.duration);
+
+            if (libraryResponse.success && libraryResponse.audio) {
+              console.log('✅ Audio uploaded to library:', libraryResponse.audio);
+
+              const newAudio = {
+                id: libraryResponse.audio.audio_id,
+                type: 'audio',
+                url: libraryResponse.audio.url,
+                title: libraryResponse.audio.name,
+                duration: libraryResponse.audio.duration,
+                libraryId: libraryResponse.audio.audio_id,
+                assetId: libraryResponse.audio.audio_id
+              };
+
+              onUploadedMediaChange(prev => [...prev, newAudio]);
+              showToast(`${file.name} uploaded successfully`, 'success');
+
+              // Revoke blob URL after successful upload
+              URL.revokeObjectURL(url);
+            }
+          } catch (error) {
+            console.error('❌ Error uploading audio to library:', error);
+            showToast(`Failed to upload ${file.name}`, 'error');
+          } finally {
+            setIsUploadingAudio(false);
+          }
         };
-        console.log('➕ Adding to uploadedMedia:', newAudio);
-        onUploadedMediaChange(prev => [...prev, newAudio]);
 
-        // Add to audio timeline if callback provided
-        if (onAddAudioTrack) {
-          console.log('🎬 Calling onAddAudioTrack for:', file.name);
-          onAddAudioTrack(file, url);
-        }
-
-        uploadedCount++;
-
-        // Show success message after last file
-        if (uploadedCount === files.length) {
-          showToast(`${files.length} audio file(s) uploaded successfully`, 'success');
+        audio.onerror = () => {
+          console.error('❌ Error loading audio metadata');
+          showToast(`Failed to load ${file.name}`, 'error');
           setIsUploadingAudio(false);
-        }
+          URL.revokeObjectURL(url);
+        };
+
+        audio.src = url;
       }
-    });
+    }
 
     // Reset file input to allow re-uploading the same file
     event.target.value = '';

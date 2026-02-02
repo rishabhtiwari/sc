@@ -206,6 +206,54 @@ def save_to_library():
         }), 500
 
 
+@audio_studio_bp.route('/audio-studio/library/upload', methods=['POST'])
+def upload_audio_file():
+    """
+    Proxy endpoint: Upload audio file to library
+    Similar to video/image library upload
+    """
+    try:
+        # Extract user context from JWT
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        if not customer_id or not user_id:
+            return jsonify({
+                'success': False,
+                'error': 'Missing customer_id or user_id'
+            }), 400
+
+        headers = {
+            'X-Customer-Id': customer_id,
+            'X-User-Id': user_id
+        }
+
+        # Forward query parameters (name, folder, etc.)
+        params = request.args.to_dict()
+
+        logger.info(f"Uploading audio file to library for customer {customer_id}, user {user_id}")
+
+        # Forward multipart form data
+        response = requests.post(
+            f'{ASSET_SERVICE_URL}/api/audio-studio/library/upload',
+            headers=headers,
+            files=request.files,
+            data=request.form,
+            params=params,
+            timeout=60  # Longer timeout for audio uploads
+        )
+
+        return jsonify(response.json()), response.status_code
+
+    except Exception as e:
+        logger.error(f"Error uploading audio file: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @audio_studio_bp.route('/audio-studio/library/<audio_id>/stream', methods=['GET'])
 def stream_library_audio(audio_id):
     """
