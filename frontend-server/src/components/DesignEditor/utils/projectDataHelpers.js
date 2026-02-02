@@ -1,11 +1,13 @@
 import projectService from '../../../services/projectService';
+import { imageLibrary, videoLibrary, audioLibrary } from '../../../services/assetLibraryService';
 
 /**
- * Upload a blob URL to the asset service
+ * Upload a blob URL to the appropriate asset library
+ * This ensures assets are properly cataloged in MongoDB collections
  */
 export const uploadBlobToAsset = async (blob, type, name) => {
   try {
-    console.log(`📤 Uploading ${type}:`, name);
+    console.log(`📤 Uploading ${type} to library:`, name);
 
     // Fetch the blob data
     const response = await fetch(blob);
@@ -14,21 +16,113 @@ export const uploadBlobToAsset = async (blob, type, name) => {
     // Create a File object
     const file = new File([blobData], name, { type: blobData.type });
 
-    // Upload to asset service
-    const asset = await projectService.uploadAsset(file, type);
-    console.log(`📦 Upload response:`, asset);
+    let uploadResult;
 
-    if (!asset || !asset.asset_id) {
-      throw new Error(`Failed to upload ${type}: Invalid response from server`);
+    // Upload to the appropriate library based on type
+    if (type === 'image') {
+      console.log(`📸 Uploading to image library...`);
+      uploadResult = await imageLibrary.upload(file, name);
+
+      if (!uploadResult.success || !uploadResult.image) {
+        throw new Error('Failed to upload image to library');
+      }
+
+      console.log(`✅ Uploaded to image library:`, uploadResult.image.image_id);
+
+      return {
+        asset_id: uploadResult.image.image_id,
+        url: uploadResult.image.url  // Library URL: /api/assets/download/image-assets/...
+      };
     }
+    else if (type === 'video') {
+      console.log(`🎬 Uploading to video library...`);
 
-    console.log(`✅ Uploaded ${type}:`, asset.asset_id);
+      // Extract video duration if possible
+      let duration = 0;
+      try {
+        const videoUrl = URL.createObjectURL(blobData);
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => {
+            duration = video.duration;
+            URL.revokeObjectURL(videoUrl);
+            resolve();
+          };
+          video.onerror = () => {
+            URL.revokeObjectURL(videoUrl);
+            resolve();
+          };
+        });
+      } catch (error) {
+        console.warn('Could not extract video duration:', error);
+      }
 
-    // Return both asset_id and url
-    return {
-      asset_id: asset.asset_id,
-      url: asset.url
-    };
+      uploadResult = await videoLibrary.upload(file, name, duration);
+
+      if (!uploadResult.success || !uploadResult.video) {
+        throw new Error('Failed to upload video to library');
+      }
+
+      console.log(`✅ Uploaded to video library:`, uploadResult.video.video_id);
+
+      return {
+        asset_id: uploadResult.video.video_id,
+        url: uploadResult.video.url  // Library URL: /api/assets/download/video-assets/...
+      };
+    }
+    else if (type === 'audio') {
+      console.log(`🎵 Uploading to audio library...`);
+
+      // Extract audio duration if possible
+      let duration = 0;
+      try {
+        const audioUrl = URL.createObjectURL(blobData);
+        const audio = new Audio(audioUrl);
+        await new Promise((resolve) => {
+          audio.onloadedmetadata = () => {
+            duration = audio.duration;
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            resolve();
+          };
+        });
+      } catch (error) {
+        console.warn('Could not extract audio duration:', error);
+      }
+
+      uploadResult = await audioLibrary.upload(file, name, duration);
+
+      if (!uploadResult.success || !uploadResult.audio) {
+        throw new Error('Failed to upload audio to library');
+      }
+
+      console.log(`✅ Uploaded to audio library:`, uploadResult.audio.audio_id);
+
+      return {
+        asset_id: uploadResult.audio.audio_id,
+        url: uploadResult.audio.url  // Library URL: /api/assets/download/audio-assets/...
+      };
+    }
+    else {
+      // Fallback for other types - use generic asset upload
+      console.log(`📦 Uploading to generic asset storage...`);
+      const asset = await projectService.uploadAsset(file, type);
+
+      if (!asset || !asset.asset_id) {
+        throw new Error(`Failed to upload ${type}: Invalid response from server`);
+      }
+
+      console.log(`✅ Uploaded ${type}:`, asset.asset_id);
+
+      return {
+        asset_id: asset.asset_id,
+        url: asset.url
+      };
+    }
   } catch (error) {
     console.error(`❌ Failed to upload ${type}:`, error);
     throw error;
@@ -47,6 +141,17 @@ const isBlobUrl = (url) => {
  */
 const isLibraryUrl = (url) => {
   return url && url.startsWith('/api/assets/download/');
+};
+
+/**
+ * Check if a URL is from the audio generation service (temporary or proxied)
+ */
+const isAudioServiceUrl = (url) => {
+  return url && (
+    url.startsWith('/api/audio/proxy/') ||  // Proxied audio generation URLs
+    url.startsWith('/temp/') ||              // Temporary audio files
+    url.includes('audio-generation')         // Direct audio generation service URLs
+  );
 };
 
 /**
@@ -90,10 +195,19 @@ export const prepareProjectData = async (
 
       // Handle video and image elements with src
       if ((element.type === 'video' || element.type === 'image') && element.src) {
+        console.log(`  🔍 Checking ${element.type} URL:`, {
+          src: element.src,
+          srcLength: element.src.length,
+          srcStart: element.src.substring(0, 50),
+          isBlob: isBlobUrl(element.src),
+          isLibrary: isLibraryUrl(element.src),
+          hasLibraryId: !!element.libraryId
+        });
+
         // If it's a blob URL, upload it
         if (isBlobUrl(element.src)) {
           console.log(`  📤 Uploading blob ${element.type}:`, element.src.substring(0, 50));
-          
+
           try {
             const uploadResult = await uploadBlobToAsset(
               element.src,
@@ -154,7 +268,18 @@ export const prepareProjectData = async (
   for (const track of audioTracks) {
     const audioUrl = track.src || track.url;
 
-    if (audioUrl && isBlobUrl(audioUrl)) {
+    console.log(`🎵 Processing audio track: ${track.name}`, {
+      url: audioUrl?.substring(0, 50),
+      isBlob: isBlobUrl(audioUrl),
+      isLibrary: isLibraryUrl(audioUrl),
+      isAudioService: isAudioServiceUrl(audioUrl),
+      hasLibraryId: !!track.libraryId
+    });
+
+    // If it's a blob URL or audio service URL (temporary), upload it
+    if (audioUrl && (isBlobUrl(audioUrl) || isAudioServiceUrl(audioUrl))) {
+      const urlType = isBlobUrl(audioUrl) ? 'blob' : 'audio service';
+      console.log(`  📤 Uploading ${urlType} audio: ${track.name}`);
       try {
         const uploadResult = await uploadBlobToAsset(
           audioUrl,
@@ -175,9 +300,10 @@ export const prepareProjectData = async (
           fadeOut: track.fadeOut || 0,
           playbackSpeed: track.playbackSpeed || 1
         });
+        console.log(`  ✅ Uploaded audio, new URL: ${uploadResult.url}`);
       } catch (error) {
-        console.error('Failed to upload audio track:', error);
-        // Still include the track but with blob URL (will fail validation)
+        console.error('  ❌ Failed to upload audio track:', error);
+        // Still include the track but with original URL (will fail validation)
         processedAudioTracks.push({
           id: track.id,
           name: track.name,
@@ -191,8 +317,10 @@ export const prepareProjectData = async (
           playbackSpeed: track.playbackSpeed || 1
         });
       }
-    } else {
-      // Map src to url for backend compatibility
+    }
+    // If it's a library URL, keep it as-is
+    else if (audioUrl && isLibraryUrl(audioUrl)) {
+      console.log(`  ℹ️ Audio from library, keeping URL: ${audioUrl.substring(0, 50)}`);
       processedAudioTracks.push({
         id: track.id,
         name: track.name,
@@ -206,6 +334,25 @@ export const prepareProjectData = async (
         fadeOut: track.fadeOut || 0,
         playbackSpeed: track.playbackSpeed || 1
       });
+    }
+    // Other URLs (external, etc.)
+    else if (audioUrl) {
+      console.log(`  ℹ️ Audio with external URL: ${audioUrl.substring(0, 50)}`);
+      processedAudioTracks.push({
+        id: track.id,
+        name: track.name,
+        url: audioUrl,
+        assetId: track.assetId,
+        type: track.type || 'music',
+        startTime: track.startTime || 0,
+        duration: track.duration || 0,
+        volume: track.volume || 100,
+        fadeIn: track.fadeIn || 0,
+        fadeOut: track.fadeOut || 0,
+        playbackSpeed: track.playbackSpeed || 1
+      });
+    } else {
+      console.warn(`  ⚠️ Audio track has no URL: ${track.name}`);
     }
   }
 

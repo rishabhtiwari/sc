@@ -17,7 +17,9 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
       emoji: element.emoji,
       text: element.text,
       hasSrc: !!element.src,
+      src: element.src?.substring(0, 100),
       hasFile: !!element.file,
+      libraryId: element.libraryId,
       duration: element.duration,
       width: element.width,
       height: element.height
@@ -37,7 +39,9 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
       id: newElement.id,
       type: newElement.type,
       hasSrc: !!newElement.src,
-      hasFile: !!newElement.file
+      src: newElement.src?.substring(0, 100),
+      hasFile: !!newElement.file,
+      libraryId: newElement.libraryId
     });
 
     setPages(prevPages => {

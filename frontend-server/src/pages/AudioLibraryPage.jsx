@@ -88,7 +88,7 @@ const AudioLibraryPage = () => {
       const [pathname, search] = returnPath.split('?');
       const fullPath = search ? `${pathname}?${search}` : pathname;
 
-      // Navigate back to editor with selected audio, preserving the return path
+      // Navigate back to editor with selected audio, preserving the return path and tool
       navigate(fullPath, {
         state: {
           addAsset: {
@@ -97,7 +97,8 @@ const AudioLibraryPage = () => {
             url: audioData.url,
             audio_url: audioData.audio_url,
             duration: audioData.duration
-          }
+          },
+          returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
       showToast('Audio added to media library', 'success');

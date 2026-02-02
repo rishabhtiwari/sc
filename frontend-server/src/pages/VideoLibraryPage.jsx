@@ -72,7 +72,7 @@ const VideoLibraryPage = () => {
       const [pathname, search] = returnPath.split('?');
       const fullPath = search ? `${pathname}?${search}` : pathname;
 
-      // Navigate back to editor with selected video, preserving the return path
+      // Navigate back to editor with selected video, preserving the return path and tool
       navigate(fullPath, {
         state: {
           addAsset: {
@@ -81,7 +81,8 @@ const VideoLibraryPage = () => {
             name: video.name,
             duration: video.duration,
             libraryId: video.video_id
-          }
+          },
+          returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
       showToast('Video added to media library', 'success');

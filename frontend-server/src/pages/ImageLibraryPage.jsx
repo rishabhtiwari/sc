@@ -114,7 +114,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
         fullPath
       });
 
-      // Navigate back to editor with selected image, preserving the return path
+      // Navigate back to editor with selected image, preserving the return path and tool
       navigate(fullPath, {
         state: {
           addAsset: {
@@ -122,7 +122,8 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
             src: image.url,
             name: image.name,
             libraryId: image.image_id
-          }
+          },
+          returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
       showToast('Image added to media library', 'success');
