@@ -172,11 +172,22 @@ async def upload_audio_file(
 
         logger.info(f"Audio uploaded to MinIO: {bucket_name}/{object_key}")
 
-        # Save metadata to MongoDB
+        # Generate URL for frontend (needed before creating the document)
+        url = f"/api/assets/download/audio-assets/{object_key}"
+
+        # Save metadata to MongoDB with flat schema matching audio_library collection
+        from bson import Int64
         audio_doc = {
             "audio_id": audio_id,
             "customer_id": x_customer_id,
             "user_id": x_user_id,
+            "name": name or filename,  # Required top-level field
+            "type": "uploaded",  # Required top-level field
+            "source": "upload",  # Required top-level field
+            "url": url,  # Required top-level field (flat, not nested)
+            "duration": duration,
+            "format": ext,
+            "size": Int64(file_size),  # Convert to BSON long for MongoDB
             "storage": {
                 "bucket": bucket_name,
                 "object_key": object_key,
@@ -192,14 +203,14 @@ async def upload_audio_file(
                 "duration": duration,
                 "folder": folder or "",
                 "tags": []
-            }
+            },
+            "folder": folder or "",  # Top-level folder field
+            "tags": [],  # Top-level tags field
+            "is_deleted": False
         }
 
         db_service.create_audio_library_entry(audio_doc)
         logger.info(f"Audio metadata saved to MongoDB: {audio_id}")
-
-        # Generate URL for frontend
-        url = f"/api/assets/download/audio-assets/{object_key}"
 
         return {
             "success": True,
