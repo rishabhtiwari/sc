@@ -85,7 +85,7 @@ const VideoLibraryPage = () => {
           returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
-      showToast('Video added to media library', 'success');
+      showToast('Opening in Design Editor', 'success');
     }
   };
 
@@ -226,15 +226,15 @@ const VideoLibraryPage = () => {
                       </div>
                     </button>
                   )}
-                  {/* Add to Canvas Button Overlay (when fromEditor) */}
+                  {/* Open in Design Editor Button Overlay (when fromEditor) */}
                   {fromEditor && playingVideo !== video.video_id && (
                     <button
                       onClick={() => handleAddToCanvas(video)}
                       className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/40 transition-all group/add"
-                      title="Add to canvas"
+                      title="Open in Design Editor"
                     >
                       <div className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg opacity-0 group-hover/add:opacity-100 transition-opacity text-sm font-medium">
-                        Add to Canvas
+                        Open in Design Editor
                       </div>
                     </button>
                   )}

@@ -170,9 +170,14 @@ const MediaPanel = ({
 
       if (!existingTrack && onAddAudioTrack) {
         console.log('✅ Calling onAddAudioTrack for:', media.title);
-        // Re-create the file object from the media
-        const file = media.file || { name: media.title };
-        onAddAudioTrack(file, media.url);
+        // Pass audio metadata including audio_id/libraryId to preserve library reference
+        const audioMetadata = {
+          name: media.title || media.name,
+          audio_id: media.audio_id || media.libraryId,
+          libraryId: media.libraryId || media.audio_id,
+          assetId: media.assetId
+        };
+        onAddAudioTrack(audioMetadata, media.url);
         showToast('Audio added to timeline', 'success');
       } else if (existingTrack) {
         console.log('⚠️ Audio already on timeline:', media.title);
@@ -233,7 +238,10 @@ const MediaPanel = ({
                 volume: 100,
                 muted: false,
                 loop: false,
-                file: media.file
+                file: media.file,
+                // Preserve library reference if it exists
+                libraryId: media.libraryId || media.video_id,
+                assetId: media.assetId || media.libraryId || media.video_id
               });
               showToast('Video added to canvas', 'success');
 
@@ -264,7 +272,10 @@ const MediaPanel = ({
           volume: 100,
           muted: false,
           loop: false,
-          file: media.file
+          file: media.file,
+          // Preserve library reference if it exists
+          libraryId: media.libraryId || media.video_id,
+          assetId: media.assetId || media.libraryId || media.video_id
         });
         showToast('Video added to canvas', 'success');
       }
@@ -436,12 +447,8 @@ const MediaPanel = ({
                         e.stopPropagation();
 
                         try {
-                          // Delete from backend library if it has a libraryId
-                          if (media.libraryId && media.type === 'video') {
-                            console.log(`🗑️ Deleting video from library: ${media.libraryId}`);
-                            await videoLibrary.delete(media.libraryId);
-                            console.log('✅ Deleted from library');
-                          }
+                          // NOTE: We only remove from editor (canvas/timeline/media list), NOT from backend library
+                          // Users must go to the asset library to permanently delete assets
 
                           // If it's audio, find the audio track and delete from both timeline and media library
                           if (media.type === 'audio') {
@@ -452,7 +459,7 @@ const MediaPanel = ({
                             } else {
                               // Fallback: just delete from media library
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                              showToast('Media deleted', 'success');
+                              showToast('Media removed from editor', 'success');
                             }
                           } else if (media.type === 'video') {
                             // For video, find the video track and delete from both timeline and media library
@@ -463,7 +470,7 @@ const MediaPanel = ({
                             } else {
                               // Fallback: just delete from media library
                               onUploadedMediaChange(prev => prev.filter(m => m.id !== media.id));
-                              showToast('Media deleted from library', 'success');
+                              showToast('Media removed from editor', 'success');
                             }
                           } else if (media.type === 'image') {
                             // For image, delete from both canvas and media library

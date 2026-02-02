@@ -92,7 +92,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
         name: image.name,
         libraryId: image.image_id
       });
-      showToast('Image added to canvas', 'success');
+      showToast('Opening in Design Editor', 'success');
       if (onClose) onClose();
     } else if (fromEditor) {
       console.log('🖼️ [ImageLibrary] Navigating back to editor:', returnPath);
@@ -126,7 +126,7 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
           returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
-      showToast('Image added to media library', 'success');
+      showToast('Opening in Design Editor', 'success');
     } else {
       console.log('🖼️ [ImageLibrary] No action - not in modal or fromEditor mode');
     }

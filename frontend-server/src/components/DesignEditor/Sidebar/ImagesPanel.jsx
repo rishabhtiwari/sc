@@ -76,12 +76,14 @@ const ImagesPanel = ({
   const handleAddImage = (image) => {
     // Support both old format (just URL string) and new format (image object)
     const imageUrl = typeof image === 'string' ? image : image.url;
-    const libraryId = typeof image === 'object' ? image.libraryId : null;
+    const libraryId = typeof image === 'object' ? (image.libraryId || image.image_id) : null;
+    const assetId = typeof image === 'object' ? (image.assetId || image.libraryId || image.image_id) : null;
 
     onAddElement({
       type: 'image',
       src: imageUrl,
       libraryId: libraryId, // Include libraryId for tracking
+      assetId: assetId, // Include assetId to prevent re-upload
       width: 300,
       height: 200
     });
@@ -92,19 +94,15 @@ const ImagesPanel = ({
     event.stopPropagation(); // Prevent triggering handleAddImage
 
     try {
-      // Delete from backend library if it has a libraryId
-      if (image.libraryId) {
-        console.log(`🗑️ Deleting image from library: ${image.libraryId}`);
-        await imageLibrary.delete(image.libraryId);
-        console.log('✅ Deleted from library');
-      }
+      // NOTE: We only remove from the editor's media list, NOT from the backend library
+      // Users must go to the asset library to permanently delete assets
 
-      // Remove from UI state
+      // Remove from UI state (media list only)
       onUploadedMediaChange(prev => prev.filter(img => img.id !== image.id));
-      showToast('Image deleted', 'success');
+      showToast('Image removed from editor', 'success');
     } catch (error) {
-      console.error('❌ Error deleting image:', error);
-      showToast('Failed to delete image from library', 'error');
+      console.error('❌ Error removing image:', error);
+      showToast('Failed to remove image', 'error');
     }
   };
 

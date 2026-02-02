@@ -211,10 +211,11 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
                     {onAddToCanvas && (
                       <button
                         onClick={() => {
-                          console.log('🎵 Add to Timeline clicked:', {
+                          console.log('🎵 Open in Design Editor clicked:', {
                             title: audio.name,
                             audioUrl: audioUrl,
                             duration: audio.duration,
+                            audio_id: audio.audio_id,
                             loading: loading
                           });
 
@@ -227,15 +228,18 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
                             title: audio.name,
                             url: audioUrl,
                             audio_url: audioUrl,
-                            duration: audio.duration
+                            duration: audio.duration,
+                            audio_id: audio.audio_id,  // Include audio_id from library
+                            libraryId: audio.audio_id,  // Also set as libraryId
+                            assetId: audio.audio_id     // And as assetId for consistency
                           });
                           setShowMenu(false);
                         }}
                         disabled={!audioUrl || loading}
                         className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <span>➕</span>
-                        <span>Add to Timeline</span>
+                        <span>🎨</span>
+                        <span>Open in Design Editor</span>
                       </button>
                     )}
                     <button

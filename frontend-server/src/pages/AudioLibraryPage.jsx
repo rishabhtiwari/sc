@@ -93,15 +93,18 @@ const AudioLibraryPage = () => {
         state: {
           addAsset: {
             type: 'audio',
-            title: audioData.title,
+            title: audioData.title || audioData.name,
             url: audioData.url,
             audio_url: audioData.audio_url,
-            duration: audioData.duration
+            duration: audioData.duration,
+            audio_id: audioData.audio_id,  // Include audio_id from library
+            libraryId: audioData.audio_id,  // Also set as libraryId
+            assetId: audioData.audio_id     // And as assetId for consistency
           },
           returnTool: location.state?.returnTool  // Preserve the selected tool
         }
       });
-      showToast('Audio added to media library', 'success');
+      showToast('Opening in Design Editor', 'success');
     }
   };
 

@@ -221,11 +221,13 @@ const DesignEditor = () => {
       console.log('🎵 Adding audio to media list only (not to timeline)');
       handleAddAudio({
         id: addAsset.libraryId || `media-${Date.now()}`,
-        url: addAsset.src || addAsset.url,
+        url: addAsset.src || addAsset.url || addAsset.audio_url,
         title: addAsset.name || addAsset.title || 'Audio',
         type: 'audio',
         duration: addAsset.duration || 0,
-        libraryId: addAsset.libraryId
+        libraryId: addAsset.libraryId,
+        audio_id: addAsset.audio_id,
+        assetId: addAsset.assetId
       });
     } else if (addAsset.type === 'image') {
       console.log('🖼️ Adding image to media list only (not to canvas)');
@@ -271,6 +273,8 @@ const DesignEditor = () => {
 
   /**
    * Handle audio track operations
+   * @param {Object|File} audioFile - File object or audio metadata object with name, audio_id, etc.
+   * @param {string} audioUrl - URL to the audio file
    */
   const handleAddAudioTrack = (audioFile, audioUrl) => {
     console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
@@ -307,7 +311,10 @@ const DesignEditor = () => {
             ? 'voiceover'
             : audioFile.name?.toLowerCase().includes('sfx')
             ? 'sfx'
-            : 'music' // Auto-detect type from filename
+            : 'music', // Auto-detect type from filename
+          // Preserve audio_id/libraryId if it exists (from audio library)
+          assetId: audioFile.audio_id || audioFile.libraryId || audioFile.assetId,
+          libraryId: audioFile.audio_id || audioFile.libraryId
         };
 
         const updatedTracks = [...prevTracks, newTrack];
@@ -705,13 +712,13 @@ const DesignEditor = () => {
       setAudioTracks(prev => prev.filter(track => track.id !== audioId));
     }
 
-    // Remove from media library
+    // Remove from media list (NOT from backend library - users must delete from library page)
     if (mediaId) {
       setUploadedAudio(prev => prev.filter(audio => audio.id !== mediaId));
     }
 
     setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
-    showToast('Audio deleted', 'success');
+    showToast('Audio removed from editor', 'success');
   };
 
   /**
@@ -737,13 +744,13 @@ const DesignEditor = () => {
       })));
     }
 
-    // Remove from media library
+    // Remove from media list (NOT from backend library - users must delete from library page)
     if (mediaId) {
       setUploadedVideo(prev => prev.filter(video => video.id !== mediaId));
     }
 
     setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
-    showToast('Video deleted', 'success');
+    showToast('Video removed from editor', 'success');
   };
 
   /**
@@ -788,13 +795,13 @@ const DesignEditor = () => {
       });
     }
 
-    // Remove from media library
+    // Remove from media list (NOT from backend library - users must delete from library page)
     if (mediaId) {
       setUploadedImage(prev => prev.filter(image => image.id !== mediaId));
     }
 
     setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });
-    showToast('Image deleted', 'success');
+    showToast('Image removed from editor', 'success');
   };
 
   /**
@@ -926,6 +933,17 @@ const DesignEditor = () => {
               </svg>
               Load
             </button>
+
+            {/* Export Project */}
+            <button
+              onClick={() => showToast('Export functionality coming soon', 'info')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </button>
           </div>
           {currentProject && (
             <div className="text-sm text-gray-600">
@@ -1021,20 +1039,6 @@ const DesignEditor = () => {
         />
       )}
 
-      {/* Toggle Properties Panel Button - Show when panel is closed */}
-      {!isPropertiesPanelOpen && (
-        <button
-          onClick={() => setIsPropertiesPanelOpen(true)}
-          className="fixed right-4 top-20 z-50 bg-blue-600 text-white p-3 rounded-lg shadow-lg hover:bg-blue-700 transition-all"
-          title="Open Properties Panel"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </button>
-      )}
-
       {/* Delete Slide Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
@@ -1061,9 +1065,10 @@ const DesignEditor = () => {
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
         onConfirm={confirmAudioDelete}
-        title="Delete Audio"
-        message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
-        confirmText="Delete"
+        title="Remove Audio"
+        message={`Are you sure you want to remove "${audioDeleteDialog.audioTitle}" from the editor?`}
+        warningMessage="This will remove the audio from the timeline and media list. To permanently delete from the library, go to the Audio Library page."
+        confirmText="Remove"
         cancelText="Cancel"
         variant="danger"
       />
@@ -1072,11 +1077,10 @@ const DesignEditor = () => {
         isOpen={videoDeleteDialog.isOpen}
         onClose={() => setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null })}
         onConfirm={confirmVideoDelete}
-        title="Delete Video"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${videoDeleteDialog.videoTitle}"?`}
-        warningMessage="This will permanently delete the video from both the timeline and media library."
-        confirmText="Delete Video"
+        title="Remove Video"
+        message={`Are you sure you want to remove "${videoDeleteDialog.videoTitle}" from the editor?`}
+        warningMessage="This will remove the video from the canvas and media list. To permanently delete from the library, go to the Video Library page."
+        confirmText="Remove"
         cancelText="Cancel"
         variant="danger"
       />
@@ -1086,15 +1090,14 @@ const DesignEditor = () => {
         isOpen={imageDeleteDialog.isOpen}
         onClose={() => setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null })}
         onConfirm={confirmImageDelete}
-        title="Delete Image"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${imageDeleteDialog.imageTitle}"?`}
+        title="Remove Image"
+        message={`Are you sure you want to remove "${imageDeleteDialog.imageTitle}" from the editor?`}
         warningMessage={
           imageDeleteDialog.imageElements && imageDeleteDialog.imageElements.length > 0
-            ? `This image is used in ${imageDeleteDialog.imageElements.length} place(s) on the canvas. It will be removed from all locations.`
-            : "This will permanently delete the image from the media library."
+            ? `This image is used in ${imageDeleteDialog.imageElements.length} place(s) on the canvas. It will be removed from all locations and the media list. To permanently delete from the library, go to the Image Library page.`
+            : "This will remove the image from the media list. To permanently delete from the library, go to the Image Library page."
         }
-        confirmText="Delete Image"
+        confirmText="Remove"
         cancelText="Cancel"
         variant="danger"
       />

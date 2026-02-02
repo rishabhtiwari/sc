@@ -1,5 +1,33 @@
 import { useState } from 'react';
 
+// Minimum default slide duration (in seconds)
+const MIN_SLIDE_DURATION = 5;
+
+/**
+ * Calculate required slide duration based on video elements
+ * Duration = max(longest video duration, MIN_SLIDE_DURATION)
+ */
+const calculateSlideDuration = (elements) => {
+  // Find all video elements
+  const videoElements = elements.filter(el => el.type === 'video');
+
+  if (videoElements.length === 0) {
+    return MIN_SLIDE_DURATION;
+  }
+
+  // Find the longest video duration
+  const maxVideoDuration = Math.max(
+    ...videoElements.map(video => {
+      // Use trimEnd if available, otherwise use full duration
+      const effectiveDuration = video.trimEnd || video.duration || 0;
+      return effectiveDuration;
+    })
+  );
+
+  // Return max of video duration and minimum slide duration
+  return Math.max(maxVideoDuration, MIN_SLIDE_DURATION);
+};
+
 /**
  * Custom hook for managing canvas elements (add, update, delete, select)
  */
@@ -47,7 +75,7 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
     setPages(prevPages => {
       const updatedPages = [...prevPages];
       const currentPage = updatedPages[currentPageIndex];
-      
+
       console.log('📄 Adding element to page', currentPageIndex + ':', {
         pageId: currentPage.id,
         pageName: currentPage.name,
@@ -57,13 +85,26 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
         newElementType: newElement.type
       });
 
+      // Add the new element
+      const newElements = [...currentPage.elements, newElement];
+
+      // Calculate new slide duration based on video elements
+      const newDuration = calculateSlideDuration(newElements);
+
+      // Log duration adjustment if it changed
+      if (newDuration !== currentPage.duration) {
+        console.log(`⏱️ Adjusting slide duration: ${currentPage.duration}s → ${newDuration}s`);
+      }
+
       updatedPages[currentPageIndex] = {
         ...currentPage,
-        elements: [...currentPage.elements, newElement]
+        elements: newElements,
+        duration: newDuration
       };
 
       console.log('✅ Pages updated. Total pages:', updatedPages.length);
       console.log('✅ Current page elements:', updatedPages[currentPageIndex].elements.length);
+      console.log('✅ Current page duration:', updatedPages[currentPageIndex].duration);
 
       return updatedPages;
     });
@@ -77,11 +118,27 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
       const updatedPages = [...prevPages];
       const currentPage = updatedPages[currentPageIndex];
 
+      // Update the element
+      const newElements = currentPage.elements.map(el =>
+        el.id === elementId ? { ...el, ...updates } : el
+      );
+
+      // Recalculate slide duration if a video element was updated
+      const updatedElement = newElements.find(el => el.id === elementId);
+      let newDuration = currentPage.duration;
+
+      if (updatedElement?.type === 'video') {
+        newDuration = calculateSlideDuration(newElements);
+
+        if (newDuration !== currentPage.duration) {
+          console.log(`⏱️ Adjusting slide duration after video update: ${currentPage.duration}s → ${newDuration}s`);
+        }
+      }
+
       updatedPages[currentPageIndex] = {
         ...currentPage,
-        elements: currentPage.elements.map(el =>
-          el.id === elementId ? { ...el, ...updates } : el
-        )
+        elements: newElements,
+        duration: newDuration
       };
 
       return updatedPages;
@@ -100,10 +157,28 @@ export const useElementManagement = (pages, setPages, currentPageIndex) => {
     setPages(prevPages => {
       const updatedPages = [...prevPages];
       const currentPage = updatedPages[currentPageIndex];
-      
+
+      // Find the element being deleted to check if it's a video
+      const deletedElement = currentPage.elements.find(el => el.id === elementId);
+
+      // Filter out the deleted element
+      const newElements = currentPage.elements.filter(el => el.id !== elementId);
+
+      // Recalculate slide duration if a video was deleted
+      let newDuration = currentPage.duration;
+
+      if (deletedElement?.type === 'video') {
+        newDuration = calculateSlideDuration(newElements);
+
+        if (newDuration !== currentPage.duration) {
+          console.log(`⏱️ Adjusting slide duration after video deletion: ${currentPage.duration}s → ${newDuration}s`);
+        }
+      }
+
       updatedPages[currentPageIndex] = {
         ...currentPage,
-        elements: currentPage.elements.filter(el => el.id !== elementId)
+        elements: newElements,
+        duration: newDuration
       };
 
       return updatedPages;

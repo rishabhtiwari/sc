@@ -201,11 +201,22 @@ export const prepareProjectData = async (
           srcStart: element.src.substring(0, 50),
           isBlob: isBlobUrl(element.src),
           isLibrary: isLibraryUrl(element.src),
-          hasLibraryId: !!element.libraryId
+          hasLibraryId: !!element.libraryId,
+          hasAssetId: !!element.assetId
         });
 
+        // Check if element already has an assetId or libraryId (from library)
+        // If so, skip upload even if it's not a library URL pattern
+        if (element.assetId || element.libraryId) {
+          console.log(`  ✅ ${element.type} already in library (assetId: ${element.assetId || element.libraryId}), skipping upload`);
+          processedElements.push({
+            ...element,
+            assetId: element.assetId || element.libraryId,
+            file: undefined
+          });
+        }
         // If it's a blob URL, upload it
-        if (isBlobUrl(element.src)) {
+        else if (isBlobUrl(element.src)) {
           console.log(`  📤 Uploading blob ${element.type}:`, element.src.substring(0, 50));
 
           try {
@@ -273,11 +284,30 @@ export const prepareProjectData = async (
       isBlob: isBlobUrl(audioUrl),
       isLibrary: isLibraryUrl(audioUrl),
       isAudioService: isAudioServiceUrl(audioUrl),
+      hasAssetId: !!track.assetId,
       hasLibraryId: !!track.libraryId
     });
 
-    // If it's a blob URL or audio service URL (temporary), upload it
-    if (audioUrl && (isBlobUrl(audioUrl) || isAudioServiceUrl(audioUrl))) {
+    // Check if audio already has an assetId or libraryId (from audio library)
+    // If so, skip upload even if it's an audio service URL
+    if (track.assetId || track.libraryId) {
+      console.log(`  ✅ Audio already in library (assetId: ${track.assetId || track.libraryId}), skipping upload`);
+      processedAudioTracks.push({
+        id: track.id,
+        name: track.name,
+        url: audioUrl,
+        assetId: track.assetId || track.libraryId,
+        type: track.type || 'music',
+        startTime: track.startTime || 0,
+        duration: track.duration || 0,
+        volume: track.volume || 100,
+        fadeIn: track.fadeIn || 0,
+        fadeOut: track.fadeOut || 0,
+        playbackSpeed: track.playbackSpeed || 1
+      });
+    }
+    // If it's a blob URL or audio service URL (temporary) and no assetId, upload it
+    else if (audioUrl && (isBlobUrl(audioUrl) || isAudioServiceUrl(audioUrl))) {
       const urlType = isBlobUrl(audioUrl) ? 'blob' : 'audio service';
       console.log(`  📤 Uploading ${urlType} audio: ${track.name}`);
       try {
