@@ -55,6 +55,10 @@ const DesignEditor = () => {
   // Audio tracks state
   const [audioTracks, setAudioTracks] = useState([]);
 
+  // Project name editing state
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [editedProjectName, setEditedProjectName] = useState('');
+
   // Page Management Hook
   const {
     currentPageIndex,
@@ -938,9 +942,49 @@ const DesignEditor = () => {
     }]);
     setCurrentPageIndex(0);
     setAudioTracks([]);
-    setCurrentProject(null);
-    setSelectedElement(null);
+
+    // Create a new project with default name
+    const defaultName = `Project ${new Date().toLocaleDateString()}`;
+    setCurrentProject({
+      name: defaultName,
+      project_id: null // Will be assigned when saved
+    });
+
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
     showToast('New project created', 'success');
+  };
+
+  /**
+   * Handle project name edit start
+   */
+  const handleStartEditingProjectName = () => {
+    setEditedProjectName(currentProject?.name || '');
+    setIsEditingProjectName(true);
+  };
+
+  /**
+   * Handle project name save
+   */
+  const handleSaveProjectName = () => {
+    if (editedProjectName.trim()) {
+      setCurrentProject(prev => ({
+        ...prev,
+        name: editedProjectName.trim()
+      }));
+      setIsEditingProjectName(false);
+      showToast('Project name updated', 'success');
+    } else {
+      setIsEditingProjectName(false);
+    }
+  };
+
+  /**
+   * Handle project name cancel
+   */
+  const handleCancelEditingProjectName = () => {
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
   };
 
   return (
@@ -1052,11 +1096,67 @@ const DesignEditor = () => {
               Export
             </button>
           </div>
-          {currentProject && (
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">Project:</span> {currentProject.name}
-            </div>
-          )}
+
+          {/* Project Name - Editable */}
+          <div className="flex items-center gap-2">
+            {isEditingProjectName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editedProjectName}
+                  onChange={(e) => setEditedProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveProjectName();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEditingProjectName();
+                    }
+                  }}
+                  className="px-3 py-1.5 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
+                  placeholder="Enter project name"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveProjectName}
+                  className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="Save name"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleCancelEditingProjectName}
+                  className="p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  title="Cancel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">Project:</span>{' '}
+                  <span className="text-gray-900">
+                    {currentProject?.name || 'Untitled Project'}
+                  </span>
+                </div>
+                {currentProject && (
+                  <button
+                    onClick={handleStartEditingProjectName}
+                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                    title="Edit project name"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Page Navigation */}

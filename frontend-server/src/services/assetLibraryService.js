@@ -136,20 +136,39 @@ export const audioLibrary = {
    */
   async upload(file, name = null, duration = 0) {
     try {
+      console.log('🔍 audioLibrary.upload called with:', {
+        file,
+        name,
+        duration,
+        fileType: file?.type,
+        fileSize: file?.size,
+        fileName: file?.name
+      });
+
       const formData = new FormData();
       formData.append('file', file);
+
+      // Log FormData contents
+      console.log('📦 FormData created, has file:', formData.has('file'));
+      for (let pair of formData.entries()) {
+        console.log('📦 FormData entry:', pair[0], pair[1]);
+      }
 
       // Send name and duration as query parameters (backend expects them as Query params)
       const params = new URLSearchParams();
       params.append('name', name || file.name);
       if (duration) params.append('duration', duration.toString());
 
+      console.log('🚀 Sending POST request to:', `/audio-studio/library/upload?${params.toString()}`);
+
       // Don't set Content-Type header - let browser set it with boundary
       const response = await api.post(`/audio-studio/library/upload?${params.toString()}`, formData);
 
+      console.log('✅ Upload successful:', response.data);
       return response.data;
     } catch (error) {
-      console.error('Error uploading audio to library:', error);
+      console.error('❌ Error uploading audio to library:', error);
+      console.error('Error details:', error.response?.data);
       throw error;
     }
   },
