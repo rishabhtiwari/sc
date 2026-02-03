@@ -158,9 +158,18 @@ export const useProjectState = ({
    * Auto-load project from URL on mount
    * If there's a project ID in URL, ALWAYS load it from backend (clear sessionStorage first)
    * This ensures clicking a project from the Projects page always loads that specific project
+   *
+   * IMPORTANT: Only run this on initial mount, not when returning from library with new assets
    */
   useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
+
+    // Don't reload project if we're returning from library with a new asset
+    // This prevents wiping out the newly added asset
+    if (location.state?.addAsset) {
+      console.log('🎯 Returning from library with new asset - skipping project reload');
+      return;
+    }
 
     if (projectId) {
       console.log('📂 Project ID in URL, loading from backend:', projectId);
