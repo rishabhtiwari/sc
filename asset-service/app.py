@@ -10,7 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from bson import ObjectId
 from datetime import datetime
 from config.settings import settings
-from routes import asset_routes, audio_library_routes, project_routes, image_library_routes, video_library_routes
+from routes import asset_routes, audio_library_routes, project_routes, image_library_routes, video_library_routes, export_routes
 
 # Configure logging
 logging.basicConfig(
@@ -137,6 +137,12 @@ app.include_router(
     project_routes.router,
     prefix="/api",
     tags=["Projects"]
+)
+
+app.include_router(
+    export_routes.router,
+    prefix="/api",
+    tags=["Export"]
 )
 
 

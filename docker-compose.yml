@@ -940,7 +940,59 @@ services:
       - ichat-mongodb
       - job-voice-generator
 
-
+  # Export Generator Job Service - Handles project exports
+  job-export-generator:
+    build:
+      context: ./jobs
+      dockerfile: export-generator/Dockerfile
+    pull_policy: if_not_present
+    container_name: job-export-generator
+    ports:
+      - "8101:8101"
+    environment:
+      # Basic Configuration
+      - FLASK_HOST=0.0.0.0
+      - FLASK_PORT=8101
+      - FLASK_DEBUG=false
+      - FLASK_ENV=production
+      - JOB_INTERVAL_MINUTES=60
+      - LOG_LEVEL=INFO
+      - LOG_FILE=logs/export-generator.log
+      # MongoDB Configuration
+      - MONGODB_HOST=ichat-mongodb
+      - MONGODB_PORT=27017
+      - MONGODB_DATABASE=ichat_db
+      - MONGODB_USERNAME=ichat_app
+      - MONGODB_PASSWORD=ichat_app_password_2024
+      - MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/ichat_db?authSource=admin
+      # News Database Configuration (for video library)
+      - NEWS_MONGODB_DATABASE=news
+      - NEWS_MONGODB_URL=mongodb://ichat_app:ichat_app_password_2024@ichat-mongodb:27017/news?authSource=admin
+      # MinIO Configuration
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET_EXPORTS=exports
+      # Export Configuration
+      - TEMP_DIR=/app/temp
+      - MAX_EXPORT_SIZE_MB=500
+      - EXPORT_TIMEOUT=600
+    volumes:
+      - ./jobs/export-generator/logs:/app/logs
+      - ./jobs/export-generator/temp:/app/temp
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8101/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    depends_on:
+      - ichat-mongodb
+      - minio
 
   # IOPaint Logo/Watermark Removal Service with MongoDB Integration
   iopaint:

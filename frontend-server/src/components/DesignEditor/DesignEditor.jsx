@@ -22,6 +22,8 @@ import Sidebar from './Sidebar/Sidebar';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import ConfirmDialog from '../common/ConfirmDialog';
+import ExportDialog from './ExportDialog/ExportDialog';
+import ExportsListDialog from './ExportDialog/ExportsListDialog';
 
 /**
  * DesignEditor - Main component (refactored)
@@ -42,6 +44,8 @@ const DesignEditor = () => {
   const [selectedTool, setSelectedTool] = useState(location.state?.returnTool || 'text');
   const [zoom, setZoom] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showExportsListDialog, setShowExportsListDialog] = useState(false);
 
   // Pages state (initialized with one default page)
   const [pages, setPages] = useState([{
@@ -1290,13 +1294,26 @@ const DesignEditor = () => {
 
             {/* Export Project */}
             <button
-              onClick={() => showToast('Export functionality coming soon', 'info')}
+              onClick={() => setShowExportDialog(true)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               Export
+            </button>
+
+            {/* View Exports */}
+            <button
+              onClick={() => setShowExportsListDialog(true)}
+              disabled={!currentProject?.exports || currentProject.exports.length === 0}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+              title={currentProject?.exports?.length > 0 ? `View ${currentProject.exports.length} export(s)` : 'No exports yet'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Exports {currentProject?.exports?.length > 0 && `(${currentProject.exports.length})`}
             </button>
           </div>
 
@@ -1580,6 +1597,20 @@ const DesignEditor = () => {
           </div>
         </div>
       )}
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        project={currentProject}
+      />
+
+      {/* Exports List Dialog */}
+      <ExportsListDialog
+        isOpen={showExportsListDialog}
+        onClose={() => setShowExportsListDialog(false)}
+        project={currentProject}
+      />
     </div>
   );
 };

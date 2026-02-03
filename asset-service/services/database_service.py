@@ -30,6 +30,9 @@ class DatabaseService:
         self.image_library = self.news_db.image_library
         self.video_library = self.news_db.video_library
 
+        # Export jobs collection
+        self.export_jobs = self.news_db.export_jobs
+
         self._ensure_indexes()
 
     def _ensure_indexes(self):

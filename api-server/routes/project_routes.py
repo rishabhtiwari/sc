@@ -129,3 +129,73 @@ def delete_project(project_id):
         logger.error(f"Error deleting project: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+# ========== Export Routes ==========
+
+@project_bp.route('/projects/export', methods=['POST'])
+def create_export():
+    """Proxy: Create export job"""
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+
+        response = requests.post(
+            f'{ASSET_SERVICE_URL}/api/projects/export',
+            headers=headers,
+            json=request.get_json(),
+            timeout=60  # Longer timeout for export creation
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error creating export: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@project_bp.route('/projects/export/<export_job_id>/status', methods=['GET'])
+def get_export_status(export_job_id):
+    """Proxy: Get export job status"""
+    try:
+        headers = get_request_headers_with_context()
+
+        response = requests.get(
+            f'{ASSET_SERVICE_URL}/api/projects/export/{export_job_id}/status',
+            headers=headers,
+            timeout=30
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error getting export status: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@project_bp.route('/projects/export/<export_job_id>', methods=['DELETE'])
+def cancel_export(export_job_id):
+    """Proxy: Cancel export job"""
+    try:
+        headers = get_request_headers_with_context()
+
+        response = requests.delete(
+            f'{ASSET_SERVICE_URL}/api/projects/export/{export_job_id}',
+            headers=headers,
+            timeout=30
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error cancelling export: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
