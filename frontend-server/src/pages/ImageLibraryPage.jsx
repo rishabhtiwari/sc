@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast';
 import { imageLibrary } from '../services/assetLibraryService';
 import AuthenticatedImage from '../components/common/AuthenticatedImage';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import SearchBar from '../components/common/SearchBar';
 
 /**
  * Image Library Page - Full page view of all images with modern, appealing design
@@ -225,15 +226,12 @@ const ImageLibraryPage = ({ isModal = false, onClose, onAddToCanvas }) => {
 
         {/* Search Bar */}
         <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="🔍 Search images..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-            />
-          </div>
+          <SearchBar
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="🔍 Search images..."
+            compact={true}
+          />
         </div>
 
         {/* Images Grid */}

@@ -4,6 +4,7 @@ import { Card, Button, Input } from '../components/common';
 import { useToast } from '../hooks/useToast';
 import { useAudioLibrary } from '../hooks/useAudioLibrary';
 import AudioCard from '../components/AudioStudio/AudioLibrary/AudioCard';
+import SearchBar from '../components/common/SearchBar';
 
 /**
  * Audio Library Page - Full page view of all audio files with modern, appealing design
@@ -226,23 +227,12 @@ const AudioLibraryPage = () => {
                 <span>🔎</span>
                 <span>Search</span>
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by name or text..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white placeholder-gray-400 text-gray-900"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <span className="text-lg">✕</span>
-                  </button>
-                )}
-              </div>
+              <SearchBar
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="🔍 Search by name or text..."
+                compact={true}
+              />
             </div>
 
             {/* Filter Row */}

@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast';
 import { videoLibrary } from '../services/assetLibraryService';
 import AuthenticatedVideo from '../components/common/AuthenticatedVideo';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import SearchBar from '../components/common/SearchBar';
 
 /**
  * Video Library Page - Full page view of all videos with modern, appealing design
@@ -170,15 +171,12 @@ const VideoLibraryPage = () => {
 
         {/* Search Bar */}
         <div className="bg-white rounded-lg shadow border border-gray-200 p-4">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="🔍 Search videos..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
-            />
-          </div>
+          <SearchBar
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="🔍 Search videos..."
+            compact={true}
+          />
         </div>
 
         {/* Videos Grid */}
