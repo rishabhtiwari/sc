@@ -292,10 +292,14 @@ export const prepareProjectData = async (
     // If so, skip upload even if it's an audio service URL
     if (track.assetId || track.libraryId) {
       console.log(`  ✅ Audio already in library (assetId: ${track.assetId || track.libraryId}), skipping upload`);
+
+      // Use library URL instead of blob URL
+      const libraryUrl = `/api/audio-studio/library/${track.assetId || track.libraryId}/stream`;
+
       processedAudioTracks.push({
         id: track.id,
         name: track.name,
-        url: audioUrl,
+        url: libraryUrl,  // Use library URL instead of blob URL
         assetId: track.assetId || track.libraryId,
         type: track.type || 'music',
         startTime: track.startTime || 0,
