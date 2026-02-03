@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import projectService from '../../../services/projectService';
 import { prepareProjectData, extractMediaFromProject } from '../utils/projectDataHelpers';
@@ -22,6 +22,7 @@ export const useProjectState = ({
   const [currentProject, setCurrentProject] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const hasLoadedProjectRef = useRef(false); // Track if we've loaded a project
 
   /**
    * Save project
@@ -159,10 +160,16 @@ export const useProjectState = ({
    * If there's a project ID in URL, ALWAYS load it from backend (clear sessionStorage first)
    * This ensures clicking a project from the Projects page always loads that specific project
    *
-   * IMPORTANT: Only run this on initial mount, not when returning from library with new assets
+   * IMPORTANT: Only load once, not when returning from library with new assets
    */
   useEffect(() => {
     const projectId = new URLSearchParams(location.search).get('project');
+
+    // Don't reload if we've already loaded this project
+    if (hasLoadedProjectRef.current) {
+      console.log('🎯 Project already loaded - skipping reload');
+      return;
+    }
 
     // Don't reload project if we're returning from library with a new asset
     // This prevents wiping out the newly added asset
@@ -177,9 +184,13 @@ export const useProjectState = ({
       sessionStorage.removeItem('designEditor_inMemoryState');
       console.log('🗑️ Cleared sessionStorage to load fresh project');
 
-      handleLoadProject(projectId).catch(error => {
-        console.error('Failed to load project from URL:', error);
-      });
+      handleLoadProject(projectId)
+        .then(() => {
+          hasLoadedProjectRef.current = true; // Mark as loaded
+        })
+        .catch(error => {
+          console.error('Failed to load project from URL:', error);
+        });
     } else {
       console.log('📭 No project ID in URL - will use sessionStorage or start fresh');
     }

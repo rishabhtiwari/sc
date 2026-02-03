@@ -181,13 +181,15 @@ const Sidebar = ({
               onImageDeleteRequest={onImageDeleteRequest}
               uploadedMedia={
                 expandedPanel === 'audio' ? uploadedAudio :
+                expandedPanel === 'video' ? uploadedVideo :
                 expandedPanel === 'images' ? uploadedImage :
-                uploadedVideo
+                [] // Default to empty array if panel doesn't use media
               }
               onUploadedMediaChange={
                 expandedPanel === 'audio' ? onUploadedAudioChange :
+                expandedPanel === 'video' ? onUploadedVideoChange :
                 expandedPanel === 'images' ? onUploadedImageChange :
-                onUploadedVideoChange
+                () => {} // No-op for panels that don't use media
               }
               onOpenAudioLibrary={onOpenAudioLibrary}
               onOpenImageLibrary={onOpenImageLibrary}
