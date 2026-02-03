@@ -1,355 +1,622 @@
-import React, { useState, useRef, useEffect } from 'react';
-import Sidebar from './Sidebar/Sidebar';
-import Canvas from './Canvas/Canvas';
-import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
-import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
-import AudioLibrary from './AudioLibrary/AudioLibrary';
-import ConfirmDialog from '../common/ConfirmDialog';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../../hooks/useToast';
 
+// Custom hooks
+import {
+  useSessionStorage,
+  useElementManagement,
+  usePageManagement,
+  useMediaManagement,
+  useProjectState,
+  useVideoPlayback
+} from './hooks';
+import { fetchAuthenticatedAudio } from '../../hooks/useAuthenticatedAudio';
+
+// Utils
+import { computeVideoTracks } from './utils';
+
+// Components
+import Canvas from './Canvas/Canvas';
+import Sidebar from './Sidebar/Sidebar';
+import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
+import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
+import ConfirmDialog from '../common/ConfirmDialog';
+
 /**
- * Main Design Editor Component
- * Layout: Sidebar | Canvas | Properties Panel
+ * DesignEditor - Main component (refactored)
+ * Uses custom hooks to manage state and logic
  */
 const DesignEditor = () => {
-  const [selectedTool, setSelectedTool] = useState(null);
-  const [selectedElement, setSelectedElement] = useState(null);
-  const [canvasElements, setCanvasElements] = useState([]);
-  const [pages, setPages] = useState([
-    {
-      id: 'page-1',
-      name: 'Page 1',
-      elements: [],
-      background: { type: 'solid', color: '#ffffff' },
-      duration: 5, // Default 5 seconds per slide
-      startTime: 0 // Default start time (can be moved independently)
-    }
-  ]);
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
-
-  // Audio Timeline State
-  const [audioTracks, setAudioTracks] = useState([]);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [selectedAudioTrack, setSelectedAudioTrack] = useState(null);
-  const audioRefs = useRef({});
-
-  // Video Timeline State
-  const [videoTracks, setVideoTracks] = useState([]);
-  const [selectedVideoTrack, setSelectedVideoTrack] = useState(null);
-  const videoRefs = useRef({});
-
-  // Video refs for controlling video playback on canvas
-  const videoElementRefs = useRef({});
-
-  // Uploaded Media State (lifted from MediaPanel to persist across tab switches)
-  // Separate state for audio and video to keep them independent
-  const [uploadedAudio, setUploadedAudio] = useState([]);
-  const [uploadedVideo, setUploadedVideo] = useState([]);
-
-  // Audio Delete Confirmation Dialog
-  const [audioDeleteDialog, setAudioDeleteDialog] = useState({
-    isOpen: false,
-    audioId: null,
-    audioTitle: null,
-    mediaId: null
-  });
-
-  // Video Delete Confirmation Dialog
-  const [videoDeleteDialog, setVideoDeleteDialog] = useState({
-    isOpen: false,
-    videoId: null,
-    videoTitle: null,
-    mediaId: null
-  });
-
-  // Audio Library Modal State
-  const [isAudioLibraryOpen, setIsAudioLibraryOpen] = useState(false);
-
+  const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
 
+  // Debug: Log when component mounts/unmounts
+  useEffect(() => {
+    console.log('🎨 DesignEditor mounted');
+    return () => console.log('🎨 DesignEditor unmounted');
+  }, []);
+
+  // UI State - Restore selectedTool from navigation state, or default to 'text'
+  const [selectedTool, setSelectedTool] = useState(location.state?.returnTool || 'text');
+  const [zoom, setZoom] = useState(1);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
+
+  // Pages state (initialized with one default page)
+  const [pages, setPages] = useState([{
+    id: 'page-1',
+    name: 'Page 1',
+    elements: [],
+    background: { type: 'solid', color: '#ffffff' },
+    duration: 5,
+    startTime: 0
+  }]);
+
+  // Audio tracks state
+  const [audioTracks, setAudioTracks] = useState([]);
+
+  // Loading state for audio/video assets
+  const [loadingAssets, setLoadingAssets] = useState(new Set());
+  const [assetsReady, setAssetsReady] = useState(false);
+
+  // Project name editing state
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [editedProjectName, setEditedProjectName] = useState('');
+
+  // Page Management Hook
+  const {
+    currentPageIndex,
+    currentPage,
+    handleAddPage,
+    handleAddMultiplePages,
+    handleDeletePage,
+    handleDuplicatePage,
+    handleBackgroundChange,
+    handlePageChange,
+    handleNextPage,
+    handlePreviousPage,
+    setCurrentPageIndex
+  } = usePageManagement(pages, setPages);
+
+  // Media Management Hook
+  const {
+    uploadedAudio,
+    uploadedImage,
+    uploadedVideo,
+    setUploadedAudio,
+    setUploadedImage,
+    setUploadedVideo,
+    handleAddAudio,
+    handleAddImage,
+    handleAddVideo,
+    handleDeleteAudio,
+    handleDeleteImage,
+    handleDeleteVideo
+  } = useMediaManagement();
+
+  // Element Management Hook
+  const {
+    selectedElement,
+    handleAddElement,
+    handleUpdateElement,
+    handleDeleteElement: handleDeleteElementBase,
+    handleSelectElement,
+    handleDeselectElement
+  } = useElementManagement(pages, setPages, currentPageIndex);
+
   /**
-   * Handle adding element to canvas (adds to current page)
+   * Wrapper for handleDeleteElement that also removes from media library
+   * Only removes from media library if NO other instances exist on canvas
    */
-  const handleAddElement = (element) => {
-    const newElement = {
-      id: `element-${Date.now()}`,
-      ...element,
-      x: element.x || 100,
-      y: element.y || 100,
-    };
-
-    // Calculate start time for video on timeline based on current slide position
-    let slideStartTime = 0;
-    for (let i = 0; i < currentPageIndex; i++) {
-      slideStartTime += pages[i].duration || 5;
-    }
-
-    // Update current page's elements
-    const updatedPages = pages.map((page, index) => {
-      if (index === currentPageIndex) {
-        const updatedPage = {
-          ...page,
-          elements: [...(page.elements || []), newElement]
-        };
-
-        // If adding a video element, auto-adjust slide duration to match video length
-        if (element.type === 'video' && element.duration) {
-          console.log('🎬 Video added with duration:', element.duration);
-          updatedPage.duration = Math.ceil(element.duration); // Round up to nearest second
-          console.log('📊 Slide duration updated to:', updatedPage.duration);
-        }
-
-        return updatedPage;
+  const handleDeleteElement = (elementId) => {
+    // Find the element to get its type and URL
+    let elementToDelete = null;
+    pages.forEach(page => {
+      const el = page.elements.find(e => e.id === elementId);
+      if (el) {
+        elementToDelete = el;
       }
-      return page;
     });
 
-    setPages(updatedPages);
-    setCanvasElements([...canvasElements, newElement]); // Keep for backward compatibility
-    setSelectedElement(newElement);
+    // Delete from canvas
+    handleDeleteElementBase(elementId);
 
-    // If adding a video element, also add it to the video timeline
-    if (element.type === 'video' && element.duration) {
-      const videoTrack = {
-        id: newElement.id,
-        elementId: newElement.id, // Link to canvas element
-        name: element.file?.name || 'Video',
-        url: element.src, // Use 'url' for consistency with VideoBlock
-        src: element.src, // Keep src for compatibility
-        file: element.file,
-        startTime: slideStartTime,
-        duration: element.duration,
-        originalDuration: element.duration, // Store original for trimming
-        trimStart: 0, // How much trimmed from start
-        trimEnd: 0, // How much trimmed from end
-        volume: element.volume || 100,
-        playbackSpeed: element.playbackSpeed || 1,
-        slideIndex: currentPageIndex,
-        videoType: 'video' // Can be 'video', 'b-roll', etc.
-      };
+    // Check if there are any other instances of this asset on the canvas
+    // Only remove from media library if this was the LAST instance
+    if (elementToDelete && (elementToDelete.type === 'image' || elementToDelete.type === 'video')) {
+      const assetUrl = elementToDelete.src;
 
-      console.log('🎬 Adding video to timeline:', videoTrack);
-      setVideoTracks(prev => [...prev, videoTrack]);
-      setSelectedVideoTrack(videoTrack.id);
+      // Count remaining instances of this asset across all pages (after deletion)
+      // We need to use setTimeout to ensure the deletion has been processed
+      setTimeout(() => {
+        let remainingInstances = 0;
+        pages.forEach(page => {
+          page.elements.forEach(el => {
+            if (el.id !== elementId && el.type === elementToDelete.type && el.src === assetUrl) {
+              remainingInstances++;
+            }
+          });
+        });
+
+        console.log(`🔍 Remaining instances of ${elementToDelete.type} (${assetUrl}):`, remainingInstances);
+
+        // Only remove from media library if no instances remain
+        if (remainingInstances === 0) {
+          console.log(`🗑️ No more instances, removing from media library`);
+          if (elementToDelete.type === 'image') {
+            setUploadedImage(prev => prev.filter(img => img.url !== assetUrl));
+          } else if (elementToDelete.type === 'video') {
+            setUploadedVideo(prev => prev.filter(vid => vid.url !== assetUrl));
+          }
+        } else {
+          console.log(`✅ ${remainingInstances} instance(s) remain, keeping in media library`);
+        }
+      }, 0);
     }
   };
 
-  /**
-   * Handle adding multiple pages (for slide generation)
-   */
-  const handleAddMultiplePages = (slidePages) => {
-    console.log('📄 DesignEditor: handleAddMultiplePages called with', slidePages?.length, 'slides');
-    console.log('📄 DesignEditor: Slide pages:', slidePages);
+  // Project State Hook
+  const {
+    currentProject,
+    isSaving,
+    isLoading,
+    setCurrentProject,
+    handleSaveProject,
+    handleLoadProject
+  } = useProjectState({
+    pages,
+    audioTracks,
+    uploadedAudio,
+    uploadedImage,
+    uploadedVideo,
+    setPages,
+    setAudioTracks,
+    setUploadedAudio,
+    setUploadedImage,
+    setUploadedVideo
+  });
 
-    if (!slidePages || slidePages.length === 0) {
-      console.warn('⚠️ DesignEditor: No slide pages provided');
+  // Video Playback Hook
+  const {
+    isPlaying,
+    currentTime,
+    videoElementRefs,
+    handlePlayPause,
+    handleSeek,
+    registerVideoRef,
+    unregisterVideoRef,
+    setIsPlaying,
+    setCurrentTime
+  } = useVideoPlayback(pages, currentPageIndex);
+
+  // Delete Dialog States
+  const [audioDeleteDialog, setAudioDeleteDialog] = useState({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
+  const [videoDeleteDialog, setVideoDeleteDialog] = useState({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
+  const [imageDeleteDialog, setImageDeleteDialog] = useState({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null });
+
+  // Properties Panel State (user can manually close/open)
+  const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(320); // Default 320px
+  const [timelineHeight, setTimelineHeight] = useState(300); // Default 300px
+  const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
+  const [isResizingTimeline, setIsResizingTimeline] = useState(false);
+
+  // Auto-open Properties Panel when element is selected
+  useEffect(() => {
+    if (selectedElement) {
+      setIsPropertiesPanelOpen(true);
+    }
+  }, [selectedElement]);
+
+  // Handle properties panel resize
+  useEffect(() => {
+    if (!isResizingPropertiesPanel) return;
+
+    const handleMouseMove = (e) => {
+      e.preventDefault();
+      const newWidth = window.innerWidth - e.clientX;
+      setPropertiesPanelWidth(Math.max(280, Math.min(600, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingPropertiesPanel(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingPropertiesPanel]);
+
+  // Handle timeline resize
+  useEffect(() => {
+    if (!isResizingTimeline) return;
+
+    const handleMouseMove = (e) => {
+      e.preventDefault();
+      const newHeight = window.innerHeight - e.clientY;
+      setTimelineHeight(Math.max(200, Math.min(600, newHeight)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTimeline(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingTimeline]);
+
+  // Session Storage Hook (auto-save/restore)
+  useSessionStorage({
+    pages,
+    uploadedAudio,
+    uploadedImage,
+    uploadedVideo,
+    audioTracks,
+    currentProject,
+    setPages,
+    setUploadedAudio,
+    setUploadedImage,
+    setUploadedVideo,
+    setAudioTracks,
+    setCurrentProject
+  });
+
+  // Compute video tracks from pages
+  const videoTracks = useMemo(() => computeVideoTracks(pages), [pages]);
+
+  // Track processed assets to prevent duplicate processing
+  const processedAssetRef = useRef(null);
+
+  // Audio refs for playback control
+  const audioRefs = useRef({});
+
+  /**
+   * Handle adding asset from library (audio, image, video)
+   */
+  useEffect(() => {
+    const addAsset = location.state?.addAsset;
+    if (!addAsset) return;
+
+    const assetKey = `${addAsset.type}-${addAsset.src || addAsset.url}`;
+
+    // Check if we've already processed this asset
+    if (processedAssetRef.current === assetKey) {
+      console.log('⏭️ Asset already processed, skipping:', assetKey);
       return;
     }
 
-    const newPages = slidePages.map((slide, index) => {
-      // Calculate start time for new slides (position at end of existing slides)
-      const existingDuration = pages.reduce((sum, p) => {
-        const pStart = p.startTime !== undefined ? p.startTime : 0;
-        const pDur = p.duration || 5;
-        return Math.max(sum, pStart + pDur);
-      }, 0);
+    console.log('📥 Processing new asset from library:', addAsset);
 
-      return {
-        id: slide.id || `page-${Date.now()}-${index}`,
-        name: slide.name || `Slide ${pages.length + index + 1}`,
-        elements: slide.elements || [],
-        background: slide.background || { type: 'solid', color: '#ffffff' },
-        duration: slide.duration || 5,
-        startTime: existingDuration + (index * 5), // Position new slides sequentially after existing ones
-        transition: slide.transition || 'fade'
-      };
-    });
+    // Mark as processed
+    processedAssetRef.current = assetKey;
 
-    console.log('📄 DesignEditor: Created new pages:', newPages);
-    console.log('📄 DesignEditor: Current pages before update:', pages);
+    // Add to appropriate media list
+    if (addAsset.type === 'audio') {
+      console.log('🎵 Adding audio to media list only (not to timeline)');
+      handleAddAudio({
+        id: addAsset.libraryId || `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url || addAsset.audio_url,
+        title: addAsset.name || addAsset.title || 'Audio',
+        type: 'audio',
+        duration: addAsset.duration || 0,
+        libraryId: addAsset.libraryId,
+        audio_id: addAsset.audio_id,
+        assetId: addAsset.assetId
+      });
+    } else if (addAsset.type === 'image') {
+      console.log('🖼️ Adding image to media list only (not to canvas)');
+      handleAddImage({
+        id: addAsset.libraryId || `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url,
+        title: addAsset.name || addAsset.title || 'Image',
+        type: 'image',
+        libraryId: addAsset.libraryId
+      });
+    } else if (addAsset.type === 'video') {
+      console.log('🎬 Adding video to media list only (not to canvas)');
+      handleAddVideo({
+        id: addAsset.libraryId || `media-${Date.now()}`,
+        url: addAsset.src || addAsset.url,
+        title: addAsset.name || addAsset.title || 'Video',
+        type: 'video',
+        duration: addAsset.duration || 0,
+        libraryId: addAsset.libraryId
+      });
+    }
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const updatedPages = [...pages, ...newPages];
-    console.log('📄 DesignEditor: Updated pages:', updatedPages);
+  /**
+   * Clear processed asset ref when navigating away from design editor
+   */
+  useEffect(() => {
+    // Clear the ref when we navigate away from the design editor (to library, etc.)
+    // This ensures that when we come back with a new asset, it will be processed
+    const isLeavingEditor = !location.pathname.includes('/design-editor');
+    if (isLeavingEditor && processedAssetRef.current) {
+      console.log('🧹 Clearing processed asset ref (navigating away from editor)');
+      processedAssetRef.current = null;
+    }
+  }, [location.pathname]);
 
-    setPages(updatedPages);
-    setCurrentPageIndex(pages.length); // Switch to first new page
+  /**
+   * Restore selected tool when returning from library
+   */
+  useEffect(() => {
+    if (location.state?.returnTool && location.state.returnTool !== selectedTool) {
+      console.log('🔧 Restoring selected tool:', location.state.returnTool);
+      setSelectedTool(location.state.returnTool);
+    }
+  }, [location.state?.returnTool]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    console.log('✅ DesignEditor: Pages state updated, new page index:', pages.length);
+  /**
+   * Handle audio track operations
+   * @param {Object|File} audioFile - File object or audio metadata object with name, audio_id, etc.
+   * @param {string} audioUrl - URL to the audio file
+   */
+  const handleAddAudioTrack = async (audioFile, audioUrl) => {
+    console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
+
+    const trackId = `audio-${Date.now()}`;
+
+    try {
+      // Use the centralized authentication utility
+      const processedUrl = await fetchAuthenticatedAudio(audioUrl);
+
+      // Create audio element to get duration
+      const audio = new Audio(processedUrl);
+      console.log('🎬 Created audio element with ID:', trackId);
+
+      audio.addEventListener('loadedmetadata', () => {
+        console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
+        setAudioTracks(prevTracks => {
+          // Calculate the end time of the last audio track
+          let startTime = 0;
+          if (prevTracks.length > 0) {
+            // Find the maximum end time among all existing tracks
+            const maxEndTime = Math.max(...prevTracks.map(track =>
+              (track.startTime || 0) + (track.duration || 0)
+            ));
+            startTime = maxEndTime; // Position new audio at the end
+          }
+
+          const newTrack = {
+            id: trackId,
+            name: audioFile.name || audioFile.title || 'Audio Track',
+            src: processedUrl, // Use the processed (authenticated) URL
+            url: audioUrl, // Keep original URL for reference
+            duration: audio.duration,
+            startTime: startTime,
+            volume: 100,
+            fadeIn: 0,
+            fadeOut: 0,
+            type: audioFile.name?.toLowerCase().includes('voiceover')
+              ? 'voiceover'
+              : audioFile.name?.toLowerCase().includes('sfx')
+              ? 'sfx'
+              : 'music', // Auto-detect type from filename
+            // Preserve audio_id/libraryId if it exists (from audio library)
+            assetId: audioFile.audio_id || audioFile.libraryId || audioFile.assetId,
+            libraryId: audioFile.audio_id || audioFile.libraryId
+          };
+
+          const updatedTracks = [...prevTracks, newTrack];
+          console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
+          return updatedTracks;
+        });
+
+        // Set initial volume
+        audio.volume = 1.0; // 100%
+        showToast('Audio added to timeline', 'success');
+      });
+
+      audio.addEventListener('error', (e) => {
+        console.error('❌ Audio loading error:', e);
+        console.error('❌ Audio error details:', {
+          error: audio.error,
+          code: audio.error?.code,
+          message: audio.error?.message,
+          src: audio.src
+        });
+        showToast('Failed to load audio', 'error');
+      });
+    } catch (error) {
+      console.error('❌ Error in handleAddAudioTrack:', error);
+      showToast('Failed to add audio to timeline', 'error');
+    }
   };
 
   /**
-   * Handle element selection
+   * Handle audio track update (drag, stretch, properties)
    */
-  const handleSelectElement = (element) => {
-    setSelectedElement(element);
+  const handleAudioUpdate = (trackId, updates) => {
+    setAudioTracks(prevTracks =>
+      prevTracks.map(track =>
+        track.id === trackId ? { ...track, ...updates } : track
+      )
+    );
   };
 
   /**
-   * Handle element update (updates element in current page)
+   * Handle audio track delete
    */
-  const handleUpdateElement = (elementId, updates) => {
-    // Update in pages
-    const updatedPages = pages.map((page, index) => {
-      if (index === currentPageIndex) {
+  const handleAudioDelete = (trackId) => {
+    // Find the track to get its URL
+    const track = audioTracks.find(t => t.id === trackId);
+
+    // Remove from timeline
+    setAudioTracks(prevTracks => prevTracks.filter(track => track.id !== trackId));
+
+    // Also remove from media library if it exists there
+    const trackUrl = track?.src || track?.url;
+    if (track && trackUrl) {
+      setUploadedAudio(prev => prev.filter(audio => audio.url !== trackUrl));
+    }
+  };
+
+  /**
+   * Handle video track update - Updates the video element in the page
+   */
+  const handleVideoUpdate = (trackId, updates) => {
+    console.log('🎬 Updating video element:', trackId, updates);
+    setPages(prevPages => {
+      // First pass: Update the video element and page duration
+      const updatedPages = prevPages.map(page => {
+        // Check if this page contains the video being updated
+        const hasVideo = page.elements.some(el => el.id === trackId);
+
+        if (hasVideo && updates.duration !== undefined) {
+          // If video duration is being updated, also update page duration
+          const updatedElements = page.elements.map(el =>
+            el.id === trackId ? { ...el, ...updates } : el
+          );
+
+          // Find the maximum duration among all video elements on this page
+          const maxVideoDuration = Math.max(
+            ...updatedElements
+              .filter(el => el.type === 'video')
+              .map(el => el.duration || 0),
+            5 // Minimum page duration
+          );
+
+          console.log('📄 Updating page duration to match video:', maxVideoDuration);
+
+          return {
+            ...page,
+            elements: updatedElements,
+            duration: maxVideoDuration
+          };
+        }
+
+        // No duration update needed, just update the element
         return {
           ...page,
           elements: page.elements.map(el =>
-            el.id === elementId ? { ...el, ...updates } : el
+            el.id === trackId ? { ...el, ...updates } : el
           )
         };
-      }
-      return page;
-    });
+      });
 
-    setPages(updatedPages);
-    setCanvasElements(canvasElements.map(el =>
-      el.id === elementId ? { ...el, ...updates } : el
-    ));
-
-    if (selectedElement?.id === elementId) {
-      setSelectedElement({ ...selectedElement, ...updates });
-    }
-  };
-
-  /**
-   * Handle element deletion (deletes from current page)
-   */
-  const handleDeleteElement = (elementId) => {
-    // Delete from pages
-    const updatedPages = pages.map((page, index) => {
-      if (index === currentPageIndex) {
-        return {
+      // Second pass: Recalculate startTime for all slides to prevent overlap
+      let accumulatedTime = 0;
+      const repositionedPages = updatedPages.map((page, index) => {
+        const pageWithStartTime = {
           ...page,
-          elements: page.elements.filter(el => el.id !== elementId)
+          startTime: accumulatedTime
         };
+        accumulatedTime += page.duration || 5;
+        return pageWithStartTime;
+      });
+
+      console.log('📐 Repositioned slides to prevent overlap');
+      return repositionedPages;
+    });
+  };
+
+  /**
+   * Handle video track delete
+   */
+  const handleVideoDelete = (trackId) => {
+    // Find the video element to get its URL
+    let videoUrl = null;
+    pages.forEach(page => {
+      const videoEl = page.elements.find(el => el.id === trackId && el.type === 'video');
+      if (videoEl) {
+        videoUrl = videoEl.src;
       }
-      return page;
     });
 
-    setPages(updatedPages);
-    setCanvasElements(canvasElements.filter(el => el.id !== elementId));
+    // Remove from canvas
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.filter(el => el.id !== trackId)
+    })));
 
-    if (selectedElement?.id === elementId) {
-      setSelectedElement(null);
+    // Also remove from media library if it exists there
+    if (videoUrl) {
+      setUploadedVideo(prev => prev.filter(video => video.url !== videoUrl));
     }
   };
 
-  // Get current page
-  const currentPage = pages[currentPageIndex] || pages[0];
-  const currentPageElements = currentPage?.elements || canvasElements;
-
-  // Handle background change
-  const handleBackgroundChange = (background) => {
-    const newPages = [...pages];
-    newPages[currentPageIndex] = {
-      ...newPages[currentPageIndex],
-      background
-    };
-    setPages(newPages);
-  };
-
   /**
-   * Handle adding audio track
+   * Handle slide duration update
    */
-  const handleAddAudioTrack = (audioFile, audioUrl) => {
-    console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
+  const handleSlideUpdate = (slideIndex, updates) => {
+    setPages(prevPages => {
+      // First pass: Update the specific slide
+      const updatedPages = prevPages.map((page, index) =>
+        index === slideIndex ? { ...page, ...updates } : page
+      );
 
-    // Create audio element to get duration
-    const audio = new Audio(audioUrl);
-    const trackId = `audio-${Date.now()}`;
-
-    console.log('🎬 Created audio element with ID:', trackId);
-
-    audio.addEventListener('loadedmetadata', () => {
-      console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
-      setAudioTracks(prevTracks => {
-        // Calculate the end time of the last audio track
-        let startTime = 0;
-        if (prevTracks.length > 0) {
-          // Find the maximum end time among all existing tracks
-          const maxEndTime = Math.max(...prevTracks.map(track =>
-            (track.startTime || 0) + (track.duration || 0)
-          ));
-          startTime = maxEndTime; // Position new audio at the end
-        }
-
-        const newTrack = {
-          id: trackId,
-          name: audioFile.name,
-          url: audioUrl,
-          duration: audio.duration,
-          startTime: startTime, // Auto-position at end of existing audio
-          volume: 100, // Default volume 100%
-          fadeIn: 0,
-          fadeOut: 0,
-          type: audioFile.name.toLowerCase().includes('voice') || audioFile.name.toLowerCase().includes('speech')
-            ? 'voiceover'
-            : audioFile.name.toLowerCase().includes('sfx') || audioFile.name.toLowerCase().includes('effect')
-            ? 'sfx'
-            : 'music' // Auto-detect type from filename
+      // Second pass: Recalculate startTime for all slides to prevent overlap
+      let accumulatedTime = 0;
+      const repositionedPages = updatedPages.map((page) => {
+        const pageWithStartTime = {
+          ...page,
+          startTime: accumulatedTime
         };
-
-        const updatedTracks = [...prevTracks, newTrack];
-        console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
-        return updatedTracks;
+        accumulatedTime += page.duration || 5;
+        return pageWithStartTime;
       });
 
-      // Set initial volume
-      audio.volume = 1.0; // 100%
-      audioRefs.current[trackId] = audio;
-    });
-
-    audio.addEventListener('error', (e) => {
-      console.error('❌ Audio loading error:', e);
-      console.error('❌ Audio error details:', {
-        error: audio.error,
-        code: audio.error?.code,
-        message: audio.error?.message,
-        src: audio.src
-      });
+      console.log('📐 Repositioned slides after duration update');
+      return repositionedPages;
     });
   };
 
-
-
-  /**
-   * Handle adding audio from library
-   * Adds to both uploadedAudio (media list) AND timeline
-   */
-  const handleAddFromLibrary = (audioData) => {
-    console.log('📁 handleAddFromLibrary called with:', audioData);
-
-    const url = audioData.url || audioData.audio_url;
-    const title = audioData.title || 'Library Audio';
-
-    console.log('📁 Extracted URL:', url);
-    console.log('📁 Extracted Title:', title);
-
-    if (!url) {
-      console.error('❌ No URL provided!');
-      showToast('Failed to add audio - no URL', 'error');
-      return;
+  const handleAudioSelect = (audioId) => {
+    console.log('🎵 Audio selected:', audioId);
+    const track = audioTracks.find(t => t.id === audioId);
+    if (track) {
+      handleSelectElement({ ...track, type: 'audio' });
     }
+  };
 
-    // Add to uploadedAudio (so it appears in "Your Media")
-    const newAudio = {
-      id: `audio-${Date.now()}-${Math.random()}`,
-      type: 'audio',
-      url: url,
-      title: title,
-      file: { name: title }
-    };
-    console.log('📁 Adding to uploadedAudio:', newAudio);
-    setUploadedAudio(prev => [...prev, newAudio]);
+  const handleVideoSelect = (videoId) => {
+    console.log('🎬 Video selected:', videoId);
+    const videoElement = currentPage?.elements.find(el => el.id === videoId);
+    if (videoElement) {
+      handleSelectElement(videoElement);
+    }
+  };
 
-    // Add to timeline
-    console.log('📁 Calling handleAddAudioTrack with:', { name: title }, url);
-    handleAddAudioTrack({ name: title }, url);
-
-    showToast('Audio added to timeline and media library', 'success');
-    setIsAudioLibraryOpen(false);
+  const handleSlideSelect = (slideIndex) => {
+    console.log('📊 Slide selected:', slideIndex);
+    const slide = pages[slideIndex];
+    if (slide) {
+      // Create a slide element object for the properties panel
+      const slideElement = {
+        ...slide,
+        type: 'slide',
+        id: slide.id || `slide-${slideIndex}`,
+        name: slide.name || `Slide ${slideIndex + 1}`,
+        slideIndex // Store the index for updates
+      };
+      handleSelectElement(slideElement);
+    }
   };
 
   /**
@@ -380,299 +647,73 @@ const DesignEditor = () => {
   };
 
   /**
-   * Handle audio track update (drag, stretch, properties)
+   * Check if all assets are ready for playback
    */
-  const handleAudioUpdate = (trackId, updates) => {
-    setAudioTracks(prevTracks => {
-      const updatedTracks = prevTracks.map(track =>
-        track.id === trackId ? { ...track, ...updates } : track
-      );
-      return updatedTracks;
-    });
-
-    // Apply volume/fade changes immediately to audio element
-    if ((updates.volume !== undefined || updates.fadeIn !== undefined || updates.fadeOut !== undefined) && audioRefs.current[trackId]) {
-      const track = audioTracks.find(t => t.id === trackId);
-      if (track) {
-        const audio = audioRefs.current[trackId];
-        const currentTrackTime = audio.currentTime;
-        applyFadeEffect(audio, { ...track, ...updates }, currentTrackTime);
-      }
-    }
-  };
+  useEffect(() => {
+    setAssetsReady(loadingAssets.size === 0);
+  }, [loadingAssets]);
 
   /**
-   * Handle audio track delete
-   * Removes from BOTH timeline AND uploaded media list
-   */
-  const handleAudioDelete = (trackId) => {
-    // Find the track to get its URL
-    const track = audioTracks.find(t => t.id === trackId);
-
-    // Remove from timeline
-    setAudioTracks(audioTracks.filter(track => track.id !== trackId));
-
-    // Remove from uploaded media list (match by URL)
-    if (track?.url) {
-      setUploadedAudio(prev => prev.filter(m => m.url !== track.url));
-    }
-
-    // Clean up audio ref
-    if (audioRefs.current[trackId]) {
-      const audio = audioRefs.current[trackId];
-      audio.pause();
-      audio.src = '';
-      delete audioRefs.current[trackId];
-    }
-
-    // Deselect if this track was selected
-    if (selectedAudioTrack?.id === trackId) {
-      setSelectedAudioTrack(null);
-    }
-  };
-
-  /**
-   * Handle audio track selection
-   */
-  const handleAudioSelect = (trackId) => {
-    const track = audioTracks.find(t => t.id === trackId);
-    setSelectedAudioTrack(track || null);
-    // Deselect canvas element when audio is selected
-    setSelectedElement(null);
-  };
-
-  /**
-   * Handle video track update
-   */
-  const handleVideoUpdate = (trackId, updates) => {
-    console.log('🎬 Updating video track:', trackId, updates);
-
-    setVideoTracks(prevTracks => {
-      const updatedTracks = prevTracks.map(track =>
-        track.id === trackId ? { ...track, ...updates } : track
-      );
-      return updatedTracks;
-    });
-
-    // Also update the canvas element if properties changed
-    if (updates.volume !== undefined || updates.playbackSpeed !== undefined ||
-        updates.loop !== undefined || updates.muted !== undefined) {
-      const track = videoTracks.find(t => t.id === trackId);
-      if (track?.elementId) {
-        handleUpdateElement(track.elementId, updates);
-      }
-    }
-
-    // If duration changed (trimming), update the canvas element and slide duration
-    if (updates.duration !== undefined) {
-      const track = videoTracks.find(t => t.id === trackId);
-      if (track?.elementId) {
-        handleUpdateElement(track.elementId, { duration: updates.duration });
-
-        // Update slide duration if this is the only/main video on the slide
-        const updatedPages = pages.map((page, index) => {
-          if (index === track.slideIndex) {
-            return {
-              ...page,
-              duration: Math.ceil(updates.duration)
-            };
-          }
-          return page;
-        });
-        setPages(updatedPages);
-      }
-    }
-  };
-
-  /**
-   * Handle video track delete
-   * Removes from BOTH timeline AND canvas element
-   */
-  const handleVideoDelete = (trackId) => {
-    const track = videoTracks.find(t => t.id === trackId);
-
-    // Revoke blob URL to free memory
-    if (track?.url && track.url.startsWith('blob:')) {
-      URL.revokeObjectURL(track.url);
-    }
-
-    // Remove from timeline
-    setVideoTracks(videoTracks.filter(t => t.id !== trackId));
-
-    // Remove canvas element
-    if (track?.elementId) {
-      handleDeleteElement(track.elementId);
-    }
-
-    // Remove from uploaded media list (match by URL)
-    if (track?.src) {
-      setUploadedVideo(prev => prev.filter(m => m.url !== track.src));
-    }
-
-    // Clean up video ref
-    if (videoRefs.current[trackId]) {
-      const video = videoRefs.current[trackId];
-      video.pause();
-      video.src = '';
-      delete videoRefs.current[trackId];
-    }
-
-    // Deselect if this track was selected
-    if (selectedVideoTrack === trackId) {
-      setSelectedVideoTrack(null);
-    }
-  };
-
-  /**
-   * Handle video track selection
-   */
-  const handleVideoSelect = (trackId) => {
-    const track = videoTracks.find(t => t.id === trackId);
-    setSelectedVideoTrack(track?.id || null);
-
-    // Also select the canvas element
-    if (track?.elementId) {
-      const element = currentPageElements.find(el => el.id === track.elementId);
-      if (element) {
-        setSelectedElement(element);
-      }
-    }
-  };
-
-
-
-  /**
-   * Handle audio delete request (opens confirmation dialog)
-   */
-  const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
-    setAudioDeleteDialog({
-      isOpen: true,
-      audioId,
-      audioTitle,
-      mediaId
-    });
-  };
-
-  /**
-   * Confirm audio deletion
-   */
-  const confirmAudioDelete = () => {
-    const { audioId, mediaId } = audioDeleteDialog;
-
-    // Delete from audio tracks (timeline)
-    if (audioId) {
-      handleAudioDelete(audioId);
-    }
-
-    // Delete from uploaded audio (media library)
-    if (mediaId) {
-      setUploadedAudio(prev => prev.filter(m => m.id !== mediaId));
-    }
-
-    // Close dialog
-    setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
-  };
-
-  /**
-   * Handle video delete request (opens confirmation dialog)
-   */
-  const handleVideoDeleteRequest = (videoId, videoTitle, mediaId) => {
-    setVideoDeleteDialog({
-      isOpen: true,
-      videoId,
-      videoTitle,
-      mediaId
-    });
-  };
-
-  /**
-   * Confirm video deletion
-   */
-  const confirmVideoDelete = () => {
-    const { videoId, mediaId } = videoDeleteDialog;
-
-    // Delete from video tracks (timeline) and canvas
-    if (videoId) {
-      handleVideoDelete(videoId);
-
-      // Also close properties panel if this video element is selected
-      if (selectedElement && selectedElement.id === videoId) {
-        setSelectedElement(null);
-      }
-    }
-
-    // Delete from media library
-    if (mediaId) {
-      setUploadedVideo(prev => prev.filter(m => m.id !== mediaId));
-    }
-
-    // Close dialog
-    setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
-  };
-
-  /**
-   * Handle slide duration update
-   */
-  const handleSlideUpdate = (slideIndex, updates) => {
-    const newPages = pages.map((page, index) =>
-      index === slideIndex ? { ...page, ...updates } : page
-    );
-    setPages(newPages);
-  };
-
-  /**
-   * Handle timeline seek
-   */
-  const handleSeek = (time) => {
-    setCurrentTime(time);
-    // Update all audio elements and apply fade effects
-    audioTracks.forEach(track => {
-      const audio = audioRefs.current[track.id];
-      if (audio) {
-        const trackTime = time - track.startTime;
-        const originalDuration = audio.duration;
-
-        if (trackTime >= 0 && trackTime <= track.duration) {
-          // Calculate actual audio position (loop if stretched)
-          const actualAudioTime = trackTime % originalDuration;
-          audio.currentTime = actualAudioTime;
-          applyFadeEffect(audio, track, trackTime);
-        }
-      }
-    });
-  };
-
-  /**
-   * Handle play
+   * Handle play/pause for timeline
    */
   const handlePlay = () => {
-    setIsPlaying(true);
-    // Play all audio tracks that should be playing at current time
+    // Check if assets are still loading
+    if (loadingAssets.size > 0) {
+      console.log('⏳ Assets still loading, cannot play yet');
+      showToast('Please wait, loading media assets...', 'info');
+      return;
+    }
+
+    console.log('▶️ Play button clicked');
+
+    // First, pause all currently playing audio to prevent overlap
     audioTracks.forEach(track => {
       const audio = audioRefs.current[track.id];
-      if (audio && currentTime >= track.startTime && currentTime < track.startTime + track.duration) {
-        const trackTime = currentTime - track.startTime;
-        const originalDuration = audio.duration;
-
-        // Calculate actual audio position (loop if stretched)
-        const actualAudioTime = trackTime % originalDuration;
-        audio.currentTime = actualAudioTime;
-        applyFadeEffect(audio, track, trackTime);
-        audio.play();
-      }
-    });
-  };
-
-  /**
-   * Handle pause
-   */
-  const handlePause = () => {
-    setIsPlaying(false);
-    // Pause all audio tracks
-    Object.values(audioRefs.current).forEach(audio => {
-      if (audio) {
+      if (audio && !audio.paused) {
         audio.pause();
       }
+    });
+
+    // Pause all video elements
+    pages.forEach(page => {
+      page.elements.forEach(element => {
+        if (element.type === 'video') {
+          const videoRef = videoElementRefs.current[element.id];
+          if (videoRef && !videoRef.paused) {
+            videoRef.pause();
+          }
+        }
+      });
+    });
+
+    // Now start playback
+    setIsPlaying(true);
+  };
+
+  const handlePause = () => {
+    console.log('⏸️ Pause button clicked');
+    setIsPlaying(false);
+
+    // Pause all audio elements
+    audioTracks.forEach(track => {
+      const audio = audioRefs.current[track.id];
+      if (audio && !audio.paused) {
+        console.log(`⏸️ Pausing audio ${track.id}`);
+        audio.pause();
+      }
+    });
+
+    // Pause all video elements
+    pages.forEach(page => {
+      page.elements.forEach(element => {
+        if (element.type === 'video') {
+          const videoRef = videoElementRefs.current[element.id];
+          if (videoRef && !videoRef.paused) {
+            console.log(`⏸️ Pausing video ${element.id}`);
+            videoRef.pause();
+          }
+        }
+      });
     });
   };
 
@@ -683,6 +724,7 @@ const DesignEditor = () => {
     let animationFrame;
 
     if (isPlaying) {
+      console.log('🎬 Playback loop started');
       const updatePlayhead = () => {
         setCurrentTime(prevTime => {
           const newTime = prevTime + 0.016; // ~60fps
@@ -719,12 +761,21 @@ const DesignEditor = () => {
               const originalDuration = audio.duration; // Original audio file duration
               const displayDuration = track.duration; // Stretched/trimmed duration on timeline
 
+              // Skip if audio metadata not loaded yet (duration is NaN)
+              if (!isFinite(originalDuration) || originalDuration <= 0) {
+                return;
+              }
+
               if (trackTime >= 0 && trackTime <= displayDuration) {
                 if (audio.paused) {
                   // Calculate actual audio position when starting playback
                   const actualAudioTime = trackTime % originalDuration;
-                  audio.currentTime = actualAudioTime;
-                  audio.play().catch(err => console.error('Audio play error:', err));
+                  // Validate the calculated time before setting
+                  if (isFinite(actualAudioTime) && actualAudioTime >= 0) {
+                    console.log(`🎵 Starting audio track ${track.id} at ${actualAudioTime.toFixed(2)}s`);
+                    audio.currentTime = actualAudioTime;
+                    audio.play().catch(err => console.error('Audio play error:', err));
+                  }
                 } else {
                   // Check if audio needs to loop (reached end of original duration)
                   if (audio.currentTime >= originalDuration - 0.05) {
@@ -738,6 +789,69 @@ const DesignEditor = () => {
                 audio.pause();
               }
             }
+          });
+
+          // Update video elements on canvas
+          pages.forEach((page, pageIndex) => {
+            page.elements.forEach(element => {
+              if (element.type === 'video') {
+                const videoRef = videoElementRefs.current[element.id];
+
+                // Debug logging
+                if (!videoRef) {
+                  console.log(`⚠️ Video ref not found for element ${element.id}`);
+                  console.log('Available video refs:', Object.keys(videoElementRefs.current));
+                  return;
+                }
+
+                if (!isFinite(videoRef.duration) || videoRef.duration <= 0) {
+                  console.log(`⚠️ Video ${element.id} metadata not loaded yet (duration: ${videoRef.duration})`);
+                  return;
+                }
+
+                // Calculate if this video should be playing based on page timing
+                // Use explicit startTime if available, otherwise calculate sequentially
+                const pageStartTime = page.startTime !== undefined
+                  ? page.startTime
+                  : pages.slice(0, pageIndex).reduce((sum, p) => sum + (p.duration || 5), 0);
+                const pageEndTime = pageStartTime + (page.duration || 5);
+
+                console.log(`🎬 Video ${element.id}: currentTime=${newTime.toFixed(2)}s, pageStart=${pageStartTime.toFixed(2)}s, pageEnd=${pageEndTime.toFixed(2)}s, pageIndex=${pageIndex}, currentPageIndex=${currentPageIndex}`);
+
+                if (newTime >= pageStartTime && newTime < pageEndTime) {
+                  // Video should be playing
+                  const videoTime = newTime - pageStartTime;
+
+                  // Get the original (natural) duration and stretched duration
+                  const originalDuration = element.originalDuration || videoRef.duration;
+                  const stretchedDuration = element.duration || videoRef.duration;
+
+                  // Calculate looped video time if video is stretched beyond its natural duration
+                  // If stretched to 20s and video is 4s, it should loop 5 times
+                  const loopedVideoTime = videoTime % originalDuration;
+
+                  if (videoRef.paused) {
+                    // Start playing the video
+                    if (isFinite(loopedVideoTime) && loopedVideoTime >= 0) {
+                      console.log(`🎬 Starting video ${element.id} at ${loopedVideoTime.toFixed(2)}s (looped from ${videoTime.toFixed(2)}s, stretched: ${stretchedDuration.toFixed(2)}s, original: ${originalDuration.toFixed(2)}s)`);
+                      videoRef.currentTime = loopedVideoTime;
+                      videoRef.play().catch(err => console.error('Video play error:', err));
+                    }
+                  } else {
+                    // Sync video time if it drifts too much
+                    const drift = Math.abs(videoRef.currentTime - loopedVideoTime);
+                    if (drift > 0.5 && isFinite(loopedVideoTime)) {
+                      console.log(`🔄 Syncing video ${element.id} time: ${loopedVideoTime.toFixed(2)}s (was ${videoRef.currentTime.toFixed(2)}s)`);
+                      videoRef.currentTime = loopedVideoTime;
+                    }
+                  }
+                } else if (!videoRef.paused) {
+                  // Video should not be playing
+                  console.log(`🎬 Pausing video ${element.id} (outside page time range)`);
+                  videoRef.pause();
+                }
+              }
+            });
           });
 
           return newTime;
@@ -754,311 +868,644 @@ const DesignEditor = () => {
         cancelAnimationFrame(animationFrame);
       }
     };
-  }, [isPlaying, audioTracks, pages]);
+  }, [isPlaying, audioTracks, pages]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Create Audio elements for audio tracks
+   */
+  useEffect(() => {
+    const createAudioElements = async () => {
+      // Track which assets are loading
+      const loadingSet = new Set();
+
+      for (const track of audioTracks) {
+        const audioUrl = track.src || track.url; // Support both 'src' and 'url' properties
+        if (!audioRefs.current[track.id] && audioUrl) {
+          console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
+
+          // Mark as loading
+          loadingSet.add(track.id);
+          setLoadingAssets(prev => new Set([...prev, track.id]));
+
+          try {
+            // Use the centralized authentication utility
+            const processedUrl = await fetchAuthenticatedAudio(audioUrl);
+            console.log(`✅ Processed audio URL for track ${track.id}`);
+
+            const audio = new Audio(processedUrl);
+            audio.volume = (track.volume || 100) / 100;
+            audio.loop = false;
+
+            // Add loadedmetadata listener to track when audio is ready
+            audio.addEventListener('loadedmetadata', () => {
+              console.log(`✅ Audio metadata loaded for ${track.id}`);
+              setLoadingAssets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(track.id);
+                return newSet;
+              });
+            });
+
+            // Add event listeners to sync audio state with React state
+            audio.addEventListener('ended', () => {
+              console.log(`🎵 Audio track ${track.id} ended`);
+              // Check if all audio tracks have ended
+              const allAudioEnded = audioTracks.every(t => {
+                const a = audioRefs.current[t.id];
+                return !a || a.ended || a.paused;
+              });
+              if (allAudioEnded) {
+                console.log('⏹️ All audio ended, stopping playback');
+                setIsPlaying(false);
+              }
+            });
+
+            audio.addEventListener('pause', () => {
+              console.log(`⏸️ Audio track ${track.id} paused`);
+            });
+
+            audio.addEventListener('play', () => {
+              console.log(`▶️ Audio track ${track.id} playing`);
+            });
+
+            audio.addEventListener('error', (e) => {
+              console.error(`❌ Audio track ${track.id} error:`, e);
+              setIsPlaying(false);
+              // Remove from loading set on error
+              setLoadingAssets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(track.id);
+                return newSet;
+              });
+            });
+
+            audioRefs.current[track.id] = audio;
+          } catch (error) {
+            console.error(`❌ Error creating audio element for ${track.id}:`, error);
+            // Remove from loading set on error
+            setLoadingAssets(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(track.id);
+              return newSet;
+            });
+          }
+        }
+      }
+    };
+
+    createAudioElements();
+
+    // Cleanup removed tracks
+    Object.keys(audioRefs.current).forEach(trackId => {
+      if (!audioTracks.find(t => t.id === trackId)) {
+        console.log(`🗑️ Removing audio element for track: ${trackId}`);
+        const audio = audioRefs.current[trackId];
+        if (audio) {
+          audio.pause();
+          audio.src = '';
+          // Remove event listeners
+          audio.removeEventListener('ended', () => {});
+          audio.removeEventListener('pause', () => {});
+          audio.removeEventListener('play', () => {});
+          audio.removeEventListener('error', () => {});
+        }
+        delete audioRefs.current[trackId];
+      }
+    });
+  }, [audioTracks]);
 
   /**
    * Auto-navigate to the slide that corresponds to current playhead position
-   * Works both during playback AND when marker is moved manually
+   * Only during playback - don't auto-switch when user is editing
    */
   useEffect(() => {
-    if (pages.length > 0) {
-      // Calculate which slide should be visible based on current time
-      let accumulatedTime = 0;
-      for (let i = 0; i < pages.length; i++) {
-        const slideDuration = pages[i].duration || 5;
-        if (currentTime >= accumulatedTime && currentTime < accumulatedTime + slideDuration) {
-          if (currentPageIndex !== i) {
-            console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s`);
-            setCurrentPageIndex(i);
-          }
-          break;
+    // Only auto-navigate during playback, not when editing
+    if (!isPlaying || pages.length === 0) return;
+
+    // Calculate which slide should be visible based on current time
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      // Use explicit startTime if available, otherwise calculate sequentially
+      const pageStartTime = page.startTime !== undefined
+        ? page.startTime
+        : pages.slice(0, i).reduce((sum, p) => sum + (p.duration || 5), 0);
+      const pageEndTime = pageStartTime + (page.duration || 5);
+
+      if (currentTime >= pageStartTime && currentTime < pageEndTime) {
+        if (currentPageIndex !== i) {
+          console.log(`Auto-switching to slide ${i + 1} at time ${currentTime.toFixed(2)}s (page start: ${pageStartTime.toFixed(2)}s)`);
+          setCurrentPageIndex(i);
         }
-        accumulatedTime += slideDuration;
+        break;
       }
     }
-  }, [currentTime, pages]);
+  }, [currentTime, pages, isPlaying]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /**
-   * Control video playback based on timeline position and current slide
-   * Videos play when their slide is active and timeline is playing
-   */
-  useEffect(() => {
-    const currentPage = pages[currentPageIndex];
-    if (!currentPage) return;
+  const handleAudioDeleteRequest = (audioId, audioTitle, mediaId) => {
+    setAudioDeleteDialog({
+      isOpen: true,
+      audioId,
+      audioTitle,
+      mediaId
+    });
+  };
 
-    // Find all video elements on the current page
-    const videoElements = currentPage.elements?.filter(el => el.type === 'video') || [];
+  const confirmAudioDelete = () => {
+    const { audioId, mediaId } = audioDeleteDialog;
 
-    // Calculate the time offset within the current slide
-    let slideStartTime = 0;
-    for (let i = 0; i < currentPageIndex; i++) {
-      slideStartTime += pages[i].duration || 5;
+    // Find the media item to get its URL
+    const mediaItem = uploadedAudio.find(audio => audio.id === mediaId);
+    const mediaUrl = mediaItem?.url;
+
+    // Remove from timeline - check by both ID and URL
+    setAudioTracks(prev => prev.filter(track => {
+      // Remove if ID matches OR URL matches
+      if (audioId && track.id === audioId) return false;
+      if (mediaUrl && track.url === mediaUrl) return false;
+      return true;
+    }));
+
+    // Remove from media list (NOT from backend library - users must delete from library page)
+    if (mediaId) {
+      setUploadedAudio(prev => prev.filter(audio => audio.id !== mediaId));
     }
-    const timeInSlide = currentTime - slideStartTime;
 
-    console.log('🎬 Video playback control:', {
-      currentPageIndex,
-      videoCount: videoElements.length,
-      isPlaying,
-      currentTime,
-      slideStartTime,
-      timeInSlide,
-      slideDuration: currentPage.duration || 5
-    });
-
-    videoElements.forEach(videoElement => {
-      // Find the video DOM element
-      const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
-
-      if (videoEl) {
-        console.log('🎬 Found video element:', videoElement.id, {
-          paused: videoEl.paused,
-          currentTime: videoEl.currentTime,
-          readyState: videoEl.readyState,
-          duration: videoEl.duration
-        });
-
-        // Store ref for cleanup
-        videoElementRefs.current[videoElement.id] = videoEl;
-
-        // Apply video properties
-        videoEl.volume = (videoElement.volume || 100) / 100;
-        videoEl.playbackRate = videoElement.playbackSpeed || 1;
-        videoEl.loop = videoElement.loop || false;
-        videoEl.muted = videoElement.muted !== undefined ? videoElement.muted : true;
-
-        if (isPlaying && timeInSlide >= 0 && timeInSlide < (currentPage.duration || 5)) {
-          console.log('🎬 Should play video:', videoElement.id);
-
-          // Sync video time with timeline position
-          if (Math.abs(videoEl.currentTime - timeInSlide) > 0.5) {
-            console.log('🎬 Syncing video time:', timeInSlide);
-            videoEl.currentTime = timeInSlide;
-          }
-
-          // Play video if paused
-          if (videoEl.paused) {
-            console.log('🎬 Playing video:', videoElement.id);
-            videoEl.play().catch(err => {
-              console.error('❌ Video play error:', err);
-              // Try to play muted if autoplay is blocked
-              if (err.name === 'NotAllowedError') {
-                console.log('🎬 Retrying with muted=true');
-                videoEl.muted = true;
-                videoEl.play().catch(err2 => console.error('❌ Video play error (muted):', err2));
-              }
-            });
-          }
-        } else {
-          // Pause video if not in active range
-          if (!videoEl.paused) {
-            console.log('🎬 Pausing video:', videoElement.id);
-            videoEl.pause();
-          }
-        }
-      } else {
-        console.warn('⚠️ Video element not found in DOM:', videoElement.id);
-      }
-    });
-
-    // Pause videos on other slides
-    pages.forEach((page, pageIndex) => {
-      if (pageIndex !== currentPageIndex) {
-        const otherVideoElements = page.elements?.filter(el => el.type === 'video') || [];
-        otherVideoElements.forEach(videoElement => {
-          const videoEl = document.querySelector(`video[data-video-element-id="${videoElement.id}"]`);
-          if (videoEl && !videoEl.paused) {
-            console.log('🎬 Pausing video on other slide:', videoElement.id);
-            videoEl.pause();
-            videoEl.currentTime = 0;
-          }
-        });
-      }
-    });
-  }, [currentTime, isPlaying, currentPageIndex, pages]);
+    setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null });
+    showToast('Audio removed from editor', 'success');
+  };
 
   /**
-   * Cleanup blob URLs on unmount to prevent memory leaks
+   * Handle video delete request
    */
-  useEffect(() => {
-    return () => {
-      // Cleanup video blob URLs
-      uploadedVideo.forEach(video => {
-        if (video.url && video.url.startsWith('blob:')) {
-          URL.revokeObjectURL(video.url);
-        }
-      });
+  const handleVideoDeleteRequest = (videoId, videoTitle, mediaId) => {
+    setVideoDeleteDialog({
+      isOpen: true,
+      videoId,
+      videoTitle,
+      mediaId
+    });
+  };
 
-      // Cleanup audio blob URLs
-      uploadedAudio.forEach(audio => {
-        if (audio.url && audio.url.startsWith('blob:')) {
-          URL.revokeObjectURL(audio.url);
+  const confirmVideoDelete = () => {
+    const { videoId, mediaId } = videoDeleteDialog;
+
+    // Find the media item to get its URL
+    const mediaItem = uploadedVideo.find(video => video.id === mediaId);
+    const mediaUrl = mediaItem?.url;
+
+    // Remove from canvas - check by both ID and URL
+    setPages(prevPages => prevPages.map(page => ({
+      ...page,
+      elements: page.elements.filter(el => {
+        // Remove if it's a video element AND (ID matches OR URL matches)
+        if (el.type === 'video') {
+          if (videoId && el.id === videoId) return false;
+          if (mediaUrl && el.src === mediaUrl) return false;
         }
-      });
-    };
-  }, []); // Empty deps - only run on unmount
+        return true;
+      })
+    })));
+
+    // Remove from media list (NOT from backend library - users must delete from library page)
+    if (mediaId) {
+      setUploadedVideo(prev => prev.filter(video => video.id !== mediaId));
+    }
+
+    setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null });
+    showToast('Video removed from editor', 'success');
+  };
+
+  /**
+   * Handle image delete request
+   */
+  const handleImageDeleteRequest = (imageUrl, imageTitle, mediaId) => {
+    // Show confirmation dialog
+    setImageDeleteDialog({
+      isOpen: true,
+      imageUrl,
+      imageTitle,
+      mediaId
+    });
+  };
+
+  const confirmImageDelete = () => {
+    const { imageUrl, mediaId } = imageDeleteDialog;
+
+    // Find the media item to get its URL if not provided
+    const mediaItem = uploadedImage.find(image => image.id === mediaId);
+    const mediaUrl = imageUrl || mediaItem?.url;
+
+    // Remove all instances from canvas - check by URL
+    if (mediaUrl) {
+      setPages(prevPages => prevPages.map(page => ({
+        ...page,
+        elements: page.elements.filter(el => {
+          // Remove if it's an image element AND URL matches
+          if (el.type === 'image' && el.src === mediaUrl) {
+            return false;
+          }
+          return true;
+        })
+      })));
+    }
+
+    // Remove from media list (NOT from backend library - users must delete from library page)
+    if (mediaId) {
+      setUploadedImage(prev => prev.filter(image => image.id !== mediaId));
+    }
+
+    setImageDeleteDialog({ isOpen: false, imageUrl: null, imageTitle: null, mediaId: null });
+    showToast('Image removed from editor', 'success');
+  };
+
+  /**
+   * Handle save with toast notification
+   */
+  const handleSaveWithToast = async () => {
+    try {
+      await handleSaveProject();
+      showToast('Project saved successfully', 'success');
+    } catch (error) {
+      showToast(`Failed to save project: ${error.message}`, 'error');
+    }
+  };
+
+  /**
+   * Handle create new project
+   */
+  const handleCreateNewProject = () => {
+    // Reset to default state
+    setPages([{
+      id: 'page-1',
+      name: 'Page 1',
+      elements: [],
+      background: { type: 'solid', color: '#ffffff' },
+      duration: 5,
+      startTime: 0
+    }]);
+    setCurrentPageIndex(0);
+    setAudioTracks([]);
+
+    // Create a new project with default name
+    const defaultName = `Project ${new Date().toLocaleDateString()}`;
+    setCurrentProject({
+      name: defaultName,
+      project_id: null // Will be assigned when saved
+    });
+
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
+    showToast('New project created', 'success');
+  };
+
+  /**
+   * Handle project name edit start
+   */
+  const handleStartEditingProjectName = () => {
+    setEditedProjectName(currentProject?.name || '');
+    setIsEditingProjectName(true);
+  };
+
+  /**
+   * Handle project name save
+   */
+  const handleSaveProjectName = () => {
+    if (editedProjectName.trim()) {
+      setCurrentProject(prev => ({
+        ...prev,
+        name: editedProjectName.trim()
+      }));
+      setIsEditingProjectName(false);
+      showToast('Project name updated', 'success');
+    } else {
+      setIsEditingProjectName(false);
+    }
+  };
+
+  /**
+   * Handle project name cancel
+   */
+  const handleCancelEditingProjectName = () => {
+    setIsEditingProjectName(false);
+    setEditedProjectName('');
+  };
 
   return (
     <div className="flex h-full bg-gray-50">
-      {/* Left Sidebar - Tools */}
+      {/* Sidebar */}
       <Sidebar
-        selectedTool={selectedTool}
-        onSelectTool={setSelectedTool}
-        onAddElement={handleAddElement}
-        onAddMultiplePages={handleAddMultiplePages}
-        onAddAudioTrack={handleAddAudioTrack}
-        currentBackground={currentPage?.background}
-        onBackgroundChange={handleBackgroundChange}
-        audioTracks={audioTracks}
-        onAudioSelect={handleAudioSelect}
-        onAudioDeleteRequest={handleAudioDeleteRequest}
-        videoTracks={videoTracks}
-        onVideoDeleteRequest={handleVideoDeleteRequest}
-        uploadedAudio={uploadedAudio}
-        onUploadedAudioChange={setUploadedAudio}
-        uploadedVideo={uploadedVideo}
-        onUploadedVideoChange={setUploadedVideo}
-        onOpenAudioLibrary={() => setIsAudioLibraryOpen(true)}
-      />
+          selectedTool={selectedTool}
+          onSelectTool={setSelectedTool}
+          onAddElement={handleAddElement}
+          onAddMultiplePages={handleAddMultiplePages}
+          onAddAudioTrack={handleAddAudioTrack}
+          currentBackground={currentPage?.background}
+          onBackgroundChange={handleBackgroundChange}
+          audioTracks={audioTracks}
+          onAudioSelect={handleAudioSelect}
+          onAudioDeleteRequest={handleAudioDeleteRequest}
+          videoTracks={videoTracks}
+          onVideoDeleteRequest={handleVideoDeleteRequest}
+          onImageDeleteRequest={handleImageDeleteRequest}
+          uploadedAudio={uploadedAudio}
+          onUploadedAudioChange={setUploadedAudio}
+          uploadedImage={uploadedImage}
+          onUploadedImageChange={setUploadedImage}
+          uploadedVideo={uploadedVideo}
+          onUploadedVideoChange={setUploadedVideo}
+          onOpenAudioLibrary={() => navigate('/audio-studio/library', {
+            state: {
+              fromEditor: true,
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
+            }
+          })}
+          onOpenImageLibrary={() => navigate('/asset-management/images', {
+            state: {
+              fromEditor: true,
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
+            }
+          })}
+          onOpenVideoLibrary={() => navigate('/asset-management/videos', {
+            state: {
+              fromEditor: true,
+              returnPath: location.pathname + location.search,
+              returnTool: selectedTool  // Preserve selected tool
+            }
+          })}
+        />
 
       {/* Main Canvas Area */}
       <div className="flex-1 flex flex-col">
-        {/* Page Navigation */}
-        {pages.length > 1 && (
-          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center gap-3">
+        {/* Project Toolbar */}
+        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* Create New Project */}
             <button
-              onClick={() => setCurrentPageIndex(Math.max(0, currentPageIndex - 1))}
-              disabled={currentPageIndex === 0}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
+              onClick={handleCreateNewProject}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
             >
-              ← Previous
-            </button>
-            <span className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-100 rounded-lg">
-              Slide {currentPageIndex + 1} / {pages.length}
-            </span>
-            <button
-              onClick={() => setCurrentPageIndex(Math.min(pages.length - 1, currentPageIndex + 1))}
-              disabled={currentPageIndex === pages.length - 1}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
-            >
-              Next →
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Project
             </button>
 
-            {/* Slide Controls - Add & Delete */}
-            <div className="flex items-center gap-2 ml-4 border-l border-gray-300 pl-4">
+            {/* Save Project */}
+            <button
+              onClick={handleSaveWithToast}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+            >
+              {isSaving ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                  </svg>
+                  Save
+                </>
+              )}
+            </button>
+
+            {/* Load Project */}
+            <button
+              onClick={() => navigate('/asset-management/projects', { state: { fromEditor: true } })}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 2 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+              </svg>
+              Load
+            </button>
+
+            {/* Export Project */}
+            <button
+              onClick={() => showToast('Export functionality coming soon', 'info')}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+            </button>
+          </div>
+
+          {/* Project Name - Editable */}
+          <div className="flex items-center gap-2">
+            {isEditingProjectName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editedProjectName}
+                  onChange={(e) => setEditedProjectName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveProjectName();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEditingProjectName();
+                    }
+                  }}
+                  className="px-3 py-1.5 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
+                  placeholder="Enter project name"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveProjectName}
+                  className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  title="Save name"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleCancelEditingProjectName}
+                  className="p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  title="Cancel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-gray-600">
+                  <span className="font-medium">Project:</span>{' '}
+                  <span className="text-gray-900">
+                    {currentProject?.name || 'Untitled Project'}
+                  </span>
+                </div>
+                {currentProject && (
+                  <button
+                    onClick={handleStartEditingProjectName}
+                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                    title="Edit project name"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Page Navigation */}
+        {pages.length > 1 && (
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => {
-                  // Duplicate current slide
-                  const currentSlide = pages[currentPageIndex];
-                  const newSlide = {
-                    ...currentSlide,
-                    id: `page-${Date.now()}`,
-                    name: `Slide ${pages.length + 1}`,
-                    elements: currentSlide.elements.map(el => ({
-                      ...el,
-                      id: `element-${Date.now()}-${Math.random()}`
-                    }))
-                  };
-                  const newPages = [
-                    ...pages.slice(0, currentPageIndex + 1),
-                    newSlide,
-                    ...pages.slice(currentPageIndex + 1)
-                  ];
-                  setPages(newPages);
-                  setCurrentPageIndex(currentPageIndex + 1);
-                }}
-                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-lg font-bold shadow-sm"
-                title="Duplicate current slide"
+                onClick={handlePreviousPage}
+                disabled={currentPageIndex === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
               >
-                +
+                ← Previous
               </button>
+              <span className="text-sm font-semibold text-gray-900 px-3 py-2 bg-gray-100 rounded-lg">
+                Slide {currentPageIndex + 1} / {pages.length}
+              </span>
               <button
-                onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
-                className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
-                title="Delete current slide"
+                onClick={handleNextPage}
+                disabled={currentPageIndex === pages.length - 1}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm"
               >
-                🗑️
+                Next →
               </button>
+              <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+                <button
+                  onClick={() => handleDuplicatePage(currentPageIndex)}
+                  className="w-8 h-8 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                  title="Duplicate current slide"
+                >
+                  +
+                </button>
+                <button
+                  onClick={() => setDeleteDialog({ isOpen: true, slideIndex: currentPageIndex })}
+                  className="w-8 h-8 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center text-base shadow-sm"
+                  title="Delete current slide"
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
-          {/* Canvas Area - Takes remaining space */}
-          <div className="flex-1 overflow-hidden relative" style={{ minHeight: 0 }}>
-            <Canvas
-              elements={currentPageElements}
-              selectedElement={selectedElement}
-              onSelectElement={handleSelectElement}
-              onUpdateElement={handleUpdateElement}
-              onDeleteElement={handleDeleteElement}
-              background={currentPage?.background}
-            />
-          </div>
+        {/* Canvas */}
+        <Canvas
+          elements={currentPage?.elements || []}
+          selectedElement={selectedElement}
+          onSelectElement={handleSelectElement}
+          onUpdateElement={handleUpdateElement}
+          onDeleteElement={handleDeleteElement}
+          background={currentPage?.background}
+          registerVideoRef={registerVideoRef}
+          unregisterVideoRef={unregisterVideoRef}
+        />
 
-          {/* Audio Timeline at Bottom - Fixed height */}
-          <AudioTimelineRefactored
-            audioTracks={audioTracks}
-            videoTracks={videoTracks}
-            slides={pages}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            selectedAudioId={selectedAudioTrack?.id}
-            selectedVideoId={selectedVideoTrack}
-            onAudioUpdate={handleAudioUpdate}
-            onAudioDelete={handleAudioDelete}
-            onAudioSelect={handleAudioSelect}
-            onVideoUpdate={handleVideoUpdate}
-            onVideoDelete={handleVideoDelete}
-            onVideoSelect={handleVideoSelect}
-            onSlideUpdate={handleSlideUpdate}
-            onSeek={handleSeek}
-            onPlay={handlePlay}
-            onPause={handlePause}
-          />
-        </div>
+        {/* Audio Timeline with Resize Handle */}
+        {(audioTracks.length > 0 || videoTracks.length > 0) && (
+          <div
+            className="relative border-t border-gray-200"
+            style={{ height: `${timelineHeight}px` }}
+          >
+            {/* Resize Handle - Larger hit area */}
+            <div
+              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizingTimeline(true);
+              }}
+              title="Drag to resize timeline"
+            >
+              <div className="w-16 h-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
+            </div>
+
+            <div className="h-full overflow-hidden pt-2">
+              <AudioTimelineRefactored
+                audioTracks={audioTracks}
+                videoTracks={videoTracks}
+                slides={pages}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                loadingAssets={loadingAssets}
+                selectedAudioId={selectedElement?.type === 'audio' ? selectedElement.id : null}
+                selectedVideoId={selectedElement?.type === 'video' ? selectedElement.id : null}
+                selectedSlideIndex={selectedElement?.type === 'slide' ? selectedElement.slideIndex : null}
+                onAudioUpdate={handleAudioUpdate}
+                onAudioDelete={handleAudioDelete}
+                onAudioSelect={handleAudioSelect}
+                onVideoUpdate={handleVideoUpdate}
+                onVideoDelete={handleVideoDelete}
+                onVideoSelect={handleVideoSelect}
+                onSlideUpdate={handleSlideUpdate}
+                onSlideSelect={handleSlideSelect}
+                onSeek={handleSeek}
+                onPlay={handlePlay}
+                onPause={handlePause}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Right Properties Panel */}
-      {selectedElement && (
-        <PropertiesPanel
-          element={selectedElement}
-          onUpdate={(updates) => handleUpdateElement(selectedElement.id, updates)}
-          onDelete={() => handleDeleteElement(selectedElement.id)}
-          onClose={() => setSelectedElement(null)}
-        />
-      )}
-
-      {/* Audio Properties Panel */}
-      {selectedAudioTrack && (() => {
-        // Find the current audio track from audioTracks (to get latest values)
-        const currentTrack = audioTracks.find(track => track.id === selectedAudioTrack.id);
-        if (!currentTrack) return null;
-
-        // Find the corresponding media ID from uploadedAudio
-        const mediaItem = uploadedAudio.find(m => m.url === currentTrack.url);
-        const mediaId = mediaItem?.id || null;
-
-        return (
-          <PropertiesPanel
-            element={{
-              ...currentTrack,
-              type: 'audio',
-              audioType: currentTrack.type // Preserve the audio type (music/voiceover/sfx)
+      {/* Properties Panel with Resize Handle - Always show if open, regardless of selection */}
+      {isPropertiesPanelOpen && (
+        <div
+          className="relative bg-gray-50 border-l border-gray-200 flex flex-col h-full"
+          style={{ width: `${propertiesPanelWidth}px` }}
+        >
+          {/* Resize Handle - Larger hit area */}
+          <div
+            className="absolute top-0 left-0 bottom-0 w-2 cursor-ew-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizingPropertiesPanel(true);
             }}
+            title="Drag to resize properties panel"
+          >
+            <div className="h-16 w-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
+          </div>
+
+          <div className="pl-2 flex-1 flex flex-col h-full overflow-hidden">
+            <PropertiesPanel
+            element={selectedElement}
             onUpdate={(updates) => {
-              // If audioType is being updated, map it back to type
-              if (updates.audioType !== undefined) {
-                updates.type = updates.audioType;
-                delete updates.audioType;
+              if (selectedElement?.type === 'slide') {
+                // Handle slide updates
+                handleSlideUpdate(selectedElement.slideIndex, updates);
+              } else if (selectedElement?.type === 'audio') {
+                // Handle audio track updates
+                handleAudioUpdate(selectedElement.id, updates);
+              } else {
+                // Handle regular element updates
+                handleUpdateElement(selectedElement.id, updates);
               }
-              handleAudioUpdate(currentTrack.id, updates);
             }}
-            onDelete={() => handleAudioDeleteRequest(currentTrack.id, currentTrack.name, mediaId)}
-            onClose={() => setSelectedAudioTrack(null)}
+            onDelete={() => {
+              if (selectedElement?.type === 'audio') {
+                handleAudioDelete(selectedElement.id);
+              } else {
+                handleDeleteElement(selectedElement.id);
+              }
+            }}
+            onClose={() => setIsPropertiesPanelOpen(false)}
           />
-        );
-      })()}
+          </div>
+        </div>
+      )}
 
       {/* Delete Slide Confirmation Dialog */}
       <ConfirmDialog
@@ -1086,35 +1533,53 @@ const DesignEditor = () => {
         isOpen={audioDeleteDialog.isOpen}
         onClose={() => setAudioDeleteDialog({ isOpen: false, audioId: null, audioTitle: null, mediaId: null })}
         onConfirm={confirmAudioDelete}
-        title="Delete Audio"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${audioDeleteDialog.audioTitle}"?`}
-        warningMessage="This will permanently delete the audio from both the timeline and media library."
-        confirmText="Delete Audio"
+        title="Remove Audio"
+        message={`Are you sure you want to remove "${audioDeleteDialog.audioTitle}" from the editor?`}
+        warningMessage="This will remove the audio from the timeline and media list. To permanently delete from the library, go to the Audio Library page."
+        confirmText="Remove"
         cancelText="Cancel"
         variant="danger"
       />
 
-      {/* Delete Video Confirmation Dialog */}
       <ConfirmDialog
         isOpen={videoDeleteDialog.isOpen}
         onClose={() => setVideoDeleteDialog({ isOpen: false, videoId: null, videoTitle: null, mediaId: null })}
         onConfirm={confirmVideoDelete}
-        title="Delete Video"
-        description="This action cannot be undone"
-        message={`Are you sure you want to delete "${videoDeleteDialog.videoTitle}"?`}
-        warningMessage="This will permanently delete the video from both the timeline and media library."
-        confirmText="Delete Video"
+        title="Remove Video"
+        message={`Are you sure you want to remove "${videoDeleteDialog.videoTitle}" from the editor?`}
+        warningMessage="This will remove the video from the canvas and media list. To permanently delete from the library, go to the Video Library page."
+        confirmText="Remove"
         cancelText="Cancel"
         variant="danger"
       />
 
-      {/* Audio Library Modal */}
-      <AudioLibrary
-        isOpen={isAudioLibraryOpen}
-        onClose={() => setIsAudioLibraryOpen(false)}
-        onAddToCanvas={handleAddFromLibrary}
+      {/* Delete Image Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={imageDeleteDialog.isOpen}
+        onClose={() => setImageDeleteDialog({ isOpen: false, imageElements: null, imageTitle: null, mediaId: null })}
+        onConfirm={confirmImageDelete}
+        title="Remove Image"
+        message={`Are you sure you want to remove "${imageDeleteDialog.imageTitle}" from the editor?`}
+        warningMessage={
+          imageDeleteDialog.imageElements && imageDeleteDialog.imageElements.length > 0
+            ? `This image is used in ${imageDeleteDialog.imageElements.length} place(s) on the canvas. It will be removed from all locations and the media list. To permanently delete from the library, go to the Image Library page.`
+            : "This will remove the image from the media list. To permanently delete from the library, go to the Image Library page."
+        }
+        confirmText="Remove"
+        cancelText="Cancel"
+        variant="danger"
       />
+
+      {/* Loading Overlay */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center">
+          <div className="bg-white rounded-lg p-8 shadow-2xl flex flex-col items-center gap-4">
+            <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-lg font-medium text-gray-900">Loading project...</p>
+            <p className="text-sm text-gray-500">Please wait while we load your project</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

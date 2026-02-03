@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTimeline } from '../../common/Timeline';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Slide Block Component
@@ -97,8 +98,12 @@ const SlideBlock = ({
           console.log('⚠️ Collision detected - cannot stretch right');
         }
       } else if (stretchStart.edge === 'left') {
-        const newDuration = Math.max(1, stretchStart.initialDuration - deltaTime);
-        const newStartTime = Math.max(0, stretchStart.initialStartTime + deltaTime);
+        // Calculate how much we can actually move left (limited by startTime reaching 0)
+        const maxLeftDelta = -stretchStart.initialStartTime;
+        const clampedDeltaTime = Math.max(deltaTime, maxLeftDelta);
+
+        const newStartTime = stretchStart.initialStartTime + clampedDeltaTime;
+        const newDuration = Math.max(1, stretchStart.initialDuration - clampedDeltaTime);
 
         // Check collision before updating
         if (!checkCollision(newStartTime, newDuration)) {
@@ -175,7 +180,7 @@ const SlideBlock = ({
             >
               {slide.elements && slide.elements.length > 0 ? (
                 slide.elements[0].type === 'image' ? (
-                  <img
+                  <AuthenticatedImage
                     src={slide.elements[0].src}
                     alt=""
                     className="w-full h-full object-cover rounded"

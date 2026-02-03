@@ -16,6 +16,7 @@ const AudioTimelineRefactored = ({
   slides = [],
   currentTime = 0,
   duration = 0,
+  loadingAssets = new Set(),
   onAudioUpdate,
   onAudioDelete,
   onAudioSelect,
@@ -23,14 +24,15 @@ const AudioTimelineRefactored = ({
   onVideoDelete,
   onVideoSelect,
   onSlideUpdate,
+  onSlideSelect,
   onSeek,
   onPlay,
   onPause,
   isPlaying = false,
   selectedAudioId = null,
-  selectedVideoId = null
+  selectedVideoId = null,
+  selectedSlideIndex = null
 }) => {
-  const [selectedSlide, setSelectedSlide] = useState(null);
   const [audioWaveforms, setAudioWaveforms] = useState({});
   const [volumeEnvelopes, setVolumeEnvelopes] = useState({});
   const [slideTransitions, setSlideTransitions] = useState({});
@@ -130,9 +132,15 @@ const AudioTimelineRefactored = ({
           {/* Play/Pause Button */}
           <button
             onClick={isPlaying ? onPause : onPlay}
-            className="w-9 h-9 bg-blue-600 hover:bg-blue-700 rounded-md flex items-center justify-center text-white transition-colors shadow-sm"
+            disabled={loadingAssets.size > 0}
+            className={`w-9 h-9 rounded-md flex items-center justify-center text-white transition-colors shadow-sm ${
+              loadingAssets.size > 0
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+            title={loadingAssets.size > 0 ? 'Loading media assets...' : (isPlaying ? 'Pause' : 'Play')}
           >
-            {isPlaying ? '⏸' : '▶'}
+            {loadingAssets.size > 0 ? '⏳' : (isPlaying ? '⏸' : '▶')}
           </button>
 
           <div className="text-xs font-semibold text-gray-600">⏱️ Timeline</div>
@@ -181,8 +189,8 @@ const AudioTimelineRefactored = ({
                       index={index}
                       startTime={slideStartTime}
                       duration={slideDuration}
-                      isSelected={selectedSlide === index}
-                      onSelect={() => setSelectedSlide(index)}
+                      isSelected={selectedSlideIndex === index}
+                      onSelect={() => onSlideSelect && onSlideSelect(index)}
                       onUpdate={(updates) => handleSlideUpdate(index, updates)}
                       onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
                       allSlides={slides}

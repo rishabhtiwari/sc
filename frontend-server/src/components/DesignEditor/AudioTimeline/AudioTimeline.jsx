@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Audio Timeline Component - Professional video editor style timeline
@@ -454,7 +455,7 @@ const AudioTimeline = ({
                             style={{ minWidth: '32px' }}
                           >
                             {slide.thumbnail ? (
-                              <img
+                              <AuthenticatedImage
                                 src={slide.thumbnail}
                                 alt=""
                                 className="w-full h-full object-cover rounded-sm"

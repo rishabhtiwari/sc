@@ -325,6 +325,162 @@ app.post('/api/templates/upload/logo', upload.single('file'), async (req, res) =
     }
 });
 
+// Audio Library Upload - Handle multipart/form-data file uploads
+// Pattern matches video library upload for consistency
+app.post('/api/audio-studio/library/upload', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            console.error('❌ No file in request');
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        // Extract query parameters (name, duration, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/audio-studio/library/upload${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying audio library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        console.log(`✅ Audio library upload response: status=${response.status}`);
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Audio library upload proxy error: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            error: 'Audio library upload proxy error',
+            message: error.message
+        });
+    }
+});
+
+// Special routes for image and video library uploads (must come before general API proxy)
+app.post('/api/image-library/library', upload.single('file'), async (req, res) => {
+    try {
+        console.log('📥 Image library upload request received');
+        console.log('File:', req.file ? 'YES' : 'NO');
+        console.log('Query:', req.query);
+
+        if (!req.file) {
+            console.error('❌ No file in request');
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        console.log('✅ Creating FormData...');
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+        console.log('✅ FormData created');
+
+        // Extract query parameters (name, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/image-library/library${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying image library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Image library upload proxy error:`, error);
+        console.error(`Error stack:`, error.stack);
+        res.status(500).json({
+            error: 'Image library upload proxy error',
+            message: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+app.post('/api/video-library/library', upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file provided' });
+        }
+
+        const formData = new FormData();
+        formData.append('file', req.file.buffer, {
+            filename: req.file.originalname,
+            contentType: req.file.mimetype,
+            knownLength: req.file.size
+        });
+
+        // Extract query parameters (name, duration, folder, etc.)
+        const queryParams = new URLSearchParams(req.query).toString();
+        const targetUrl = `${API_SERVER_URL}/api/video-library/library${queryParams ? '?' + queryParams : ''}`;
+
+        console.log(`🔄 Proxying video library upload ${req.method} ${req.originalUrl} -> ${targetUrl}`);
+        console.log(`📎 File details: name=${req.file.originalname}, size=${req.file.size}, type=${req.file.mimetype}`);
+        console.log(`📋 Query params:`, req.query);
+
+        const headers = {
+            ...formData.getHeaders()
+        };
+
+        // Forward auth headers
+        if (req.headers.authorization) {
+            headers['Authorization'] = req.headers.authorization;
+        }
+
+        const response = await axios.post(targetUrl, formData, {
+            headers,
+            maxBodyLength: Infinity,
+            maxContentLength: Infinity,
+            validateStatus: () => true
+        });
+
+        res.status(response.status).json(response.data);
+    } catch (error) {
+        console.error(`❌ Video library upload proxy error: ${error.message}`);
+        res.status(500).json({
+            error: 'Video library upload proxy error',
+            message: error.message
+        });
+    }
+});
+
 // Special route for product media file uploads (must come before general API proxy)
 // This proxies to API server to maintain API Gateway pattern
 app.post('/api/products/:productId/upload-media', upload.array('files', 20), async (req, res) => {
@@ -434,7 +590,8 @@ app.use('/api', async (req, res) => {
         // Check if this is an image endpoint that returns binary data
         const isImageEndpoint = req.originalUrl.startsWith('/api/proxy-image') ||
                                 req.originalUrl.startsWith('/api/image/cleaned/') ||
-                                req.originalUrl.startsWith('/api/cleaned-image/');
+                                req.originalUrl.startsWith('/api/cleaned-image/') ||
+                                req.originalUrl.startsWith('/api/assets/download/image-assets/');
 
         // Check if this is an audio endpoint that returns binary data
         const isAudioEndpoint = req.originalUrl.startsWith('/api/news/audio/serve') ||
@@ -442,11 +599,13 @@ app.use('/api', async (req, res) => {
                                 req.originalUrl.startsWith('/api/audio/proxy/') ||
                                 req.originalUrl.startsWith('/api/audio-studio/preview/') ||
                                 req.originalUrl.match(/\/api\/audio-studio\/library\/[^\/]+\/stream$/) ||
-                                req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/);
+                                req.originalUrl.match(/\/api\/videos\/background-audio\/[^\/]+\/download$/) ||
+                                req.originalUrl.startsWith('/api/assets/download/audio-assets/');
 
         // Check if this is a video endpoint that returns binary data
         const isVideoEndpoint = req.originalUrl.startsWith('/api/templates/preview/video/') ||
                                 req.originalUrl.startsWith('/api/ecommerce/public/product/') ||
+                                req.originalUrl.startsWith('/api/assets/download/video-assets/') ||
                                 req.originalUrl.match(/\.mp4$/) ||
                                 req.originalUrl.match(/\.webm$/) ||
                                 req.originalUrl.match(/\.mov$/);

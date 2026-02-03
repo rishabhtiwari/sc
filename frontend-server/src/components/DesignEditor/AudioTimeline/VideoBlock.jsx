@@ -29,24 +29,61 @@ const VideoBlock = ({
 
   // Generate video thumbnail
   useEffect(() => {
-    if (track.url) {
-      const video = document.createElement('video');
-      video.src = track.url;
-      video.crossOrigin = 'anonymous';
-      
-      video.addEventListener('loadeddata', () => {
-        video.currentTime = 0.1; // Seek to 0.1s for thumbnail
-      });
+    if (!track.url) return;
 
-      video.addEventListener('seeked', () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 160;
-        canvas.height = 90;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        setThumbnail(canvas.toDataURL());
-      });
-    }
+    const generateThumbnail = async () => {
+      try {
+        let videoUrl = track.url;
+
+        // If this is an API URL, fetch it with authentication
+        const isApiUrl = track.url.startsWith('/api/');
+        if (isApiUrl) {
+          const token = localStorage.getItem('auth_token');
+          if (!token) {
+            console.error('No auth token for video thumbnail');
+            return;
+          }
+
+          const response = await fetch(track.url, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (!response.ok) {
+            console.error('Failed to fetch video for thumbnail:', response.status);
+            return;
+          }
+
+          const blob = await response.blob();
+          videoUrl = URL.createObjectURL(blob);
+        }
+
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        video.crossOrigin = 'anonymous';
+
+        video.addEventListener('loadeddata', () => {
+          video.currentTime = 0.1; // Seek to 0.1s for thumbnail
+        });
+
+        video.addEventListener('seeked', () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 160;
+          canvas.height = 90;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          setThumbnail(canvas.toDataURL());
+
+          // Cleanup blob URL if we created one
+          if (isApiUrl && videoUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(videoUrl);
+          }
+        });
+      } catch (error) {
+        console.error('Error generating video thumbnail:', error);
+      }
+    };
+
+    generateThumbnail();
   }, [track.url]);
 
   // Handle stretch start
@@ -75,8 +112,13 @@ const VideoBlock = ({
         const newDuration = Math.max(0.5, stretchStart.duration + deltaTime);
         onUpdate({ duration: newDuration });
       } else if (stretchStart.edge === 'left') {
-        const newStartTime = Math.max(0, stretchStart.startTime + deltaTime);
-        const newDuration = Math.max(0.5, stretchStart.duration - deltaTime);
+        // Calculate how much we can actually move left (limited by startTime reaching 0)
+        const maxLeftDelta = -stretchStart.startTime;
+        const clampedDeltaTime = Math.max(deltaTime, maxLeftDelta);
+
+        const newStartTime = stretchStart.startTime + clampedDeltaTime;
+        const newDuration = Math.max(0.5, stretchStart.duration - clampedDeltaTime);
+
         onUpdate({ startTime: newStartTime, duration: newDuration });
       }
     };

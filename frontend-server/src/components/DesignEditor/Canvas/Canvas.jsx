@@ -5,7 +5,16 @@ import CanvasElement from './CanvasElement';
  * Canvas Component - Main design area
  * Features: Drag & drop, resize, rotate elements
  */
-const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, onDeleteElement, background }) => {
+const Canvas = ({
+  elements,
+  selectedElement,
+  onSelectElement,
+  onUpdateElement,
+  onDeleteElement,
+  background,
+  registerVideoRef,
+  unregisterVideoRef
+}) => {
   const canvasRef = useRef(null);
   const [canvasSize, setCanvasSize] = useState({ width: 1920, height: 1080 });
   const [zoom, setZoom] = useState(0.5);
@@ -110,20 +119,21 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
         </div>
       </div>
 
-      {/* Canvas Area */}
-      <div className="flex-1 overflow-auto p-8 flex items-center justify-center">
-        <div
-          ref={canvasRef}
-          onClick={handleCanvasClick}
-          className="shadow-2xl relative"
-          style={{
-            width: canvasSize.width * zoom,
-            height: canvasSize.height * zoom,
-            transform: `scale(1)`,
-            transformOrigin: 'center',
-            ...getBackgroundStyle()
-          }}
-        >
+      {/* Canvas Area - Scrollable container */}
+      <div className="flex-1 overflow-auto p-8">
+        <div className="min-h-full flex items-start justify-center">
+          <div
+            ref={canvasRef}
+            onClick={handleCanvasClick}
+            className="shadow-2xl relative my-auto"
+            style={{
+              width: canvasSize.width * zoom,
+              height: canvasSize.height * zoom,
+              transform: `scale(1)`,
+              transformOrigin: 'center',
+              ...getBackgroundStyle()
+            }}
+          >
           {/* Render Elements */}
           {elements.map((element) => (
             <CanvasElement
@@ -139,6 +149,8 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
                   setIsEditingText(editing);
                 }
               }}
+              registerVideoRef={registerVideoRef}
+              unregisterVideoRef={unregisterVideoRef}
             />
           ))}
 
@@ -152,6 +164,7 @@ const Canvas = ({ elements, selectedElement, onSelectElement, onUpdateElement, o
               </div>
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

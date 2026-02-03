@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
+import { useAuthenticatedAudio } from '../../../hooks/useAuthenticatedAudio';
 
 /**
  * Audio Card Component
@@ -7,77 +8,10 @@ import React, { useState, useRef, useEffect } from 'react';
 const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
   const audioRef = useRef(null);
 
-  // Fetch authenticated audio URL
-  useEffect(() => {
-    const fetchAudio = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('auth_token');
-
-        console.log('Fetching audio from:', audio.url);
-
-        const response = await fetch(audio.url, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        console.log('Audio response status:', response.status);
-        console.log('Audio response headers:', {
-          contentType: response.headers.get('Content-Type'),
-          contentLength: response.headers.get('Content-Length'),
-          contentDisposition: response.headers.get('Content-Disposition'),
-          allHeaders: Array.from(response.headers.entries())
-        });
-
-        if (response.ok) {
-          const blob = await response.blob();
-          console.log('Audio blob created:', {
-            size: blob.size,
-            type: blob.type
-          });
-
-          // Check if blob is actually audio
-          if (!blob.type.startsWith('audio/')) {
-            console.error('⚠️ Blob is not audio! Type:', blob.type);
-            // Try to read blob as text to see what it contains
-            const text = await blob.text();
-            console.error('Blob content (first 500 chars):', text.substring(0, 500));
-            return;
-          }
-
-          // Ensure blob has correct MIME type
-          const audioBlob = new Blob([blob], { type: 'audio/wav' });
-          console.log('Created audio blob with type:', audioBlob.type);
-          const blobUrl = URL.createObjectURL(audioBlob);
-          setAudioUrl(blobUrl);
-          console.log('✅ Audio blob URL created:', blobUrl);
-        } else {
-          const errorText = await response.text();
-          console.error('Failed to fetch audio:', response.status, errorText);
-        }
-      } catch (error) {
-        console.error('Error fetching audio:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (audio.url) {
-      fetchAudio();
-    }
-
-    // Cleanup blob URL on unmount
-    return () => {
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
-    };
-  }, [audio.url]);
+  // Use the centralized authenticated audio hook
+  const { blobUrl: audioUrl, loading, error } = useAuthenticatedAudio(audio.url);
 
   const togglePlayPause = () => {
     const audioElement = audioRef.current;
@@ -115,7 +49,7 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   };
 
   const handleDelete = () => {
-    onDelete(audio.audio_id);
+    onDelete(audio);
     setShowMenu(false);
   };
 
@@ -140,7 +74,7 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
   };
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+    <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
       <audio
         ref={audioRef}
         src={audioUrl}
@@ -153,10 +87,25 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
         {/* Play Button */}
         <button
           onClick={togglePlayPause}
-          disabled={loading || !audioUrl}
-          className="w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={loading || !audioUrl || error}
+          className="w-12 h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center flex-shrink-0 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          title={loading ? 'Loading...' : error ? 'Failed to load audio' : isPlaying ? 'Pause' : 'Play'}
         >
-          {loading ? '⏳' : isPlaying ? '⏸️' : '▶️'}
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : error ? (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+            </svg>
+          ) : isPlaying ? (
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          )}
         </button>
 
         {/* Audio Info */}
@@ -200,10 +149,11 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
                     {onAddToCanvas && (
                       <button
                         onClick={() => {
-                          console.log('🎵 Add to Timeline clicked:', {
+                          console.log('🎵 Open in Design Editor clicked:', {
                             title: audio.name,
                             audioUrl: audioUrl,
                             duration: audio.duration,
+                            audio_id: audio.audio_id,
                             loading: loading
                           });
 
@@ -216,15 +166,18 @@ const AudioCard = ({ audio, onDelete, onAddToCanvas }) => {
                             title: audio.name,
                             url: audioUrl,
                             audio_url: audioUrl,
-                            duration: audio.duration
+                            duration: audio.duration,
+                            audio_id: audio.audio_id,  // Include audio_id from library
+                            libraryId: audio.audio_id,  // Also set as libraryId
+                            assetId: audio.audio_id     // And as assetId for consistency
                           });
                           setShowMenu(false);
                         }}
                         disabled={!audioUrl || loading}
                         className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <span>➕</span>
-                        <span>Add to Timeline</span>
+                        <span>🎨</span>
+                        <span>Open in Design Editor</span>
                       </button>
                     )}
                     <button

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import AIToolsPanel from './AIToolsPanel';
 import SlidesPanel from './SlidesPanel';
 import TextPanel from './TextPanel';
@@ -23,13 +23,26 @@ const Sidebar = ({
   onAudioDeleteRequest,
   videoTracks,
   onVideoDeleteRequest,
+  onImageDeleteRequest,
   uploadedAudio,
   onUploadedAudioChange,
+  uploadedImage,
+  onUploadedImageChange,
   uploadedVideo,
   onUploadedVideoChange,
-  onOpenAudioLibrary
+  onOpenAudioLibrary,
+  onOpenImageLibrary,
+  onOpenVideoLibrary
 }) => {
-  const [expandedPanel, setExpandedPanel] = useState(null);
+  // Default to 'text' panel open
+  const [expandedPanel, setExpandedPanel] = useState('text');
+
+  // Sync local state with parent's selectedTool prop
+  useEffect(() => {
+    if (selectedTool !== expandedPanel) {
+      setExpandedPanel(selectedTool);
+    }
+  }, [selectedTool]);
 
   const tools = [
     {
@@ -84,22 +97,38 @@ const Sidebar = ({
   ];
 
   const handleToolClick = (toolId) => {
-    if (expandedPanel === toolId) {
-      setExpandedPanel(null);
-      onSelectTool(null);
-    } else {
-      setExpandedPanel(toolId);
-      onSelectTool(toolId);
-    }
+    // Always open the clicked tool panel (don't toggle)
+    setExpandedPanel(toolId);
+    onSelectTool(toolId);
+  };
+
+  const handleClosePanel = () => {
+    setExpandedPanel(null);
+    onSelectTool(null);
   };
 
   const activeTool = tools.find(t => t.id === expandedPanel);
   const ActivePanel = activeTool?.panel;
 
   return (
-    <div className="flex h-full bg-white border-r border-gray-200">
+    <div className="flex h-full bg-white border-r border-gray-200 relative">
       {/* Tool Icons Bar */}
       <div className="w-20 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-2">
+
+        {/* Reopen Button - Show when panel is closed, positioned above AI icon */}
+        {!expandedPanel && (
+          <button
+            onClick={() => {
+              // Reopen the last selected tool or default to 'text'
+              const toolToOpen = selectedTool || 'text';
+              handleToolClick(toolToOpen);
+            }}
+            className="w-14 h-14 flex items-center justify-center bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-all font-bold text-xl mb-2"
+            title="Open sidebar"
+          >
+            »»
+          </button>
+        )}
         {tools.map((tool) => (
           <button
             key={tool.id}
@@ -123,9 +152,18 @@ const Sidebar = ({
       {/* Expanded Tool Panel */}
       {expandedPanel && ActivePanel && (
         <div className="w-80 bg-white overflow-y-auto">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">{activeTool.name}</h2>
-            <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">{activeTool.name}</h2>
+              <p className="text-sm text-gray-500 mt-1">{activeTool.description}</p>
+            </div>
+            <button
+              onClick={handleClosePanel}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-600 hover:text-gray-900 font-bold text-xl"
+              title="Close panel"
+            >
+              ««
+            </button>
           </div>
           <div className="p-4">
             <ActivePanel
@@ -140,9 +178,22 @@ const Sidebar = ({
               onAudioDeleteRequest={onAudioDeleteRequest}
               videoTracks={videoTracks}
               onVideoDeleteRequest={onVideoDeleteRequest}
-              uploadedMedia={expandedPanel === 'audio' ? uploadedAudio : uploadedVideo}
-              onUploadedMediaChange={expandedPanel === 'audio' ? onUploadedAudioChange : onUploadedVideoChange}
+              onImageDeleteRequest={onImageDeleteRequest}
+              uploadedMedia={
+                expandedPanel === 'audio' ? uploadedAudio :
+                expandedPanel === 'video' ? uploadedVideo :
+                expandedPanel === 'images' ? uploadedImage :
+                [] // Default to empty array if panel doesn't use media
+              }
+              onUploadedMediaChange={
+                expandedPanel === 'audio' ? onUploadedAudioChange :
+                expandedPanel === 'video' ? onUploadedVideoChange :
+                expandedPanel === 'images' ? onUploadedImageChange :
+                () => {} // No-op for panels that don't use media
+              }
               onOpenAudioLibrary={onOpenAudioLibrary}
+              onOpenImageLibrary={onOpenImageLibrary}
+              onOpenVideoLibrary={onOpenVideoLibrary}
             />
           </div>
         </div>

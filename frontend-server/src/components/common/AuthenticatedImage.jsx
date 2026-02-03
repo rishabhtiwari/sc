@@ -24,7 +24,8 @@ const AuthenticatedImage = ({
       src.startsWith('/api/') ||
       src.includes('/api/ecommerce/') ||
       src.includes('/api/cleaned-image/') ||
-      src.includes('/api/image/cleaned/')
+      src.includes('/api/image/cleaned/') ||
+      src.includes('/api/assets/download/')
     );
 
     if (!src || !isApiUrl) {

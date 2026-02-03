@@ -6,8 +6,11 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+from bson import ObjectId
+from datetime import datetime
 from config.settings import settings
-from routes import asset_routes, audio_library_routes
+from routes import asset_routes, audio_library_routes, project_routes, image_library_routes, video_library_routes
 
 # Configure logging
 logging.basicConfig(
@@ -15,6 +18,39 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+# Custom JSON encoder for MongoDB ObjectId
+def custom_jsonable_encoder(obj, **kwargs):
+    """Custom JSON encoder that handles MongoDB ObjectId"""
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    return jsonable_encoder(obj, custom_encoder={
+        ObjectId: str,
+        datetime: lambda dt: dt.isoformat()
+    }, **kwargs)
+
+
+# Monkey patch FastAPI's jsonable_encoder
+import fastapi.encoders
+original_jsonable_encoder = fastapi.encoders.jsonable_encoder
+
+
+def patched_jsonable_encoder(obj, **kwargs):
+    """Patched jsonable_encoder that handles ObjectId"""
+    # Add custom encoders for ObjectId and datetime
+    custom_encoder = kwargs.get('custom_encoder', {})
+    custom_encoder[ObjectId] = str
+    if datetime not in custom_encoder:
+        custom_encoder[datetime] = lambda dt: dt.isoformat()
+    kwargs['custom_encoder'] = custom_encoder
+    return original_jsonable_encoder(obj, **kwargs)
+
+
+fastapi.encoders.jsonable_encoder = patched_jsonable_encoder
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -83,6 +119,24 @@ app.include_router(
     audio_library_routes.router,
     prefix="/api/audio-studio",
     tags=["Audio Studio"]
+)
+
+app.include_router(
+    image_library_routes.router,
+    prefix="/api/image-library",
+    tags=["Image Library"]
+)
+
+app.include_router(
+    video_library_routes.router,
+    prefix="/api/video-library",
+    tags=["Video Library"]
+)
+
+app.include_router(
+    project_routes.router,
+    prefix="/api",
+    tags=["Projects"]
 )
 
 

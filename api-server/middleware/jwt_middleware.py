@@ -66,9 +66,16 @@ def extract_and_inject_jwt_context():
     customer_id = None
     user_id = None
     token_valid = False
+    token = None
 
-    # Try to extract from Authorization header
+    # Try to extract from Authorization header first
     auth_header = request.headers.get('Authorization')
+
+    # If no Authorization header, try query parameter (for media files in <audio>/<video> tags)
+    if not auth_header:
+        token = request.args.get('token')
+        if token:
+            logger.debug(f"🔑 Token found in query parameter for path={request.path}")
 
     if auth_header:
         try:
@@ -77,45 +84,46 @@ def extract_and_inject_jwt_context():
             if len(parts) == 2 and parts[0].lower() == 'bearer':
                 token = parts[1]
 
-                # Decode JWT token
-                try:
-                    payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-                    customer_id = payload.get('customer_id')
-                    user_id = payload.get('user_id')
-                    token_valid = True
-
-                    logger.debug(f"✅ JWT decoded: customer_id={customer_id}, user_id={user_id}, path={request.path}")
-
-                except jwt.ExpiredSignatureError:
-                    logger.warning(f"⚠️ JWT token expired for path={request.path}")
-                    return jsonify({
-                        'success': False,
-                        'error': 'Token expired. Please login again.',
-                        'code': 'TOKEN_EXPIRED'
-                    }), 401
-
-                except jwt.InvalidTokenError as e:
-                    logger.warning(f"⚠️ Invalid JWT token for path={request.path}: {str(e)}")
-                    return jsonify({
-                        'success': False,
-                        'error': 'Invalid token. Please login again.',
-                        'code': 'INVALID_TOKEN'
-                    }), 401
-
-                except Exception as e:
-                    logger.error(f"❌ Error decoding JWT token: {str(e)}")
-                    return jsonify({
-                        'success': False,
-                        'error': 'Authentication failed',
-                        'code': 'AUTH_ERROR'
-                    }), 401
-
         except Exception as e:
             logger.error(f"❌ Error extracting token from Authorization header: {str(e)}")
             return jsonify({
                 'success': False,
                 'error': 'Invalid authorization header',
                 'code': 'INVALID_AUTH_HEADER'
+            }), 401
+
+    # Decode JWT token (from either header or query parameter)
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+            customer_id = payload.get('customer_id')
+            user_id = payload.get('user_id')
+            token_valid = True
+
+            logger.debug(f"✅ JWT decoded: customer_id={customer_id}, user_id={user_id}, path={request.path}")
+
+        except jwt.ExpiredSignatureError:
+            logger.warning(f"⚠️ JWT token expired for path={request.path}")
+            return jsonify({
+                'success': False,
+                'error': 'Token expired. Please login again.',
+                'code': 'TOKEN_EXPIRED'
+            }), 401
+
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"⚠️ Invalid JWT token for path={request.path}: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid token. Please login again.',
+                'code': 'INVALID_TOKEN'
+            }), 401
+
+        except Exception as e:
+            logger.error(f"❌ Error decoding JWT token: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Authentication failed',
+                'code': 'AUTH_ERROR'
             }), 401
 
     # If no valid token found, reject the request

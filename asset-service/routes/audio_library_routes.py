@@ -9,10 +9,11 @@ and user_id in headers.
 import logging
 import uuid
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query, Header
+from fastapi import APIRouter, HTTPException, Query, Header, File, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from io import BytesIO
+import subprocess
 
 from services.database_service import db_service
 from services.audio_library_service import audio_library_service
@@ -91,6 +92,140 @@ async def save_to_library(
 
     except Exception as e:
         logger.error(f"Error saving to library: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/library/upload")
+async def upload_audio_file(
+    file: UploadFile = File(...),
+    name: Optional[str] = Query(None),
+    folder: Optional[str] = Query(None),
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """
+    Upload audio file directly to library
+    Similar to video/image library upload endpoints
+
+    This endpoint:
+    1. Accepts audio file upload (multipart/form-data)
+    2. Extracts duration using ffprobe
+    3. Uploads to MinIO
+    4. Saves metadata to MongoDB
+    """
+    try:
+        # Generate unique audio ID
+        audio_id = str(uuid.uuid4())
+
+        # Read file data
+        file_data = await file.read()
+        file_size = len(file_data)
+
+        # Determine file extension
+        filename = file.filename or "audio.wav"
+        ext = filename.split('.')[-1] if '.' in filename else 'wav'
+
+        # Extract duration using ffprobe
+        duration = 0.0
+        try:
+            # Save to temp file for ffprobe
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{ext}') as temp_file:
+                temp_file.write(file_data)
+                temp_path = temp_file.name
+
+            # Use ffprobe to get duration
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                 '-of', 'default=noprint_wrappers=1:nokey=1', temp_path],
+                capture_output=True,
+                text=True
+            )
+
+            if result.returncode == 0:
+                duration = float(result.stdout.strip())
+                logger.info(f"Extracted duration: {duration}s")
+
+            # Clean up temp file
+            import os
+            os.unlink(temp_path)
+        except Exception as e:
+            logger.warning(f"Failed to extract duration: {e}")
+            duration = 0.0
+
+        # Upload to MinIO
+        bucket_name = "audio-assets"
+        object_key = f"{x_customer_id}/{x_user_id}/audio/{audio_id}.{ext}"
+
+        storage_service.upload_file(
+            bucket=bucket_name,
+            object_name=object_key,
+            file_data=BytesIO(file_data),
+            length=file_size,
+            content_type=file.content_type or "audio/wav",
+            metadata={
+                "customer_id": x_customer_id,
+                "user_id": x_user_id,
+                "audio_id": audio_id
+            }
+        )
+
+        logger.info(f"Audio uploaded to MinIO: {bucket_name}/{object_key}")
+
+        # Generate URL for frontend (needed before creating the document)
+        url = f"/api/assets/download/audio-assets/{object_key}"
+
+        # Save metadata to MongoDB with flat schema matching audio_library collection
+        from bson import Int64
+        audio_doc = {
+            "audio_id": audio_id,
+            "customer_id": x_customer_id,
+            "user_id": x_user_id,
+            "name": name or filename,  # Required top-level field
+            "type": "sound_effect",  # Required: enum ['voiceover', 'music', 'sound_effect']
+            "source": "uploaded",  # Required: enum ['tts', 'ai_voice', 'ai_music', 'cloned', 'uploaded']
+            "url": url,  # Required top-level field (flat, not nested)
+            "duration": duration,
+            "format": ext,
+            "size": Int64(file_size),  # Convert to BSON long for MongoDB
+            "storage": {
+                "bucket": bucket_name,
+                "object_key": object_key,
+                "file_size": file_size
+            },
+            "generation_config": {
+                "text": name or filename,  # Use name as text for uploaded files
+                "voice": "uploaded",
+                "voice_name": "Uploaded Audio",
+                "model": "uploaded",
+                "language": "en",
+                "speed": 1.0,
+                "duration": duration,
+                "folder": folder or "",
+                "tags": []
+            },
+            "folder": folder or "",  # Top-level folder field
+            "tags": [],  # Top-level tags field
+            "is_deleted": False
+        }
+
+        db_service.create_audio_library_entry(audio_doc)
+        logger.info(f"Audio metadata saved to MongoDB: {audio_id}")
+
+        return {
+            "success": True,
+            "audio": {
+                "audio_id": audio_id,
+                "name": name or filename,
+                "url": url,
+                "duration": duration,
+                "type": "uploaded"
+            },
+            "message": "Audio uploaded successfully"
+        }
+
+    except Exception as e:
+        logger.error(f"Error uploading audio file: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -257,9 +392,17 @@ async def stream_audio(
         if audio.get("customer_id") != x_customer_id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        # Extract storage info
+        # Extract storage info - use object_key from storage metadata if available
         bucket = "audio-assets"
-        object_key = f"{audio['customer_id']}/{audio['user_id']}/audio/{audio_id}.wav"
+
+        # Try to get object_key from storage metadata first (for uploaded files)
+        storage_info = audio.get("storage", {})
+        if storage_info and "object_key" in storage_info:
+            object_key = storage_info["object_key"]
+        else:
+            # Fallback: construct from audio metadata (for TTS files)
+            file_format = audio.get("format", "wav")
+            object_key = f"{audio['customer_id']}/{audio['user_id']}/audio/{audio_id}.{file_format}"
 
         logger.info(f"Streaming audio: {audio_id} from {bucket}/{object_key}")
 
@@ -269,12 +412,23 @@ async def stream_audio(
             object_name=object_key
         )
 
+        # Determine media type from format
+        file_format = audio.get("format", "wav")
+        media_type_map = {
+            "mp3": "audio/mpeg",
+            "wav": "audio/wav",
+            "ogg": "audio/ogg",
+            "m4a": "audio/mp4",
+            "flac": "audio/flac"
+        }
+        media_type = media_type_map.get(file_format, "audio/wav")
+
         # Return as streaming response
         return StreamingResponse(
             BytesIO(audio_data),
-            media_type="audio/wav",
+            media_type=media_type,
             headers={
-                "Content-Disposition": f'inline; filename="{audio_id}.wav"',
+                "Content-Disposition": f'inline; filename="{audio_id}.{file_format}"',
                 "Accept-Ranges": "bytes"
             }
         )

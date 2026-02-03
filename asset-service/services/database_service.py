@@ -20,10 +20,15 @@ class DatabaseService:
         self.client = MongoClient(settings.MONGODB_URL)
         self.db = self.client[settings.MONGODB_DB_NAME]
         self.assets = self.db.assets
+        self.projects = self.db.projects  # Add projects collection
 
         # Audio library uses the news database
         self.news_db = self.client['news']
         self.audio_library = self.news_db.audio_library
+
+        # Image and Video libraries
+        self.image_library = self.news_db.image_library
+        self.video_library = self.news_db.video_library
 
         self._ensure_indexes()
 
@@ -52,6 +57,9 @@ class DatabaseService:
                 ("customer_id", ASCENDING),
                 ("metadata.folder", ASCENDING)
             ])
+
+            # Note: Project indexes are created by migration 056_create_projects_collection.js
+            # No need to create them here to avoid duplication
 
             logger.info("Database indexes created successfully")
 
@@ -257,11 +265,11 @@ class DatabaseService:
                 query["user_id"] = user_id
 
             logger.info(f"Querying audio_library with: {query}")
-            audio = self.audio_library.find_one(query)
+            # Exclude _id field to avoid ObjectId serialization issues
+            audio = self.audio_library.find_one(query, {"_id": 0})
 
             if audio:
                 logger.info(f"Found audio: {audio.get('audio_id')}")
-                audio['_id'] = str(audio['_id'])
             else:
                 logger.warning(f"Audio not found with query: {query}")
 
@@ -373,6 +381,172 @@ class DatabaseService:
             logger.error(f"Error listing audio library: {e}")
             raise
 
+    # ========== Image Library Methods ==========
+
+    def create_image_library_entry(self, image_data: Dict[str, Any]) -> str:
+        """Create a new image library entry"""
+        try:
+            image_data["created_at"] = datetime.utcnow()
+            image_data["updated_at"] = datetime.utcnow()
+
+            result = self.image_library.insert_one(image_data)
+            logger.info(f"Created image library entry: {image_data.get('image_id')}")
+            return image_data["image_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating image library entry: {e}")
+            raise
+
+    def list_image_library(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        folder: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List image library entries"""
+        try:
+            query = {
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            if folder:
+                query["folder"] = folder
+
+            images = list(
+                self.image_library.find(query, {"_id": 0})
+                .sort("created_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return images
+
+        except PyMongoError as e:
+            logger.error(f"Error listing image library: {e}")
+            raise
+
+    def delete_image_library_entry(
+        self,
+        image_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """Soft delete an image library entry"""
+        try:
+            query = {
+                "image_id": image_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            result = self.image_library.update_one(
+                query,
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting image library entry: {e}")
+            raise
+
+    # ========== Video Library Methods ==========
+
+    def create_video_library_entry(self, video_data: Dict[str, Any]) -> str:
+        """Create a new video library entry"""
+        try:
+            video_data["created_at"] = datetime.utcnow()
+            video_data["updated_at"] = datetime.utcnow()
+
+            result = self.video_library.insert_one(video_data)
+            logger.info(f"Created video library entry: {video_data.get('video_id')}")
+            return video_data["video_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating video library entry: {e}")
+            raise
+
+    def list_video_library(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        folder: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """List video library entries"""
+        try:
+            query = {
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            if folder:
+                query["folder"] = folder
+
+            videos = list(
+                self.video_library.find(query, {"_id": 0})
+                .sort("created_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return videos
+
+        except PyMongoError as e:
+            logger.error(f"Error listing video library: {e}")
+            raise
+
+    def delete_video_library_entry(
+        self,
+        video_id: str,
+        customer_id: str,
+        user_id: Optional[str] = None
+    ) -> bool:
+        """Soft delete a video library entry"""
+        try:
+            query = {
+                "video_id": video_id,
+                "customer_id": customer_id,
+                "is_deleted": False
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+
+            result = self.video_library.update_one(
+                query,
+                {
+                    "$set": {
+                        "is_deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting video library entry: {e}")
+            raise
+
     def list_assets(
         self,
         customer_id: str,
@@ -441,6 +615,185 @@ class DatabaseService:
 
         except PyMongoError as e:
             logger.error(f"Error searching assets: {e}")
+            raise
+
+    # ==================== Project Methods ====================
+
+    def create_project(self, project_data: Dict[str, Any]) -> str:
+        """
+        Create a new project
+
+        Args:
+            project_data: Project metadata
+
+        Returns:
+            Project ID
+        """
+        try:
+            project_data["created_at"] = datetime.utcnow()
+            project_data["updated_at"] = datetime.utcnow()
+
+            result = self.projects.insert_one(project_data)
+            logger.info(f"Created project: {project_data.get('project_id')}")
+            return project_data["project_id"]
+
+        except PyMongoError as e:
+            logger.error(f"Error creating project: {e}")
+            raise
+
+    def get_project(
+        self,
+        project_id: str,
+        customer_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a project by ID
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+
+        Returns:
+            Project data or None
+        """
+        try:
+            project = self.projects.find_one(
+                {
+                    "project_id": project_id,
+                    "customer_id": customer_id,
+                    "deleted_at": None
+                },
+                {"_id": 0}
+            )
+            return project
+
+        except PyMongoError as e:
+            logger.error(f"Error getting project: {e}")
+            raise
+
+    def update_project(
+        self,
+        project_id: str,
+        customer_id: str,
+        update_data: Dict[str, Any]
+    ) -> bool:
+        """
+        Update a project
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+            update_data: Fields to update
+
+        Returns:
+            True if updated
+        """
+        try:
+            update_data["updated_at"] = datetime.utcnow()
+
+            result = self.projects.update_one(
+                {
+                    "project_id": project_id,
+                    "customer_id": customer_id
+                },
+                {"$set": update_data}
+            )
+
+            if result.modified_count > 0:
+                logger.info(f"Updated project: {project_id}")
+
+            return result.modified_count > 0
+
+        except PyMongoError as e:
+            logger.error(f"Error updating project: {e}")
+            raise
+
+    def list_projects(
+        self,
+        customer_id: str,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        skip: int = 0,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        List projects with filters
+
+        Args:
+            customer_id: Customer ID
+            user_id: Optional user ID filter
+            status: Optional status filter
+            skip: Number of records to skip
+            limit: Maximum number of records
+
+        Returns:
+            List of projects
+        """
+        try:
+            query = {
+                "customer_id": customer_id,
+                "deleted_at": None
+            }
+
+            if user_id:
+                query["user_id"] = user_id
+            if status:
+                query["status"] = status
+
+            projects = list(
+                self.projects.find(query, {"_id": 0})
+                .sort("updated_at", DESCENDING)
+                .skip(skip)
+                .limit(limit)
+            )
+
+            return projects
+
+        except PyMongoError as e:
+            logger.error(f"Error listing projects: {e}")
+            raise
+
+    def delete_project(
+        self,
+        project_id: str,
+        customer_id: str,
+        hard: bool = False
+    ) -> bool:
+        """
+        Delete a project (soft or hard delete)
+
+        Args:
+            project_id: Project ID
+            customer_id: Customer ID
+            hard: If True, permanently delete; if False, soft delete
+
+        Returns:
+            True if deleted
+        """
+        try:
+            if hard:
+                result = self.projects.delete_one({
+                    "project_id": project_id,
+                    "customer_id": customer_id
+                })
+                deleted = result.deleted_count > 0
+            else:
+                result = self.projects.update_one(
+                    {
+                        "project_id": project_id,
+                        "customer_id": customer_id
+                    },
+                    {"$set": {"deleted_at": datetime.utcnow()}}
+                )
+                deleted = result.modified_count > 0
+
+            if deleted:
+                logger.info(f"Deleted project: {project_id} (hard={hard})")
+
+            return deleted
+
+        except PyMongoError as e:
+            logger.error(f"Error deleting project: {e}")
             raise
 
 

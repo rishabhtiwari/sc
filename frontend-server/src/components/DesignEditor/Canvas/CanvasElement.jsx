@@ -1,10 +1,21 @@
 import React, { useState, useRef } from 'react';
+import AuthenticatedVideo from '../../common/AuthenticatedVideo';
+import AuthenticatedImage from '../../common/AuthenticatedImage';
 
 /**
  * Canvas Element Component
  * Renders different types of elements (text, image, shape, etc.)
  */
-const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditingChange }) => {
+const CanvasElement = ({
+  element,
+  isSelected,
+  zoom,
+  onSelect,
+  onUpdate,
+  onEditingChange,
+  registerVideoRef,
+  unregisterVideoRef
+}) => {
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState(null);
@@ -12,6 +23,7 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(element.text || '');
   const elementRef = useRef(null);
+  const videoRef = useRef(null);
 
   // Notify parent when editing state changes
   React.useEffect(() => {
@@ -19,6 +31,21 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
       onEditingChange(isEditing);
     }
   }, [isEditing, onEditingChange]);
+
+  // Register/unregister video ref for playback control
+  React.useEffect(() => {
+    if (element.type === 'video' && videoRef.current && registerVideoRef) {
+      console.log('📹 Registering video ref for element:', element.id);
+      registerVideoRef(element.id, videoRef.current);
+
+      return () => {
+        if (unregisterVideoRef) {
+          console.log('📹 Unregistering video ref for element:', element.id);
+          unregisterVideoRef(element.id);
+        }
+      };
+    }
+  }, [element.id, element.type, registerVideoRef, unregisterVideoRef]);
 
   const handleMouseDown = (e) => {
     e.stopPropagation();
@@ -32,7 +59,9 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
         x: e.clientX,
         y: e.clientY,
         width: element.width || 200,
-        height: element.height || 100
+        height: element.height || 100,
+        elementX: element.x || 0,
+        elementY: element.y || 0
       });
       return;
     }
@@ -55,21 +84,43 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
 
       let newWidth = dragStart.width;
       let newHeight = dragStart.height;
+      let newX = dragStart.elementX;
+      let newY = dragStart.elementY;
 
+      // East handle - increase width to the right
       if (resizeHandle.includes('e')) {
         newWidth = Math.max(50, dragStart.width + deltaX);
       }
+
+      // West handle - increase width to the left (also move element)
       if (resizeHandle.includes('w')) {
-        newWidth = Math.max(50, dragStart.width - deltaX);
+        const proposedWidth = Math.max(50, dragStart.width - deltaX);
+        const widthDiff = proposedWidth - dragStart.width;
+        newWidth = proposedWidth;
+        newX = dragStart.elementX - widthDiff;
       }
+
+      // South handle - increase height downward
       if (resizeHandle.includes('s')) {
         newHeight = Math.max(30, dragStart.height + deltaY);
       }
+
+      // North handle - increase height upward (also move element)
       if (resizeHandle.includes('n')) {
-        newHeight = Math.max(30, dragStart.height - deltaY);
+        const proposedHeight = Math.max(30, dragStart.height - deltaY);
+        const heightDiff = proposedHeight - dragStart.height;
+        newHeight = proposedHeight;
+        newY = dragStart.elementY - heightDiff;
       }
 
-      onUpdate({ width: newWidth, height: newHeight });
+      // Update both size and position
+      const updates = { width: newWidth, height: newHeight };
+      if (resizeHandle.includes('w') || resizeHandle.includes('n')) {
+        updates.x = newX;
+        updates.y = newY;
+      }
+
+      onUpdate(updates);
     }
   };
 
@@ -252,6 +303,22 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
           filter: filters.length > 0 ? filters.join(' ') : 'none'
         };
 
+        // Check if this is an API URL that needs authentication
+        const isApiImageUrl = element.src && element.src.startsWith('/api/');
+
+        if (isApiImageUrl) {
+          // Use AuthenticatedImage for API URLs (library images)
+          return (
+            <AuthenticatedImage
+              src={element.src}
+              alt="Canvas element"
+              style={imageStyle}
+              draggable={false}
+            />
+          );
+        }
+
+        // Regular image for blob URLs or external URLs
         return (
           <img
             src={element.src}
@@ -280,9 +347,14 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
         return (
           <div
             style={{
-              fontSize: (element.fontSize || 16) * zoom,
+              fontSize: element.width ? element.width * zoom : (element.fontSize || 64) * zoom,
               color: element.color,
-              cursor: 'move'
+              cursor: 'move',
+              width: element.width ? element.width * zoom : 'auto',
+              height: element.height ? element.height * zoom : 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
             {element.icon || element.emoji}
@@ -308,33 +380,70 @@ const CanvasElement = ({ element, isSelected, zoom, onSelect, onUpdate, onEditin
 
         console.log('🎬 Rendering video element:', element.id, 'src:', element.src?.substring(0, 50));
 
-        return (
-          <video
-            key={element.id}
-            src={element.src}
-            style={videoStyle}
-            muted={element.muted !== undefined ? element.muted : true}
-            loop={element.loop !== undefined ? element.loop : false}
-            playsInline
-            preload="auto"
-            data-video-element-id={element.id}
-            onLoadedMetadata={(e) => {
-              console.log('🎬 Video onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState, 'src valid:', !!e.target.src);
-            }}
-            onCanPlay={(e) => {
-              console.log('🎬 Video onCanPlay:', element.id);
-            }}
-            onPlay={(e) => {
-              console.log('✅ Video onPlay event:', element.id);
-            }}
-            onPause={(e) => {
-              console.log('⏸️ Video onPause event:', element.id);
-            }}
-            onError={(e) => {
-              console.error('❌ Video onError:', element.id, 'error:', e.target.error);
-            }}
-          />
-        );
+        // Check if this is an API URL that needs authentication
+        const isApiUrl = element.src && element.src.startsWith('/api/assets/download/');
+
+        if (isApiUrl) {
+          // Use AuthenticatedVideo for API URLs
+          return (
+            <AuthenticatedVideo
+              ref={videoRef}
+              key={element.id}
+              src={element.src}
+              style={videoStyle}
+              muted={element.muted !== undefined ? element.muted : true}
+              loop={element.loop !== undefined ? element.loop : false}
+              playsInline
+              preload="auto"
+              data-video-element-id={element.id}
+              onLoadedMetadata={(e) => {
+                console.log('🎬 AuthenticatedVideo onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState);
+              }}
+              onCanPlay={(e) => {
+                console.log('🎬 AuthenticatedVideo onCanPlay:', element.id);
+              }}
+              onPlay={(e) => {
+                console.log('✅ AuthenticatedVideo onPlay event:', element.id);
+              }}
+              onPause={(e) => {
+                console.log('⏸️ AuthenticatedVideo onPause event:', element.id);
+              }}
+              onError={(e) => {
+                console.error('❌ AuthenticatedVideo error:', element.id, e);
+              }}
+            />
+          );
+        } else {
+          // Use regular video tag for blob URLs and local files
+          return (
+            <video
+              ref={videoRef}
+              key={element.id}
+              src={element.src}
+              style={videoStyle}
+              muted={element.muted !== undefined ? element.muted : true}
+              loop={element.loop !== undefined ? element.loop : false}
+              playsInline
+              preload="auto"
+              data-video-element-id={element.id}
+              onLoadedMetadata={(e) => {
+                console.log('🎬 Video onLoadedMetadata:', element.id, 'duration:', e.target.duration, 'readyState:', e.target.readyState, 'src valid:', !!e.target.src);
+              }}
+              onCanPlay={(e) => {
+                console.log('🎬 Video onCanPlay:', element.id);
+              }}
+              onPlay={(e) => {
+                console.log('✅ Video onPlay event:', element.id);
+              }}
+              onPause={(e) => {
+                console.log('⏸️ Video onPause event:', element.id);
+              }}
+              onError={(e) => {
+                console.error('❌ Video onError:', element.id, 'error:', e.target.error);
+              }}
+            />
+          );
+        }
 
       default:
         return <div>Unknown element type</div>;

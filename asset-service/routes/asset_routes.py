@@ -185,15 +185,42 @@ async def upload_asset(
         
         # Save to database
         db_service.create_asset(asset_data)
-        
+
         logger.info(f"Asset uploaded successfully: {asset_id}")
-        
-        return UploadResponse(
-            success=True,
-            asset_id=asset_id,
-            url=storage_url,
-            message="Asset uploaded successfully"
-        )
+
+        # Generate presigned URL for browser access (valid for 24 hours)
+        try:
+            presigned_url = storage_service.get_presigned_url(
+                bucket=bucket,
+                object_name=storage_key,
+                expires=timedelta(hours=24)
+            )
+            logger.info(f"✅ Presigned URL generated: {presigned_url[:100]}...")
+        except Exception as e:
+            logger.error(f"❌ Failed to generate presigned URL: {e}")
+            logger.warning(f"⚠️ Falling back to storage URL: {storage_url}")
+            presigned_url = storage_url
+
+        # Return response with presigned URL and full asset data
+        return {
+            "success": True,
+            "asset_id": asset_id,
+            "url": presigned_url,  # Presigned URL for browser access
+            "message": "Asset uploaded successfully",
+            "asset": {
+                "asset_id": asset_id,
+                "type": asset_type,
+                "name": name or file.filename,
+                "storage": {
+                    "bucket": bucket,
+                    "key": storage_key,
+                    "url": presigned_url
+                },
+                "size": file_size,
+                "duration": file_info.get("duration"),
+                "dimensions": file_info.get("dimensions")
+            }
+        }
         
     except HTTPException:
         raise
@@ -262,6 +289,53 @@ async def download_asset(
         raise
     except Exception as e:
         logger.error(f"Error downloading asset: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download/{bucket}/{object_path:path}")
+async def download_asset_by_path(
+    bucket: str,
+    object_path: str,
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """
+    Download asset file directly by bucket and object path
+    This is used for proxy URLs that don't require asset_id lookup
+    """
+    try:
+        logger.info(f"Downloading asset: bucket={bucket}, path={object_path}")
+
+        # Download from MinIO
+        file_data = storage_service.download_file(
+            bucket=bucket,
+            object_name=object_path
+        )
+
+        # Determine MIME type from file extension
+        import mimetypes
+        mime_type, _ = mimetypes.guess_type(object_path)
+        if not mime_type:
+            mime_type = "application/octet-stream"
+
+        logger.info(f"Serving file: {bucket}/{object_path} as {mime_type}")
+
+        # Return as streaming response with inline disposition for browser playback
+        return StreamingResponse(
+            BytesIO(file_data),
+            media_type=mime_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{object_path.split("/")[-1]}"',
+                "Accept-Ranges": "bytes",
+                "Cache-Control": "public, max-age=3600"
+            }
+        )
+
+    except S3Error as e:
+        logger.error(f"MinIO error downloading asset: {e}")
+        raise HTTPException(status_code=404, detail="Asset not found in storage")
+    except Exception as e:
+        logger.error(f"Error downloading asset by path: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

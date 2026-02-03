@@ -5,6 +5,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { marked } from 'marked';
+import SearchBar from '../../common/SearchBar';
 
 /**
  * Text Studio - AI text generation component
@@ -28,6 +29,7 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
   const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [textLibrary, setTextLibrary] = useState([]);
   const [customPrompt, setCustomPrompt] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const { showToast } = useToast();
 
   // Tiptap editor instance
@@ -747,6 +749,16 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">
                     📚 Saved Texts
                   </h3>
+
+                  {/* Search Bar */}
+                  <SearchBar
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="🔍 Search by title or preview..."
+                    compact={true}
+                    className="mb-4"
+                  />
+
                   {textLibrary.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">
                       <div className="text-6xl mb-4">📚</div>
@@ -757,7 +769,15 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
-                      {textLibrary.map((item) => (
+                      {textLibrary
+                        .filter(item => {
+                          if (!searchQuery) return true;
+                          const query = searchQuery.toLowerCase();
+                          const titleMatch = item.title?.toLowerCase().includes(query);
+                          const previewMatch = item.metadata?.preview?.toLowerCase().includes(query);
+                          return titleMatch || previewMatch;
+                        })
+                        .map((item) => (
                         <div
                           key={item.asset_id}
                           className="border border-gray-200 rounded-lg p-4 hover:shadow-lg transition-all"
@@ -817,6 +837,15 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
                 </button>
               </div>
 
+              {/* Search Bar */}
+              <SearchBar
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="🔍 Search..."
+                compact={true}
+                className="mb-4"
+              />
+
               {/* Categories */}
               <div className="mb-4">
                 <div className="space-y-1">
@@ -845,7 +874,16 @@ const TextStudio = ({ isOpen = true, onClose, onAddToCanvas, mode = 'modal' }) =
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {textLibrary.slice(0, 10).map((item) => (
+                  {textLibrary
+                    .filter(item => {
+                      if (!searchQuery) return true;
+                      const query = searchQuery.toLowerCase();
+                      const titleMatch = item.title?.toLowerCase().includes(query);
+                      const previewMatch = item.metadata?.preview?.toLowerCase().includes(query);
+                      return titleMatch || previewMatch;
+                    })
+                    .slice(0, 10)
+                    .map((item) => (
                     <div
                       key={item.asset_id}
                       className="group relative bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-300 transition-all"

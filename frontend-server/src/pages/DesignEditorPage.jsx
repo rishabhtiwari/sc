@@ -21,15 +21,6 @@ const DesignEditorPage = () => {
           <h1 className="text-xl font-bold text-gray-900">Design Editor</h1>
           <span className="text-sm text-gray-500">Create stunning visuals with AI</span>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <button className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
-            Save Draft
-          </button>
-          <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700">
-            Export
-          </button>
-        </div>
       </div>
 
       {/* Design Editor Component */}

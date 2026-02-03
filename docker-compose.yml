@@ -6,6 +6,7 @@ services:
     build:
       context: ./ichat-ui
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-ui-frontend
     ports:
       - "3001:80"
@@ -32,6 +33,7 @@ services:
       dockerfile: Dockerfile
       args:
         - NODE_ENV=production
+    pull_policy: if_not_present
     container_name: news-automation-frontend
     ports:
       - "3002:3002"  # Express API proxy
@@ -97,6 +99,7 @@ services:
     build:
       context: ./api-server
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-api-server
     ports:
       - "8080:8080"
@@ -152,6 +155,7 @@ services:
     build:
       context: ./template-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-template-service
     ports:
       - "5010:5000"
@@ -206,6 +210,7 @@ services:
     build:
       context: ./ocr-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-ocr-service
     ports:
       - "8081:8081"
@@ -238,6 +243,7 @@ services:
     build:
       context: ./llm/llm-prompt-generation
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-llm-service
     ports:
       - "8083:8083"
@@ -305,6 +311,7 @@ services:
     build:
       context: ./llm/embedding-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-embedding-service
     ports:
       - "8085:8085"
@@ -346,6 +353,7 @@ services:
     build:
       context: ./llm/vector-db
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-vector-db
     ports:
       - "8084:8084"
@@ -373,6 +381,7 @@ services:
     build:
       context: ./llm/retriever-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-retriever-service
     ports:
       - "8086:8086"
@@ -420,6 +429,7 @@ services:
     build:
       context: ./code-generation-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-code-generation-service
     ports:
       - "8088:8088"
@@ -464,6 +474,7 @@ services:
     build:
       context: ./mcp-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-mcp-service
     ports:
       - "8089:8089"
@@ -507,6 +518,7 @@ services:
     build:
       context: ./jobs/remote-host-syncer
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: job-remote-host-syncer
     ports:
       - "8091:8091"
@@ -561,6 +573,7 @@ services:
     build:
       context: ./jobs/github-repo-syncer
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: job-github-repo-syncer
     ports:
       - "8092:8092"
@@ -617,6 +630,7 @@ services:
     build:
       context: ./jobs
       dockerfile: news-fetcher/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-news-fetcher
     ports:
       - "8093:8093"
@@ -673,6 +687,7 @@ services:
     build:
       context: ./jobs
       dockerfile: voice-generator/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-voice-generator
     ports:
       - "8094:8094"
@@ -755,6 +770,7 @@ services:
     build:
       context: ./audio-generation
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: audio-generation-factory
     ports:
       - "3000:3000"
@@ -806,6 +822,7 @@ services:
     build:
       context: .
       dockerfile: inventory-creation-service/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-inventory-creation-service
     ports:
       - "5001:5001"
@@ -850,6 +867,7 @@ services:
     build:
       context: ./jobs
       dockerfile: video-generator/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-video-generator
     ports:
       - "8095:8095"
@@ -929,6 +947,7 @@ services:
     build:
       context: ./jobs
       dockerfile: ./watermark-remover/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-iopaint
     ports:
       - "8096:8096"
@@ -962,6 +981,7 @@ services:
     build:
       context: ./jobs
       dockerfile: ./image-auto-marker/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-image-auto-marker
     ports:
       - "8102:8102"
@@ -1003,6 +1023,7 @@ services:
     build:
       context: .
       dockerfile: ./youtube-uploader/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-youtube-uploader
     ports:
       - "8097:8097"
@@ -1036,6 +1057,7 @@ services:
     build:
       context: ./auth-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-auth-service
     ports:
       - "8098:8098"
@@ -1084,6 +1106,7 @@ services:
     build:
       context: ./jobs
       dockerfile: cleanup/Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-cleanup
     ports:
       - "8100:8100"
@@ -1138,6 +1161,7 @@ services:
     build:
       context: ./mongodb
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-mongodb
     ports:
       - "27017:27017"
@@ -1168,6 +1192,7 @@ services:
   # MinIO Object Storage
   minio:
     image: minio/minio:latest
+    pull_policy: if_not_present
     container_name: ichat-minio
     ports:
       - "9000:9000"  # API
@@ -1193,6 +1218,7 @@ services:
     build:
       context: ./asset-service
       dockerfile: Dockerfile
+    pull_policy: if_not_present
     container_name: ichat-asset-service
     ports:
       - "8099:8099"
