@@ -26,7 +26,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
 
   if (!element) {
     return (
-      <div className="w-80 bg-gray-50 border-l border-gray-200 flex items-center justify-center p-8">
+      <div className="w-full h-full bg-gray-50 flex items-center justify-center p-8">
         <div className="text-center">
           <div className="text-5xl mb-3 opacity-40">✨</div>
           <h3 className="text-sm font-semibold text-gray-700 mb-1">No element selected</h3>
@@ -970,7 +970,7 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
   };
 
   return (
-    <div className="w-80 bg-gray-50 border-l border-gray-200 flex flex-col h-full">
+    <div className="w-full h-full bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">

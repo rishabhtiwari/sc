@@ -197,6 +197,10 @@ const DesignEditor = () => {
 
   // Properties Panel State (user can manually close/open)
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(320); // Default 320px
+  const [timelineHeight, setTimelineHeight] = useState(300); // Default 300px
+  const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
+  const [isResizingTimeline, setIsResizingTimeline] = useState(false);
 
   // Auto-open Properties Panel when element is selected
   useEffect(() => {
@@ -204,6 +208,50 @@ const DesignEditor = () => {
       setIsPropertiesPanelOpen(true);
     }
   }, [selectedElement]);
+
+  // Handle properties panel resize
+  useEffect(() => {
+    if (!isResizingPropertiesPanel) return;
+
+    const handleMouseMove = (e) => {
+      const newWidth = window.innerWidth - e.clientX;
+      setPropertiesPanelWidth(Math.max(280, Math.min(600, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingPropertiesPanel(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingPropertiesPanel]);
+
+  // Handle timeline resize
+  useEffect(() => {
+    if (!isResizingTimeline) return;
+
+    const handleMouseMove = (e) => {
+      const newHeight = window.innerHeight - e.clientY;
+      setTimelineHeight(Math.max(200, Math.min(600, newHeight)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTimeline(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingTimeline]);
 
   // Session Storage Hook (auto-save/restore)
   useSessionStorage({
@@ -527,7 +575,7 @@ const DesignEditor = () => {
     console.log('🎵 Audio selected:', audioId);
     const track = audioTracks.find(t => t.id === audioId);
     if (track) {
-      setSelectedElement({ ...track, type: 'audio' });
+      handleSelectElement({ ...track, type: 'audio' });
     }
   };
 
@@ -1351,58 +1399,88 @@ const DesignEditor = () => {
           unregisterVideoRef={unregisterVideoRef}
         />
 
-        {/* Audio Timeline */}
+        {/* Audio Timeline with Resize Handle */}
         {(audioTracks.length > 0 || videoTracks.length > 0) && (
-          <AudioTimelineRefactored
-            audioTracks={audioTracks}
-            videoTracks={videoTracks}
-            slides={pages}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            loadingAssets={loadingAssets}
-            selectedAudioId={selectedElement?.type === 'audio' ? selectedElement.id : null}
-            selectedVideoId={selectedElement?.type === 'video' ? selectedElement.id : null}
-            selectedSlideIndex={selectedElement?.type === 'slide' ? selectedElement.slideIndex : null}
-            onAudioUpdate={handleAudioUpdate}
-            onAudioDelete={handleAudioDelete}
-            onAudioSelect={handleAudioSelect}
-            onVideoUpdate={handleVideoUpdate}
-            onVideoDelete={handleVideoDelete}
-            onVideoSelect={handleVideoSelect}
-            onSlideUpdate={handleSlideUpdate}
-            onSlideSelect={handleSlideSelect}
-            onSeek={handleSeek}
-            onPlay={handlePlay}
-            onPause={handlePause}
-          />
+          <div
+            className="relative border-t border-gray-200"
+            style={{ height: `${timelineHeight}px` }}
+          >
+            {/* Resize Handle */}
+            <div
+              className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-500 transition-colors z-50 group"
+              onMouseDown={() => setIsResizingTimeline(true)}
+              title="Drag to resize timeline"
+            >
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-gray-300 group-hover:bg-blue-500 rounded-full"></div>
+            </div>
+
+            <div className="h-full overflow-hidden">
+              <AudioTimelineRefactored
+                audioTracks={audioTracks}
+                videoTracks={videoTracks}
+                slides={pages}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                loadingAssets={loadingAssets}
+                selectedAudioId={selectedElement?.type === 'audio' ? selectedElement.id : null}
+                selectedVideoId={selectedElement?.type === 'video' ? selectedElement.id : null}
+                selectedSlideIndex={selectedElement?.type === 'slide' ? selectedElement.slideIndex : null}
+                onAudioUpdate={handleAudioUpdate}
+                onAudioDelete={handleAudioDelete}
+                onAudioSelect={handleAudioSelect}
+                onVideoUpdate={handleVideoUpdate}
+                onVideoDelete={handleVideoDelete}
+                onVideoSelect={handleVideoSelect}
+                onSlideUpdate={handleSlideUpdate}
+                onSlideSelect={handleSlideSelect}
+                onSeek={handleSeek}
+                onPlay={handlePlay}
+                onPause={handlePause}
+              />
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Properties Panel - Always show if open, regardless of selection */}
+      {/* Properties Panel with Resize Handle - Always show if open, regardless of selection */}
       {isPropertiesPanelOpen && (
-        <PropertiesPanel
-          element={selectedElement}
-          onUpdate={(updates) => {
-            if (selectedElement?.type === 'slide') {
-              // Handle slide updates
-              handleSlideUpdate(selectedElement.slideIndex, updates);
-            } else if (selectedElement?.type === 'audio') {
-              // Handle audio track updates
-              handleAudioUpdate(selectedElement.id, updates);
-            } else {
-              // Handle regular element updates
-              handleUpdateElement(selectedElement.id, updates);
-            }
-          }}
-          onDelete={() => {
-            if (selectedElement?.type === 'audio') {
-              handleAudioDelete(selectedElement.id);
-            } else {
-              handleDeleteElement(selectedElement.id);
-            }
-          }}
-          onClose={() => setIsPropertiesPanelOpen(false)}
-        />
+        <div
+          className="relative bg-gray-50 border-l border-gray-200 flex flex-col h-full"
+          style={{ width: `${propertiesPanelWidth}px` }}
+        >
+          {/* Resize Handle */}
+          <div
+            className="absolute top-0 left-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500 transition-colors z-50 group"
+            onMouseDown={() => setIsResizingPropertiesPanel(true)}
+            title="Drag to resize properties panel"
+          >
+            <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-12 bg-gray-300 group-hover:bg-blue-500 rounded-full"></div>
+          </div>
+
+          <PropertiesPanel
+            element={selectedElement}
+            onUpdate={(updates) => {
+              if (selectedElement?.type === 'slide') {
+                // Handle slide updates
+                handleSlideUpdate(selectedElement.slideIndex, updates);
+              } else if (selectedElement?.type === 'audio') {
+                // Handle audio track updates
+                handleAudioUpdate(selectedElement.id, updates);
+              } else {
+                // Handle regular element updates
+                handleUpdateElement(selectedElement.id, updates);
+              }
+            }}
+            onDelete={() => {
+              if (selectedElement?.type === 'audio') {
+                handleAudioDelete(selectedElement.id);
+              } else {
+                handleDeleteElement(selectedElement.id);
+              }
+            }}
+            onClose={() => setIsPropertiesPanelOpen(false)}
+          />
+        </div>
       )}
 
       {/* Delete Slide Confirmation Dialog */}
