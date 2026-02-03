@@ -875,6 +875,90 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
           </div>
         );
 
+      case 'slide':
+        return (
+          <div className="space-y-1">
+            {/* Slide Info Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Slide Info"
+                icon="📊"
+                section="content"
+                isExpanded={expandedSections.content}
+              />
+              {expandedSections.content && (
+                <div className="p-4 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide block mb-2">Slide Name</label>
+                    <input
+                      type="text"
+                      value={element.name || ''}
+                      onChange={(e) => onUpdate({ name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      placeholder="Slide name"
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 space-y-1">
+                    <div>Duration: {element.duration?.toFixed(2)}s</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Duration Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Duration"
+                icon="⏱️"
+                section="dimensions"
+                isExpanded={expandedSections.dimensions}
+              />
+              {expandedSections.dimensions && (
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-medium text-gray-600 uppercase tracking-wide">Duration (seconds)</label>
+                      <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">{element.duration || 5}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="30"
+                      step="0.5"
+                      value={element.duration || 5}
+                      onChange={(e) => onUpdate({ duration: parseFloat(e.target.value) })}
+                      className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Background Section */}
+            <div className="bg-white border-b border-gray-100">
+              <SectionHeader
+                title="Background"
+                icon="🎨"
+                section="color"
+                isExpanded={expandedSections.color}
+              />
+              {expandedSections.color && (
+                <div className="p-4 space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 uppercase tracking-wide block mb-2">Background Color</label>
+                    <input
+                      type="color"
+                      value={element.background?.color || '#ffffff'}
+                      onChange={(e) => onUpdate({ background: { ...element.background, type: 'solid', color: e.target.value } })}
+                      className="w-full h-10 rounded cursor-pointer border border-gray-300"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
       default:
         return (
           <div className="text-center py-12 px-4">
@@ -893,13 +977,13 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
           <div className="flex-1">
             <h2 className="text-sm font-bold text-gray-900">Properties</h2>
             <p className="text-xs text-gray-500 mt-0.5 capitalize">
-              {element.type === 'audio' ? 'Audio Track' : `${element.type} Element`}
+              {element.type === 'audio' ? 'Audio Track' : element.type === 'slide' ? 'Slide' : `${element.type} Element`}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-50 rounded-md flex items-center justify-center">
               <span className="text-lg">
-                {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : element.type === 'video' ? '🎬' : '⬜'}
+                {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : element.type === 'video' ? '🎬' : element.type === 'slide' ? '📊' : '⬜'}
               </span>
             </div>
             {/* Close Button */}

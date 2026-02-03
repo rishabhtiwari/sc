@@ -104,8 +104,13 @@ const AudioBlock = ({
           onUpdate({ duration: newDuration });
         }
       } else if (stretchStart.edge === 'left') {
-        const newStartTime = Math.max(0, stretchStart.initialStartTime + deltaTime);
-        const newDuration = Math.max(1, stretchStart.initialDuration - deltaTime);
+        // Calculate how much we can actually move left (limited by startTime reaching 0)
+        const maxLeftDelta = -stretchStart.initialStartTime;
+        const clampedDeltaTime = Math.max(deltaTime, maxLeftDelta);
+
+        const newStartTime = stretchStart.initialStartTime + clampedDeltaTime;
+        const newDuration = Math.max(1, stretchStart.initialDuration - clampedDeltaTime);
+
         if (onUpdate) {
           onUpdate({ startTime: newStartTime, duration: newDuration });
         }

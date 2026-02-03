@@ -56,6 +56,10 @@ const DesignEditor = () => {
   // Audio tracks state
   const [audioTracks, setAudioTracks] = useState([]);
 
+  // Loading state for audio/video assets
+  const [loadingAssets, setLoadingAssets] = useState(new Set());
+  const [assetsReady, setAssetsReady] = useState(false);
+
   // Project name editing state
   const [isEditingProjectName, setIsEditingProjectName] = useState(false);
   const [editedProjectName, setEditedProjectName] = useState('');
@@ -535,6 +539,22 @@ const DesignEditor = () => {
     }
   };
 
+  const handleSlideSelect = (slideIndex) => {
+    console.log('📊 Slide selected:', slideIndex);
+    const slide = pages[slideIndex];
+    if (slide) {
+      // Create a slide element object for the properties panel
+      const slideElement = {
+        ...slide,
+        type: 'slide',
+        id: slide.id || `slide-${slideIndex}`,
+        name: slide.name || `Slide ${slideIndex + 1}`,
+        slideIndex // Store the index for updates
+      };
+      handleSelectElement(slideElement);
+    }
+  };
+
   /**
    * Apply fade in/out effect to audio element
    */
@@ -563,18 +583,26 @@ const DesignEditor = () => {
   };
 
   /**
+   * Check if all assets are ready for playback
+   */
+  useEffect(() => {
+    setAssetsReady(loadingAssets.size === 0);
+  }, [loadingAssets]);
+
+  /**
    * Handle play/pause for timeline
    */
   const handlePlay = () => {
+    // Check if assets are still loading
+    if (loadingAssets.size > 0) {
+      console.log('⏳ Assets still loading, cannot play yet');
+      showToast('Please wait, loading media assets...', 'info');
+      return;
+    }
+
     console.log('▶️ Play button clicked');
-    setIsPlaying(true);
-  };
 
-  const handlePause = () => {
-    console.log('⏸️ Pause button clicked');
-    setIsPlaying(false);
-
-    // Pause all audio elements
+    // First, pause all currently playing audio to prevent overlap
     audioTracks.forEach(track => {
       const audio = audioRefs.current[track.id];
       if (audio && !audio.paused) {
@@ -588,6 +616,36 @@ const DesignEditor = () => {
         if (element.type === 'video') {
           const videoRef = videoElementRefs.current[element.id];
           if (videoRef && !videoRef.paused) {
+            videoRef.pause();
+          }
+        }
+      });
+    });
+
+    // Now start playback
+    setIsPlaying(true);
+  };
+
+  const handlePause = () => {
+    console.log('⏸️ Pause button clicked');
+    setIsPlaying(false);
+
+    // Pause all audio elements
+    audioTracks.forEach(track => {
+      const audio = audioRefs.current[track.id];
+      if (audio && !audio.paused) {
+        console.log(`⏸️ Pausing audio ${track.id}`);
+        audio.pause();
+      }
+    });
+
+    // Pause all video elements
+    pages.forEach(page => {
+      page.elements.forEach(element => {
+        if (element.type === 'video') {
+          const videoRef = videoElementRefs.current[element.id];
+          if (videoRef && !videoRef.paused) {
+            console.log(`⏸️ Pausing video ${element.id}`);
             videoRef.pause();
           }
         }
@@ -753,10 +811,17 @@ const DesignEditor = () => {
    */
   useEffect(() => {
     const createAudioElements = async () => {
+      // Track which assets are loading
+      const loadingSet = new Set();
+
       for (const track of audioTracks) {
         const audioUrl = track.src || track.url; // Support both 'src' and 'url' properties
         if (!audioRefs.current[track.id] && audioUrl) {
           console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
+
+          // Mark as loading
+          loadingSet.add(track.id);
+          setLoadingAssets(prev => new Set([...prev, track.id]));
 
           try {
             // Use the centralized authentication utility
@@ -766,6 +831,16 @@ const DesignEditor = () => {
             const audio = new Audio(processedUrl);
             audio.volume = (track.volume || 100) / 100;
             audio.loop = false;
+
+            // Add loadedmetadata listener to track when audio is ready
+            audio.addEventListener('loadedmetadata', () => {
+              console.log(`✅ Audio metadata loaded for ${track.id}`);
+              setLoadingAssets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(track.id);
+                return newSet;
+              });
+            });
 
             // Add event listeners to sync audio state with React state
             audio.addEventListener('ended', () => {
@@ -792,11 +867,23 @@ const DesignEditor = () => {
             audio.addEventListener('error', (e) => {
               console.error(`❌ Audio track ${track.id} error:`, e);
               setIsPlaying(false);
+              // Remove from loading set on error
+              setLoadingAssets(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(track.id);
+                return newSet;
+              });
             });
 
             audioRefs.current[track.id] = audio;
           } catch (error) {
             console.error(`❌ Error creating audio element for ${track.id}:`, error);
+            // Remove from loading set on error
+            setLoadingAssets(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(track.id);
+              return newSet;
+            });
           }
         }
       }
@@ -1272,8 +1359,10 @@ const DesignEditor = () => {
             slides={pages}
             currentTime={currentTime}
             isPlaying={isPlaying}
+            loadingAssets={loadingAssets}
             selectedAudioId={selectedElement?.type === 'audio' ? selectedElement.id : null}
             selectedVideoId={selectedElement?.type === 'video' ? selectedElement.id : null}
+            selectedSlideIndex={selectedElement?.type === 'slide' ? selectedElement.slideIndex : null}
             onAudioUpdate={handleAudioUpdate}
             onAudioDelete={handleAudioDelete}
             onAudioSelect={handleAudioSelect}
@@ -1281,6 +1370,7 @@ const DesignEditor = () => {
             onVideoDelete={handleVideoDelete}
             onVideoSelect={handleVideoSelect}
             onSlideUpdate={handleSlideUpdate}
+            onSlideSelect={handleSlideSelect}
             onSeek={handleSeek}
             onPlay={handlePlay}
             onPause={handlePause}
@@ -1292,8 +1382,25 @@ const DesignEditor = () => {
       {isPropertiesPanelOpen && (
         <PropertiesPanel
           element={selectedElement}
-          onUpdate={(updates) => handleUpdateElement(selectedElement.id, updates)}
-          onDelete={() => handleDeleteElement(selectedElement.id)}
+          onUpdate={(updates) => {
+            if (selectedElement?.type === 'slide') {
+              // Handle slide updates
+              handleSlideUpdate(selectedElement.slideIndex, updates);
+            } else if (selectedElement?.type === 'audio') {
+              // Handle audio track updates
+              handleAudioUpdate(selectedElement.id, updates);
+            } else {
+              // Handle regular element updates
+              handleUpdateElement(selectedElement.id, updates);
+            }
+          }}
+          onDelete={() => {
+            if (selectedElement?.type === 'audio') {
+              handleAudioDelete(selectedElement.id);
+            } else {
+              handleDeleteElement(selectedElement.id);
+            }
+          }}
           onClose={() => setIsPropertiesPanelOpen(false)}
         />
       )}

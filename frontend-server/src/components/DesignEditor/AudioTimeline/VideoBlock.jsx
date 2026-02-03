@@ -112,8 +112,13 @@ const VideoBlock = ({
         const newDuration = Math.max(0.5, stretchStart.duration + deltaTime);
         onUpdate({ duration: newDuration });
       } else if (stretchStart.edge === 'left') {
-        const newStartTime = Math.max(0, stretchStart.startTime + deltaTime);
-        const newDuration = Math.max(0.5, stretchStart.duration - deltaTime);
+        // Calculate how much we can actually move left (limited by startTime reaching 0)
+        const maxLeftDelta = -stretchStart.startTime;
+        const clampedDeltaTime = Math.max(deltaTime, maxLeftDelta);
+
+        const newStartTime = stretchStart.startTime + clampedDeltaTime;
+        const newDuration = Math.max(0.5, stretchStart.duration - clampedDeltaTime);
+
         onUpdate({ startTime: newStartTime, duration: newDuration });
       }
     };
