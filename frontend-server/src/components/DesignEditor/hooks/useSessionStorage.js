@@ -77,7 +77,7 @@ export const useSessionStorage = ({
       currentProject,
       timestamp: Date.now()
     };
-    
+
     sessionStorage.setItem('designEditor_inMemoryState', JSON.stringify(stateToSave));
     console.log('💾 Auto-saved in-memory state to sessionStorage');
   }, [pages, uploadedAudio, uploadedImage, uploadedVideo, audioTracks, currentProject]);

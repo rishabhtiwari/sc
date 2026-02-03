@@ -19,7 +19,7 @@ export const useMediaManagement = () => {
         console.log('🎵 Audio already in list, skipping');
         return prev;
       }
-      
+
       console.log('🎵 Adding audio to media list:', audioData.title);
       return [...prev, audioData];
     });

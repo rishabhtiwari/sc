@@ -253,17 +253,20 @@ const DesignEditor = () => {
         libraryId: addAsset.libraryId
       });
     }
-  }, [location.state?.addAsset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /**
-   * Clear processed asset ref when location changes
+   * Clear processed asset ref when navigating away from design editor
    */
   useEffect(() => {
-    if (!location.state?.addAsset && processedAssetRef.current) {
-      console.log('🧹 Clearing processed asset ref');
+    // Clear the ref when we navigate away from the design editor (to library, etc.)
+    // This ensures that when we come back with a new asset, it will be processed
+    const isLeavingEditor = !location.pathname.includes('/design-editor');
+    if (isLeavingEditor && processedAssetRef.current) {
+      console.log('🧹 Clearing processed asset ref (navigating away from editor)');
       processedAssetRef.current = null;
     }
-  }, [location]);
+  }, [location.pathname]);
 
   /**
    * Restore selected tool when returning from library
