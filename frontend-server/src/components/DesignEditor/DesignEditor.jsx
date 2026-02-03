@@ -11,6 +11,7 @@ import {
   useProjectState,
   useVideoPlayback
 } from './hooks';
+import { fetchAuthenticatedAudio } from '../../hooks/useAuthenticatedAudio';
 
 // Utils
 import { computeVideoTracks } from './utils';
@@ -102,6 +103,7 @@ const DesignEditor = () => {
 
   /**
    * Wrapper for handleDeleteElement that also removes from media library
+   * Only removes from media library if NO other instances exist on canvas
    */
   const handleDeleteElement = (elementId) => {
     // Find the element to get its type and URL
@@ -116,13 +118,37 @@ const DesignEditor = () => {
     // Delete from canvas
     handleDeleteElementBase(elementId);
 
-    // Also remove from media library if it's an image or video
-    if (elementToDelete) {
-      if (elementToDelete.type === 'image' && elementToDelete.src) {
-        setUploadedImage(prev => prev.filter(img => img.url !== elementToDelete.src));
-      } else if (elementToDelete.type === 'video' && elementToDelete.src) {
-        setUploadedVideo(prev => prev.filter(vid => vid.url !== elementToDelete.src));
-      }
+    // Check if there are any other instances of this asset on the canvas
+    // Only remove from media library if this was the LAST instance
+    if (elementToDelete && (elementToDelete.type === 'image' || elementToDelete.type === 'video')) {
+      const assetUrl = elementToDelete.src;
+
+      // Count remaining instances of this asset across all pages (after deletion)
+      // We need to use setTimeout to ensure the deletion has been processed
+      setTimeout(() => {
+        let remainingInstances = 0;
+        pages.forEach(page => {
+          page.elements.forEach(el => {
+            if (el.id !== elementId && el.type === elementToDelete.type && el.src === assetUrl) {
+              remainingInstances++;
+            }
+          });
+        });
+
+        console.log(`🔍 Remaining instances of ${elementToDelete.type} (${assetUrl}):`, remainingInstances);
+
+        // Only remove from media library if no instances remain
+        if (remainingInstances === 0) {
+          console.log(`🗑️ No more instances, removing from media library`);
+          if (elementToDelete.type === 'image') {
+            setUploadedImage(prev => prev.filter(img => img.url !== assetUrl));
+          } else if (elementToDelete.type === 'video') {
+            setUploadedVideo(prev => prev.filter(vid => vid.url !== assetUrl));
+          }
+        } else {
+          console.log(`✅ ${remainingInstances} instance(s) remain, keeping in media library`);
+        }
+      }, 0);
     }
   };
 
@@ -289,27 +315,8 @@ const DesignEditor = () => {
     const trackId = `audio-${Date.now()}`;
 
     try {
-      // Check if URL requires authentication (library stream URL)
-      let processedUrl = audioUrl;
-      if (audioUrl.includes('/api/audio-studio/library/') && audioUrl.includes('/stream')) {
-        console.log('🔐 Fetching authenticated audio for track');
-        const token = localStorage.getItem('auth_token');
-        const response = await fetch(audioUrl, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (response.ok) {
-          const blob = await response.blob();
-          const contentType = response.headers.get('Content-Type') || 'audio/mpeg';
-          const audioBlob = new Blob([blob], { type: contentType });
-          processedUrl = URL.createObjectURL(audioBlob);
-          console.log('✅ Created authenticated blob URL for track');
-        } else {
-          console.error('❌ Failed to fetch authenticated audio:', response.status);
-          showToast('Failed to load audio from library', 'error');
-          return;
-        }
-      }
+      // Use the centralized authentication utility
+      const processedUrl = await fetchAuthenticatedAudio(audioUrl);
 
       // Create audio element to get duration
       const audio = new Audio(processedUrl);
@@ -752,25 +759,9 @@ const DesignEditor = () => {
           console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
 
           try {
-            // Check if URL requires authentication (library stream URL)
-            let processedUrl = audioUrl;
-            if (audioUrl.includes('/api/audio-studio/library/') && audioUrl.includes('/stream')) {
-              console.log('🔐 Fetching authenticated audio for:', track.id);
-              const token = localStorage.getItem('auth_token');
-              const response = await fetch(audioUrl, {
-                headers: { 'Authorization': `Bearer ${token}` }
-              });
-
-              if (response.ok) {
-                const blob = await response.blob();
-                const contentType = response.headers.get('Content-Type') || 'audio/mpeg';
-                const audioBlob = new Blob([blob], { type: contentType });
-                processedUrl = URL.createObjectURL(audioBlob);
-                console.log('✅ Created authenticated blob URL for:', track.id);
-              } else {
-                console.error('❌ Failed to fetch authenticated audio:', response.status);
-              }
-            }
+            // Use the centralized authentication utility
+            const processedUrl = await fetchAuthenticatedAudio(audioUrl);
+            console.log(`✅ Processed audio URL for track ${track.id}`);
 
             const audio = new Audio(processedUrl);
             audio.volume = (track.volume || 100) / 100;
