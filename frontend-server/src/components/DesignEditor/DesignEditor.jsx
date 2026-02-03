@@ -283,66 +283,95 @@ const DesignEditor = () => {
    * @param {Object|File} audioFile - File object or audio metadata object with name, audio_id, etc.
    * @param {string} audioUrl - URL to the audio file
    */
-  const handleAddAudioTrack = (audioFile, audioUrl) => {
+  const handleAddAudioTrack = async (audioFile, audioUrl) => {
     console.log('🎬 handleAddAudioTrack called:', { audioFile, audioUrl });
 
-    // Create audio element to get duration
-    const audio = new Audio(audioUrl);
     const trackId = `audio-${Date.now()}`;
 
-    console.log('🎬 Created audio element with ID:', trackId);
+    try {
+      // Check if URL requires authentication (library stream URL)
+      let processedUrl = audioUrl;
+      if (audioUrl.includes('/api/audio-studio/library/') && audioUrl.includes('/stream')) {
+        console.log('🔐 Fetching authenticated audio for track');
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(audioUrl, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
 
-    audio.addEventListener('loadedmetadata', () => {
-      console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
-      setAudioTracks(prevTracks => {
-        // Calculate the end time of the last audio track
-        let startTime = 0;
-        if (prevTracks.length > 0) {
-          // Find the maximum end time among all existing tracks
-          const maxEndTime = Math.max(...prevTracks.map(track =>
-            (track.startTime || 0) + (track.duration || 0)
-          ));
-          startTime = maxEndTime; // Position new audio at the end
+        if (response.ok) {
+          const blob = await response.blob();
+          const contentType = response.headers.get('Content-Type') || 'audio/mpeg';
+          const audioBlob = new Blob([blob], { type: contentType });
+          processedUrl = URL.createObjectURL(audioBlob);
+          console.log('✅ Created authenticated blob URL for track');
+        } else {
+          console.error('❌ Failed to fetch authenticated audio:', response.status);
+          showToast('Failed to load audio from library', 'error');
+          return;
         }
+      }
 
-        const newTrack = {
-          id: trackId,
-          name: audioFile.name || 'Audio Track',
-          src: audioUrl,
-          duration: audio.duration,
-          startTime: startTime,
-          volume: 100,
-          fadeIn: 0,
-          fadeOut: 0,
-          type: audioFile.name?.toLowerCase().includes('voiceover')
-            ? 'voiceover'
-            : audioFile.name?.toLowerCase().includes('sfx')
-            ? 'sfx'
-            : 'music', // Auto-detect type from filename
-          // Preserve audio_id/libraryId if it exists (from audio library)
-          assetId: audioFile.audio_id || audioFile.libraryId || audioFile.assetId,
-          libraryId: audioFile.audio_id || audioFile.libraryId
-        };
+      // Create audio element to get duration
+      const audio = new Audio(processedUrl);
+      console.log('🎬 Created audio element with ID:', trackId);
 
-        const updatedTracks = [...prevTracks, newTrack];
-        console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
-        return updatedTracks;
+      audio.addEventListener('loadedmetadata', () => {
+        console.log('🎬 Audio metadata loaded. Duration:', audio.duration);
+        setAudioTracks(prevTracks => {
+          // Calculate the end time of the last audio track
+          let startTime = 0;
+          if (prevTracks.length > 0) {
+            // Find the maximum end time among all existing tracks
+            const maxEndTime = Math.max(...prevTracks.map(track =>
+              (track.startTime || 0) + (track.duration || 0)
+            ));
+            startTime = maxEndTime; // Position new audio at the end
+          }
+
+          const newTrack = {
+            id: trackId,
+            name: audioFile.name || audioFile.title || 'Audio Track',
+            src: processedUrl, // Use the processed (authenticated) URL
+            url: audioUrl, // Keep original URL for reference
+            duration: audio.duration,
+            startTime: startTime,
+            volume: 100,
+            fadeIn: 0,
+            fadeOut: 0,
+            type: audioFile.name?.toLowerCase().includes('voiceover')
+              ? 'voiceover'
+              : audioFile.name?.toLowerCase().includes('sfx')
+              ? 'sfx'
+              : 'music', // Auto-detect type from filename
+            // Preserve audio_id/libraryId if it exists (from audio library)
+            assetId: audioFile.audio_id || audioFile.libraryId || audioFile.assetId,
+            libraryId: audioFile.audio_id || audioFile.libraryId
+          };
+
+          const updatedTracks = [...prevTracks, newTrack];
+          console.log('✅ Audio track added:', newTrack, 'Start time:', startTime, 'Duration:', audio.duration);
+          return updatedTracks;
+        });
+
+        // Set initial volume
+        audio.volume = 1.0; // 100%
+        showToast('Audio added to timeline', 'success');
       });
 
-      // Set initial volume
-      audio.volume = 1.0; // 100%
-      showToast('Audio added to timeline', 'success');
-    });
-
-    audio.addEventListener('error', (e) => {
-      console.error('❌ Audio loading error:', e);
-      console.error('❌ Audio error details:', {
-        error: audio.error,
-        code: audio.error?.code,
-        message: audio.error?.message,
-        src: audio.src
+      audio.addEventListener('error', (e) => {
+        console.error('❌ Audio loading error:', e);
+        console.error('❌ Audio error details:', {
+          error: audio.error,
+          code: audio.error?.code,
+          message: audio.error?.message,
+          src: audio.src
+        });
+        showToast('Failed to load audio', 'error');
       });
-    });
+    } catch (error) {
+      console.error('❌ Error in handleAddAudioTrack:', error);
+      showToast('Failed to add audio to timeline', 'error');
+    }
   };
 
   /**
@@ -716,44 +745,73 @@ const DesignEditor = () => {
    * Create Audio elements for audio tracks
    */
   useEffect(() => {
-    audioTracks.forEach(track => {
-      const audioUrl = track.src || track.url; // Support both 'src' and 'url' properties
-      if (!audioRefs.current[track.id] && audioUrl) {
-        console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
-        const audio = new Audio(audioUrl);
-        audio.volume = (track.volume || 100) / 100;
-        audio.loop = false;
+    const createAudioElements = async () => {
+      for (const track of audioTracks) {
+        const audioUrl = track.src || track.url; // Support both 'src' and 'url' properties
+        if (!audioRefs.current[track.id] && audioUrl) {
+          console.log(`🎵 Creating audio element for track: ${track.id}, URL: ${audioUrl?.substring(0, 50)}`);
 
-        // Add event listeners to sync audio state with React state
-        audio.addEventListener('ended', () => {
-          console.log(`🎵 Audio track ${track.id} ended`);
-          // Check if all audio tracks have ended
-          const allAudioEnded = audioTracks.every(t => {
-            const a = audioRefs.current[t.id];
-            return !a || a.ended || a.paused;
-          });
-          if (allAudioEnded) {
-            console.log('⏹️ All audio ended, stopping playback');
-            setIsPlaying(false);
+          try {
+            // Check if URL requires authentication (library stream URL)
+            let processedUrl = audioUrl;
+            if (audioUrl.includes('/api/audio-studio/library/') && audioUrl.includes('/stream')) {
+              console.log('🔐 Fetching authenticated audio for:', track.id);
+              const token = localStorage.getItem('auth_token');
+              const response = await fetch(audioUrl, {
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+
+              if (response.ok) {
+                const blob = await response.blob();
+                const contentType = response.headers.get('Content-Type') || 'audio/mpeg';
+                const audioBlob = new Blob([blob], { type: contentType });
+                processedUrl = URL.createObjectURL(audioBlob);
+                console.log('✅ Created authenticated blob URL for:', track.id);
+              } else {
+                console.error('❌ Failed to fetch authenticated audio:', response.status);
+              }
+            }
+
+            const audio = new Audio(processedUrl);
+            audio.volume = (track.volume || 100) / 100;
+            audio.loop = false;
+
+            // Add event listeners to sync audio state with React state
+            audio.addEventListener('ended', () => {
+              console.log(`🎵 Audio track ${track.id} ended`);
+              // Check if all audio tracks have ended
+              const allAudioEnded = audioTracks.every(t => {
+                const a = audioRefs.current[t.id];
+                return !a || a.ended || a.paused;
+              });
+              if (allAudioEnded) {
+                console.log('⏹️ All audio ended, stopping playback');
+                setIsPlaying(false);
+              }
+            });
+
+            audio.addEventListener('pause', () => {
+              console.log(`⏸️ Audio track ${track.id} paused`);
+            });
+
+            audio.addEventListener('play', () => {
+              console.log(`▶️ Audio track ${track.id} playing`);
+            });
+
+            audio.addEventListener('error', (e) => {
+              console.error(`❌ Audio track ${track.id} error:`, e);
+              setIsPlaying(false);
+            });
+
+            audioRefs.current[track.id] = audio;
+          } catch (error) {
+            console.error(`❌ Error creating audio element for ${track.id}:`, error);
           }
-        });
-
-        audio.addEventListener('pause', () => {
-          console.log(`⏸️ Audio track ${track.id} paused`);
-        });
-
-        audio.addEventListener('play', () => {
-          console.log(`▶️ Audio track ${track.id} playing`);
-        });
-
-        audio.addEventListener('error', (e) => {
-          console.error(`❌ Audio track ${track.id} error:`, e);
-          setIsPlaying(false);
-        });
-
-        audioRefs.current[track.id] = audio;
+        }
       }
-    });
+    };
+
+    createAudioElements();
 
     // Cleanup removed tracks
     Object.keys(audioRefs.current).forEach(trackId => {

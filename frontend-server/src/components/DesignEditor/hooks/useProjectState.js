@@ -127,49 +127,22 @@ export const useProjectState = ({
       setAudioTracks(project.audioTracks || []);
       setCurrentProject(project);
 
-      // Extract and restore media library
+      // Extract and restore media library from project
       const extractedMedia = extractMediaFromProject(project);
 
-      console.log('📦 Current audio in state:', uploadedAudio.length);
-      console.log('📦 Current image in state:', uploadedImage.length);
-      console.log('📦 Current video in state:', uploadedVideo.length);
-
-      // Merge current media with extracted media (don't overwrite)
-      setUploadedAudio(prev => {
-        const merged = [...prev];
-        extractedMedia.audio.forEach(audio => {
-          if (!merged.some(a => a.url === audio.url)) {
-            merged.push(audio);
-          }
-        });
-        return merged;
-      });
-
-      setUploadedImage(prev => {
-        const merged = [...prev];
-        extractedMedia.image.forEach(image => {
-          if (!merged.some(i => i.url === image.url)) {
-            merged.push(image);
-          }
-        });
-        return merged;
-      });
-
-      setUploadedVideo(prev => {
-        const merged = [...prev];
-        extractedMedia.video.forEach(video => {
-          if (!merged.some(v => v.url === video.url)) {
-            merged.push(video);
-          }
-        });
-        return merged;
-      });
-
-      console.log('✅ Media after extraction and merge:', {
+      console.log('📦 Extracted media from project:', {
         audio: extractedMedia.audio.length,
         image: extractedMedia.image.length,
         video: extractedMedia.video.length
       });
+
+      // REPLACE media lists with project data (don't merge)
+      // This ensures loaded project has exactly the media it was saved with
+      setUploadedAudio(extractedMedia.audio);
+      setUploadedImage(extractedMedia.image);
+      setUploadedVideo(extractedMedia.video);
+
+      console.log('✅ Media lists replaced with project data');
 
       console.log('✅ Project loaded successfully');
       return project;
