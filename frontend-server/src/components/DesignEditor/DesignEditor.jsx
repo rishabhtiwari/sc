@@ -214,13 +214,19 @@ const DesignEditor = () => {
     if (!isResizingPropertiesPanel) return;
 
     const handleMouseMove = (e) => {
+      e.preventDefault();
       const newWidth = window.innerWidth - e.clientX;
       setPropertiesPanelWidth(Math.max(280, Math.min(600, newWidth)));
     };
 
     const handleMouseUp = () => {
       setIsResizingPropertiesPanel(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
+
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -228,6 +234,8 @@ const DesignEditor = () => {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isResizingPropertiesPanel]);
 
@@ -236,13 +244,19 @@ const DesignEditor = () => {
     if (!isResizingTimeline) return;
 
     const handleMouseMove = (e) => {
+      e.preventDefault();
       const newHeight = window.innerHeight - e.clientY;
       setTimelineHeight(Math.max(200, Math.min(600, newHeight)));
     };
 
     const handleMouseUp = () => {
       setIsResizingTimeline(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
+
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
@@ -250,6 +264,8 @@ const DesignEditor = () => {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
     };
   }, [isResizingTimeline]);
 
@@ -1405,16 +1421,19 @@ const DesignEditor = () => {
             className="relative border-t border-gray-200"
             style={{ height: `${timelineHeight}px` }}
           >
-            {/* Resize Handle */}
+            {/* Resize Handle - Larger hit area */}
             <div
-              className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize hover:bg-blue-500 transition-colors z-50 group"
-              onMouseDown={() => setIsResizingTimeline(true)}
+              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizingTimeline(true);
+              }}
               title="Drag to resize timeline"
             >
-              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-gray-300 group-hover:bg-blue-500 rounded-full"></div>
+              <div className="w-16 h-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
             </div>
 
-            <div className="h-full overflow-hidden">
+            <div className="h-full overflow-hidden pt-2">
               <AudioTimelineRefactored
                 audioTracks={audioTracks}
                 videoTracks={videoTracks}
@@ -1448,16 +1467,20 @@ const DesignEditor = () => {
           className="relative bg-gray-50 border-l border-gray-200 flex flex-col h-full"
           style={{ width: `${propertiesPanelWidth}px` }}
         >
-          {/* Resize Handle */}
+          {/* Resize Handle - Larger hit area */}
           <div
-            className="absolute top-0 left-0 bottom-0 w-1 cursor-ew-resize hover:bg-blue-500 transition-colors z-50 group"
-            onMouseDown={() => setIsResizingPropertiesPanel(true)}
+            className="absolute top-0 left-0 bottom-0 w-2 cursor-ew-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizingPropertiesPanel(true);
+            }}
             title="Drag to resize properties panel"
           >
-            <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-12 bg-gray-300 group-hover:bg-blue-500 rounded-full"></div>
+            <div className="h-16 w-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
           </div>
 
-          <PropertiesPanel
+          <div className="pl-2 flex-1 flex flex-col h-full overflow-hidden">
+            <PropertiesPanel
             element={selectedElement}
             onUpdate={(updates) => {
               if (selectedElement?.type === 'slide') {
@@ -1480,6 +1503,7 @@ const DesignEditor = () => {
             }}
             onClose={() => setIsPropertiesPanelOpen(false)}
           />
+          </div>
         </div>
       )}
 
