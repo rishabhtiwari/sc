@@ -370,24 +370,24 @@ class ExportService:
                 # Calculate number of frames for this slide
                 duration = page.get('duration', 5)
                 num_frames = int(duration * fps)
-                self.logger.debug(f"Slide {slide_idx + 1}: duration={duration}s, frames={num_frames}")
+                self.logger.info(f"⏱️ Slide {slide_idx + 1}: duration={duration}s, frames={num_frames}")
 
                 # Render slide to image
-                self.logger.debug(f"Calling _render_slide for slide {slide_idx + 1}...")
+                self.logger.info(f"🎬 Calling _render_slide for slide {slide_idx + 1}...")
                 slide_image = self._render_slide(page, canvas_width, canvas_height, customer_id, user_id)
-                self.logger.debug(f"Slide {slide_idx + 1} rendered successfully")
+                self.logger.info(f"✅ Slide {slide_idx + 1} rendered successfully, preparing to save frames...")
 
                 # Save frame for each frame in duration
-                self.logger.debug(f"Saving {num_frames} frames for slide {slide_idx + 1}...")
+                self.logger.info(f"💾 Saving {num_frames} frames for slide {slide_idx + 1}...")
                 for frame_idx in range(num_frames):
                     frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
                     slide_image.save(frame_path, 'PNG')
                     frame_number += 1
-                    if frame_idx % 30 == 0:  # Log every 30 frames (1 second at 30fps)
-                        self.logger.debug(f"Saved frame {frame_idx}/{num_frames}")
+                    if frame_idx % 100 == 0:  # Log every 100 frames
+                        self.logger.info(f"💾 Saved frame {frame_idx}/{num_frames}")
 
                 slide_image.close()
-                self.logger.info(f"Slide {slide_idx + 1}/{total_slides} completed")
+                self.logger.info(f"✅ Slide {slide_idx + 1}/{total_slides} completed ({num_frames} frames saved)")
 
             self.logger.info(f"✅ Rendered {frame_number} frames for {total_slides} slides")
 
