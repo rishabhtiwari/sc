@@ -200,15 +200,23 @@ class ExportService:
 
             # Calculate total duration
             total_duration = sum(page.get('duration', 5) for page in project_data.get('pages', []))
+            self.logger.info(f"📊 Total video duration: {total_duration}s")
 
             # Render slides to frames
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🎨 STEP 1: Rendering slides to frames...")
+            self.logger.info(f"=" * 60)
+            # Default to 24 fps (cinema standard) for better performance
+            # Users can override with 30 or 60 fps in export settings
             self._render_slides_to_frames(
                 project_data,
                 frames_dir,
-                settings.get('fps', 30),
+                settings.get('fps', 24),
                 customer_id,
-                user_id
+                user_id,
+                job_id
             )
+            self.logger.info(f"✅ Frame rendering complete!")
 
             # Create video from frames
             output_path = os.path.join(export_dir, f"{job_id}.mp4")
@@ -222,58 +230,120 @@ class ExportService:
             }
 
             resolution = quality_map.get(settings.get('quality', '1080p'), quality_map["1080p"])
-            fps = settings.get('fps', 30)
+            fps = settings.get('fps', 24)  # Default 24 fps (cinema standard)
             codec = settings.get('codec', 'libx264')
             bitrate = settings.get('bitrate', '5M')
 
-            # Create video from frames
-            input_pattern = os.path.join(frames_dir, "frame_%05d.png")
+            # Try to use GPU encoding (NVENC) if available, fallback to CPU
+            use_gpu = self._check_gpu_available()
+            if use_gpu:
+                codec = 'h264_nvenc'
+                self.logger.info(f"🚀 Using GPU-accelerated encoding (NVENC)")
+            else:
+                codec = 'libx264'
+                self.logger.info(f"💻 Using CPU encoding (libx264)")
 
-            stream = ffmpeg.input(input_pattern, framerate=fps)
-            stream = ffmpeg.filter(stream, 'scale', resolution["width"], resolution["height"])
+            # Update progress
+            self._update_export_job(job_id, customer_id, {
+                "progress": 90,
+                "current_step": "Encoding video..."
+            })
+
+            # Create video from frames (handling static and animated slides)
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🎞️ STEP 3: Creating video from frames...")
+            self.logger.info(f"=" * 60)
+            video_path = self._create_video_from_frames(
+                frames_dir,
+                output_path,
+                fps,
+                resolution,
+                codec,
+                bitrate,
+                use_gpu
+            )
+            self.logger.info(f"✅ Video creation complete!")
 
             # Add audio if requested
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🎵 STEP 4: Processing audio...")
+            self.logger.info(f"=" * 60)
             if settings.get('includeAudio', True) and (project_data.get('audioTracks') or project_data.get('videoTracks')):
                 self.logger.info(f"🎵 Mixing audio tracks...")
                 audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration, customer_id, user_id)
                 if audio_path and os.path.exists(audio_path):
-                    audio_stream = ffmpeg.input(audio_path)
-                    stream = ffmpeg.output(
-                        stream,
-                        audio_stream,
-                        output_path,
-                        vcodec=codec,
-                        video_bitrate=bitrate,
-                        acodec='aac',
-                        audio_bitrate='192k',
-                        shortest=None
-                    )
-                else:
-                    stream = ffmpeg.output(
-                        stream,
-                        output_path,
-                        vcodec=codec,
-                        video_bitrate=bitrate
-                    )
-            else:
-                stream = ffmpeg.output(
-                    stream,
-                    output_path,
-                    vcodec=codec,
-                    video_bitrate=bitrate
-                )
+                    self.logger.info(f"🎵 Adding audio to video...")
+                    # Create final video with audio
+                    final_output = os.path.join(export_dir, f"{job_id}_final.mp4")
 
-            # Run FFmpeg
-            self.logger.info(f"🎞️ Encoding video...")
-            ffmpeg.run(stream, overwrite_output=True, quiet=True)
+                    video_stream = ffmpeg.input(video_path)
+                    audio_stream = ffmpeg.input(audio_path)
+
+                    if use_gpu:
+                        stream = ffmpeg.output(
+                            video_stream,
+                            audio_stream,
+                            final_output,
+                            vcodec='copy',  # Copy video stream (already encoded)
+                            acodec='aac',
+                            audio_bitrate='192k',
+                            shortest=None
+                        )
+                    else:
+                        stream = ffmpeg.output(
+                            video_stream,
+                            audio_stream,
+                            final_output,
+                            vcodec='copy',  # Copy video stream (already encoded)
+                            acodec='aac',
+                            audio_bitrate='192k',
+                            shortest=None
+                        )
+
+                    try:
+                        ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                        # Replace video_path with final output
+                        os.remove(video_path)
+                        os.rename(final_output, output_path)
+                        self.logger.info(f"✅ Audio added to video")
+                    except ffmpeg.Error as e:
+                        self.logger.error(f"FFmpeg audio mixing failed: {e.stderr.decode()}")
+                        raise
+                else:
+                    # No audio, just rename video_path to output_path
+                    if video_path != output_path:
+                        os.rename(video_path, output_path)
+            else:
+                # No audio requested, just rename video_path to output_path
+                if video_path != output_path:
+                    os.rename(video_path, output_path)
+
+            self.logger.info(f"✅ Video encoding completed")
 
             # Cleanup frames
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🗑️ STEP 5: Cleanup...")
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🗑️ Removing frames directory: {frames_dir}")
             shutil.rmtree(frames_dir)
+            self.logger.info(f"✅ Cleanup complete")
+
+            # Final summary
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"🎉 EXPORT COMPLETE!")
+            self.logger.info(f"=" * 60)
+            self.logger.info(f"📁 Output file: {output_path}")
+            self.logger.info(f"⏱️ Duration: {total_duration}s")
+            import os as os_module
+            if os_module.path.exists(output_path):
+                file_size_mb = os_module.path.getsize(output_path) / (1024 * 1024)
+                self.logger.info(f"💾 File size: {file_size_mb:.2f} MB")
+            self.logger.info(f"=" * 60)
 
             return output_path, total_duration
 
         except Exception as e:
-            self.logger.error(f"Error exporting MP4: {e}")
+            self.logger.error(f"❌ Error exporting MP4: {e}")
             raise
 
     def _export_mp3(
@@ -345,15 +415,42 @@ class ExportService:
             self.logger.error(f"Error exporting JSON: {e}")
             raise
 
+    def _is_slide_static(self, page: Dict[str, Any]) -> bool:
+        """
+        Detect if a slide is static (no animations or videos)
+        Returns True if slide only contains static elements (images, text, shapes)
+        Returns False if slide contains videos or animations
+        """
+        elements = page.get('elements', [])
+
+        for element in elements:
+            element_type = element.get('type', '')
+
+            # Check for video elements
+            if element_type == 'video':
+                return False
+
+            # Check for animations
+            if element.get('animations') or element.get('animation'):
+                return False
+
+        # Check for background animations
+        background = page.get('background', {})
+        if background.get('type') == 'video' or background.get('animation'):
+            return False
+
+        return True
+
     def _render_slides_to_frames(
         self,
         project_data: Dict[str, Any],
         frames_dir: str,
         fps: int,
         customer_id: str,
-        user_id: str
+        user_id: str,
+        job_id: str = None
     ):
-        """Render all slides to frame sequences"""
+        """Render all slides to frame sequences with smart static/animated detection"""
         try:
             frame_number = 0
             pages = project_data.get('pages', [])
@@ -362,7 +459,12 @@ class ExportService:
             canvas_width = project_data.get('settings', {}).get('canvasWidth', 1920)
             canvas_height = project_data.get('settings', {}).get('canvasHeight', 1080)
 
+            # Calculate total frames needed for progress tracking
+            total_frames_needed = sum(int(page.get('duration', 5) * fps) for page in pages)
+            frames_saved = 0
+
             self.logger.info(f"Starting to render {total_slides} slides at {canvas_width}x{canvas_height}, {fps} fps")
+            self.logger.info(f"Total frames needed: {total_frames_needed}")
 
             for slide_idx, page in enumerate(pages):
                 self.logger.info(f"Rendering slide {slide_idx + 1}/{total_slides}...")
@@ -370,26 +472,72 @@ class ExportService:
                 # Calculate number of frames for this slide
                 duration = page.get('duration', 5)
                 num_frames = int(duration * fps)
-                self.logger.info(f"⏱️ Slide {slide_idx + 1}: duration={duration}s, frames={num_frames}")
+
+                # Detect if slide is static or animated
+                is_static = self._is_slide_static(page)
+
+                if is_static:
+                    self.logger.info(f"✨ Slide {slide_idx + 1} is STATIC (image/text only)")
+                    self.logger.info(f"⏱️ Duration: {duration}s → Will save 1 frame and loop in FFmpeg")
+                else:
+                    self.logger.info(f"🎬 Slide {slide_idx + 1} is ANIMATED (video/animations)")
+                    self.logger.info(f"⏱️ Duration: {duration}s → Will save {num_frames} frames")
 
                 # Render slide to image
-                self.logger.info(f"🎬 Calling _render_slide for slide {slide_idx + 1}...")
+                self.logger.info(f"� Rendering slide {slide_idx + 1}...")
                 slide_image = self._render_slide(page, canvas_width, canvas_height, customer_id, user_id)
-                self.logger.info(f"✅ Slide {slide_idx + 1} rendered successfully, preparing to save frames...")
+                self.logger.info(f"✅ Slide {slide_idx + 1} rendered successfully")
 
-                # Save frame for each frame in duration
-                self.logger.info(f"💾 Saving {num_frames} frames for slide {slide_idx + 1}...")
-                for frame_idx in range(num_frames):
+                if is_static:
+                    # For static slides: save only 1 frame
                     frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
-                    slide_image.save(frame_path, 'PNG')
+                    slide_image.save(frame_path, 'PNG', compress_level=1)
                     frame_number += 1
-                    if frame_idx % 100 == 0:  # Log every 100 frames
-                        self.logger.info(f"💾 Saved frame {frame_idx}/{num_frames}")
+                    frames_saved += num_frames  # Count as if we saved all frames for progress
+
+                    # Store metadata for FFmpeg to know this is a static slide
+                    metadata_path = os.path.join(frames_dir, f"frame_{frame_number-1:05d}.meta")
+                    with open(metadata_path, 'w') as f:
+                        json.dump({
+                            'static': True,
+                            'duration': duration,
+                            'num_frames': num_frames
+                        }, f)
+
+                    self.logger.info(f"✅ Slide {slide_idx + 1} saved (1 static frame)")
+                else:
+                    # For animated slides: save all frames
+                    self.logger.info(f"💾 Saving {num_frames} frames for slide {slide_idx + 1}...")
+                    for frame_idx in range(num_frames):
+                        frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
+                        slide_image.save(frame_path, 'PNG', compress_level=1)
+                        frame_number += 1
+                        frames_saved += 1
+
+                        # Update progress every 100 frames
+                        if frame_idx > 0 and frame_idx % 100 == 0:
+                            progress = int((frames_saved / total_frames_needed) * 80) + 10  # 10-90%
+                            if job_id and customer_id:
+                                self._update_export_job(job_id, customer_id, {
+                                    "progress": progress,
+                                    "current_step": f"Rendering frames: {frames_saved}/{total_frames_needed}"
+                                })
+                            self.logger.info(f"💾 Progress: {frame_idx}/{num_frames} frames ({progress}%)")
+
+                    self.logger.info(f"✅ Slide {slide_idx + 1} saved ({num_frames} frames)")
 
                 slide_image.close()
-                self.logger.info(f"✅ Slide {slide_idx + 1}/{total_slides} completed ({num_frames} frames saved)")
 
-            self.logger.info(f"✅ Rendered {frame_number} frames for {total_slides} slides")
+                # Update progress after each slide
+                progress = int((frames_saved / total_frames_needed) * 80) + 10  # 10-90%
+                if job_id and customer_id:
+                    self._update_export_job(job_id, customer_id, {
+                        "progress": progress,
+                        "current_step": f"Rendered slide {slide_idx + 1}/{total_slides}"
+                    })
+
+            self.logger.info(f"✅ Rendered {frame_number} actual frames for {total_slides} slides")
+            self.logger.info(f"✅ Saved {frames_saved} equivalent frames (with static optimization)")
 
         except Exception as e:
             self.logger.error(f"❌ Error rendering slides to frames: {e}", exc_info=True)
@@ -572,6 +720,278 @@ class ExportService:
         except Exception as e:
             self.logger.error(f"Error mixing audio tracks: {e}")
             return None
+
+    def _create_video_from_frames(
+        self,
+        frames_dir: str,
+        output_path: str,
+        fps: int,
+        resolution: Dict[str, int],
+        codec: str,
+        bitrate: str,
+        use_gpu: bool
+    ) -> str:
+        """
+        Create video from frames, handling both static and animated slides
+        Returns path to the created video file
+        """
+        try:
+            # Scan frames directory for frames and metadata
+            self.logger.info(f"📂 Scanning frames directory: {frames_dir}")
+            frame_files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
+            meta_files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.meta')])
+
+            self.logger.info(f"📊 Found {len(frame_files)} frame files and {len(meta_files)} metadata files")
+
+            # If no metadata files, use simple sequential encoding
+            if not meta_files:
+                self.logger.info("⚠️ No metadata files found, using sequential frame encoding")
+                self.logger.info("ℹ️ This means all slides were rendered as animated (all frames saved)")
+                return self._encode_sequential_frames(
+                    frames_dir,
+                    output_path,
+                    fps,
+                    resolution,
+                    codec,
+                    bitrate,
+                    use_gpu
+                )
+
+            # Build video segments for each slide (static or animated)
+            self.logger.info(f"🎬 Building video segments from {len(meta_files)} slides...")
+            segments_dir = os.path.join(os.path.dirname(frames_dir), "segments")
+            os.makedirs(segments_dir, exist_ok=True)
+            self.logger.info(f"📁 Created segments directory: {segments_dir}")
+
+            segment_paths = []
+            frame_idx = 0
+
+            for slide_num, meta_file in enumerate(meta_files, 1):
+                meta_path = os.path.join(frames_dir, meta_file)
+                self.logger.info(f"📄 Reading metadata for slide {slide_num}/{len(meta_files)}: {meta_file}")
+                with open(meta_path, 'r') as f:
+                    metadata = json.load(f)
+
+                self.logger.info(f"📋 Metadata: {metadata}")
+
+                if metadata.get('static'):
+                    # Static slide - create video from single frame
+                    duration = metadata['duration']
+                    frame_file = frame_files[frame_idx]
+                    frame_path = os.path.join(frames_dir, frame_file)
+                    segment_path = os.path.join(segments_dir, f"segment_{len(segment_paths):03d}.mp4")
+
+                    self.logger.info(f"✨ Creating STATIC segment from {frame_file} (duration: {duration}s)")
+                    self.logger.info(f"🔄 Using FFmpeg loop to extend single frame to {duration}s")
+
+                    # Use FFmpeg to loop single frame for duration
+                    stream = ffmpeg.input(frame_path, loop=1, t=duration, framerate=fps)
+                    stream = ffmpeg.filter(stream, 'scale', resolution["width"], resolution["height"])
+
+                    if use_gpu:
+                        self.logger.info(f"🚀 Encoding with GPU (NVENC)")
+                        stream = ffmpeg.output(
+                            stream,
+                            segment_path,
+                            vcodec=codec,
+                            preset='fast',
+                            video_bitrate=bitrate,
+                            pix_fmt='yuv420p'
+                        )
+                    else:
+                        self.logger.info(f"💻 Encoding with CPU (libx264)")
+                        stream = ffmpeg.output(
+                            stream,
+                            segment_path,
+                            vcodec=codec,
+                            preset='medium',
+                            video_bitrate=bitrate,
+                            pix_fmt='yuv420p'
+                        )
+
+                    self.logger.info(f"⏳ Running FFmpeg encoding for static segment...")
+                    ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                    self.logger.info(f"✅ Static segment created: {segment_path}")
+                    segment_paths.append(segment_path)
+                    frame_idx += 1
+
+                else:
+                    # Animated slide - create video from frame sequence
+                    num_frames = metadata['num_frames']
+                    segment_path = os.path.join(segments_dir, f"segment_{len(segment_paths):03d}.mp4")
+
+                    self.logger.info(f"🎬 Creating ANIMATED segment from {num_frames} frames")
+
+                    # Create temporary directory for this segment's frames
+                    segment_frames_dir = os.path.join(segments_dir, f"frames_{len(segment_paths):03d}")
+                    os.makedirs(segment_frames_dir, exist_ok=True)
+                    self.logger.info(f"📁 Created temp frames directory: {segment_frames_dir}")
+
+                    # Copy frames for this segment
+                    self.logger.info(f"📋 Copying {num_frames} frames to segment directory...")
+                    for i in range(num_frames):
+                        src = os.path.join(frames_dir, frame_files[frame_idx + i])
+                        dst = os.path.join(segment_frames_dir, f"frame_{i:05d}.png")
+                        shutil.copy(src, dst)
+                        if i > 0 and i % 500 == 0:
+                            self.logger.info(f"📋 Copied {i}/{num_frames} frames...")
+                    self.logger.info(f"✅ All {num_frames} frames copied")
+
+                    # Encode segment
+                    input_pattern = os.path.join(segment_frames_dir, "frame_%05d.png")
+                    stream = ffmpeg.input(input_pattern, framerate=fps)
+                    stream = ffmpeg.filter(stream, 'scale', resolution["width"], resolution["height"])
+
+                    if use_gpu:
+                        self.logger.info(f"🚀 Encoding with GPU (NVENC)")
+                        stream = ffmpeg.output(
+                            stream,
+                            segment_path,
+                            vcodec=codec,
+                            preset='fast',
+                            video_bitrate=bitrate,
+                            pix_fmt='yuv420p'
+                        )
+                    else:
+                        self.logger.info(f"💻 Encoding with CPU (libx264)")
+                        stream = ffmpeg.output(
+                            stream,
+                            segment_path,
+                            vcodec=codec,
+                            preset='medium',
+                            video_bitrate=bitrate,
+                            pix_fmt='yuv420p'
+                        )
+
+                    self.logger.info(f"⏳ Running FFmpeg encoding for animated segment...")
+                    ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+                    self.logger.info(f"✅ Animated segment created: {segment_path}")
+                    segment_paths.append(segment_path)
+                    frame_idx += num_frames
+
+                    # Cleanup segment frames
+                    self.logger.info(f"🗑️ Cleaning up temporary frames directory...")
+                    shutil.rmtree(segment_frames_dir)
+                    self.logger.info(f"✅ Cleanup complete")
+
+            # Concatenate all segments
+            self.logger.info(f"🎞️ Total segments created: {len(segment_paths)}")
+            if len(segment_paths) == 1:
+                # Only one segment, just rename it
+                self.logger.info("ℹ️ Only one segment, using it directly (no concatenation needed)")
+                shutil.copy(segment_paths[0], output_path)
+                self.logger.info(f"✅ Video created: {output_path}")
+            else:
+                # Multiple segments, concatenate them
+                self.logger.info(f"🔗 Concatenating {len(segment_paths)} segments into final video...")
+                self._concatenate_videos(segment_paths, output_path)
+                self.logger.info(f"✅ Final video created: {output_path}")
+
+            # Cleanup segments
+            self.logger.info(f"🗑️ Cleaning up segments directory...")
+            shutil.rmtree(segments_dir)
+            self.logger.info(f"✅ Segments cleanup complete")
+
+            return output_path
+
+        except Exception as e:
+            self.logger.error(f"Error creating video from frames: {e}", exc_info=True)
+            raise
+
+    def _encode_sequential_frames(
+        self,
+        frames_dir: str,
+        output_path: str,
+        fps: int,
+        resolution: Dict[str, int],
+        codec: str,
+        bitrate: str,
+        use_gpu: bool
+    ) -> str:
+        """Encode video from sequential frames (fallback method)"""
+        try:
+            self.logger.info(f"🎬 Encoding video from sequential frames...")
+            input_pattern = os.path.join(frames_dir, "frame_%05d.png")
+            self.logger.info(f"📂 Input pattern: {input_pattern}")
+            self.logger.info(f"⚙️ Settings: {fps} fps, {resolution['width']}x{resolution['height']}, {bitrate}")
+
+            stream = ffmpeg.input(input_pattern, framerate=fps)
+            stream = ffmpeg.filter(stream, 'scale', resolution["width"], resolution["height"])
+
+            if use_gpu:
+                self.logger.info(f"🚀 Encoding with GPU (NVENC)")
+                stream = ffmpeg.output(
+                    stream,
+                    output_path,
+                    vcodec=codec,
+                    preset='fast',
+                    video_bitrate=bitrate,
+                    pix_fmt='yuv420p'
+                )
+            else:
+                self.logger.info(f"💻 Encoding with CPU (libx264)")
+                stream = ffmpeg.output(
+                    stream,
+                    output_path,
+                    vcodec=codec,
+                    preset='medium',
+                    video_bitrate=bitrate,
+                    pix_fmt='yuv420p'
+                )
+
+            self.logger.info(f"⏳ Running FFmpeg encoding...")
+            ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+            self.logger.info(f"✅ Video encoding complete: {output_path}")
+            return output_path
+
+        except Exception as e:
+            self.logger.error(f"Error encoding sequential frames: {e}", exc_info=True)
+            raise
+
+    def _concatenate_videos(self, video_paths: List[str], output_path: str):
+        """Concatenate multiple video files using FFmpeg concat demuxer"""
+        try:
+            self.logger.info(f"🔗 Starting concatenation of {len(video_paths)} video segments...")
+
+            # Create concat file
+            concat_file = os.path.join(os.path.dirname(output_path), "concat_list.txt")
+            self.logger.info(f"📝 Creating concat list file: {concat_file}")
+            with open(concat_file, 'w') as f:
+                for idx, video_path in enumerate(video_paths, 1):
+                    f.write(f"file '{video_path}'\n")
+                    self.logger.info(f"  {idx}. {video_path}")
+
+            # Use FFmpeg concat demuxer
+            self.logger.info(f"⏳ Running FFmpeg concat demuxer...")
+            stream = ffmpeg.input(concat_file, format='concat', safe=0)
+            stream = ffmpeg.output(stream, output_path, c='copy')
+            ffmpeg.run(stream, overwrite_output=True, capture_stdout=True, capture_stderr=True)
+
+            # Cleanup concat file
+            self.logger.info(f"🗑️ Removing concat list file...")
+            os.remove(concat_file)
+
+            self.logger.info(f"✅ Successfully concatenated {len(video_paths)} segments into {output_path}")
+
+        except Exception as e:
+            self.logger.error(f"Error concatenating videos: {e}", exc_info=True)
+            raise
+
+    def _check_gpu_available(self) -> bool:
+        """Check if NVIDIA GPU is available for hardware encoding"""
+        try:
+            import subprocess
+            # Check if nvidia-smi is available
+            result = subprocess.run(['nvidia-smi'], capture_output=True, timeout=5)
+            if result.returncode == 0:
+                self.logger.info("✅ NVIDIA GPU detected")
+                return True
+            else:
+                self.logger.info("ℹ️ No NVIDIA GPU detected, using CPU encoding")
+                return False
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+            self.logger.info(f"ℹ️ GPU check failed: {e}, using CPU encoding")
+            return False
 
     def _download_image(self, url: str, customer_id: str, user_id: str) -> Optional[Image.Image]:
         """Download image from URL"""
