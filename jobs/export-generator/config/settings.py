@@ -77,6 +77,9 @@ class Config:
     # Request Timeouts
     HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 30))
 
+    # Asset Service Configuration
+    ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://news-automation-asset-service:8000')
+
     @classmethod
     def validate_config(cls):
         """Validate configuration settings"""

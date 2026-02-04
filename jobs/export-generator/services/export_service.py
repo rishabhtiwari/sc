@@ -559,19 +559,17 @@ class ExportService:
     def _download_image(self, url: str) -> Optional[Image.Image]:
         """Download image from URL"""
         try:
-            # Handle both MinIO URLs and external URLs
+            # Handle both asset-service URLs and external URLs
             if url.startswith('/api/assets/download/'):
-                # Internal MinIO URL - extract bucket and key
-                parts = url.replace('/api/assets/download/', '').split('/', 1)
-                if len(parts) == 2:
-                    bucket, key = parts
-                    response = self.minio_client.get_object(bucket, key)
-                    file_data = response.read()
-                    response.close()
-                    response.release_conn()
-                    return Image.open(BytesIO(file_data))
+                # Internal asset-service URL - make request to asset-service
+                asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
+                self.logger.debug(f"Downloading image from asset-service: {asset_service_url}")
+                response = requests.get(asset_service_url, timeout=30)
+                response.raise_for_status()
+                return Image.open(BytesIO(response.content))
             else:
                 # External URL
+                self.logger.debug(f"Downloading image from external URL: {url}")
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 return Image.open(BytesIO(response.content))
@@ -584,21 +582,19 @@ class ExportService:
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
-            # Handle both MinIO URLs and external URLs
+            # Handle both asset-service URLs and external URLs
             if url.startswith('/api/assets/download/'):
-                # Internal MinIO URL
-                parts = url.replace('/api/assets/download/', '').split('/', 1)
-                if len(parts) == 2:
-                    bucket, key = parts
-                    response = self.minio_client.get_object(bucket, key)
-                    file_data = response.read()
-                    response.close()
-                    response.release_conn()
-                    with open(output_path, 'wb') as f:
-                        f.write(file_data)
-                    return output_path
+                # Internal asset-service URL - make request to asset-service
+                asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
+                self.logger.debug(f"Downloading audio from asset-service: {asset_service_url}")
+                response = requests.get(asset_service_url, timeout=30)
+                response.raise_for_status()
+                with open(output_path, 'wb') as f:
+                    f.write(response.content)
+                return output_path
             else:
                 # External URL
+                self.logger.debug(f"Downloading audio from external URL: {url}")
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
