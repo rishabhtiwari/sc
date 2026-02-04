@@ -42,6 +42,7 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
 
   // Reset state when dialog opens
   useEffect(() => {
+    console.log('ExportDialog isOpen changed:', isOpen, 'project:', project);
     if (isOpen) {
       setExporting(false);
       setJobId(null);
@@ -50,7 +51,7 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
       setError(null);
       setDownloadUrl(null);
     }
-  }, [isOpen]);
+  }, [isOpen, project]);
 
   // Poll for export status
   const pollExportStatus = async (exportJobId) => {

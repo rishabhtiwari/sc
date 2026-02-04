@@ -1294,7 +1294,10 @@ const DesignEditor = () => {
 
             {/* Export Project */}
             <button
-              onClick={() => setShowExportDialog(true)}
+              onClick={() => {
+                console.log('Export button clicked, currentProject:', currentProject);
+                setShowExportDialog(true);
+              }}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
               title={!currentProject?.project_id ? 'Save your project first to enable export' : 'Export project to video, audio, or JSON'}
             >
