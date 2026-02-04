@@ -356,33 +356,43 @@ class ExportService:
             canvas_width = project_data.get('settings', {}).get('canvasWidth', 1920)
             canvas_height = project_data.get('settings', {}).get('canvasHeight', 1080)
 
+            self.logger.info(f"Starting to render {total_slides} slides at {canvas_width}x{canvas_height}, {fps} fps")
+
             for slide_idx, page in enumerate(pages):
                 self.logger.info(f"Rendering slide {slide_idx + 1}/{total_slides}...")
 
                 # Calculate number of frames for this slide
                 duration = page.get('duration', 5)
                 num_frames = int(duration * fps)
+                self.logger.debug(f"Slide {slide_idx + 1}: duration={duration}s, frames={num_frames}")
 
                 # Render slide to image
+                self.logger.debug(f"Calling _render_slide for slide {slide_idx + 1}...")
                 slide_image = self._render_slide(page, canvas_width, canvas_height)
+                self.logger.debug(f"Slide {slide_idx + 1} rendered successfully")
 
                 # Save frame for each frame in duration
-                for _ in range(num_frames):
+                self.logger.debug(f"Saving {num_frames} frames for slide {slide_idx + 1}...")
+                for frame_idx in range(num_frames):
                     frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
                     slide_image.save(frame_path, 'PNG')
                     frame_number += 1
+                    if frame_idx % 30 == 0:  # Log every 30 frames (1 second at 30fps)
+                        self.logger.debug(f"Saved frame {frame_idx}/{num_frames}")
 
                 slide_image.close()
+                self.logger.info(f"Slide {slide_idx + 1}/{total_slides} completed")
 
-            self.logger.info(f"Rendered {frame_number} frames for {total_slides} slides")
+            self.logger.info(f"✅ Rendered {frame_number} frames for {total_slides} slides")
 
         except Exception as e:
-            self.logger.error(f"Error rendering slides to frames: {e}")
+            self.logger.error(f"❌ Error rendering slides to frames: {e}", exc_info=True)
             raise
 
     def _render_slide(self, page: Dict[str, Any], width: int, height: int) -> Image.Image:
         """Render a single slide to an image"""
         try:
+            self.logger.debug(f"Creating canvas {width}x{height}")
             # Create blank canvas
             img = Image.new('RGB', (width, height), color='white')
             draw = ImageDraw.Draw(img)
@@ -390,6 +400,7 @@ class ExportService:
             # Render background
             background = page.get('background', {})
             bg_type = background.get('type', 'solid')
+            self.logger.debug(f"Rendering background type: {bg_type}")
 
             if bg_type == 'solid':
                 color = background.get('color', '#ffffff')
@@ -399,6 +410,7 @@ class ExportService:
                 img = self._create_gradient(width, height, background.get('gradient', {}))
                 draw = ImageDraw.Draw(img)
             elif bg_type == 'image' and background.get('imageUrl'):
+                self.logger.debug(f"Downloading background image: {background.get('imageUrl')}")
                 bg_img = self._download_image(background.get('imageUrl'))
                 if bg_img:
                     img = bg_img.resize((width, height))
@@ -406,13 +418,16 @@ class ExportService:
 
             # Render elements (text, images, shapes, videos)
             elements = page.get('elements', [])
-            for element in sorted(elements, key=lambda e: e.get('zIndex', 0)):
+            self.logger.debug(f"Rendering {len(elements)} elements")
+            for idx, element in enumerate(sorted(elements, key=lambda e: e.get('zIndex', 0))):
+                self.logger.debug(f"Rendering element {idx + 1}/{len(elements)}: type={element.get('type')}")
                 self._render_element(img, draw, element, width, height)
 
+            self.logger.debug("Slide rendering complete")
             return img
 
         except Exception as e:
-            self.logger.error(f"Error rendering slide: {e}")
+            self.logger.error(f"❌ Error rendering slide: {e}", exc_info=True)
             # Return blank image on error
             return Image.new('RGB', (width, height), color='white')
 
