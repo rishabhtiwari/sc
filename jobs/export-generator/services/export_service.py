@@ -101,11 +101,11 @@ class ExportService:
             
             # Route to appropriate export handler
             if export_format.lower() == 'mp4':
-                output_path, duration = self._export_mp4(job_id, project_data, settings, customer_id)
+                output_path, duration = self._export_mp4(job_id, project_data, settings, customer_id, user_id)
             elif export_format.lower() == 'mp3':
-                output_path, duration = self._export_mp3(job_id, project_data, settings, customer_id)
+                output_path, duration = self._export_mp3(job_id, project_data, settings, customer_id, user_id)
             elif export_format.lower() == 'json':
-                output_path, duration = self._export_json(job_id, project_data, settings, customer_id)
+                output_path, duration = self._export_json(job_id, project_data, settings, customer_id, user_id)
             else:
                 raise Exception(f"Unsupported export format: {export_format}")
             
@@ -184,7 +184,8 @@ class ExportService:
         job_id: str,
         project_data: Dict[str, Any],
         settings: Dict[str, Any],
-        customer_id: str
+        customer_id: str,
+        user_id: str
     ) -> Tuple[str, float]:
         """Export project as MP4 video"""
         try:
@@ -204,7 +205,9 @@ class ExportService:
             self._render_slides_to_frames(
                 project_data,
                 frames_dir,
-                settings.get('fps', 30)
+                settings.get('fps', 30),
+                customer_id,
+                user_id
             )
 
             # Create video from frames
@@ -232,7 +235,7 @@ class ExportService:
             # Add audio if requested
             if settings.get('includeAudio', True) and (project_data.get('audioTracks') or project_data.get('videoTracks')):
                 self.logger.info(f"🎵 Mixing audio tracks...")
-                audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration)
+                audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration, customer_id, user_id)
                 if audio_path and os.path.exists(audio_path):
                     audio_stream = ffmpeg.input(audio_path)
                     stream = ffmpeg.output(
@@ -278,7 +281,8 @@ class ExportService:
         job_id: str,
         project_data: Dict[str, Any],
         settings: Dict[str, Any],
-        customer_id: str
+        customer_id: str,
+        user_id: str
     ) -> Tuple[str, float]:
         """Export project audio as MP3"""
         try:
@@ -290,7 +294,7 @@ class ExportService:
             total_duration = sum(page.get('duration', 5) for page in project_data.get('pages', []))
 
             # Mix audio tracks
-            audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration)
+            audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration, customer_id, user_id)
 
             if not audio_path or not os.path.exists(audio_path):
                 raise Exception("No audio tracks found in project")
@@ -345,7 +349,9 @@ class ExportService:
         self,
         project_data: Dict[str, Any],
         frames_dir: str,
-        fps: int
+        fps: int,
+        customer_id: str,
+        user_id: str
     ):
         """Render all slides to frame sequences"""
         try:
@@ -368,7 +374,7 @@ class ExportService:
 
                 # Render slide to image
                 self.logger.debug(f"Calling _render_slide for slide {slide_idx + 1}...")
-                slide_image = self._render_slide(page, canvas_width, canvas_height)
+                slide_image = self._render_slide(page, canvas_width, canvas_height, customer_id, user_id)
                 self.logger.debug(f"Slide {slide_idx + 1} rendered successfully")
 
                 # Save frame for each frame in duration
@@ -389,7 +395,7 @@ class ExportService:
             self.logger.error(f"❌ Error rendering slides to frames: {e}", exc_info=True)
             raise
 
-    def _render_slide(self, page: Dict[str, Any], width: int, height: int) -> Image.Image:
+    def _render_slide(self, page: Dict[str, Any], width: int, height: int, customer_id: str, user_id: str) -> Image.Image:
         """Render a single slide to an image"""
         try:
             self.logger.debug(f"Creating canvas {width}x{height}")
@@ -411,7 +417,7 @@ class ExportService:
                 draw = ImageDraw.Draw(img)
             elif bg_type == 'image' and background.get('imageUrl'):
                 self.logger.debug(f"Downloading background image: {background.get('imageUrl')}")
-                bg_img = self._download_image(background.get('imageUrl'))
+                bg_img = self._download_image(background.get('imageUrl'), customer_id, user_id)
                 if bg_img:
                     img = bg_img.resize((width, height))
                     draw = ImageDraw.Draw(img)
@@ -421,7 +427,7 @@ class ExportService:
             self.logger.debug(f"Rendering {len(elements)} elements")
             for idx, element in enumerate(sorted(elements, key=lambda e: e.get('zIndex', 0))):
                 self.logger.debug(f"Rendering element {idx + 1}/{len(elements)}: type={element.get('type')}")
-                self._render_element(img, draw, element, width, height)
+                self._render_element(img, draw, element, width, height, customer_id, user_id)
 
             self.logger.debug("Slide rendering complete")
             return img
@@ -437,7 +443,9 @@ class ExportService:
         draw: ImageDraw.Draw,
         element: Dict[str, Any],
         width: int,
-        height: int
+        height: int,
+        customer_id: str,
+        user_id: str
     ):
         """Render a single element on the canvas"""
         try:
@@ -460,7 +468,7 @@ class ExportService:
 
             elif elem_type == 'image' and element.get('src'):
                 # Download and composite image
-                elem_img = self._download_image(element.get('src'))
+                elem_img = self._download_image(element.get('src'), customer_id, user_id)
                 if elem_img:
                     # Resize and position
                     elem_width = int(element.get('width', 100))
@@ -494,7 +502,9 @@ class ExportService:
         self,
         project_data: Dict[str, Any],
         export_dir: str,
-        total_duration: float
+        total_duration: float,
+        customer_id: str,
+        user_id: str
     ) -> Optional[str]:
         """Mix all audio tracks into a single file"""
         try:
@@ -509,7 +519,7 @@ class ExportService:
             # Download audio tracks
             for idx, track in enumerate(audio_tracks):
                 if track.get('url'):
-                    audio_file = self._download_audio(track.get('url'), export_dir, f"audio_{idx}")
+                    audio_file = self._download_audio(track.get('url'), export_dir, f"audio_{idx}", customer_id, user_id)
                     if audio_file:
                         audio_files.append({
                             'path': audio_file,
@@ -521,7 +531,7 @@ class ExportService:
             # Download video audio tracks
             for idx, track in enumerate(video_tracks):
                 if track.get('url') and not track.get('muted'):
-                    audio_file = self._download_audio(track.get('url'), export_dir, f"video_audio_{idx}")
+                    audio_file = self._download_audio(track.get('url'), export_dir, f"video_audio_{idx}", customer_id, user_id)
                     if audio_file:
                         audio_files.append({
                             'path': audio_file,
@@ -556,15 +566,19 @@ class ExportService:
             self.logger.error(f"Error mixing audio tracks: {e}")
             return None
 
-    def _download_image(self, url: str) -> Optional[Image.Image]:
+    def _download_image(self, url: str, customer_id: str, user_id: str) -> Optional[Image.Image]:
         """Download image from URL"""
         try:
             # Handle both asset-service URLs and external URLs
             if url.startswith('/api/assets/download/'):
-                # Internal asset-service URL - make request to asset-service
+                # Internal asset-service URL - make request to asset-service with auth headers
                 asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
                 self.logger.debug(f"Downloading image from asset-service: {asset_service_url}")
-                response = requests.get(asset_service_url, timeout=30)
+                headers = {
+                    'x-customer-id': customer_id,
+                    'x-user-id': user_id
+                }
+                response = requests.get(asset_service_url, headers=headers, timeout=30)
                 response.raise_for_status()
                 return Image.open(BytesIO(response.content))
             else:
@@ -577,17 +591,21 @@ class ExportService:
             self.logger.warning(f"Error downloading image {url}: {e}")
             return None
 
-    def _download_audio(self, url: str, export_dir: str, filename: str) -> Optional[str]:
+    def _download_audio(self, url: str, export_dir: str, filename: str, customer_id: str, user_id: str) -> Optional[str]:
         """Download audio file from URL"""
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
             # Handle both asset-service URLs and external URLs
             if url.startswith('/api/assets/download/'):
-                # Internal asset-service URL - make request to asset-service
+                # Internal asset-service URL - make request to asset-service with auth headers
                 asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
                 self.logger.debug(f"Downloading audio from asset-service: {asset_service_url}")
-                response = requests.get(asset_service_url, timeout=30)
+                headers = {
+                    'x-customer-id': customer_id,
+                    'x-user-id': user_id
+                }
+                response = requests.get(asset_service_url, headers=headers, timeout=30)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
