@@ -78,7 +78,7 @@ class Config:
     HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 30))
 
     # Asset Service Configuration
-    ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://news-automation-asset-service:8000')
+    ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://ichat-asset-service:8099')
 
     @classmethod
     def validate_config(cls):
