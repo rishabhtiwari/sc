@@ -72,6 +72,7 @@ SERVICES=(
     "iopaint"
     "job-image-auto-marker"
     "job-video-generator"
+    "job-export-generator"
     "youtube-uploader"
     "job-cleanup"
     "inventory-creation-service"
@@ -223,6 +224,8 @@ create_directories() {
         "jobs/video-generator/public"
         "jobs/video-generator/temp"
         "jobs/video-generator/assets"
+        "jobs/export-generator/logs"
+        "jobs/export-generator/temp"
         "jobs/youtube-uploader/logs"
         "jobs/youtube-uploader/credentials"
         "jobs/cleanup/logs"
@@ -677,32 +680,37 @@ deploy_all_services() {
     # wait_for_health "ichat-image-auto-marker" 60
 
     # 12. Video Generator Job
-    print_header "Step 12/17: Video Generator Job"
+    print_header "Step 12/18: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
     # wait_for_health "ichat-video-generator" 60
 
-    # 13. YouTube Uploader
-    print_header "Step 13/17: YouTube Uploader"
+    # 13. Export Generator Job
+    print_header "Step 13/18: Export Generator Job"
+    deploy_service "job-export-generator" "$build_flag"
+    # wait_for_health "job-export-generator" 60
+
+    # 14. YouTube Uploader
+    print_header "Step 14/18: YouTube Uploader"
     deploy_service "youtube-uploader" "$build_flag"
     # wait_for_health "ichat-youtube-uploader" 60
 
-    # 14. Cleanup Job
-    print_header "Step 14/17: Cleanup Job"
+    # 15. Cleanup Job
+    print_header "Step 15/18: Cleanup Job"
     deploy_service "job-cleanup" "$build_flag"
     # wait_for_health "ichat-cleanup" 60
 
-    # 15. Inventory Creation Service
-    print_header "Step 15/17: Inventory Creation Service (Generic Content Generation)"
+    # 16. Inventory Creation Service
+    print_header "Step 16/18: Inventory Creation Service (Generic Content Generation)"
     deploy_service "inventory-creation-service" "$build_flag"
     # wait_for_health "ichat-inventory-creation-service" 60
 
-    # 16. API Server
-    print_header "Step 16/17: API Server"
+    # 17. API Server
+    print_header "Step 17/18: API Server"
     deploy_service "ichat-api" "$build_flag"
     # wait_for_health "ichat-api-server" 60
 
-    # 17. News Automation Frontend
-    print_header "Step 17/17: News Automation Frontend"
+    # 18. News Automation Frontend
+    print_header "Step 18/18: News Automation Frontend"
     deploy_service "news-automation-frontend" "$build_flag"
     # wait_for_health "news-automation-frontend" 60
     
@@ -729,9 +737,9 @@ deploy_all_services() {
     echo "  • Watermark Remover:    http://localhost:8096"
     echo "  • Image Auto-Marker:    http://localhost:8102"
     echo "  • Video Generator:      http://localhost:8095"
+    echo "  • Export Generator:     http://localhost:8101"
     echo "  • YouTube Uploader:     http://localhost:8097"
     echo "  • Cleanup Job:          http://localhost:8100"
-    echo "  • E-commerce Service:   http://localhost:8101"
     echo "  • MongoDB:              mongodb://localhost:27017"
     echo ""
     print_info "Default Admin Credentials:"
