@@ -86,8 +86,15 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
   };
 
   const handleExport = async () => {
-    if (!project || !project.project_id) {
-      showToast('No project to export', 'error');
+    // Validate project exists
+    if (!project) {
+      showToast('No project loaded. Please create or load a project first.', 'error');
+      return;
+    }
+
+    // Validate project has been saved
+    if (!project.project_id) {
+      showToast('Please save your project before exporting.', 'error');
       return;
     }
 
@@ -96,6 +103,8 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
     setProgress(0);
 
     try {
+      console.log('Starting export for project:', project.project_id);
+
       const response = await api.post('/projects/export', {
         project_id: project.project_id,
         format: format,
@@ -108,18 +117,22 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
         }
       });
 
+      console.log('Export response:', response.data);
+
       const newJobId = response.data.export_job_id;
       setJobId(newJobId);
       setCurrentStep('Initializing export...');
+      showToast('Export started successfully!', 'success');
 
       // Start polling for progress
       pollExportStatus(newJobId);
 
     } catch (err) {
       console.error('Export error:', err);
-      setError(err.response?.data?.error || 'Failed to start export');
+      const errorMessage = err.response?.data?.error || err.response?.data?.detail || 'Failed to start export';
+      setError(errorMessage);
       setExporting(false);
-      showToast('Failed to start export', 'error');
+      showToast(errorMessage, 'error');
     }
   };
 

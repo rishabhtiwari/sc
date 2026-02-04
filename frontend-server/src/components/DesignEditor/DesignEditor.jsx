@@ -1296,11 +1296,15 @@ const DesignEditor = () => {
             <button
               onClick={() => setShowExportDialog(true)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+              title={!currentProject?.project_id ? 'Save your project first to enable export' : 'Export project to video, audio, or JSON'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               Export
+              {!currentProject?.project_id && (
+                <span className="ml-1 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Save first</span>
+              )}
             </button>
 
             {/* View Exports */}
