@@ -1243,12 +1243,7 @@ const DesignEditor = () => {
       {/* Main Canvas Area */}
       <div className="flex-1 flex flex-col">
         {/* Project Toolbar */}
-        <div
-          className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between relative z-50"
-          onClick={(e) => {
-            console.log('🎯 Toolbar clicked!', e.target);
-          }}
-        >
+        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Create New Project */}
             <button
@@ -1299,16 +1294,8 @@ const DesignEditor = () => {
 
             {/* Export Project */}
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                alert('Export button clicked!');
-                console.log('Export button clicked, currentProject:', currentProject);
-                console.log('showExportDialog before:', showExportDialog);
-                setShowExportDialog(true);
-                console.log('setShowExportDialog called');
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm pointer-events-auto relative z-50"
+              onClick={() => setShowExportDialog(true)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
               title={!currentProject?.project_id ? 'Save your project first to enable export' : 'Export project to video, audio, or JSON'}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
