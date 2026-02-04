@@ -857,6 +857,13 @@ class ExportService:
             # Remove MongoDB _id
             job_data.pop('_id', None)
 
+            # Convert datetime objects to ISO format strings for JSON serialization
+            datetime_fields = ['created_at', 'started_at', 'completed_at', 'updated_at']
+            for field in datetime_fields:
+                if field in job_data and job_data[field] is not None:
+                    if isinstance(job_data[field], datetime):
+                        job_data[field] = job_data[field].isoformat()
+
             return job_data
 
         except Exception as e:
