@@ -398,7 +398,7 @@ class ExportService:
     def _render_slide(self, page: Dict[str, Any], width: int, height: int, customer_id: str, user_id: str) -> Image.Image:
         """Render a single slide to an image"""
         try:
-            self.logger.debug(f"Creating canvas {width}x{height}")
+            self.logger.info(f"📐 Creating canvas {width}x{height}")
             # Create blank canvas
             img = Image.new('RGB', (width, height), color='white')
             draw = ImageDraw.Draw(img)
@@ -406,30 +406,37 @@ class ExportService:
             # Render background
             background = page.get('background', {})
             bg_type = background.get('type', 'solid')
-            self.logger.debug(f"Rendering background type: {bg_type}")
+            self.logger.info(f"🎨 Rendering background type: {bg_type}")
 
             if bg_type == 'solid':
                 color = background.get('color', '#ffffff')
                 img = Image.new('RGB', (width, height), color=color)
                 draw = ImageDraw.Draw(img)
+                self.logger.info(f"✅ Solid background rendered: {color}")
             elif bg_type == 'gradient':
                 img = self._create_gradient(width, height, background.get('gradient', {}))
                 draw = ImageDraw.Draw(img)
+                self.logger.info(f"✅ Gradient background rendered")
             elif bg_type == 'image' and background.get('imageUrl'):
-                self.logger.debug(f"Downloading background image: {background.get('imageUrl')}")
+                self.logger.info(f"📥 Downloading background image: {background.get('imageUrl')}")
                 bg_img = self._download_image(background.get('imageUrl'), customer_id, user_id)
                 if bg_img:
+                    self.logger.info(f"✅ Background image downloaded, resizing to {width}x{height}")
                     img = bg_img.resize((width, height))
                     draw = ImageDraw.Draw(img)
+                    self.logger.info(f"✅ Background image rendered")
+                else:
+                    self.logger.warning(f"⚠️ Failed to download background image")
 
             # Render elements (text, images, shapes, videos)
             elements = page.get('elements', [])
-            self.logger.debug(f"Rendering {len(elements)} elements")
+            self.logger.info(f"🎭 Rendering {len(elements)} elements")
             for idx, element in enumerate(sorted(elements, key=lambda e: e.get('zIndex', 0))):
-                self.logger.debug(f"Rendering element {idx + 1}/{len(elements)}: type={element.get('type')}")
+                self.logger.info(f"🔧 Rendering element {idx + 1}/{len(elements)}: type={element.get('type')}")
                 self._render_element(img, draw, element, width, height, customer_id, user_id)
+                self.logger.info(f"✅ Element {idx + 1}/{len(elements)} rendered")
 
-            self.logger.debug("Slide rendering complete")
+            self.logger.info("✅ Slide rendering complete")
             return img
 
         except Exception as e:

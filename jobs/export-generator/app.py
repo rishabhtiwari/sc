@@ -141,10 +141,12 @@ class ExportGeneratorJob(BaseJob):
 
                 # Start export processing in background
                 import threading
+                import traceback
                 def run_export():
                     try:
+                        self.logger.info(f"🎬 Export thread started for job {job_id}")
                         self.job_instance_service.update_job_instance(job_id, status='running')
-                        
+
                         result = self.run_job(
                             job_id,
                             is_on_demand=True,
@@ -163,8 +165,10 @@ class ExportGeneratorJob(BaseJob):
                             status=status,
                             result=result
                         )
+                        self.logger.info(f"✅ Export thread completed for job {job_id}")
                     except Exception as e:
-                        self.logger.error(f"Export job {job_id} failed: {str(e)}")
+                        self.logger.error(f"❌ Export job {job_id} failed: {str(e)}")
+                        self.logger.error(f"Traceback: {traceback.format_exc()}")
                         self.job_instance_service.update_job_instance(
                             job_id,
                             status='failed',
@@ -174,6 +178,7 @@ class ExportGeneratorJob(BaseJob):
                 thread = threading.Thread(target=run_export)
                 thread.daemon = True
                 thread.start()
+                self.logger.info(f"🚀 Export thread launched for job {job_id}")
 
                 return jsonify({
                     'success': True,
