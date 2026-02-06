@@ -290,11 +290,13 @@ services:
   # Coqui TTS XTTS v2 Server (GPU-accelerated)
   # Model is pre-downloaded by deployment script
   coqui-tts:
-    command: >
-      python3 -m TTS.server.server
-      --model_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2
-      --config_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
-      --use_cuda true
+    command:
+      - "--model_path"
+      - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2"
+      - "--config_path"
+      - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json"
+      - "--use_cuda"
+      - "true"
     deploy:
       resources:
         limits:
