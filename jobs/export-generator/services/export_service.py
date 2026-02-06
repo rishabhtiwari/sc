@@ -112,7 +112,7 @@ class ExportService:
             # Upload to MinIO
             self.logger.info(f"📤 Uploading export to MinIO...")
             self._update_export_job(job_id, customer_id, {
-                "progress": 90,
+                "progress": 95,
                 "current_step": "Uploading to storage..."
             })
 
@@ -245,8 +245,8 @@ class ExportService:
 
             # Update progress
             self._update_export_job(job_id, customer_id, {
-                "progress": 90,
-                "current_step": "Encoding video..."
+                "progress": 80,
+                "current_step": "Encoding video with FFmpeg..."
             })
 
             # Create video from frames (handling static and animated slides)
@@ -264,14 +264,32 @@ class ExportService:
             )
             self.logger.info(f"✅ Video creation complete!")
 
+            # Update progress after video creation
+            self._update_export_job(job_id, customer_id, {
+                "progress": 85,
+                "current_step": "Video encoding complete"
+            })
+
             # Add audio if requested
             self.logger.info(f"=" * 60)
             self.logger.info(f"🎵 STEP 4: Processing audio...")
             self.logger.info(f"=" * 60)
             if settings.get('includeAudio', True) and (project_data.get('audioTracks') or project_data.get('videoTracks')):
+                # Update progress
+                self._update_export_job(job_id, customer_id, {
+                    "progress": 87,
+                    "current_step": "Mixing audio tracks..."
+                })
+
                 self.logger.info(f"🎵 Mixing audio tracks...")
                 audio_path = self._mix_audio_tracks(project_data, export_dir, total_duration, customer_id, user_id)
                 if audio_path and os.path.exists(audio_path):
+                    # Update progress
+                    self._update_export_job(job_id, customer_id, {
+                        "progress": 90,
+                        "current_step": "Adding audio to video..."
+                    })
+
                     self.logger.info(f"🎵 Adding audio to video...")
                     # Create final video with audio
                     final_output = os.path.join(export_dir, f"{job_id}_final.mp4")
@@ -504,6 +522,15 @@ class ExportService:
                             'num_frames': num_frames
                         }, f)
 
+                    # Update progress for static slide
+                    progress = int((frames_saved / total_frames_needed) * 70) + 10  # 10-80%
+                    if job_id and customer_id:
+                        self._update_export_job(job_id, customer_id, {
+                            "progress": progress,
+                            "current_step": f"Rendered slide {slide_idx + 1}/{total_slides} (static)"
+                        })
+                    self.logger.info(f"💾 Progress: {frames_saved}/{total_frames_needed} frames ({progress}%)")
+
                     self.logger.info(f"✅ Slide {slide_idx + 1} saved (1 static frame)")
                 else:
                     # For animated slides: save all frames
@@ -514,9 +541,9 @@ class ExportService:
                         frame_number += 1
                         frames_saved += 1
 
-                        # Update progress every 100 frames
-                        if frame_idx > 0 and frame_idx % 100 == 0:
-                            progress = int((frames_saved / total_frames_needed) * 80) + 10  # 10-90%
+                        # Update progress every 50 frames (more frequent updates)
+                        if frame_idx > 0 and frame_idx % 50 == 0:
+                            progress = int((frames_saved / total_frames_needed) * 70) + 10  # 10-80%
                             if job_id and customer_id:
                                 self._update_export_job(job_id, customer_id, {
                                     "progress": progress,
@@ -529,12 +556,13 @@ class ExportService:
                 slide_image.close()
 
                 # Update progress after each slide
-                progress = int((frames_saved / total_frames_needed) * 80) + 10  # 10-90%
+                progress = int((frames_saved / total_frames_needed) * 70) + 10  # 10-80%
                 if job_id and customer_id:
                     self._update_export_job(job_id, customer_id, {
                         "progress": progress,
                         "current_step": f"Rendered slide {slide_idx + 1}/{total_slides}"
                     })
+                self.logger.info(f"📊 Overall progress: {progress}% ({frames_saved}/{total_frames_needed} frames)")
 
             self.logger.info(f"✅ Rendered {frame_number} actual frames for {total_slides} slides")
             self.logger.info(f"✅ Saved {frames_saved} equivalent frames (with static optimization)")

@@ -1,0 +1,71 @@
+# Node.js + PyTorch Base Image with CUDA 11.8 Support
+# This base image combines Node.js 18 with PyTorch CUDA support
+# Used by: audio-generation-factory
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu22.04
+
+LABEL maintainer="News Automation Team"
+LABEL description="Node.js 18 + PyTorch 2.1.2 with CUDA 11.8 base image"
+LABEL nodejs.version="18"
+LABEL pytorch.version="2.1.2"
+LABEL cuda.version="11.8"
+
+# Set timezone non-interactively
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install Node.js 18, Python 3.10, and system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    ffmpeg \
+    git \
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
+    python3-pip \
+    espeak-ng \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
+
+# Create Python virtual environment
+RUN python3 -m venv /app/venv
+
+# Upgrade pip in virtual environment
+RUN /app/venv/bin/pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA 11.8 support using direct wheel URLs
+RUN /app/venv/bin/pip install --no-cache-dir \
+    https://download.pytorch.org/whl/cu118/torch-2.1.2%2Bcu118-cp310-cp310-linux_x86_64.whl \
+    https://download.pytorch.org/whl/cu118/torchvision-0.16.2%2Bcu118-cp310-cp310-linux_x86_64.whl \
+    https://download.pytorch.org/whl/cu118/torchaudio-2.1.2%2Bcu118-cp310-cp310-linux_x86_64.whl
+
+# Install NumPy <2.0 for compatibility
+RUN /app/venv/bin/pip install --no-cache-dir "numpy>=1.20.0,<2.0"
+
+# Set CUDA environment variables
+ENV CUDA_HOME=/usr/local/cuda
+ENV CUDA_PATH=/usr/local/cuda
+ENV CUDACXX=/usr/local/cuda/bin/nvcc
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+
+# Verify installations
+RUN node --version && npm --version && \
+    /app/venv/bin/python -c "import torch; print(f'PyTorch {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["/bin/bash"]
+

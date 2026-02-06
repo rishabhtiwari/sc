@@ -817,6 +817,51 @@ services:
           memory: 2G
           cpus: '1.0'
 
+  # Coqui TTS Server (XTTS-v2 Model)
+  coqui-tts:
+    image: ghcr.io/coqui-ai/tts:latest
+    pull_policy: if_not_present
+    container_name: coqui-tts
+    ports:
+      - "5002:5002"
+    volumes:
+      # Persistent storage for TTS models (prevents re-downloading on restart)
+      - coqui-tts-models:/root/.local/share/tts
+    environment:
+      - TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
+      - COQUI_TOS_AGREED=1
+    # Use bash to download model first, then start server
+    command: >
+      bash -c "
+      echo 'Checking for XTTS-v2 model...';
+      if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
+        echo 'Model not found. Downloading XTTS-v2 model (this may take 5-10 minutes)...';
+        tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 --text 'Initialization' --out_path /tmp/init.wav;
+        echo 'Model downloaded successfully!';
+      else
+        echo 'Model already exists. Skipping download.';
+      fi;
+      echo 'Starting TTS server...';
+      tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2
+      "
+    networks:
+      - ichat-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:5002/api/tts || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s  # Model download and loading can take up to 10 minutes on first run
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '2.0'
+        reservations:
+          memory: 3G
+          cpus: '1.0'
+
   # Inventory Creation Service - Generic content generation for products, blogs, social media
   inventory-creation-service:
     build:
@@ -1355,5 +1400,9 @@ volumes:
     driver: local
     # Use regular named volume instead of bind mount to avoid directory creation issues
     # Models will be cached in Docker's volume directory
+  coqui-tts-models:
+    driver: local
+    # Persistent storage for Coqui TTS models (XTTS-v2)
+    # Prevents re-downloading models on container restart
 
 

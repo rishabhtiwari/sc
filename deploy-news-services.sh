@@ -11,16 +11,18 @@
 # 5. Asset Service (asset management with MinIO)
 # 6. News Fetcher Job (fetches news articles)
 # 7. LLM Service (generates summaries)
-# 8. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
-# 9. Voice Generator Job (generates audio from news)
-# 10. IOPaint Watermark Remover (removes watermarks from images - GPU)
-# 11. Image Auto-Marker Job (automatically marks images as cleaned)
-# 12. Video Generator Job (creates videos from news + audio)
-# 13. YouTube Uploader (uploads videos to YouTube)
-# 14. Cleanup Job (cleans up old files and MongoDB records)
-# 15. E-commerce Service (manages e-commerce products and video generation)
-# 16. API Server (serves news data to frontend)
-# 17. News Automation Frontend (React UI for managing news automation)
+# 8. Coqui TTS Server (XTTS-v2 model for multilingual TTS)
+# 9. Audio Generation Factory (TTS models: Kokoro for English, Veena for Hindi)
+# 10. Voice Generator Job (generates audio from news)
+# 11. IOPaint Watermark Remover (removes watermarks from images - GPU)
+# 12. Image Auto-Marker Job (automatically marks images as cleaned)
+# 13. Video Generator Job (creates videos from news + audio)
+# 14. Export Generator Job (exports videos in different formats)
+# 15. YouTube Uploader (uploads videos to YouTube)
+# 16. Cleanup Job (cleans up old files and MongoDB records)
+# 17. E-commerce Service (manages e-commerce products and video generation)
+# 18. API Server (serves news data to frontend)
+# 19. News Automation Frontend (React UI for managing news automation)
 #
 # Usage:
 #   ./deploy-news-services.sh [options] [service_name]
@@ -286,43 +288,19 @@ services:
 
   # Coqui TTS XTTS v2 Server (GPU-accelerated)
   coqui-tts:
-    image: ghcr.io/coqui-ai/tts:latest
-    container_name: coqui-tts
-    entrypoint: tts-server
-    ports:
-      - "5002:5002"
     environment:
       - COQUI_TOS_AGREED=1
-    volumes:
-      # Persistent model storage (models already downloaded)
-      - /root/.local/share/tts:/root/.local/share/tts
-    command:
-      - --model_path
-      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/
-      - --config_path
-      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
-      - --speakers_file_path
-      - /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/speakers_xtts.pth
-      - --use_cuda
-      - "1"
-      - --port
-      - "5002"
+    command: tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2 --use_cuda true
     deploy:
       resources:
+        limits:
+          memory: 8G
         reservations:
+          memory: 4G
           devices:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    networks:
-      - ichat-network
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5002/')\" || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 120s
-    restart: unless-stopped
 
   # Audio Generation Factory with GPU support
   audio-generation-factory:
@@ -374,6 +352,77 @@ services:
 EOF
 
     print_success "GPU docker-compose override created: docker-compose.gpu.yml"
+}
+
+# Function to build base Docker images (shared across multiple services)
+build_base_images() {
+    local build_flag=$1
+
+    print_header "Building Base Docker Images"
+    print_info "Pre-building shared base images to avoid redundant downloads..."
+    echo ""
+
+    # Determine which base images to build based on GPU flag
+    local base_images=()
+
+    if [ "$USE_GPU" = true ]; then
+        print_info "GPU mode enabled - building CUDA base images"
+        base_images=(
+            "pytorch-base-cu118:docker/pytorch-base/Dockerfile.cu118"
+            "pytorch-node-base-cu118:docker/pytorch-node-base/Dockerfile.cu118"
+        )
+    else
+        print_info "CPU mode - building CPU base images"
+        base_images=(
+            "pytorch-base-cpu:docker/pytorch-base/Dockerfile.cpu"
+            "pytorch-node-base-cpu:docker/pytorch-node-base/Dockerfile.cpu"
+        )
+    fi
+
+    # Build each base image
+    for image_spec in "${base_images[@]}"; do
+        IFS=':' read -r image_name dockerfile_path <<< "$image_spec"
+
+        # Check if image exists and skip if not building
+        if [ "$build_flag" != "--build" ]; then
+            if docker images | grep -q "$image_name"; then
+                print_success "Base image $image_name already exists (use --build to rebuild)"
+                continue
+            fi
+        fi
+
+        print_info "Building base image: ${CYAN}$image_name${NC}"
+        print_info "  Dockerfile: $dockerfile_path"
+
+        # Extract directory from dockerfile path
+        local dockerfile_dir=$(dirname "$dockerfile_path")
+        local dockerfile_name=$(basename "$dockerfile_path")
+
+        # Build the image
+        if docker build \
+            -t "$image_name" \
+            -f "$dockerfile_path" \
+            "$dockerfile_dir" 2>&1 | tee "/tmp/build-$image_name.log"; then
+            print_success "✓ Built $image_name successfully"
+        else
+            print_error "✗ Failed to build $image_name"
+            print_error "  Check logs: /tmp/build-$image_name.log"
+            return 1
+        fi
+        echo ""
+    done
+
+    print_success "All base images built successfully!"
+    echo ""
+
+    # Show summary of built images
+    print_info "Base images summary:"
+    for image_spec in "${base_images[@]}"; do
+        IFS=':' read -r image_name dockerfile_path <<< "$image_spec"
+        local size=$(docker images "$image_name" --format "{{.Size}}" | head -1)
+        print_info "  ${CYAN}$image_name${NC} - Size: $size"
+    done
+    echo ""
 }
 
 # Function to get docker-compose command with appropriate files
@@ -620,10 +669,14 @@ deploy_all_services() {
     # Create necessary directories
     create_directories
 
+    # Build base Docker images first (if --build flag is set or images don't exist)
+    # This ensures PyTorch and other common dependencies are downloaded once and reused
+    build_base_images "$build_flag"
+
     # Deploy services in order
     print_info "Starting deployment sequence..."
     echo ""
-    
+
     # 1. MongoDB
     print_header "Step 1/17: MongoDB Database"
     deploy_service "ichat-mongodb" "$build_flag"
@@ -655,62 +708,68 @@ deploy_all_services() {
     # wait_for_health "ichat-news-fetcher" 60
 
     # 7. LLM Service
-    print_header "Step 7/17: LLM Service"
+    print_header "Step 7/18: LLM Service"
     deploy_service "llm-service" "$build_flag"
     # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
 
-    # 8. Audio Generation Factory
-    print_header "Step 8/17: Audio Generation Factory (Kokoro + Veena TTS)"
+    # 8. Coqui TTS Server (XTTS-v2)
+    print_header "Step 8/18: Coqui TTS Server (XTTS-v2 Model)"
+    print_info "First run will download XTTS-v2 model (~2GB, may take 5-10 minutes)"
+    deploy_service "coqui-tts" "$build_flag"
+    # wait_for_health "coqui-tts" 600  # Model download can take up to 10 minutes
+
+    # 9. Audio Generation Factory
+    print_header "Step 9/18: Audio Generation Factory (Kokoro + Veena TTS)"
     deploy_service "audio-generation-factory" "$build_flag"
     # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
 
-    # 9. Voice Generator Job
-    print_header "Step 9/17: Voice Generator Job"
+    # 10. Voice Generator Job
+    print_header "Step 10/18: Voice Generator Job"
     deploy_service "job-voice-generator" "$build_flag"
     # wait_for_health "ichat-voice-generator" 60
 
-    # 10. IOPaint Watermark Remover
-    print_header "Step 10/17: IOPaint Watermark Remover"
+    # 11. IOPaint Watermark Remover
+    print_header "Step 11/18: IOPaint Watermark Remover"
     deploy_service "iopaint" "$build_flag"
     # wait_for_health "ichat-iopaint" 60
 
-    # 11. Image Auto-Marker Job
-    print_header "Step 11/17: Image Auto-Marker Job"
+    # 12. Image Auto-Marker Job
+    print_header "Step 12/18: Image Auto-Marker Job"
     deploy_service "job-image-auto-marker" "$build_flag"
     # wait_for_health "ichat-image-auto-marker" 60
 
-    # 12. Video Generator Job
-    print_header "Step 12/18: Video Generator Job"
+    # 13. Video Generator Job
+    print_header "Step 13/18: Video Generator Job"
     deploy_service "job-video-generator" "$build_flag"
     # wait_for_health "ichat-video-generator" 60
 
-    # 13. Export Generator Job
-    print_header "Step 13/18: Export Generator Job"
+    # 14. Export Generator Job
+    print_header "Step 14/18: Export Generator Job"
     deploy_service "job-export-generator" "$build_flag"
     # wait_for_health "job-export-generator" 60
 
-    # 14. YouTube Uploader
-    print_header "Step 14/18: YouTube Uploader"
+    # 15. YouTube Uploader
+    print_header "Step 15/18: YouTube Uploader"
     deploy_service "youtube-uploader" "$build_flag"
     # wait_for_health "ichat-youtube-uploader" 60
 
-    # 15. Cleanup Job
-    print_header "Step 15/18: Cleanup Job"
+    # 16. Cleanup Job
+    print_header "Step 16/18: Cleanup Job"
     deploy_service "job-cleanup" "$build_flag"
     # wait_for_health "ichat-cleanup" 60
 
-    # 16. Inventory Creation Service
-    print_header "Step 16/18: Inventory Creation Service (Generic Content Generation)"
+    # 17. Inventory Creation Service
+    print_header "Step 17/18: Inventory Creation Service (Generic Content Generation)"
     deploy_service "inventory-creation-service" "$build_flag"
     # wait_for_health "ichat-inventory-creation-service" 60
 
-    # 17. API Server
-    print_header "Step 17/18: API Server"
+    # 18. API Server
+    print_header "Step 18/19: API Server"
     deploy_service "ichat-api" "$build_flag"
     # wait_for_health "ichat-api-server" 60
 
-    # 18. News Automation Frontend
-    print_header "Step 18/18: News Automation Frontend"
+    # 19. News Automation Frontend
+    print_header "Step 19/19: News Automation Frontend"
     deploy_service "news-automation-frontend" "$build_flag"
     # wait_for_health "news-automation-frontend" 60
     
@@ -766,16 +825,18 @@ This script manages deployment of all news-related services:
   5. Asset Service (asset management with MinIO)
   6. News Fetcher Job (fetches news articles)
   7. LLM Service (generates summaries) ${MAGENTA}[GPU capable]${NC}
-  8. Audio Generation Factory (TTS: Kokoro English + Veena Hindi) ${MAGENTA}[GPU capable]${NC}
-  9. Voice Generator Job (generates audio from news)
-  10. IOPaint Watermark Remover (removes watermarks from images) ${MAGENTA}[GPU capable]${NC}
-  11. Image Auto-Marker Job (automatically marks images as cleaned)
-  12. Video Generator Job (creates videos from news + audio)
-  13. YouTube Uploader (uploads videos to YouTube)
-  14. Cleanup Job (cleans up old files and MongoDB records)
-  15. E-commerce Service (manages e-commerce products and video generation)
-  16. API Server (serves news data to frontend)
-  17. News Automation Frontend (React UI for managing news automation)
+  8. Coqui TTS Server (XTTS-v2 multilingual TTS) ${MAGENTA}[GPU capable]${NC}
+  9. Audio Generation Factory (TTS: Kokoro English + Veena Hindi) ${MAGENTA}[GPU capable]${NC}
+  10. Voice Generator Job (generates audio from news)
+  11. IOPaint Watermark Remover (removes watermarks from images) ${MAGENTA}[GPU capable]${NC}
+  12. Image Auto-Marker Job (automatically marks images as cleaned)
+  13. Video Generator Job (creates videos from news + audio)
+  14. Export Generator Job (exports videos in different formats)
+  15. YouTube Uploader (uploads videos to YouTube)
+  16. Cleanup Job (cleans up old files and MongoDB records)
+  17. E-commerce Service (manages e-commerce products and video generation)
+  18. API Server (serves news data to frontend)
+  19. News Automation Frontend (React UI for managing news automation)
 
 ${YELLOW}Usage:${NC}
   ./deploy-news-services.sh [options] [service_name]

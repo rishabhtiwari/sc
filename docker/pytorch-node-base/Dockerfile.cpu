@@ -1,0 +1,50 @@
+# Node.js + PyTorch CPU Base Image
+# This base image combines Node.js 18 with PyTorch CPU support
+# Used by: audio-generation-factory (CPU version)
+FROM node:18-slim
+
+LABEL maintainer="News Automation Team"
+LABEL description="Node.js 18 + PyTorch CPU base image"
+LABEL nodejs.version="18"
+LABEL pytorch.version="2.1.2"
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies for audio processing and Python
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    python3 \
+    python3-pip \
+    python3-venv \
+    espeak-ng \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create Python virtual environment
+RUN python3 -m venv /app/venv
+
+# Upgrade pip in virtual environment
+RUN /app/venv/bin/pip install --no-cache-dir --upgrade pip
+
+# Install PyTorch CPU version using direct wheel URLs
+RUN /app/venv/bin/pip install --no-cache-dir \
+    https://download.pytorch.org/whl/cpu/torch-2.1.2%2Bcpu-cp310-cp310-linux_x86_64.whl \
+    https://download.pytorch.org/whl/cpu/torchaudio-2.1.2%2Bcpu-cp310-cp310-linux_x86_64.whl
+
+# Install NumPy <2.0 for compatibility
+RUN /app/venv/bin/pip install --no-cache-dir "numpy>=1.20.0,<2.0"
+
+# Verify installations
+RUN node --version && npm --version && \
+    /app/venv/bin/python -c "import torch; print(f'PyTorch {torch.__version__} installed successfully')"
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["/bin/bash"]
+
