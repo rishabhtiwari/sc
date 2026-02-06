@@ -322,8 +322,7 @@ services:
       - COQUI_TTS_URL=http://coqui-tts:5002
       - TEXT_CHUNKER_VERSION=v2  # v1=spaCy, v2=semantic_text_splitter (recommended)
     depends_on:
-      coqui-tts:
-        condition: service_healthy
+      - coqui-tts
     deploy:
       resources:
         reservations:
