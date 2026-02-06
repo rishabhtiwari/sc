@@ -236,6 +236,7 @@ create_directories() {
         "jobs/image-auto-marker/logs"
         "audio-generation/data"
         "audio-generation/public"
+        "coqui-tts-models"
     )
 
     for dir in "${dirs[@]}"; do
@@ -287,26 +288,13 @@ services:
               capabilities: [gpu]
 
   # Coqui TTS XTTS v2 Server (GPU-accelerated)
+  # Model is pre-downloaded by deployment script
   coqui-tts:
-    environment:
-      - COQUI_TOS_AGREED=1
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - >
-        echo 'Checking for XTTS-v2 model...';
-        MODEL_DIR='/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2';
-        if [ ! -f "$MODEL_DIR/config.json" ]; then
-          echo 'Model not found. Downloading XTTS-v2 model from HuggingFace (this may take 5-10 minutes)...';
-          echo 'Installing huggingface-hub...';
-          pip install -q huggingface-hub;
-          echo 'Downloading model files...';
-          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='coqui/XTTS-v2', local_dir='$MODEL_DIR', local_dir_use_symlinks=False)";
-          echo 'Model downloaded successfully!';
-        else
-          echo 'Model already exists. Skipping download.';
-        fi;
-        echo 'Starting TTS server with GPU support...';
-        python3 -m TTS.server.server --model_path "$MODEL_DIR" --config_path "$MODEL_DIR/config.json" --use_cuda true
+    command: >
+      python3 -m TTS.server.server
+      --model_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2
+      --config_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
+      --use_cuda true
     deploy:
       resources:
         limits:
@@ -368,6 +356,57 @@ services:
 EOF
 
     print_success "GPU docker-compose override created: docker-compose.gpu.yml"
+}
+
+# Function to download Coqui TTS model
+download_coqui_model() {
+    print_header "Downloading Coqui TTS Model"
+
+    local model_dir="./coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2"
+
+    # Check if model already exists
+    if [ -f "$model_dir/config.json" ]; then
+        print_success "Coqui TTS XTTS-v2 model already exists. Skipping download."
+        return 0
+    fi
+
+    print_info "Downloading XTTS-v2 model from HuggingFace..."
+    print_info "This is a one-time download (~2GB, may take 5-10 minutes)"
+    echo ""
+
+    # Create model directory
+    mkdir -p "$model_dir"
+
+    # Download using Python and huggingface-hub
+    print_info "Installing huggingface-hub (if not already installed)..."
+    python3 -m pip install -q huggingface-hub 2>/dev/null || pip3 install -q huggingface-hub
+
+    print_info "Downloading model files..."
+    python3 << EOF
+from huggingface_hub import snapshot_download
+import os
+
+model_dir = os.path.abspath("$model_dir")
+print(f"Downloading to: {model_dir}")
+
+snapshot_download(
+    repo_id='coqui/XTTS-v2',
+    local_dir=model_dir,
+    local_dir_use_symlinks=False
+)
+
+print("Model download complete!")
+EOF
+
+    if [ $? -eq 0 ]; then
+        print_success "✓ Coqui TTS model downloaded successfully!"
+        print_info "Model location: $model_dir"
+    else
+        print_error "✗ Failed to download Coqui TTS model"
+        return 1
+    fi
+
+    echo ""
 }
 
 # Function to build base Docker images (shared across multiple services)
@@ -684,6 +723,11 @@ deploy_all_services() {
 
     # Create necessary directories
     create_directories
+
+    # Download Coqui TTS model if using GPU (model is needed for TTS service)
+    if [ "$USE_GPU" = true ]; then
+        download_coqui_model
+    fi
 
     # Build base Docker images first (if --build flag is set or images don't exist)
     # This ensures PyTorch and other common dependencies are downloaded once and reused

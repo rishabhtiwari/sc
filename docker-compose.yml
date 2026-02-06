@@ -818,6 +818,7 @@ services:
           cpus: '1.0'
 
   # Coqui TTS Server (XTTS-v2 Model)
+  # Model is pre-downloaded by deployment script to ./coqui-tts-models/
   coqui-tts:
     image: ghcr.io/coqui-ai/tts:latest
     pull_policy: if_not_present
@@ -825,29 +826,15 @@ services:
     ports:
       - "5002:5002"
     volumes:
-      # Persistent storage for TTS models (prevents re-downloading on restart)
-      - coqui-tts-models:/root/.local/share/tts
+      # Mount pre-downloaded model directory from host
+      - ./coqui-tts-models:/root/.local/share/tts
     environment:
-      - TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
       - COQUI_TOS_AGREED=1
-    # Use bash to download model first, then start server
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - >
-        echo 'Checking for XTTS-v2 model...';
-        MODEL_DIR='/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2';
-        if [ ! -f "$MODEL_DIR/config.json" ]; then
-          echo 'Model not found. Downloading XTTS-v2 model from HuggingFace (this may take 5-10 minutes)...';
-          echo 'Installing huggingface-hub...';
-          pip install -q huggingface-hub;
-          echo 'Downloading model files...';
-          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='coqui/XTTS-v2', local_dir='$MODEL_DIR', local_dir_use_symlinks=False)";
-          echo 'Model downloaded successfully!';
-        else
-          echo 'Model already exists. Skipping download.';
-        fi;
-        echo 'Starting TTS server...';
-        python3 -m TTS.server.server --model_path "$MODEL_DIR" --config_path "$MODEL_DIR/config.json"
+    # Start server directly - model is already downloaded on host
+    command: >
+      python3 -m TTS.server.server
+      --model_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2
+      --config_path /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json
     networks:
       - ichat-network
     healthcheck:
@@ -855,7 +842,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 600s  # Model download and loading can take up to 10 minutes on first run
+      start_period: 120s  # Model loading takes ~2 minutes
     restart: unless-stopped
     deploy:
       resources:
@@ -1404,9 +1391,7 @@ volumes:
     driver: local
     # Use regular named volume instead of bind mount to avoid directory creation issues
     # Models will be cached in Docker's volume directory
-  coqui-tts-models:
-    driver: local
-    # Persistent storage for Coqui TTS models (XTTS-v2)
-    # Prevents re-downloading models on container restart
+  # Note: coqui-tts-models is now a bind mount (./coqui-tts-models) instead of named volume
+  # Model is pre-downloaded by deployment script before container starts
 
 
