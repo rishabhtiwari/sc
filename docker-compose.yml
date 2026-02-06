@@ -831,19 +831,20 @@ services:
       - TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
       - COQUI_TOS_AGREED=1
     # Use bash to download model first, then start server
-    command: >
-      bash -c "
-      echo 'Checking for XTTS-v2 model...';
-      if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
-        echo 'Model not found. Downloading XTTS-v2 model (this may take 5-10 minutes)...';
-        tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 --text 'Initialization' --out_path /tmp/init.wav;
-        echo 'Model downloaded successfully!';
-      else
-        echo 'Model already exists. Skipping download.';
-      fi;
-      echo 'Starting TTS server...';
-      tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2
-      "
+    command:
+      - /bin/bash
+      - -c
+      - |
+        echo 'Checking for XTTS-v2 model...'
+        if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
+          echo 'Model not found. Downloading XTTS-v2 model (this may take 5-10 minutes)...'
+          tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 --text 'Initialization' --out_path /tmp/init.wav
+          echo 'Model downloaded successfully!'
+        else
+          echo 'Model already exists. Skipping download.'
+        fi
+        echo 'Starting TTS server...'
+        tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2
     networks:
       - ichat-network
     healthcheck:
