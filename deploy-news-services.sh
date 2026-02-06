@@ -532,6 +532,12 @@ deploy_service() {
     # Get the appropriate docker-compose command
     local compose_cmd=$(get_compose_command)
 
+    # Special handling for coqui-tts: ensure model is downloaded first
+    if [ "$service" = "coqui-tts" ]; then
+        print_info "Checking Coqui TTS model..."
+        download_coqui_model
+    fi
+
     # Show GPU status if applicable
     if is_gpu_service "$service" && [ "$USE_GPU" = true ]; then
         print_info "Deploying $service with ${MAGENTA}GPU support${NC}..."
