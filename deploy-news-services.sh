@@ -294,18 +294,19 @@ services:
     command:
       - >
         echo 'Checking for XTTS-v2 model...';
-        if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
+        MODEL_DIR='/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2';
+        if [ ! -f "$MODEL_DIR/config.json" ]; then
           echo 'Model not found. Downloading XTTS-v2 model from HuggingFace (this may take 5-10 minutes)...';
           echo 'Installing huggingface-hub...';
           pip install -q huggingface-hub;
           echo 'Downloading model files...';
-          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='coqui/XTTS-v2', local_dir='/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2', local_dir_use_symlinks=False)";
+          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='coqui/XTTS-v2', local_dir='$MODEL_DIR', local_dir_use_symlinks=False)";
           echo 'Model downloaded successfully!';
         else
           echo 'Model already exists. Skipping download.';
         fi;
         echo 'Starting TTS server with GPU support...';
-        python3 -m TTS.server.server --model_name tts_models/multilingual/multi-dataset/xtts_v2 --use_cuda true
+        python3 -m TTS.server.server --model_path "$MODEL_DIR" --config_path "$MODEL_DIR/config.json" --use_cuda true
     deploy:
       resources:
         limits:
