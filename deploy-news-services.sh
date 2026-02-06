@@ -295,8 +295,11 @@ services:
       - >
         echo 'Checking for XTTS-v2 model...';
         if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
-          echo 'Model not found. Downloading XTTS-v2 model (this may take 5-10 minutes)...';
-          python3 -m TTS.server.server --model_name tts_models/multilingual/multi-dataset/xtts_v2 --list_models > /dev/null 2>&1 || true;
+          echo 'Model not found. Downloading XTTS-v2 model from HuggingFace (this may take 5-10 minutes)...';
+          echo 'Installing huggingface-hub...';
+          pip install -q huggingface-hub;
+          echo 'Downloading model files...';
+          python3 -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='coqui/XTTS-v2', local_dir='/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2', local_dir_use_symlinks=False)";
           echo 'Model downloaded successfully!';
         else
           echo 'Model already exists. Skipping download.';
