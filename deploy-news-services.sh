@@ -365,6 +365,7 @@ download_coqui_model() {
     print_header "Downloading Coqui TTS Model"
 
     local model_dir="./coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2"
+    local abs_model_dir=$(cd "$(dirname "$0")" && pwd)"/coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2"
 
     # Check if model already exists
     if [ -f "$model_dir/config.json" ]; then
@@ -378,31 +379,50 @@ download_coqui_model() {
 
     # Create model directory
     mkdir -p "$model_dir"
+    chmod 777 "$model_dir"
 
     # Download using Python and huggingface-hub
     print_info "Installing huggingface-hub (if not already installed)..."
     python3 -m pip install -q huggingface-hub 2>/dev/null || pip3 install -q huggingface-hub
 
     print_info "Downloading model files..."
-    python3 << EOF
+    print_info "Target directory: $model_dir"
+
+    # Use a temporary Python script to avoid heredoc issues
+    cat > /tmp/download_coqui_model.py << 'PYEOF'
 from huggingface_hub import snapshot_download
 import os
+import sys
 
-model_dir = os.path.abspath("$model_dir")
+model_dir = sys.argv[1]
 print(f"Downloading to: {model_dir}")
 
-snapshot_download(
-    repo_id='coqui/XTTS-v2',
-    local_dir=model_dir,
-    local_dir_use_symlinks=False
-)
+try:
+    snapshot_download(
+        repo_id='coqui/XTTS-v2',
+        local_dir=model_dir,
+        local_dir_use_symlinks=False
+    )
+    print("Model download complete!")
+except Exception as e:
+    print(f"Error downloading model: {e}")
+    sys.exit(1)
+PYEOF
 
-print("Model download complete!")
-EOF
+    python3 /tmp/download_coqui_model.py "$model_dir"
+    local download_status=$?
+    rm -f /tmp/download_coqui_model.py
 
-    if [ $? -eq 0 ]; then
+    if [ $download_status -eq 0 ]; then
         print_success "✓ Coqui TTS model downloaded successfully!"
         print_info "Model location: $model_dir"
+        # Verify the config file exists
+        if [ -f "$model_dir/config.json" ]; then
+            print_success "✓ Model config.json verified"
+        else
+            print_error "✗ Model config.json not found after download"
+            return 1
+        fi
     else
         print_error "✗ Failed to download Coqui TTS model"
         return 1
