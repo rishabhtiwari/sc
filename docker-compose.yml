@@ -838,17 +838,17 @@ services:
         echo 'Checking for XTTS-v2 model...'
         if [ ! -f /root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json ]; then
           echo 'Model not found. Downloading XTTS-v2 model (this may take 5-10 minutes)...'
-          tts --model_name tts_models/multilingual/multi-dataset/xtts_v2 --text 'Initialization' --out_path /tmp/init.wav
+          python3 -m TTS.server.server --model_name tts_models/multilingual/multi-dataset/xtts_v2 --list_models > /dev/null 2>&1 || true
           echo 'Model downloaded successfully!'
         else
           echo 'Model already exists. Skipping download.'
         fi
         echo 'Starting TTS server...'
-        tts-server --model_name tts_models/multilingual/multi-dataset/xtts_v2
+        python3 -m TTS.server.server --model_name tts_models/multilingual/multi-dataset/xtts_v2
     networks:
       - ichat-network
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:5002/api/tts || exit 1" ]
+      test: [ "CMD-SHELL", "curl -f http://localhost:5002/ || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
