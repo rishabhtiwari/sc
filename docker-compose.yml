@@ -837,6 +837,10 @@ services:
       - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2"
       - "--config_path"
       - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "5002"
     networks:
       - ichat-network
     healthcheck:

@@ -295,6 +295,10 @@ services:
       - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2"
       - "--config_path"
       - "/root/.local/share/tts/tts_models--multilingual--multi-dataset--xtts_v2/config.json"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "5002"
       - "--use_cuda"
       - "true"
     deploy:
@@ -554,8 +558,20 @@ deploy_service() {
 
     # Special handling for coqui-tts: ensure model is downloaded first
     if [ "$service" = "coqui-tts" ]; then
-        print_info "Checking Coqui TTS model..."
+        echo ""
+        echo "DEBUG: Service is coqui-tts, calling download_coqui_model..."
         download_coqui_model
+        local download_result=$?
+        echo "DEBUG: download_coqui_model returned: $download_result"
+
+        # Verify model exists before proceeding
+        if [ ! -f "./coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2/config.json" ]; then
+            print_error "Model download failed or incomplete. Cannot deploy coqui-tts."
+            echo "DEBUG: Checking directory contents:"
+            ls -la ./coqui-tts-models/ || echo "Directory doesn't exist"
+            return 1
+        fi
+        echo ""
     fi
 
     # Show GPU status if applicable
