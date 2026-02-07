@@ -24,9 +24,18 @@ const InstagramPlatformPage = () => {
   const [loading, setLoading] = useState(true);
   const [showMasterAppForm, setShowMasterAppForm] = useState(false);
   const currentUser = getCurrentUser();
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.permissions?.includes('admin');
+
+  // Check if user is admin - check role_name or role_id or permissions
+  const isAdmin = currentUser?.role_name?.toLowerCase().includes('admin') ||
+                  currentUser?.role_id?.toLowerCase().includes('admin') ||
+                  currentUser?.permissions?.includes('admin') ||
+                  currentUser?.permissions?.includes('master_app.manage');
+
   const { showToast } = useToast();
   const instagramPlatform = SOCIAL_PLATFORMS.instagram;
+
+  console.log('Current User:', currentUser);
+  console.log('Is Admin:', isAdmin);
 
   useEffect(() => {
     loadMasterApp();

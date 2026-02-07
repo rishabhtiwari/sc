@@ -38,7 +38,8 @@ const SettingsPage = () => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
         </svg>
       ),
-      permission: 'admin'
+      permission: null, // Show to all users, but only admins can manage
+      adminOnly: true
     },
     {
       id: 'audit',
@@ -52,10 +53,20 @@ const SettingsPage = () => {
     }
   ];
 
+  // Check if user is admin
+  const isAdmin = currentUser?.role_name?.toLowerCase().includes('admin') ||
+                  currentUser?.role_id?.toLowerCase().includes('admin') ||
+                  currentUser?.permissions?.includes('admin');
+
   // Filter tabs based on user permissions
-  const visibleTabs = tabs.filter(tab => 
-    !tab.permission || currentUser?.permissions?.includes(tab.permission)
-  );
+  const visibleTabs = tabs.filter(tab => {
+    // If tab requires admin, check if user is admin
+    if (tab.adminOnly && !isAdmin) {
+      return false;
+    }
+    // Otherwise check permission
+    return !tab.permission || currentUser?.permissions?.includes(tab.permission);
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
