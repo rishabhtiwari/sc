@@ -590,7 +590,18 @@ class ExportService:
                 draw = ImageDraw.Draw(img)
                 self.logger.info(f"✅ Solid background rendered: {color}")
             elif bg_type == 'gradient':
-                img = self._create_gradient(width, height, background.get('gradient', {}))
+                gradient_config = background.get('gradient')
+                self.logger.info(f"🎨 Gradient config: {gradient_config}")
+
+                # Handle null or empty gradient config
+                if not gradient_config or gradient_config is None:
+                    self.logger.warning(f"⚠️ Gradient type specified but gradient config is null/empty, using default gradient")
+                    gradient_config = {
+                        'startColor': '#667eea',
+                        'endColor': '#764ba2'
+                    }
+
+                img = self._create_gradient(width, height, gradient_config)
                 draw = ImageDraw.Draw(img)
                 self.logger.info(f"✅ Gradient background rendered")
             elif bg_type == 'image' and background.get('imageUrl'):
@@ -633,6 +644,7 @@ class ExportService:
         """Render a single element on the canvas"""
         try:
             elem_type = element.get('type')
+            self.logger.info(f"🎨 Rendering element type: {elem_type}")
 
             if elem_type == 'text':
                 # Render text
@@ -642,15 +654,33 @@ class ExportService:
                 font_size = int(element.get('fontSize', 16))
                 color = element.get('color', '#000000')
 
+                # Log text element details for debugging
+                self.logger.info(f"📝 Text element details:")
+                self.logger.info(f"   Position: ({x}, {y})")
+                self.logger.info(f"   Text content: '{text}'")
+                self.logger.info(f"   Font size: {font_size}")
+                self.logger.info(f"   Color: {color}")
+                self.logger.info(f"   Full element data: {element}")
+
+                # Validate text content
+                if not text or text.strip() == "":
+                    self.logger.warning(f"⚠️ Text element has empty or missing text content!")
+                    self.logger.warning(f"   Element keys: {list(element.keys())}")
+                    return
+
                 try:
                     font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
-                except:
+                    self.logger.info(f"✅ Loaded TrueType font at size {font_size}")
+                except Exception as font_error:
+                    self.logger.warning(f"⚠️ Failed to load TrueType font: {font_error}, using default")
                     font = ImageFont.load_default()
 
                 draw.text((x, y), text, fill=color, font=font)
+                self.logger.info(f"✅ Text rendered successfully: '{text[:50]}...' at ({x}, {y})")
 
             elif elem_type == 'image' and element.get('src'):
                 # Download and composite image
+                self.logger.info(f"🖼️ Image element - src: {element.get('src')}")
                 elem_img = self._download_image(element.get('src'), customer_id, user_id)
                 if elem_img:
                     # Resize and position
@@ -661,8 +691,12 @@ class ExportService:
                     x = int(element.get('x', 0))
                     y = int(element.get('y', 0))
 
+                    self.logger.info(f"   Pasting image at ({x}, {y}) with size {elem_width}x{elem_height}")
                     img.paste(elem_img, (x, y), elem_img if elem_img.mode == 'RGBA' else None)
                     elem_img.close()
+                    self.logger.info(f"✅ Image rendered successfully")
+                else:
+                    self.logger.warning(f"⚠️ Failed to download/render image")
 
             elif elem_type == 'shape':
                 # Render basic shapes
@@ -673,13 +707,18 @@ class ExportService:
                 fill_color = element.get('fill', '#000000')
 
                 shape_type = element.get('shapeType', 'rectangle')
+                self.logger.info(f"🔷 Shape element - type: {shape_type}, position: ({x}, {y}), size: {w}x{h}")
                 if shape_type == 'rectangle':
                     draw.rectangle([x, y, x + w, y + h], fill=fill_color)
                 elif shape_type == 'circle':
                     draw.ellipse([x, y, x + w, y + h], fill=fill_color)
+                self.logger.info(f"✅ Shape rendered successfully")
+            else:
+                self.logger.warning(f"⚠️ Unknown or unsupported element type: {elem_type}")
 
         except Exception as e:
-            self.logger.warning(f"Error rendering element {element.get('type')}: {e}")
+            self.logger.error(f"❌ Error rendering element {element.get('type')}: {e}", exc_info=True)
+            self.logger.error(f"   Element data: {element}")
 
     def _mix_audio_tracks(
         self,
