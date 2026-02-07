@@ -1900,7 +1900,8 @@ def instagram_oauth_initiate():
         # Build OAuth URL using master app credentials
         # Instagram uses Facebook OAuth for Instagram Business/Creator accounts
         scopes = ','.join(master_app.get('scopes', Config.INSTAGRAM_SCOPES))
-        state = f"{customer_id}:{user_id}:{master_app['_id']}"  # Pass customer, user, and master app context in state
+        master_app_id_str = str(master_app['_id'])
+        state = f"{customer_id}:{user_id}:{master_app_id_str}"  # Pass customer, user, and master app context in state
 
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
@@ -1911,12 +1912,12 @@ def instagram_oauth_initiate():
             f"response_type=code"
         )
 
-        logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}, master_app={master_app['_id']}")
+        logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}, master_app={master_app_id_str}")
 
         return jsonify({
             'status': 'success',
             'auth_url': auth_url,
-            'master_app_id': master_app['_id']
+            'master_app_id': master_app_id_str
         })
 
     except Exception as e:
