@@ -1591,8 +1591,6 @@ class ExportService:
             start_color = gradient_config.get('startColor', '#667eea')
             end_color = gradient_config.get('endColor', '#764ba2')
 
-            self.logger.info(f"🎨 Creating gradient: {start_color} → {end_color}")
-
             # Convert hex to RGB
             start_rgb = tuple(int(start_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
             end_rgb = tuple(int(end_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
@@ -1605,7 +1603,6 @@ class ExportService:
                 b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
                 draw.line([(0, y), (width, y)], fill=(r, g, b))
 
-            self.logger.info(f"✅ Gradient created successfully")
             return img
         except Exception as e:
             self.logger.error(f"❌ Error creating gradient: {e}", exc_info=True)
