@@ -206,6 +206,9 @@ const DesignEditor = () => {
   const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
   const [isResizingTimeline, setIsResizingTimeline] = useState(false);
 
+  // Refs for resize tracking
+  const timelineResizeStartRef = useRef({ y: 0, height: 0 });
+
   // Auto-open Properties Panel when element is selected
   useEffect(() => {
     if (selectedElement) {
@@ -247,18 +250,11 @@ const DesignEditor = () => {
   useEffect(() => {
     if (!isResizingTimeline) return;
 
-    let startY = null;
-    let startHeight = timelineHeight;
-
     const handleMouseMove = (e) => {
       e.preventDefault();
-      if (startY === null) {
-        startY = e.clientY;
-        return;
-      }
       // Calculate delta: dragging UP (negative) should INCREASE height
-      const deltaY = startY - e.clientY;
-      const newHeight = startHeight + deltaY;
+      const deltaY = timelineResizeStartRef.current.y - e.clientY;
+      const newHeight = timelineResizeStartRef.current.height + deltaY;
       setTimelineHeight(Math.max(200, Math.min(800, newHeight)));
     };
 
@@ -280,7 +276,7 @@ const DesignEditor = () => {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizingTimeline, timelineHeight]);
+  }, [isResizingTimeline]);
 
   // Session Storage Hook (auto-save/restore)
   useSessionStorage({
@@ -769,19 +765,6 @@ const DesignEditor = () => {
             return calculated;
           })();
 
-          // Stop playback when reaching the end
-          if (newTime >= totalDuration) {
-            setIsPlaying(false);
-            // Pause all audio
-            audioTracks.forEach(track => {
-              const audio = audioRefs.current[track.id];
-              if (audio && !audio.paused) {
-                audio.pause();
-              }
-            });
-            return totalDuration;
-          }
-
           // Update audio elements and sync playhead with audio
           let syncedTime = newTime;
           audioTracks.forEach(track => {
@@ -834,8 +817,31 @@ const DesignEditor = () => {
           });
 
           // Use synced time if we corrected for drift
-          if (syncedTime !== newTime) {
-            return syncedTime;
+          const finalTime = syncedTime !== newTime ? syncedTime : newTime;
+
+          // Stop playback when reaching the end (check AFTER syncing)
+          if (finalTime >= totalDuration) {
+            console.log(`⏹️ Reached end of timeline at ${finalTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s`);
+            setIsPlaying(false);
+            // Pause all audio
+            audioTracks.forEach(track => {
+              const audio = audioRefs.current[track.id];
+              if (audio && !audio.paused) {
+                audio.pause();
+              }
+            });
+            // Pause all videos
+            pages.forEach(page => {
+              page.elements.forEach(element => {
+                if (element.type === 'video') {
+                  const videoRef = videoElementRefs.current[element.id];
+                  if (videoRef && !videoRef.paused) {
+                    videoRef.pause();
+                  }
+                }
+              });
+            });
+            return totalDuration;
           }
 
           // Update video elements on canvas
@@ -901,7 +907,7 @@ const DesignEditor = () => {
             });
           });
 
-          return newTime;
+          return finalTime;
         });
 
         animationFrame = requestAnimationFrame(updatePlayhead);
@@ -1490,6 +1496,11 @@ const DesignEditor = () => {
               className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
               onMouseDown={(e) => {
                 e.preventDefault();
+                // Capture initial position and height
+                timelineResizeStartRef.current = {
+                  y: e.clientY,
+                  height: timelineHeight
+                };
                 setIsResizingTimeline(true);
               }}
               title="Drag to resize timeline"
