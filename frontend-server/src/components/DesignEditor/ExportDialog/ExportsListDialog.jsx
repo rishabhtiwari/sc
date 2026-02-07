@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuthenticatedVideo } from '../../../hooks/useAuthenticatedVideo';
+import { appendAuthToken } from '../../../services/api';
 
 /**
  * VideoPreviewDialog Component
@@ -104,7 +105,8 @@ const ExportsListDialog = ({ isOpen, onClose, project }) => {
   const handleDownload = (exportItem) => {
     // Create a temporary link and trigger download
     const link = document.createElement('a');
-    link.href = exportItem.output_url;
+    // Append authentication token to download URL
+    link.href = appendAuthToken(exportItem.output_url);
     link.download = `${project.name}_${exportItem.format}_${exportItem.quality}.${exportItem.format}`;
     document.body.appendChild(link);
     link.click();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../../services/api';
+import api, { appendAuthToken } from '../../../services/api';
 import { useToast } from '../../../hooks/useToast';
 
 /**
@@ -139,7 +139,9 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
 
   const handleDownload = () => {
     if (downloadUrl) {
-      window.open(downloadUrl, '_blank');
+      // Append authentication token to download URL
+      const authenticatedUrl = appendAuthToken(downloadUrl);
+      window.open(authenticatedUrl, '_blank');
       showToast('Download started', 'success');
     }
   };
