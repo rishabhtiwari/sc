@@ -148,7 +148,7 @@ const InstagramCredentialsManager = () => {
             <li className="list-disc">Admin access to the Facebook Page</li>
           </ul>
         </div>
-
+      </Card>
 
       {/* Credentials List */}
       {credentials.length === 0 ? (
