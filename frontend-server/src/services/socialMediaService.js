@@ -110,7 +110,13 @@ export const SOCIAL_PLATFORMS = {
     name: 'Instagram',
     icon: '📸',
     color: 'from-purple-600 to-pink-600',
-    defaultScopes: ['pages_show_list', 'instagram_basic', 'instagram_content_publish', 'pages_read_engagement'],
+    defaultScopes: [
+      'pages_show_list',
+      'pages_read_engagement',
+      'instagram_basic',
+      'instagram_content_publish',
+      'instagram_manage_insights'
+    ],
     description: 'Instagram Business & Creator accounts via Facebook Graph API'
   },
   tiktok: {

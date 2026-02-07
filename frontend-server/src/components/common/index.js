@@ -15,6 +15,7 @@ export { default as AuthenticatedVideo } from './AuthenticatedVideo';
 export { default as ConfirmDialog } from './ConfirmDialog';
 export { default as ErrorAlert } from './ErrorAlert';
 export { default as ToastContainer } from './ToastContainer';
+export { default as PreviewUploadModal } from './PreviewUploadModal';
 
 // Content Generation Components
 export {

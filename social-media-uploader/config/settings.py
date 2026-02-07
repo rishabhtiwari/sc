@@ -48,5 +48,11 @@ class Config:
     # Instagram API Configuration (Default values - actual credentials come from Master App in DB)
     # OAuth callback goes through API server (port 8080), not directly to this service
     INSTAGRAM_REDIRECT_URI = os.getenv('INSTAGRAM_REDIRECT_URI', 'http://localhost:8080/api/social-media/instagram/oauth/callback')
-    INSTAGRAM_SCOPES = ['pages_show_list', 'instagram_basic', 'instagram_content_publish', 'pages_read_engagement']
+    INSTAGRAM_SCOPES = [
+        'pages_show_list',
+        'pages_read_engagement',
+        'instagram_basic',
+        'instagram_content_publish',
+        'instagram_manage_insights'
+    ]
 
