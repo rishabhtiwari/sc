@@ -198,7 +198,9 @@ class MasterAppService:
                 document = self._sanitize_app_document(document)
 
             return document
-
+        except Exception as e:
+            logger.error(f"❌ Failed to get master app: {e}")
+            raise
 
     def update_master_app(self, customer_id, app_id, update_data):
         """
