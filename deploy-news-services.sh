@@ -124,6 +124,77 @@ check_docker() {
     print_success "Docker is running"
 }
 
+# Function to install NVIDIA Container Toolkit
+install_nvidia_container_toolkit() {
+    print_header "Installing NVIDIA Container Toolkit"
+
+    # Detect OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        print_error "Cannot detect OS. Please install NVIDIA Container Toolkit manually."
+        return 1
+    fi
+
+    print_info "Detected OS: $OS"
+
+    case "$OS" in
+        ubuntu|debian)
+            print_info "Installing prerequisites..."
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends curl gnupg2
+
+            print_info "Configuring NVIDIA Container Toolkit repository..."
+            curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+                sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+                sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+            print_info "Installing NVIDIA Container Toolkit..."
+            sudo apt-get update
+            sudo apt-get install -y nvidia-container-toolkit
+            ;;
+
+        rhel|centos|fedora|amzn)
+            print_info "Installing prerequisites..."
+            sudo dnf install -y curl
+
+            print_info "Configuring NVIDIA Container Toolkit repository..."
+            curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | \
+                sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+
+            print_info "Installing NVIDIA Container Toolkit..."
+            sudo dnf install -y nvidia-container-toolkit
+            ;;
+
+        opensuse*|sles)
+            print_info "Configuring NVIDIA Container Toolkit repository..."
+            sudo zypper ar https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+
+            print_info "Installing NVIDIA Container Toolkit..."
+            sudo zypper --gpg-auto-import-keys install -y nvidia-container-toolkit
+            ;;
+
+        *)
+            print_error "Unsupported OS: $OS"
+            print_error "Please install NVIDIA Container Toolkit manually:"
+            print_error "https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"
+            return 1
+            ;;
+    esac
+
+    # Configure Docker to use NVIDIA runtime
+    print_info "Configuring Docker to use NVIDIA Container Runtime..."
+    sudo nvidia-ctk runtime configure --runtime=docker
+
+    # Restart Docker
+    print_info "Restarting Docker daemon..."
+    sudo systemctl restart docker
+
+    print_success "NVIDIA Container Toolkit installed and configured successfully!"
+    return 0
+}
+
 # Function to check GPU availability
 check_gpu() {
     if [ "$USE_GPU" = true ]; then
@@ -131,16 +202,31 @@ check_gpu() {
 
         # Check if nvidia-smi is available
         if ! command -v nvidia-smi &> /dev/null; then
-            print_warning "nvidia-smi not found. GPU support may not work."
-            print_warning "Install NVIDIA drivers and CUDA toolkit for GPU support."
-            return 1
+            print_error "nvidia-smi not found. NVIDIA GPU drivers are not installed."
+            print_error "Please install NVIDIA drivers first:"
+            print_error "https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html"
+            exit 1
         fi
 
         # Check if NVIDIA Docker runtime is available
-        if ! docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null; then
-            print_warning "NVIDIA Docker runtime not available."
-            print_warning "Install nvidia-docker2 for GPU support in containers."
-            return 1
+        if ! docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null 2>&1; then
+            print_warning "NVIDIA Container Toolkit not available or not configured."
+            print_info "Attempting to install NVIDIA Container Toolkit..."
+
+            if install_nvidia_container_toolkit; then
+                print_success "NVIDIA Container Toolkit installed successfully!"
+
+                # Verify installation
+                if ! docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null 2>&1; then
+                    print_error "NVIDIA Container Toolkit installation failed verification."
+                    print_error "Please check the installation manually."
+                    exit 1
+                fi
+            else
+                print_error "Failed to install NVIDIA Container Toolkit."
+                print_error "Please install it manually and try again."
+                exit 1
+            fi
         fi
 
         print_success "GPU support is available"
@@ -254,13 +340,93 @@ create_directories() {
     print_success "All necessary directories exist with proper permissions"
 }
 
+# Function to install Docker Compose
+install_docker_compose() {
+    print_header "Installing Docker Compose"
+
+    # Detect OS
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+    else
+        print_error "Cannot detect OS. Please install Docker Compose manually."
+        return 1
+    fi
+
+    print_info "Detected OS: $OS"
+
+    # Fix any broken apt state first
+    print_info "Fixing any broken package state..."
+    sudo apt-get install -f -y 2>/dev/null || true
+
+    case "$OS" in
+        ubuntu|debian)
+            print_info "Updating package list..."
+            sudo apt-get update
+
+            print_info "Installing Docker Compose v2..."
+            sudo apt-get install -y docker-compose-v2
+
+            # Create symlink for backward compatibility
+            print_info "Creating symlink for docker-compose command..."
+            if [ -f /usr/libexec/docker/cli-plugins/docker-compose ]; then
+                sudo ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+            elif [ -f /usr/lib/docker/cli-plugins/docker-compose ]; then
+                sudo ln -sf /usr/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+            fi
+            ;;
+
+        rhel|centos|fedora|amzn)
+            print_info "Installing Docker Compose..."
+            sudo dnf install -y docker-compose-plugin
+
+            # Create symlink
+            if [ -f /usr/libexec/docker/cli-plugins/docker-compose ]; then
+                sudo ln -sf /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+            fi
+            ;;
+
+        *)
+            print_warning "Unsupported OS for automatic installation: $OS"
+            print_info "Attempting to download Docker Compose binary..."
+
+            # Download latest Docker Compose binary
+            DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep 'tag_name' | cut -d\" -f4)
+            sudo curl -L "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+            sudo chmod +x /usr/local/bin/docker-compose
+            ;;
+    esac
+
+    # Verify installation
+    if command -v docker-compose &> /dev/null; then
+        print_success "Docker Compose installed successfully!"
+        docker-compose version
+        return 0
+    else
+        print_error "Docker Compose installation failed."
+        return 1
+    fi
+}
+
 # Function to check if docker-compose is available
 check_docker_compose() {
     if ! command -v docker-compose &> /dev/null; then
-        print_error "docker-compose is not installed. Please install it and try again."
-        exit 1
+        print_warning "docker-compose is not installed."
+        print_info "Attempting to install Docker Compose..."
+
+        if install_docker_compose; then
+            print_success "Docker Compose installed successfully!"
+        else
+            print_error "Failed to install Docker Compose."
+            print_error "Please install it manually:"
+            print_error "  Ubuntu/Debian: sudo apt-get install docker-compose-v2"
+            print_error "  RHEL/CentOS: sudo dnf install docker-compose-plugin"
+            exit 1
+        fi
+    else
+        print_success "docker-compose is available"
+        docker-compose version | head -1
     fi
-    print_success "docker-compose is available"
 }
 
 # Function to generate GPU-enabled docker-compose override
@@ -749,14 +915,35 @@ restart_services() {
     fi
 }
 
+# Function to deploy services in parallel (background jobs)
+deploy_parallel() {
+    local services=("$@")
+    local pids=()
+
+    for service in "${services[@]}"; do
+        deploy_service "$service" "$build_flag" &
+        pids+=($!)
+    done
+
+    # Wait for all background jobs to complete
+    local failed=0
+    for pid in "${pids[@]}"; do
+        if ! wait $pid; then
+            failed=$((failed + 1))
+        fi
+    done
+
+    return $failed
+}
+
 # Function to deploy all services
 deploy_all_services() {
     local build_flag=$1
 
     if [ "$USE_GPU" = true ]; then
-        print_header "Deploying News Services with GPU Support"
+        print_header "Deploying News Services with GPU Support (Parallel Mode)"
     else
-        print_header "Deploying News Services (CPU Mode)"
+        print_header "Deploying News Services (CPU Mode - Parallel Mode)"
     fi
 
     # Check prerequisites
@@ -787,105 +974,66 @@ deploy_all_services() {
     # This ensures PyTorch and other common dependencies are downloaded once and reused
     build_base_images "$build_flag"
 
-    # Deploy services in order
-    print_info "Starting deployment sequence..."
+    # Deploy services in parallel groups based on dependencies
+    print_info "Starting parallel deployment sequence..."
     echo ""
 
-    # 1. MongoDB
-    print_header "Step 1/17: MongoDB Database"
-    deploy_service "ichat-mongodb" "$build_flag"
-    # wait_for_health "ichat-mongodb" 60
+    # Group 1: Foundation services (must deploy first)
+    print_header "Group 1: Foundation Services (MongoDB, MinIO)"
+    print_info "Deploying MongoDB and MinIO in parallel..."
+    deploy_parallel "ichat-mongodb" "minio"
+    sleep 5  # Give databases time to initialize
 
-    # 2. MinIO Object Storage
-    print_header "Step 2/17: MinIO Object Storage"
-    deploy_service "minio" "$build_flag"
-    # wait_for_health "ichat-minio" 60
+    # Group 2: Core services (depend on MongoDB/MinIO)
+    print_header "Group 2: Core Services"
+    print_info "Deploying Auth, Template, and Asset services in parallel..."
+    deploy_parallel "auth-service" "template-service" "asset-service"
+    sleep 3
 
-    # 3. Auth Service
-    print_header "Step 3/17: Auth Service (Authentication & User Management)"
-    deploy_service "auth-service" "$build_flag"
-    # wait_for_health "ichat-auth-service" 60
+    # Group 3: AI/ML services (GPU-heavy, deploy in parallel)
+    print_header "Group 3: AI/ML Services"
+    if [ "$USE_GPU" = true ]; then
+        print_info "Deploying LLM and Coqui TTS in parallel (GPU-accelerated)..."
+        deploy_parallel "llm-service" "coqui-tts"
+        sleep 5  # Give models time to load
 
-    # 4. Template Service
-    print_header "Step 4/17: Template Service (Video Templates)"
-    deploy_service "template-service" "$build_flag"
-    # wait_for_health "ichat-template-service" 60
+        print_info "Deploying Audio Generation Factory..."
+        deploy_service "audio-generation-factory" "$build_flag"
+        sleep 3
+    else
+        print_info "Deploying LLM, Coqui TTS, and Audio Generation in parallel (CPU mode)..."
+        deploy_parallel "llm-service" "coqui-tts" "audio-generation-factory"
+        sleep 5
+    fi
 
-    # 5. Asset Service
-    print_header "Step 5/17: Asset Service (Asset Management with MinIO)"
-    deploy_service "asset-service" "$build_flag"
-    # wait_for_health "ichat-asset-service" 60
+    # Group 4: Job services (can run in parallel)
+    print_header "Group 4: Job Services"
+    print_info "Deploying job services in parallel..."
+    deploy_parallel \
+        "job-news-fetcher" \
+        "job-voice-generator" \
+        "job-image-auto-marker" \
+        "job-video-generator" \
+        "job-export-generator" \
+        "job-cleanup"
+    sleep 3
 
-    # 6. News Fetcher
-    print_header "Step 6/17: News Fetcher Job"
-    deploy_service "job-news-fetcher" "$build_flag"
-    # wait_for_health "ichat-news-fetcher" 60
+    # Group 5: Media processing services
+    print_header "Group 5: Media Processing Services"
+    print_info "Deploying IOPaint and YouTube Uploader in parallel..."
+    deploy_parallel "iopaint" "youtube-uploader"
+    sleep 3
 
-    # 7. LLM Service
-    print_header "Step 7/18: LLM Service"
-    deploy_service "llm-service" "$build_flag"
-    # wait_for_health "ichat-llm-service" 180  # LLM takes longer to load model
-
-    # 8. Coqui TTS Server (XTTS-v2)
-    print_header "Step 8/18: Coqui TTS Server (XTTS-v2 Model)"
-    print_info "First run will download XTTS-v2 model (~2GB, may take 5-10 minutes)"
-    deploy_service "coqui-tts" "$build_flag"
-    # wait_for_health "coqui-tts" 600  # Model download can take up to 10 minutes
-
-    # 9. Audio Generation Factory
-    print_header "Step 9/18: Audio Generation Factory (Kokoro + Veena TTS)"
-    deploy_service "audio-generation-factory" "$build_flag"
-    # wait_for_health "audio-generation-factory" 180  # TTS models take time to load
-
-    # 10. Voice Generator Job
-    print_header "Step 10/18: Voice Generator Job"
-    deploy_service "job-voice-generator" "$build_flag"
-    # wait_for_health "ichat-voice-generator" 60
-
-    # 11. IOPaint Watermark Remover
-    print_header "Step 11/18: IOPaint Watermark Remover"
-    deploy_service "iopaint" "$build_flag"
-    # wait_for_health "ichat-iopaint" 60
-
-    # 12. Image Auto-Marker Job
-    print_header "Step 12/18: Image Auto-Marker Job"
-    deploy_service "job-image-auto-marker" "$build_flag"
-    # wait_for_health "ichat-image-auto-marker" 60
-
-    # 13. Video Generator Job
-    print_header "Step 13/18: Video Generator Job"
-    deploy_service "job-video-generator" "$build_flag"
-    # wait_for_health "ichat-video-generator" 60
-
-    # 14. Export Generator Job
-    print_header "Step 14/18: Export Generator Job"
-    deploy_service "job-export-generator" "$build_flag"
-    # wait_for_health "job-export-generator" 60
-
-    # 15. YouTube Uploader
-    print_header "Step 15/18: YouTube Uploader"
-    deploy_service "youtube-uploader" "$build_flag"
-    # wait_for_health "ichat-youtube-uploader" 60
-
-    # 16. Cleanup Job
-    print_header "Step 16/18: Cleanup Job"
-    deploy_service "job-cleanup" "$build_flag"
-    # wait_for_health "ichat-cleanup" 60
-
-    # 17. Inventory Creation Service
-    print_header "Step 17/18: Inventory Creation Service (Generic Content Generation)"
+    # Group 6: High-level services (depend on everything else)
+    print_header "Group 6: High-Level Services"
+    print_info "Deploying Inventory Creation Service..."
     deploy_service "inventory-creation-service" "$build_flag"
-    # wait_for_health "ichat-inventory-creation-service" 60
+    sleep 2
 
-    # 18. API Server
-    print_header "Step 18/19: API Server"
-    deploy_service "ichat-api" "$build_flag"
-    # wait_for_health "ichat-api-server" 60
-
-    # 19. News Automation Frontend
-    print_header "Step 19/19: News Automation Frontend"
-    deploy_service "news-automation-frontend" "$build_flag"
-    # wait_for_health "news-automation-frontend" 60
+    # Group 7: API and Frontend (must be last)
+    print_header "Group 7: API & Frontend"
+    print_info "Deploying API Server and Frontend in parallel..."
+    deploy_parallel "ichat-api" "news-automation-frontend"
     
     # Show final status
     echo ""
