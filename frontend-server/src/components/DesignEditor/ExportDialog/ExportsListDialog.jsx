@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuthenticatedVideo } from '../../../hooks/useAuthenticatedVideo';
 import { appendAuthToken } from '../../../services/api';
 import api from '../../../services/api';
+import ConfirmDialog from '../../common/ConfirmDialog';
 
 /**
  * VideoPreviewDialog Component
@@ -75,6 +76,7 @@ const ExportsListDialog = ({ isOpen, onClose, project, onExportDeleted }) => {
   const [selectedExport, setSelectedExport] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
   const [deletingExportId, setDeletingExportId] = useState(null);
+  const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, exportItem: null });
 
   if (!isOpen) return null;
 
@@ -104,13 +106,16 @@ const ExportsListDialog = ({ isOpen, onClose, project, onExportDeleted }) => {
     setShowPreview(true);
   };
 
-  const handleDelete = async (exportItem) => {
-    if (!window.confirm(`Are you sure you want to delete this export?\n\n${exportItem.quality} ${exportItem.format.toUpperCase()} - ${formatDate(exportItem.exported_at)}`)) {
-      return;
-    }
+  const handleDelete = (exportItem) => {
+    setDeleteDialog({ isOpen: true, exportItem });
+  };
+
+  const confirmDelete = async () => {
+    const exportItem = deleteDialog.exportItem;
 
     try {
       setDeletingExportId(exportItem.export_id);
+      setDeleteDialog({ isOpen: false, exportItem: null });
 
       await api.delete(`/projects/${project.project_id}/exports/${exportItem.export_id}`);
 
@@ -295,6 +300,24 @@ const ExportsListDialog = ({ isOpen, onClose, project, onExportDeleted }) => {
           }}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, exportItem: null })}
+        onConfirm={confirmDelete}
+        title="Delete Export"
+        description="This action cannot be undone"
+        message={
+          deleteDialog.exportItem
+            ? `Are you sure you want to delete this export?\n\n${deleteDialog.exportItem.quality} ${deleteDialog.exportItem.format.toUpperCase()} - ${formatDate(deleteDialog.exportItem.exported_at)}`
+            : ''
+        }
+        warningMessage="This will permanently delete the export file from storage and remove it from the project."
+        confirmText="Delete Export"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </>
   );
 };
