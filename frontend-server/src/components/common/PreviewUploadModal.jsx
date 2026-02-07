@@ -92,7 +92,7 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
 
       // Add platform-specific fields
       if (selectedPlatform.id === 'youtube') {
-        uploadParams.videoPath = asset.url || asset.video_url;
+        uploadParams.videoUrl = asset.url || asset.video_url;
         uploadParams.categoryId = formData.category;
         uploadParams.privacyStatus = formData.privacy;
       } else if (selectedPlatform.id === 'instagram') {

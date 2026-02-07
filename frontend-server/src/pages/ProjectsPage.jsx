@@ -66,7 +66,18 @@ const ProjectsPage = () => {
 
   const handlePreviewClick = (project, e) => {
     e.stopPropagation();
-    setPreviewModal({ isOpen: true, project });
+
+    // Get the latest export
+    const latestExport = project.exports && project.exports.length > 0
+      ? project.exports[project.exports.length - 1]
+      : null;
+
+    if (!latestExport) {
+      showToast('No exported video found. Please export the project first.', 'warning');
+      return;
+    }
+
+    setPreviewModal({ isOpen: true, project, export: latestExport });
   };
 
   // Filter projects based on search query
@@ -220,11 +231,11 @@ const ProjectsPage = () => {
                           </svg>
                           Open
                         </button>
-                        {(project.preview_url || project.thumbnail) && (
+                        {(project.exports && project.exports.length > 0) && (
                           <button
                             onClick={(e) => handlePreviewClick(project, e)}
                             className="px-3 py-1.5 bg-blue-500/90 hover:bg-blue-600 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
-                            title="Preview and Upload"
+                            title="Preview and Upload to Platform"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -248,9 +259,9 @@ const ProjectsPage = () => {
                     </div>
                   </div>
 
-                  {/* Status Badge */}
-                  {project.status && (
-                    <div className="absolute top-2 left-2">
+                  {/* Status Badges */}
+                  <div className="absolute top-2 left-2 flex flex-col gap-1.5">
+                    {project.status && (
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         project.status === 'published'
                           ? 'bg-green-100 text-green-700'
@@ -258,8 +269,16 @@ const ProjectsPage = () => {
                       }`}>
                         {project.status}
                       </span>
-                    </div>
-                  )}
+                    )}
+                    {project.exports && project.exports.length > 0 && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Exported
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Project Info */}
@@ -316,15 +335,18 @@ const ProjectsPage = () => {
       {/* Preview and Upload Modal */}
       <PreviewUploadModal
         isOpen={previewModal.isOpen}
-        onClose={() => setPreviewModal({ isOpen: false, project: null })}
-        asset={previewModal.project ? {
-          name: previewModal.project.name,
-          description: previewModal.project.description,
-          preview_url: previewModal.project.preview_url,
-          url: previewModal.project.preview_url || previewModal.project.thumbnail,
-          video_url: previewModal.project.preview_url,
+        onClose={() => setPreviewModal({ isOpen: false, project: null, export: null })}
+        asset={previewModal.project && previewModal.export ? {
+          name: previewModal.project.name || 'Untitled Project',
+          description: previewModal.project.description || '',
+          preview_url: previewModal.export.output_url,
+          url: previewModal.export.output_url,
+          video_url: previewModal.export.output_url,
           type: 'video',
-          project_id: previewModal.project.project_id
+          project_id: previewModal.project.project_id,
+          export_id: previewModal.export.export_id,
+          duration: previewModal.export.duration,
+          file_size: previewModal.export.file_size
         } : null}
       />
     </div>

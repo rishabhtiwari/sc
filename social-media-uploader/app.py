@@ -2185,6 +2185,134 @@ def instagram_oauth_callback():
         """, 500
 
 
+@app.route('/api/youtube/upload', methods=['POST'])
+def upload_generic_video():
+    """Generic endpoint to upload a video to YouTube with custom metadata"""
+    try:
+        logger.info("📤 Starting generic YouTube video upload...")
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        data = request.get_json()
+
+        # Required fields
+        video_url = data.get('video_url')  # Can be relative path like /api/assets/download/...
+        title = data.get('title')
+
+        # Optional fields
+        description = data.get('description', '')
+        tags = data.get('tags', [])
+        category_id = data.get('category_id', '22')  # Default: People & Blogs
+        privacy_status = data.get('privacy_status', 'public')
+        credential_id = data.get('credential_id')
+
+        if not video_url:
+            return jsonify({
+                'status': 'error',
+                'error': 'video_url is required'
+            }), 400
+
+        if not title:
+            return jsonify({
+                'status': 'error',
+                'error': 'title is required'
+            }), 400
+
+        # Download video from URL if it's a URL, otherwise use as path
+        import tempfile
+        import urllib.parse
+
+        temp_video_path = None
+
+        try:
+            # Check if video_url is a relative API path
+            if video_url.startswith('/api/'):
+                # It's a relative path, need to download from asset service
+                logger.info(f"📥 Downloading video from: {video_url}")
+
+                # Get the asset service URL
+                asset_service_url = os.getenv('ASSET_SERVICE_URL', 'http://ichat-asset-service:8099')
+                full_url = f"{asset_service_url}{video_url}"
+
+                # Download the file
+                headers = {
+                    'X-Customer-ID': customer_id,
+                    'X-User-ID': user_id
+                }
+
+                response = requests.get(full_url, headers=headers, stream=True, timeout=60)
+
+                if response.status_code != 200:
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Failed to download video: {response.status_code}'
+                    }), 400
+
+                # Save to temp file
+                temp_video_path = tempfile.mktemp(suffix='.mp4')
+                with open(temp_video_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+
+                logger.info(f"✅ Video downloaded to: {temp_video_path}")
+                video_path = temp_video_path
+            else:
+                # Assume it's a local file path
+                video_path = video_url
+
+                if not os.path.exists(video_path):
+                    return jsonify({
+                        'status': 'error',
+                        'error': f'Video file not found: {video_path}'
+                    }), 404
+
+            # Upload to YouTube
+            logger.info(f"📤 Uploading to YouTube with credential: {credential_id}")
+            upload_result = youtube_service.upload_video(
+                video_path=video_path,
+                title=title,
+                description=description,
+                tags=tags,
+                category_id=category_id,
+                privacy_status=privacy_status,
+                credential_id=credential_id,
+                customer_id=customer_id
+            )
+
+            if upload_result:
+                logger.info(f"✅ Upload successful: {upload_result.get('video_url')}")
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Video uploaded successfully',
+                    'video_id': upload_result.get('video_id'),
+                    'video_url': upload_result.get('video_url')
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'error': 'Upload failed'
+                }), 500
+
+        finally:
+            # Clean up temp file
+            if temp_video_path and os.path.exists(temp_video_path):
+                try:
+                    os.remove(temp_video_path)
+                    logger.info(f"🗑️ Cleaned up temp file: {temp_video_path}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to clean up temp file: {e}")
+
+    except Exception as e:
+        logger.error(f"❌ Error uploading video: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/instagram/credentials', methods=['GET'])
 def get_instagram_credentials():
     """Get Instagram credentials for current user"""

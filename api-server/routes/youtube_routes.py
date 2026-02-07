@@ -29,6 +29,24 @@ def get_youtube_stats():
         return jsonify({'error': str(e)}), 500
 
 
+@youtube_bp.route('/youtube/upload', methods=['POST'])
+def upload_video():
+    """Generic video upload to YouTube"""
+    try:
+        headers = get_request_headers_with_context()
+        headers['Content-Type'] = 'application/json'
+        response = requests.post(
+            f'{YOUTUBE_SERVICE_URL}/api/youtube/upload',
+            json=request.get_json(),
+            headers=headers,
+            timeout=300
+        )
+        return Response(response.content, status=response.status_code, content_type=response.headers.get('Content-Type'))
+    except Exception as e:
+        logger.error(f"Error proxying to YouTube upload: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 @youtube_bp.route('/youtube/upload-latest-20', methods=['POST'])
 def upload_latest_20():
     """Upload latest 20 videos to YouTube"""

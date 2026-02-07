@@ -33,7 +33,7 @@ export const getConnectedAccounts = async (platform) => {
 /**
  * Upload video to YouTube
  * @param {Object} params - Upload parameters
- * @param {string} params.videoPath - Path to video file (or video URL)
+ * @param {string} params.videoUrl - URL or path to video file
  * @param {string} params.title - Video title
  * @param {string} params.description - Video description
  * @param {Array} params.tags - Video tags
@@ -44,7 +44,7 @@ export const getConnectedAccounts = async (platform) => {
  */
 export const uploadToYouTube = async (params) => {
   const {
-    videoPath,
+    videoUrl,
     title,
     description,
     tags = [],
@@ -54,7 +54,7 @@ export const uploadToYouTube = async (params) => {
   } = params;
 
   const response = await api.post('/youtube/upload', {
-    video_path: videoPath,
+    video_url: videoUrl,
     title,
     description,
     tags,
