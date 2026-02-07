@@ -247,10 +247,19 @@ const DesignEditor = () => {
   useEffect(() => {
     if (!isResizingTimeline) return;
 
+    let startY = null;
+    let startHeight = timelineHeight;
+
     const handleMouseMove = (e) => {
       e.preventDefault();
-      const newHeight = window.innerHeight - e.clientY;
-      setTimelineHeight(Math.max(200, Math.min(600, newHeight)));
+      if (startY === null) {
+        startY = e.clientY;
+        return;
+      }
+      // Calculate delta: dragging UP (negative) should INCREASE height
+      const deltaY = startY - e.clientY;
+      const newHeight = startHeight + deltaY;
+      setTimelineHeight(Math.max(200, Math.min(800, newHeight)));
     };
 
     const handleMouseUp = () => {
@@ -271,7 +280,7 @@ const DesignEditor = () => {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizingTimeline]);
+  }, [isResizingTimeline, timelineHeight]);
 
   // Session Storage Hook (auto-save/restore)
   useSessionStorage({

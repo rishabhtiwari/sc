@@ -177,7 +177,7 @@ const AudioTimelineRefactored = ({
       </div>
 
       {/* Timeline Content - Using Generic Timeline Component */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-auto">
         <Timeline
           containerRef={scrollContainerRef}
           duration={totalDuration}

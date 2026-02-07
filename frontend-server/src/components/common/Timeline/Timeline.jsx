@@ -63,10 +63,22 @@ const Timeline = ({
   const availableWidth = containerWidth - paddingTotal;
   const pixelsPerSecond = duration > 0 ? availableWidth / duration : 50;
 
+  // Debug logging
+  useEffect(() => {
+    console.log('📊 Timeline Scaling:', {
+      containerWidth,
+      paddingTotal,
+      availableWidth,
+      duration,
+      pixelsPerSecond,
+      totalTimelineWidth: duration * pixelsPerSecond
+    });
+  }, [containerWidth, duration, pixelsPerSecond, availableWidth, paddingTotal]);
+
   // Time conversion functions
   const timeToPixels = (time) => {
     const pixels = time * pixelsPerSecond;
-    return Math.max(0, Math.min(pixels, availableWidth)); // Clamp to boundaries
+    return Math.max(0, pixels); // Only clamp to 0, allow extending beyond available width
   };
 
   const pixelsToTime = (pixels) => {
