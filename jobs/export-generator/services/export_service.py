@@ -1111,48 +1111,31 @@ class ExportService:
             return None
 
     def _download_audio(self, url: str, export_dir: str, filename: str, customer_id: str, user_id: str) -> Optional[str]:
-        """Download audio file from URL"""
+        """
+        Download audio file from URL
+
+        Note: The URL should already contain authentication if needed (e.g., token in query params).
+        We simply download the audio without modifying the URL.
+        """
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
-            # Handle internal service URLs and external URLs
-            if url.startswith('/api/assets/download/'):
-                # Internal asset-service URL - make request to asset-service with auth headers
-                asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
-                self.logger.debug(f"Downloading audio from asset-service: {asset_service_url}")
-                headers = {
-                    'x-customer-id': customer_id,
-                    'x-user-id': user_id
-                }
-                response = requests.get(asset_service_url, headers=headers, timeout=30)
-                response.raise_for_status()
-                with open(output_path, 'wb') as f:
-                    f.write(response.content)
-                return output_path
-            elif url.startswith('/api/audio-studio/'):
-                # Internal audio-studio URL - served by asset-service
-                # The asset-service handles /api/audio-studio/* endpoints
-                asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
-                self.logger.debug(f"Downloading audio from asset-service (audio-studio): {asset_service_url}")
-                headers = {
-                    'x-customer-id': customer_id,
-                    'x-user-id': user_id
-                }
-                response = requests.get(asset_service_url, headers=headers, timeout=30)
-                response.raise_for_status()
-                with open(output_path, 'wb') as f:
-                    f.write(response.content)
-                return output_path
-            else:
-                # External URL
-                self.logger.debug(f"Downloading audio from external URL: {url}")
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
-                with open(output_path, 'wb') as f:
-                    f.write(response.content)
-                return output_path
+            self.logger.debug(f"Downloading audio from URL: {url}")
+
+            # Download audio (URL already contains authentication if needed)
+            response = requests.get(url, timeout=30, stream=True)
+            response.raise_for_status()
+
+            with open(output_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            self.logger.debug(f"✅ Successfully downloaded audio to: {output_path}")
+            return output_path
+
         except Exception as e:
-            self.logger.warning(f"Error downloading audio {url}: {e}")
+            self.logger.warning(f"❌ Error downloading audio {url}: {e}")
             return None
 
     def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.Draw) -> list:
