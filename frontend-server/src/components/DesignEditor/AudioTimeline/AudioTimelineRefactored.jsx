@@ -187,80 +187,86 @@ const AudioTimelineRefactored = ({
           onPlay={onPlay}
           onPause={onPause}
         >
-          {/* Slides Track */}
-          <TimelineTrack type="slides" height={125} label="📸 Slides / Photos">
-            <div className="relative h-full pt-2">
-              {slides.map((slide, index) => {
-                const slideStartTime = getSlideStartTime(index);
-                const slideDuration = slide.duration || 5;
+          {/* Slides Track - Only show if there are slides */}
+          {slides.length > 0 && (
+            <TimelineTrack type="slides" height={125} label="📸 Slides / Photos">
+              <div className="relative h-full pt-2">
+                {slides.map((slide, index) => {
+                  const slideStartTime = getSlideStartTime(index);
+                  const slideDuration = slide.duration || 5;
 
-                return (
-                  <div key={slide.id || index} className="relative">
-                    <SlideBlock
-                      slide={slide}
+                  return (
+                    <div key={slide.id || index} className="relative">
+                      <SlideBlock
+                        slide={slide}
+                        index={index}
+                        startTime={slideStartTime}
+                        duration={slideDuration}
+                        isSelected={selectedSlideIndex === index}
+                        onSelect={() => onSlideSelect && onSlideSelect(index)}
+                        onUpdate={(updates) => handleSlideUpdate(index, updates)}
+                        onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
+                        allSlides={slides}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </TimelineTrack>
+          )}
+
+          {/* Video Tracks - Only show if there are video tracks */}
+          {videoTracks.length > 0 && (
+            <TimelineTrack
+              type="video"
+              height={videoTracks.length * 115 + 30}
+              label="🎬 Video"
+              className="mt-4"
+            >
+              <div className="relative pt-2">
+                {videoTracks.map((track, index) => (
+                  <div key={track.id || index} className="relative mb-3" style={{ height: '100px' }}>
+                    <VideoBlock
+                      track={track}
                       index={index}
-                      startTime={slideStartTime}
-                      duration={slideDuration}
-                      isSelected={selectedSlideIndex === index}
-                      onSelect={() => onSlideSelect && onSlideSelect(index)}
-                      onUpdate={(updates) => handleSlideUpdate(index, updates)}
-                      onTransitionClick={index < slides.length - 1 ? () => console.log('Transition clicked') : null}
-                      allSlides={slides}
+                      isSelected={selectedVideoId === track.id}
+                      onSelect={() => onVideoSelect && onVideoSelect(track.id)}
+                      onUpdate={(updates) => onVideoUpdate && onVideoUpdate(track.id, updates)}
+                      onDelete={() => onVideoDelete && onVideoDelete(track.id)}
                     />
                   </div>
-                );
-              })}
-            </div>
-          </TimelineTrack>
+                ))}
+              </div>
+            </TimelineTrack>
+          )}
 
-          {/* Video Tracks */}
-          <TimelineTrack
-            type="video"
-            height={videoTracks.length > 0 ? (videoTracks.length * 115 + 30) : 125}
-            label="🎬 Video"
-            className="mt-4"
-          >
-            <div className="relative pt-2">
-              {videoTracks.map((track, index) => (
-                <div key={track.id || index} className="relative mb-3" style={{ height: '100px' }}>
-                  <VideoBlock
-                    track={track}
-                    index={index}
-                    isSelected={selectedVideoId === track.id}
-                    onSelect={() => onVideoSelect && onVideoSelect(track.id)}
-                    onUpdate={(updates) => onVideoUpdate && onVideoUpdate(track.id, updates)}
-                    onDelete={() => onVideoDelete && onVideoDelete(track.id)}
-                  />
-                </div>
-              ))}
-            </div>
-          </TimelineTrack>
-
-          {/* Audio Tracks */}
-          <TimelineTrack
-            type="audio"
-            height={audioTracks.length > 0 ? (audioTracks.length * 115 + 30) : 125}
-            label="🎵 Audio"
-            className="mt-4"
-          >
-            <div className="relative pt-2">
-              {audioTracks.map((track, index) => (
-                <div key={track.id || index} className="relative mb-3" style={{ height: '100px' }}>
-                  <AudioBlock
-                    track={track}
-                    index={index}
-                    isSelected={selectedAudioId === track.id}
-                    onSelect={() => onAudioSelect && onAudioSelect(track.id)}
-                    onUpdate={(updates) => handleAudioUpdate(track.id, updates)}
-                    onDelete={() => onAudioDelete && onAudioDelete(track.id)}
-                    waveformData={generateWaveformData(track.id, track.duration)}
-                    volumeEnvelope={getVolumeEnvelope(track.id)}
-                    colors={getAudioTrackColor(track)}
-                  />
-                </div>
-              ))}
-            </div>
-          </TimelineTrack>
+          {/* Audio Tracks - Only show if there are audio tracks */}
+          {audioTracks.length > 0 && (
+            <TimelineTrack
+              type="audio"
+              height={audioTracks.length * 115 + 30}
+              label="🎵 Audio"
+              className="mt-4"
+            >
+              <div className="relative pt-2">
+                {audioTracks.map((track, index) => (
+                  <div key={track.id || index} className="relative mb-3" style={{ height: '100px' }}>
+                    <AudioBlock
+                      track={track}
+                      index={index}
+                      isSelected={selectedAudioId === track.id}
+                      onSelect={() => onAudioSelect && onAudioSelect(track.id)}
+                      onUpdate={(updates) => handleAudioUpdate(track.id, updates)}
+                      onDelete={() => onAudioDelete && onAudioDelete(track.id)}
+                      waveformData={generateWaveformData(track.id, track.duration)}
+                      volumeEnvelope={getVolumeEnvelope(track.id)}
+                      colors={getAudioTrackColor(track)}
+                    />
+                  </div>
+                ))}
+              </div>
+            </TimelineTrack>
+          )}
         </Timeline>
       </div>
     </div>
