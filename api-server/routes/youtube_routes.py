@@ -1,6 +1,7 @@
 """
-YouTube Routes - Proxy routes for YouTube uploader service
-All /api/youtube/* requests are forwarded to the YouTube uploader service
+YouTube Routes - Proxy routes for Social Media uploader service
+All /api/youtube/* requests are forwarded to the Social Media uploader service
+Note: This maintains backward compatibility with existing YouTube endpoints
 """
 
 import logging
@@ -12,8 +13,8 @@ from middleware.jwt_middleware import get_request_headers_with_context
 youtube_bp = Blueprint('youtube', __name__)
 logger = logging.getLogger(__name__)
 
-# YouTube uploader service URL
-YOUTUBE_SERVICE_URL = 'http://ichat-youtube-uploader:8097'
+# Social Media uploader service URL (handles YouTube and other platforms)
+YOUTUBE_SERVICE_URL = 'http://ichat-social-media-uploader:8097'
 
 
 @youtube_bp.route('/youtube/stats', methods=['GET'])

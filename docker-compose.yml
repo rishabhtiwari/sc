@@ -47,7 +47,8 @@ services:
       - API_SERVER_URL=http://ichat-api-server:8080
       - NEWS_FETCHER_URL=http://ichat-news-fetcher:8093
       - IOPAINT_URL=http://ichat-iopaint:8096
-      - YOUTUBE_UPLOADER_URL=http://ichat-youtube-uploader:8097
+      - YOUTUBE_UPLOADER_URL=http://ichat-social-media-uploader:8097
+      - SOCIAL_MEDIA_UPLOADER_URL=http://ichat-social-media-uploader:8097
       - VOICE_GENERATOR_URL=http://ichat-voice-generator:8094
       - AUDIO_GENERATION_URL=http://audio-generation-factory:3000
       - ASSET_SERVICE_URL=http://ichat-asset-service:8099
@@ -87,7 +88,7 @@ services:
         condition: service_started
       iopaint:
         condition: service_started
-      youtube-uploader:
+      social-media-uploader:
         condition: service_started
     labels:
       - "com.news-automation.service=frontend"
@@ -1110,13 +1111,13 @@ services:
       - "com.news-automation.version=1.0.0"
       - "com.news-automation.description=Automatic Image Marking Job (BaseJob)"
 
-  # YouTube Uploader Service
-  youtube-uploader:
+  # Social Media Uploader Service (YouTube, Instagram, TikTok, Twitter, LinkedIn, Facebook, Reddit)
+  social-media-uploader:
     build:
       context: .
-      dockerfile: ./youtube-uploader/Dockerfile
+      dockerfile: ./social-media-uploader/Dockerfile
     pull_policy: if_not_present
-    container_name: ichat-youtube-uploader
+    container_name: ichat-social-media-uploader
     ports:
       - "8097:8097"
     environment:
@@ -1128,9 +1129,19 @@ services:
       - DEFAULT_CATEGORY_ID=25
       - DEFAULT_PRIVACY_STATUS=private
       - DEFAULT_TAGS=news,hindi news,breaking news,latest news
+      # Instagram (Facebook Graph API)
+      - INSTAGRAM_APP_ID=${INSTAGRAM_APP_ID}
+      - INSTAGRAM_APP_SECRET=${INSTAGRAM_APP_SECRET}
+      - INSTAGRAM_REDIRECT_URI=${INSTAGRAM_REDIRECT_URI:-http://localhost:8097/api/instagram/oauth/callback}
+      # TikTok (coming soon)
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+      # Twitter (coming soon)
+      - TWITTER_CLIENT_ID=${TWITTER_CLIENT_ID}
+      - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET}
     volumes:
-      - ./youtube-uploader/logs:/app/logs
-      - ./youtube-uploader/credentials:/app/credentials
+      - ./social-media-uploader/logs:/app/logs
+      - ./social-media-uploader/credentials:/app/credentials
       - ./jobs/video-generator/public:/app/public:ro  # Read-only access to videos
     networks:
       - ichat-network
@@ -1143,6 +1154,10 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    labels:
+      - "com.news-automation.service=social-media-uploader"
+      - "com.news-automation.version=1.0.0"
+      - "com.news-automation.description=Social Media Uploader (YouTube, Instagram, TikTok, etc.)"
 
   # Auth Service - Authentication and User Management
   auth-service:

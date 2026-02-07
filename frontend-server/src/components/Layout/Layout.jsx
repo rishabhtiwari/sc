@@ -26,6 +26,7 @@ const Layout = ({ children, user, onLogout }) => {
     { path: '/design-editor', icon: '🎨', label: 'Design Editor' },
     { path: '/asset-management', icon: '📚', label: 'Asset Management' },
     { path: '/youtube', icon: '📺', label: 'Video Processing' },
+    { path: '/social-platform', icon: '🌐', label: 'Social Platform' },
     { path: '/ecommerce', icon: '🛒', label: 'E-commerce' },
     {
       id: 'templates',

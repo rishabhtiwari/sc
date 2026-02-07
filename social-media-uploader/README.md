@@ -1,15 +1,22 @@
-# YouTube Uploader Service
+# Social Media Uploader Service
 
-Automated service for uploading news videos to YouTube with a web-based UI.
+Automated service for uploading content to multiple social media platforms (YouTube, Instagram, TikTok, Twitter, LinkedIn, Facebook, Reddit) with a web-based UI.
 
 ## Features
 
 - 📺 Upload videos to YouTube automatically
+- 📸 Upload content to Instagram (coming soon)
+- 🎵 Upload videos to TikTok (coming soon)
+- 🐦 Post to Twitter/X (coming soon)
+- 💼 Share on LinkedIn (coming soon)
+- 👥 Post to Facebook (coming soon)
+- 🤖 Submit to Reddit (coming soon)
 - 🎯 Web UI for easy management
 - 📊 Real-time statistics dashboard
 - 🔄 Batch upload support (latest 20 videos)
 - 📝 Automatic metadata from news articles
 - ✅ Upload tracking in MongoDB
+- 🔐 OAuth 2.0 authentication for all platforms
 
 ## Setup
 
@@ -26,7 +33,7 @@ Automated service for uploading news videos to YouTube with a web-based UI.
 
 On first run, the service will open a browser window for OAuth authentication:
 
-1. Start the service: `docker-compose up youtube-uploader`
+1. Start the service: `docker-compose up social-media-uploader`
 2. The service will prompt for authentication
 3. Follow the browser prompts to authorize the app
 4. Credentials will be saved to `credentials/youtube_credentials.json`

@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY youtube-uploader/requirements.txt .
+COPY social-media-uploader/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -21,7 +21,7 @@ RUN pip install https://github.com/explosion/spacy-models/releases/download/en_c
 COPY jobs/common /app/common
 
 # Copy application code
-COPY youtube-uploader /app
+COPY social-media-uploader /app
 
 # Create necessary directories
 RUN mkdir -p /app/logs /app/data /app/credentials

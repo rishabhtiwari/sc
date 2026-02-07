@@ -1,11 +1,12 @@
 """
-YouTube Uploader Service Configuration
+Social Media Uploader Service Configuration
+Supports YouTube, Instagram, TikTok, Twitter, LinkedIn, Facebook, Reddit
 """
 import os
 
 
 class Config:
-    """Configuration for YouTube Uploader Service"""
+    """Configuration for Social Media Uploader Service"""
     
     # Flask Configuration
     FLASK_PORT = int(os.getenv('FLASK_PORT', 8097))
@@ -43,4 +44,10 @@ class Config:
     
     # Default Tags
     DEFAULT_TAGS = os.getenv('DEFAULT_TAGS', 'news,hindi news,breaking news,latest news').split(',')
+
+    # Instagram API Configuration
+    INSTAGRAM_APP_ID = os.getenv('INSTAGRAM_APP_ID', '')
+    INSTAGRAM_APP_SECRET = os.getenv('INSTAGRAM_APP_SECRET', '')
+    INSTAGRAM_REDIRECT_URI = os.getenv('INSTAGRAM_REDIRECT_URI', 'http://localhost:8097/api/instagram/oauth/callback')
+    INSTAGRAM_SCOPES = ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']
 

@@ -9,6 +9,9 @@ import NewsFetcherPage from './pages/NewsFetcherPage';
 import ImageProcessingPage from './pages/ImageProcessingPage';
 import AudioProcessingPage from './pages/AudioProcessingPage';
 import YouTubePage from './pages/YouTubePage';
+import SocialPlatformPage from './pages/SocialPlatformPage';
+import YouTubePlatformPage from './pages/YouTubePlatformPage';
+import InstagramPlatformPage from './pages/InstagramPlatformPage';
 import Workflow from './pages/Workflow';
 import Monitoring from './pages/Monitoring';
 import SettingsPage from './pages/SettingsPage';
@@ -140,6 +143,14 @@ function App() {
                   <Route path="/asset-library/images" element={<Navigate to="/asset-management/images" replace />} />
                   <Route path="/asset-library/videos" element={<Navigate to="/asset-management/videos" replace />} />
                   <Route path="/youtube" element={<YouTubePage />} />
+                  <Route path="/social-platform" element={<SocialPlatformPage />} />
+                  <Route path="/social-platform/youtube" element={<YouTubePlatformPage />} />
+                  <Route path="/social-platform/instagram" element={<InstagramPlatformPage />} />
+                  <Route path="/social-platform/tiktok" element={<SocialPlatformPage />} />
+                  <Route path="/social-platform/twitter" element={<SocialPlatformPage />} />
+                  <Route path="/social-platform/linkedin" element={<SocialPlatformPage />} />
+                  <Route path="/social-platform/facebook" element={<SocialPlatformPage />} />
+                  <Route path="/social-platform/reddit" element={<SocialPlatformPage />} />
                   <Route path="/ecommerce" element={<EcommercePage />} />
                   <Route path="/workflow" element={<Workflow />} />
                   <Route path="/monitoring" element={<Monitoring />} />

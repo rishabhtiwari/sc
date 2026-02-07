@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-YouTube Uploader Service
-Provides UI and API for uploading news videos to YouTube
+Social Media Uploader Service
+Provides UI and API for uploading content to multiple social media platforms
+Currently supports: YouTube (active), Instagram, TikTok, Twitter, LinkedIn, Facebook, Reddit (coming soon)
 """
 
 import os
@@ -1627,10 +1628,298 @@ def delete_credential(credential_id):
         }), 500
 
 
+# ============================================================================
+# Instagram OAuth Endpoints
+# ============================================================================
+
+@app.route('/api/instagram/oauth/initiate', methods=['GET'])
+def instagram_oauth_initiate():
+    """Initiate Instagram OAuth flow"""
+    try:
+        logger.info("🔐 Initiating Instagram OAuth flow")
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        if not customer_id or not user_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id or user_id in headers'
+            }), 400
+
+        # Check if Instagram credentials are configured
+        if not Config.INSTAGRAM_APP_ID or not Config.INSTAGRAM_APP_SECRET:
+            return jsonify({
+                'status': 'error',
+                'error': 'Instagram API credentials not configured. Please set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET environment variables.'
+            }), 500
+
+        # Build OAuth URL
+        # Instagram uses Facebook OAuth for Instagram Business/Creator accounts
+        scopes = ','.join(Config.INSTAGRAM_SCOPES)
+        state = f"{customer_id}:{user_id}"  # Pass customer and user context in state
+
+        auth_url = (
+            f"https://www.facebook.com/v18.0/dialog/oauth?"
+            f"client_id={Config.INSTAGRAM_APP_ID}&"
+            f"redirect_uri={Config.INSTAGRAM_REDIRECT_URI}&"
+            f"scope={scopes}&"
+            f"state={state}&"
+            f"response_type=code"
+        )
+
+        logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}")
+
+        return jsonify({
+            'status': 'success',
+            'auth_url': auth_url
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error initiating Instagram OAuth: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/instagram/oauth/callback', methods=['GET'])
+def instagram_oauth_callback():
+    """Handle Instagram OAuth callback"""
+    try:
+        logger.info("🔐 Handling Instagram OAuth callback")
+
+        # Get authorization code and state from query parameters
+        code = request.args.get('code')
+        state = request.args.get('state')
+        error = request.args.get('error')
+
+        if error:
+            logger.error(f"❌ OAuth error: {error}")
+            return f"""
+            <html>
+                <body>
+                    <h2>Instagram Connection Failed</h2>
+                    <p>Error: {error}</p>
+                    <p>You can close this window.</p>
+                    <script>setTimeout(() => window.close(), 3000);</script>
+                </body>
+            </html>
+            """, 400
+
+        if not code or not state:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing code or state parameter'
+            }), 400
+
+        # Extract customer_id and user_id from state
+        try:
+            customer_id, user_id = state.split(':')
+        except ValueError:
+            return jsonify({
+                'status': 'error',
+                'error': 'Invalid state parameter'
+            }), 400
+
+        # Exchange authorization code for access token
+        token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        token_params = {
+            'client_id': Config.INSTAGRAM_APP_ID,
+            'client_secret': Config.INSTAGRAM_APP_SECRET,
+            'redirect_uri': Config.INSTAGRAM_REDIRECT_URI,
+            'code': code
+        }
+
+        token_response = requests.get(token_url, params=token_params)
+        token_data = token_response.json()
+
+        if 'error' in token_data:
+            logger.error(f"❌ Token exchange error: {token_data['error']}")
+            return jsonify({
+                'status': 'error',
+                'error': token_data['error'].get('message', 'Token exchange failed')
+            }), 400
+
+        access_token = token_data.get('access_token')
+
+        # Get Instagram Business Account ID from Facebook Pages
+        # First, get user's Facebook pages
+        pages_url = f"https://graph.facebook.com/v18.0/me/accounts?access_token={access_token}"
+        pages_response = requests.get(pages_url)
+        pages_data = pages_response.json()
+
+        if 'error' in pages_data or not pages_data.get('data'):
+            logger.error("❌ No Facebook pages found")
+            return f"""
+            <html>
+                <body>
+                    <h2>Instagram Connection Failed</h2>
+                    <p>No Facebook pages found. Please connect a Facebook Page to your Instagram Business account.</p>
+                    <p>You can close this window.</p>
+                    <script>setTimeout(() => window.close(), 5000);</script>
+                </body>
+            </html>
+            """, 400
+
+        # Get Instagram Business Account from the first page
+        page = pages_data['data'][0]
+        page_id = page['id']
+        page_access_token = page['access_token']
+
+        # Get Instagram Business Account ID
+        ig_url = f"https://graph.facebook.com/v18.0/{page_id}?fields=instagram_business_account&access_token={page_access_token}"
+        ig_response = requests.get(ig_url)
+        ig_data = ig_response.json()
+
+        if 'instagram_business_account' not in ig_data:
+            logger.error("❌ No Instagram Business Account found")
+            return f"""
+            <html>
+                <body>
+                    <h2>Instagram Connection Failed</h2>
+                    <p>No Instagram Business Account found for this Facebook Page.</p>
+                    <p>Please convert your Instagram account to a Business or Creator account and connect it to your Facebook Page.</p>
+                    <p>You can close this window.</p>
+                    <script>setTimeout(() => window.close(), 5000);</script>
+                </body>
+            </html>
+            """, 400
+
+        instagram_account_id = ig_data['instagram_business_account']['id']
+
+        # Get Instagram account details
+        ig_details_url = f"https://graph.facebook.com/v18.0/{instagram_account_id}?fields=id,username&access_token={page_access_token}"
+        ig_details_response = requests.get(ig_details_url)
+        ig_details = ig_details_response.json()
+
+        instagram_username = ig_details.get('username', 'Unknown')
+
+        # Save credentials to MongoDB
+        instagram_credentials_collection = db['instagram_credentials']
+
+        credential_doc = {
+            'customer_id': customer_id,
+            'user_id': user_id,
+            'instagram_user_id': instagram_account_id,
+            'instagram_username': instagram_username,
+            'app_id': Config.INSTAGRAM_APP_ID,
+            'app_secret': Config.INSTAGRAM_APP_SECRET,
+            'facebook_page_id': page_id,
+            'access_token': page_access_token,
+            'is_active': True,
+            'is_authenticated': True,
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        }
+
+        # Prepare document for multi-tenancy
+        prepare_insert_document(credential_doc, customer_id=customer_id, user_id=user_id)
+
+        # Check if credential already exists
+        existing = instagram_credentials_collection.find_one({
+            'customer_id': customer_id,
+            'user_id': user_id,
+            'instagram_user_id': instagram_account_id
+        })
+
+        if existing:
+            # Update existing credential
+            update_data = {
+                'instagram_username': instagram_username,
+                'facebook_page_id': page_id,
+                'access_token': page_access_token,
+                'is_active': True,
+                'is_authenticated': True,
+                'updated_at': datetime.utcnow()
+            }
+            prepare_update_document(update_data, user_id=user_id)
+
+            instagram_credentials_collection.update_one(
+                {'_id': existing['_id']},
+                {'$set': update_data}
+            )
+            logger.info(f"✅ Updated Instagram credential for @{instagram_username}")
+        else:
+            # Insert new credential
+            instagram_credentials_collection.insert_one(credential_doc)
+            logger.info(f"✅ Saved Instagram credential for @{instagram_username}")
+
+        # Return success page
+        return f"""
+        <html>
+            <body>
+                <h2>Instagram Connected Successfully!</h2>
+                <p>Account: @{instagram_username}</p>
+                <p>You can close this window.</p>
+                <script>setTimeout(() => window.close(), 2000);</script>
+            </body>
+        </html>
+        """
+
+    except Exception as e:
+        logger.error(f"❌ Error in Instagram OAuth callback: {str(e)}")
+        return f"""
+        <html>
+            <body>
+                <h2>Instagram Connection Failed</h2>
+                <p>Error: {str(e)}</p>
+                <p>You can close this window.</p>
+                <script>setTimeout(() => window.close(), 3000);</script>
+            </body>
+        </html>
+        """, 500
+
+
+@app.route('/api/instagram/credentials', methods=['GET'])
+def get_instagram_credentials():
+    """Get Instagram credentials for current user"""
+    try:
+        logger.info("📋 GET /api/instagram/credentials")
+
+        # Extract user context from headers for multi-tenancy
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        if not customer_id or not user_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id or user_id in headers'
+            }), 400
+
+        # Get credentials from MongoDB
+        instagram_credentials_collection = db['instagram_credentials']
+
+        query = build_multi_tenant_query({}, customer_id=customer_id, user_id=user_id)
+        credentials = list(instagram_credentials_collection.find(query))
+
+        # Convert ObjectId to string
+        for cred in credentials:
+            cred['_id'] = str(cred['_id'])
+            # Remove sensitive data
+            cred.pop('access_token', None)
+            cred.pop('app_secret', None)
+
+        return jsonify({
+            'status': 'success',
+            'credentials': credentials
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error getting Instagram credentials: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
-    return jsonify({'status': 'healthy', 'service': 'youtube-uploader'})
+    return jsonify({'status': 'healthy', 'service': 'social-media-uploader'})
 
 
 if __name__ == '__main__':

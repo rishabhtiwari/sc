@@ -75,7 +75,7 @@ SERVICES=(
     "job-image-auto-marker"
     "job-video-generator"
     "job-export-generator"
-    "youtube-uploader"
+    "social-media-uploader"
     "job-cleanup"
     "inventory-creation-service"
     "ichat-api"
@@ -473,8 +473,8 @@ create_directories() {
         "jobs/video-generator/assets"
         "jobs/export-generator/logs"
         "jobs/export-generator/temp"
-        "jobs/youtube-uploader/logs"
-        "jobs/youtube-uploader/credentials"
+        "social-media-uploader/logs"
+        "social-media-uploader/credentials"
         "jobs/cleanup/logs"
         "jobs/watermark-remover/public"
         "jobs/watermark-remover/models"
@@ -1224,8 +1224,8 @@ deploy_all_services() {
 
     # Group 5: Media processing services
     print_header "Group 5: Media Processing Services"
-    print_info "Deploying IOPaint and YouTube Uploader in parallel..."
-    deploy_parallel "iopaint" "youtube-uploader"
+    print_info "Deploying IOPaint and Social Media Uploader in parallel..."
+    deploy_parallel "iopaint" "social-media-uploader"
     sleep 3
 
     # Group 6: High-level services (depend on everything else)
@@ -1298,24 +1298,24 @@ This script manages deployment of all news-related services:
   12. Image Auto-Marker Job (automatically marks images as cleaned)
   13. Video Generator Job (creates videos from news + audio)
   14. Export Generator Job (exports videos in different formats)
-  15. YouTube Uploader (uploads videos to YouTube)
+  15. Social Media Uploader (uploads to YouTube, Instagram, TikTok, Twitter, LinkedIn, Facebook, Reddit)
   16. Cleanup Job (cleans up old files and MongoDB records)
   17. E-commerce Service (manages e-commerce products and video generation)
   18. API Server (serves news data to frontend)
   19. News Automation Frontend (React UI for managing news automation)
 
 ${YELLOW}Usage:${NC}
-  ./deploy-news-services.sh [options] [service_name]
+  ./deploy-news-services.sh [options] [service_name...]
 
 ${YELLOW}Options:${NC}
-  --build              Force rebuild of services before deployment
-  --gpu                Enable GPU support for compatible services
-  --service <name>     Deploy only specific service
-  --logs [service]     Show logs (all services or specific service)
-  --status             Show status of all services
-  --stop [service]     Stop all services or specific service
-  --restart [service]  Restart all services or specific service
-  --help               Show this help message
+  --build                    Force rebuild of services before deployment
+  --gpu                      Enable GPU support for compatible services
+  --service <name> [name...] Deploy one or more specific services
+  --logs [service]           Show logs (all services or specific service)
+  --status                   Show status of all services
+  --stop [service...]        Stop all services or specific service(s)
+  --restart [service...]     Restart all services or specific service(s)
+  --help                     Show this help message
 
 ${YELLOW}Available Services:${NC}
 EOF
@@ -1342,11 +1342,17 @@ ${YELLOW}Examples:${NC}
   ${GREEN}# Deploy only LLM service${NC}
   ./deploy-news-services.sh --service llm-service
 
+  ${GREEN}# Deploy multiple services${NC}
+  ./deploy-news-services.sh --service llm-service audio-generation-factory coqui-tts
+
   ${GREEN}# Deploy LLM service with GPU and rebuild${NC}
   ./deploy-news-services.sh --service llm-service --gpu --build
 
   ${GREEN}# Deploy audio generation with GPU${NC}
   ./deploy-news-services.sh --service audio-generation-factory --gpu --build
+
+  ${GREEN}# Deploy frontend services (API + Frontend)${NC}
+  ./deploy-news-services.sh --service ichat-api news-automation-frontend --build
 
   ${GREEN}# Check status${NC}
   ./deploy-news-services.sh --status
@@ -1354,11 +1360,14 @@ ${YELLOW}Examples:${NC}
   ${GREEN}# Show logs for specific service${NC}
   ./deploy-news-services.sh --logs llm-service
 
-  ${GREEN}# Stop specific service${NC}
-  ./deploy-news-services.sh --stop audio-generation-factory
+  ${GREEN}# Stop multiple services${NC}
+  ./deploy-news-services.sh --stop audio-generation-factory coqui-tts
 
   ${GREEN}# Restart specific service with rebuild${NC}
   ./deploy-news-services.sh --restart llm-service --build
+
+  ${GREEN}# Restart multiple services${NC}
+  ./deploy-news-services.sh --restart ichat-api news-automation-frontend --build
 
 EOF
 }
@@ -1367,7 +1376,7 @@ EOF
 main() {
     local build_flag=""
     local action=""
-    local target_service=""
+    local target_services=()
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -1386,14 +1395,18 @@ main() {
                     show_help
                     exit 1
                 fi
-                target_service="$2"
-                shift 2
+                # Collect all service names until next flag or end
+                shift
+                while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; do
+                    target_services+=("$1")
+                    shift
+                done
                 ;;
             --logs)
                 action="logs"
-                target_service="${2:-}"
                 shift
-                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; then
+                    target_services+=("$1")
                     shift
                 fi
                 ;;
@@ -1403,19 +1416,19 @@ main() {
                 ;;
             --stop)
                 action="stop"
-                target_service="${2:-}"
                 shift
-                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; do
+                    target_services+=("$1")
                     shift
-                fi
+                done
                 ;;
             --restart)
                 action="restart"
-                target_service="${2:-}"
                 shift
-                if [ -n "$target_service" ] && [[ ! "$target_service" =~ ^-- ]]; then
+                while [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]]; do
+                    target_services+=("$1")
                     shift
-                fi
+                done
                 ;;
             --help|-h)
                 show_help
@@ -1433,22 +1446,44 @@ main() {
     # Execute action
     case "$action" in
         logs)
-            show_logs "$target_service"
+            if [ ${#target_services[@]} -eq 0 ]; then
+                show_logs ""
+            else
+                show_logs "${target_services[0]}"
+            fi
             ;;
         status)
             show_status
             ;;
         stop)
-            stop_services "$target_service"
+            if [ ${#target_services[@]} -eq 0 ]; then
+                stop_services ""
+            else
+                for svc in "${target_services[@]}"; do
+                    stop_services "$svc"
+                done
+            fi
             ;;
         restart)
-            restart_services "$target_service" "$build_flag"
+            if [ ${#target_services[@]} -eq 0 ]; then
+                restart_services "" "$build_flag"
+            else
+                for svc in "${target_services[@]}"; do
+                    restart_services "$svc" "$build_flag"
+                done
+            fi
             ;;
         *)
             # Deploy action
-            if [ -n "$target_service" ]; then
-                # Deploy single service
-                deploy_service "$target_service" "$build_flag"
+            if [ ${#target_services[@]} -gt 0 ]; then
+                # Deploy multiple services
+                print_header "Deploying ${#target_services[@]} service(s)"
+                for svc in "${target_services[@]}"; do
+                    print_info "Deploying service: $svc"
+                    deploy_service "$svc" "$build_flag"
+                    echo ""
+                done
+                print_success "All ${#target_services[@]} service(s) deployed successfully!"
             else
                 # Deploy all services
                 deploy_all_services "$build_flag"
