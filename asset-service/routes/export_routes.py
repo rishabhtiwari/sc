@@ -15,6 +15,7 @@ from models.export import (
     ExportStatus
 )
 from config.settings import settings
+from services.database_service import db_service
 
 logger = logging.getLogger(__name__)
 
@@ -178,21 +179,69 @@ async def delete_project_export(
     """
     Delete a completed export from a project
 
-    This removes the export metadata from the project's exports array.
-    Note: This does not delete the actual file from storage.
+    This removes:
+    1. Export metadata from the project's exports array
+    2. Export file from MinIO storage
+    3. Video library entry (if MP4 export)
     """
     try:
-        from services.db_service import DBService
-
-        db_service = DBService()
+        from minio import Minio
+        from services.storage_service import storage_service
 
         # Get the project to verify it exists and user has access
         project = db_service.get_project(project_id, x_customer_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
+        # Find the export in the project's exports array
+        export_to_delete = None
+        for export in project.get('exports', []):
+            if export.get('export_id') == export_id:
+                export_to_delete = export
+                break
+
+        if not export_to_delete:
+            raise HTTPException(status_code=404, detail="Export not found in project")
+
+        # Delete from MinIO storage
+        try:
+            # Extract file extension from format
+            export_format = export_to_delete.get('format', 'mp4')
+            object_key = f"{x_customer_id}/{x_user_id}/exports/{export_id}.{export_format}"
+
+            # Delete from exports bucket
+            storage_service.delete_file(
+                bucket='exports',
+                object_name=object_key
+            )
+            logger.info(f"Deleted export file from MinIO: {object_key}")
+        except Exception as e:
+            logger.warning(f"Failed to delete export file from MinIO: {e}")
+            # Continue even if MinIO deletion fails
+
+        # Delete from video library if it's an MP4 export
+        if export_to_delete.get('output_video_id'):
+            try:
+                video_id = export_to_delete['output_video_id']
+                db_service.video_library.update_one(
+                    {
+                        "video_id": video_id,
+                        "customer_id": x_customer_id
+                    },
+                    {
+                        "$set": {
+                            "is_deleted": True,
+                            "updated_at": datetime.utcnow()
+                        }
+                    }
+                )
+                logger.info(f"Marked video library entry as deleted: {video_id}")
+            except Exception as e:
+                logger.warning(f"Failed to delete video library entry: {e}")
+                # Continue even if video library deletion fails
+
         # Remove the export from the exports array
-        result = db_service.projects_collection.update_one(
+        result = db_service.projects.update_one(
             {
                 "project_id": project_id,
                 "customer_id": x_customer_id
