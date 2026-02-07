@@ -102,15 +102,38 @@ const ExportsListDialog = ({ isOpen, onClose, project }) => {
     setShowPreview(true);
   };
 
-  const handleDownload = (exportItem) => {
-    // Create a temporary link and trigger download
-    const link = document.createElement('a');
-    // Append authentication token to download URL
-    link.href = appendAuthToken(exportItem.output_url);
-    link.download = `${project.name}_${exportItem.format}_${exportItem.quality}.${exportItem.format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownload = async (exportItem) => {
+    try {
+      // Fetch the file as a blob with authentication
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(exportItem.output_url, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create blob URL and trigger download
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${project.name}_${exportItem.format}_${exportItem.quality}.${exportItem.format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up blob URL
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download error:', error);
+      alert(`Failed to download: ${error.message}`);
+    }
   };
 
   return (

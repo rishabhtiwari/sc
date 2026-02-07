@@ -137,12 +137,43 @@ const ExportDialog = ({ isOpen, onClose, project }) => {
     }
   };
 
-  const handleDownload = () => {
-    if (downloadUrl) {
-      // Append authentication token to download URL
-      const authenticatedUrl = appendAuthToken(downloadUrl);
-      window.open(authenticatedUrl, '_blank');
+  const handleDownload = async () => {
+    if (!downloadUrl) return;
+
+    try {
+      showToast('Starting download...', 'info');
+
+      // Fetch the file as a blob with authentication
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(downloadUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+      }
+
+      // Create blob from response
+      const blob = await response.blob();
+
+      // Create blob URL and trigger download
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${project.name}_${format}_${quality}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Clean up blob URL
+      URL.revokeObjectURL(blobUrl);
+
       showToast('Download started', 'success');
+    } catch (error) {
+      console.error('Download error:', error);
+      showToast(`Download failed: ${error.message}`, 'error');
     }
   };
 
