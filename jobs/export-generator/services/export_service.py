@@ -1114,16 +1114,30 @@ class ExportService:
         """
         Download audio file from URL
 
-        Note: The URL should already contain authentication if needed (e.g., token in query params).
-        We simply download the audio without modifying the URL.
+        Handles both relative URLs (e.g., /api/audio-studio/library/...) and absolute URLs.
+        For relative URLs, converts them to absolute URLs using the API server.
         """
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
-            self.logger.debug(f"Downloading audio from URL: {url}")
+            # Convert relative URL to absolute URL if needed
+            if url.startswith('/'):
+                # Relative URL - prepend API server URL
+                full_url = f"{self.config.API_SERVER_URL}{url}"
+                self.logger.debug(f"Converting relative URL to absolute: {url} -> {full_url}")
+            else:
+                full_url = url
 
-            # Download audio (URL already contains authentication if needed)
-            response = requests.get(url, timeout=30, stream=True)
+            self.logger.debug(f"Downloading audio from URL: {full_url}")
+
+            # Add authentication headers for internal API calls
+            headers = {
+                'x-customer-id': customer_id,
+                'x-user-id': user_id
+            }
+
+            # Download audio
+            response = requests.get(full_url, headers=headers, timeout=30, stream=True)
             response.raise_for_status()
 
             with open(output_path, 'wb') as f:

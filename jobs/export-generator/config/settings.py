@@ -81,6 +81,9 @@ class Config:
     # Note: Asset service also handles /api/audio-studio/* endpoints
     ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://ichat-asset-service:8099')
 
+    # API Server Configuration (for downloading audio/video files)
+    API_SERVER_URL = os.getenv('API_SERVER_URL', 'http://ichat-api-server:8000')
+
     @classmethod
     def validate_config(cls):
         """Validate configuration settings"""
