@@ -2024,13 +2024,43 @@ def instagram_oauth_callback():
         pages_response = requests.get(pages_url)
         pages_data = pages_response.json()
 
-        if 'error' in pages_data or not pages_data.get('data'):
-            logger.error("❌ No Facebook pages found")
+        logger.info(f"📄 Facebook Pages response: {pages_data}")
+
+        if 'error' in pages_data:
+            error_msg = pages_data['error'].get('message', 'Unknown error')
+            logger.error(f"❌ Facebook Pages API error: {error_msg}")
             return f"""
             <html>
                 <body>
                     <h2>Instagram Connection Failed</h2>
-                    <p>No Facebook pages found. Please connect a Facebook Page to your Instagram Business account.</p>
+                    <p>Error fetching Facebook Pages: {error_msg}</p>
+                    <p><strong>Required:</strong></p>
+                    <ul>
+                        <li>You must have a Facebook Page</li>
+                        <li>The Page must be connected to an Instagram Business account</li>
+                        <li>You must have admin access to the Page</li>
+                        <li>The app must have 'pages_show_list' and 'instagram_basic' permissions</li>
+                    </ul>
+                    <p>You can close this window.</p>
+                    <script>setTimeout(() => window.close(), 5000);</script>
+                </body>
+            </html>
+            """, 400
+
+        if not pages_data.get('data'):
+            logger.error("❌ No Facebook pages found in response")
+            return f"""
+            <html>
+                <body>
+                    <h2>Instagram Connection Failed</h2>
+                    <p>No Facebook Pages found for your account.</p>
+                    <p><strong>To fix this:</strong></p>
+                    <ol>
+                        <li>Create a Facebook Page (if you don't have one)</li>
+                        <li>Convert your Instagram account to a Business account</li>
+                        <li>Connect your Instagram Business account to your Facebook Page</li>
+                        <li>Make sure you have admin access to the Page</li>
+                    </ol>
                     <p>You can close this window.</p>
                     <script>setTimeout(() => window.close(), 5000);</script>
                 </body>
