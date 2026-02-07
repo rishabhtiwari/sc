@@ -249,24 +249,16 @@ const InstagramPlatformPage = () => {
         )}
 
         {/* Divider for Admin */}
-        {isAdmin && masterApp && (
+        {isAdmin && (
           <div className="border-t border-gray-200 my-8"></div>
         )}
 
-        {/* User Accounts Section Header */}
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-gray-900">Your Instagram Accounts</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            Connect and manage your Instagram Business accounts
-          </p>
-        </div>
-
-        {/* Setup Instructions */}
+        {/* Setup Instructions - Only show if master app is configured */}
         {!loading && masterApp && (
           <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg mb-6">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
               <span>📋</span>
-              Before You Connect
+              Before You Connect Your Account
             </h3>
             <div className="text-sm text-gray-700 space-y-2">
               <p className="font-medium">Make sure you have:</p>
