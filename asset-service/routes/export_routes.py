@@ -6,6 +6,7 @@ from fastapi import APIRouter, Header, HTTPException
 from typing import Optional
 import logging
 import requests
+from datetime import datetime
 from models.export import (
     ExportRequest,
     ExportJobResponse,
@@ -164,5 +165,57 @@ async def cancel_export(
         raise
     except Exception as e:
         logger.error(f"Error cancelling export: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{project_id}/exports/{export_id}")
+async def delete_project_export(
+    project_id: str,
+    export_id: str,
+    x_customer_id: str = Header(...),
+    x_user_id: str = Header(...)
+):
+    """
+    Delete a completed export from a project
+
+    This removes the export metadata from the project's exports array.
+    Note: This does not delete the actual file from storage.
+    """
+    try:
+        from services.db_service import DBService
+
+        db_service = DBService()
+
+        # Get the project to verify it exists and user has access
+        project = db_service.get_project(project_id, x_customer_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Remove the export from the exports array
+        result = db_service.projects_collection.update_one(
+            {
+                "project_id": project_id,
+                "customer_id": x_customer_id
+            },
+            {
+                "$pull": {"exports": {"export_id": export_id}},
+                "$set": {"updated_at": datetime.utcnow()}
+            }
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Export not found in project")
+
+        logger.info(f"Deleted export {export_id} from project {project_id}")
+
+        return {
+            "success": True,
+            "message": "Export deleted successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting export: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

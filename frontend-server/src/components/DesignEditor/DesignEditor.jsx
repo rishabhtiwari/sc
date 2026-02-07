@@ -1691,6 +1691,17 @@ const DesignEditor = () => {
         isOpen={showExportsListDialog}
         onClose={() => setShowExportsListDialog(false)}
         project={currentProject}
+        onExportDeleted={async () => {
+          // Reload the project to get updated exports list
+          if (currentProject?.project_id) {
+            try {
+              const updatedProject = await handleLoadProject(currentProject.project_id);
+              console.log('✅ Project reloaded after export deletion');
+            } catch (error) {
+              console.error('❌ Failed to reload project after export deletion:', error);
+            }
+          }
+        }}
       />
     </div>
   );

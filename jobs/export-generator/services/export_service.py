@@ -542,20 +542,26 @@ class ExportService:
 
                     if has_video:
                         self.logger.info(f"🎬 Slide has video elements - rendering frame-by-frame")
-                        # Download video files first
+                        # Download video files first and get their durations
                         video_elements = [elem for elem in page.get('elements', []) if elem.get('type') == 'video']
                         video_files = {}
+                        video_durations = {}
                         for idx, video_elem in enumerate(video_elements):
                             video_url = video_elem.get('src')
                             if video_url:
                                 video_file = self._download_video(video_url, frames_dir, f"video_{slide_idx}_{idx}", customer_id, user_id)
                                 if video_file:
                                     video_files[video_elem.get('id')] = video_file
+                                    # Get video duration using FFprobe
+                                    video_duration = self._get_video_duration(video_file)
+                                    if video_duration:
+                                        video_durations[video_elem.get('id')] = video_duration
+                                        self.logger.info(f"🎬 Video {idx} duration: {video_duration}s")
 
                         # Render each frame with video
                         for frame_idx in range(num_frames):
                             frame_time = frame_idx / fps
-                            frame_image = self._render_slide_with_video(page, canvas_width, canvas_height, customer_id, user_id, frame_time, video_files, fps)
+                            frame_image = self._render_slide_with_video(page, canvas_width, canvas_height, customer_id, user_id, frame_time, video_files, video_durations, fps)
                             frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
                             frame_image.save(frame_path, 'PNG', compress_level=1)
                             frame_image.close()
@@ -618,22 +624,48 @@ class ExportService:
         user_id: str,
         frame_time: float,
         video_files: Dict[str, str],
+        video_durations: Dict[str, float],
         fps: int
     ) -> Image.Image:
         """Render a single slide at a specific time (for video elements)"""
         try:
             # Create blank canvas
-            background = page.get('background', {})
-            bg_color = background.get('color', '#FFFFFF')
-            img = Image.new('RGB', (width, height), color=bg_color)
+            img = Image.new('RGB', (width, height), color='white')
             draw = ImageDraw.Draw(img)
+
+            # Render background (same as _render_slide)
+            background = page.get('background', {})
+            bg_type = background.get('type', 'solid')
+
+            if bg_type == 'solid':
+                color = background.get('color', '#ffffff')
+                img = Image.new('RGB', (width, height), color=color)
+                draw = ImageDraw.Draw(img)
+            elif bg_type == 'gradient':
+                gradient_config = background.get('gradient')
+
+                # Handle null or empty gradient config
+                if not gradient_config or gradient_config is None:
+                    gradient_config = {
+                        'startColor': '#667eea',
+                        'endColor': '#764ba2'
+                    }
+
+                img = self._create_gradient(width, height, gradient_config)
+                draw = ImageDraw.Draw(img)
+            elif bg_type == 'image' and background.get('imageUrl'):
+                bg_img = self._download_image(background.get('imageUrl'), customer_id, user_id)
+                if bg_img:
+                    bg_img = bg_img.resize((width, height))
+                    img = bg_img
+                    draw = ImageDraw.Draw(img)
 
             # Render elements
             elements = page.get('elements', [])
             sorted_elements = sorted(elements, key=lambda e: e.get('zIndex', 0))
 
             for element in sorted_elements:
-                self._render_element_with_video(img, draw, element, width, height, customer_id, user_id, frame_time, video_files, fps)
+                self._render_element_with_video(img, draw, element, width, height, customer_id, user_id, frame_time, video_files, video_durations, fps)
 
             return img
 
@@ -872,6 +904,7 @@ class ExportService:
         user_id: str,
         frame_time: float,
         video_files: Dict[str, str],
+        video_durations: Dict[str, float],
         fps: int
     ):
         """Render a single element with video support at a specific time"""
@@ -887,9 +920,15 @@ class ExportService:
                 elem_id = element.get('id')
 
                 video_file = video_files.get(elem_id)
-                if video_file and os.path.exists(video_file):
+                video_duration = video_durations.get(elem_id)
+
+                if video_file and os.path.exists(video_file) and video_duration:
                     try:
-                        # Extract frame from video at frame_time using FFmpeg
+                        # Loop the video if frame_time exceeds video duration
+                        # If video is 5s and timeline is 10s, it should loop twice
+                        looped_time = frame_time % video_duration
+
+                        # Extract frame from video at looped time using FFmpeg
                         import subprocess
                         import tempfile
 
@@ -901,10 +940,11 @@ class ExportService:
                         # Use FFmpeg to extract frame at specific time
                         cmd = [
                             'ffmpeg',
-                            '-ss', str(frame_time),
+                            '-ss', str(looped_time),
                             '-i', video_file,
                             '-frames:v', '1',
                             '-y',
+                            '-loglevel', 'error',  # Suppress FFmpeg output
                             temp_frame_path
                         ]
 
@@ -920,18 +960,93 @@ class ExportService:
                         os.unlink(temp_frame_path)
 
                     except Exception as e:
-                        self.logger.warning(f"⚠️ Failed to extract video frame at {frame_time}s: {e}")
+                        self.logger.warning(f"⚠️ Failed to extract video frame at {frame_time}s (looped: {looped_time}s): {e}")
                         # Draw placeholder
                         draw.rectangle([x, y, x + w, y + h], fill='#000000')
                 else:
                     # No video file - draw placeholder
                     draw.rectangle([x, y, x + w, y + h], fill='#000000')
             else:
-                # For non-video elements, use the regular rendering method
-                self._render_element(img, draw, element, width, height, customer_id, user_id)
+                # For non-video elements, use the regular rendering method but suppress verbose logs
+                # Temporarily reduce logging for repetitive frame rendering
+                self._render_element_quiet(img, draw, element, width, height, customer_id, user_id)
 
         except Exception as e:
             self.logger.error(f"❌ Error rendering element with video {element.get('type')}: {e}", exc_info=True)
+
+    def _render_element_quiet(
+        self,
+        img: Image.Image,
+        draw: ImageDraw.Draw,
+        element: Dict[str, Any],
+        width: int,
+        height: int,
+        customer_id: str,
+        user_id: str
+    ):
+        """Render a single element on the canvas with minimal logging (for frame-by-frame rendering)"""
+        try:
+            elem_type = element.get('type')
+
+            if elem_type == 'text':
+                # Render text
+                x = int(element.get('x', 0))
+                y = int(element.get('y', 0))
+                text = element.get('text', "")
+                font_size = int(element.get('fontSize', 16))
+                color = element.get('color', '#000000')
+                text_width = int(element.get('width', width))
+                text_height = int(element.get('height', height))
+
+                if not text or text.strip() == "":
+                    return
+
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+                except:
+                    font = ImageFont.load_default()
+
+                # Wrap text to fit within the specified width
+                wrapped_lines = self._wrap_text(text, font, text_width, draw)
+
+                # Draw each line
+                current_y = y
+                line_height = font_size + int(font_size * 0.2)
+
+                for line in wrapped_lines:
+                    draw.text((x, current_y), line, fill=color, font=font)
+                    current_y += line_height
+
+            elif elem_type == 'image' and element.get('src'):
+                # Download and composite image
+                elem_img = self._download_image(element.get('src'), customer_id, user_id)
+                if elem_img:
+                    elem_width = int(element.get('width', 100))
+                    elem_height = int(element.get('height', 100))
+                    elem_img = elem_img.resize((elem_width, elem_height))
+
+                    x = int(element.get('x', 0))
+                    y = int(element.get('y', 0))
+
+                    img.paste(elem_img, (x, y), elem_img if elem_img.mode == 'RGBA' else None)
+                    elem_img.close()
+
+            elif elem_type == 'shape':
+                # Render basic shapes
+                x = int(element.get('x', 0))
+                y = int(element.get('y', 0))
+                w = int(element.get('width', 100))
+                h = int(element.get('height', 100))
+                fill_color = element.get('fill', '#000000')
+
+                shape_type = element.get('shapeType', 'rectangle')
+                if shape_type == 'rectangle':
+                    draw.rectangle([x, y, x + w, y + h], fill=fill_color)
+                elif shape_type == 'circle':
+                    draw.ellipse([x, y, x + w, y + h], fill=fill_color)
+
+        except Exception as e:
+            self.logger.error(f"❌ Error rendering element {element.get('type')}: {e}", exc_info=True)
 
     def _mix_audio_tracks(
         self,
@@ -1296,6 +1411,29 @@ class ExportService:
                 return Image.open(BytesIO(response.content))
         except Exception as e:
             self.logger.warning(f"Error downloading image {url}: {e}")
+            return None
+
+    def _get_video_duration(self, video_path: str) -> Optional[float]:
+        """Get video duration in seconds using FFprobe"""
+        try:
+            import subprocess
+            import json
+
+            cmd = [
+                'ffprobe',
+                '-v', 'error',
+                '-show_entries', 'format=duration',
+                '-of', 'json',
+                video_path
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            data = json.loads(result.stdout)
+            duration = float(data['format']['duration'])
+            return duration
+
+        except Exception as e:
+            self.logger.error(f"❌ Error getting video duration for {video_path}: {e}")
             return None
 
     def _download_video(self, url: str, export_dir: str, filename: str, customer_id: str, user_id: str) -> Optional[str]:

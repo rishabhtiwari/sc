@@ -199,3 +199,25 @@ def cancel_export(export_job_id):
         logger.error(f"Error cancelling export: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+
+@project_bp.route('/projects/<project_id>/exports/<export_id>', methods=['DELETE'])
+def delete_project_export(project_id, export_id):
+    """Proxy: Delete export from project"""
+    try:
+        headers = get_request_headers_with_context()
+
+        response = requests.delete(
+            f'{ASSET_SERVICE_URL}/api/projects/{project_id}/exports/{export_id}',
+            headers=headers,
+            timeout=30
+        )
+
+        return Response(
+            response.content,
+            status=response.status_code,
+            content_type=response.headers.get('Content-Type')
+        )
+    except Exception as e:
+        logger.error(f"Error deleting export: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
