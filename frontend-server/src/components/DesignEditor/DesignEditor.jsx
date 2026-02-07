@@ -735,12 +735,21 @@ const DesignEditor = () => {
    */
   useEffect(() => {
     let animationFrame;
+    let lastTimestamp = null;
 
     if (isPlaying) {
       console.log('🎬 Playback loop started');
-      const updatePlayhead = () => {
+      const updatePlayhead = (timestamp) => {
+        // Calculate delta time based on actual frame timing
+        if (lastTimestamp === null) {
+          lastTimestamp = timestamp;
+        }
+        const deltaTime = (timestamp - lastTimestamp) / 1000; // Convert to seconds
+        lastTimestamp = timestamp;
+
         setCurrentTime(prevTime => {
-          const newTime = prevTime + 0.016; // ~60fps
+          // Use actual delta time instead of fixed 0.016
+          const newTime = prevTime + deltaTime;
 
           // Calculate total duration
           const totalDuration = (() => {
@@ -750,7 +759,14 @@ const DesignEditor = () => {
             const slidesDuration = pages.length > 0
               ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
               : 0;
-            return Math.max(audioDuration, slidesDuration, 30);
+            const calculated = Math.max(audioDuration, slidesDuration, 30);
+
+            // Debug log once per second
+            if (Math.floor(newTime) !== Math.floor(prevTime)) {
+              console.log(`⏱️ Playback at ${newTime.toFixed(2)}s / ${calculated.toFixed(2)}s (audio: ${audioDuration.toFixed(2)}s, slides: ${slidesDuration.toFixed(2)}s)`);
+            }
+
+            return calculated;
           })();
 
           // Stop playback when reaching the end
@@ -766,7 +782,8 @@ const DesignEditor = () => {
             return totalDuration;
           }
 
-          // Update audio elements
+          // Update audio elements and sync playhead with audio
+          let syncedTime = newTime;
           audioTracks.forEach(track => {
             const audio = audioRefs.current[track.id];
             if (audio) {
@@ -790,6 +807,18 @@ const DesignEditor = () => {
                     audio.play().catch(err => console.error('Audio play error:', err));
                   }
                 } else {
+                  // Sync playhead with actual audio time to prevent drift
+                  const actualAudioTime = audio.currentTime;
+                  const expectedTrackTime = actualAudioTime; // Since we're not stretching audio
+                  const expectedTimelineTime = track.startTime + expectedTrackTime;
+
+                  // If there's significant drift (>100ms), sync to audio time
+                  const drift = Math.abs(newTime - expectedTimelineTime);
+                  if (drift > 0.1 && isFinite(expectedTimelineTime)) {
+                    console.log(`🔄 Syncing playhead to audio: ${expectedTimelineTime.toFixed(2)}s (was ${newTime.toFixed(2)}s, drift: ${(drift * 1000).toFixed(0)}ms)`);
+                    syncedTime = expectedTimelineTime;
+                  }
+
                   // Check if audio needs to loop (reached end of original duration)
                   if (audio.currentTime >= originalDuration - 0.05) {
                     audio.currentTime = 0; // Loop back to start
@@ -803,6 +832,11 @@ const DesignEditor = () => {
               }
             }
           });
+
+          // Use synced time if we corrected for drift
+          if (syncedTime !== newTime) {
+            return syncedTime;
+          }
 
           // Update video elements on canvas
           pages.forEach((page, pageIndex) => {
