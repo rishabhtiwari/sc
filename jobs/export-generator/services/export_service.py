@@ -1124,11 +1124,11 @@ class ExportService:
             if url.startswith('/'):
                 # Relative URL - prepend API server URL
                 full_url = f"{self.config.API_SERVER_URL}{url}"
-                self.logger.debug(f"Converting relative URL to absolute: {url} -> {full_url}")
+                self.logger.info(f"🔗 Converting relative URL to absolute: {url} -> {full_url}")
             else:
                 full_url = url
 
-            self.logger.debug(f"Downloading audio from URL: {full_url}")
+            self.logger.info(f"📥 Downloading audio from URL: {full_url}")
 
             # Add authentication headers for internal API calls
             headers = {
@@ -1145,11 +1145,11 @@ class ExportService:
                     if chunk:
                         f.write(chunk)
 
-            self.logger.debug(f"✅ Successfully downloaded audio to: {output_path}")
+            self.logger.info(f"✅ Successfully downloaded audio to: {output_path}")
             return output_path
 
         except Exception as e:
-            self.logger.warning(f"❌ Error downloading audio {url}: {e}")
+            self.logger.error(f"❌ Error downloading audio {url}: {e}", exc_info=True)
             return None
 
     def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.Draw) -> list:
