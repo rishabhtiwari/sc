@@ -27,6 +27,7 @@ PUBLIC_ENDPOINTS = [
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/verify',
+    '/api/social-media/instagram/oauth/callback',  # Instagram OAuth callback from Facebook
 ]
 
 # Endpoint patterns that don't require authentication (for file serving)
