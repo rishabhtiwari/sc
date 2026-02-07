@@ -113,6 +113,7 @@ def create_app():
     from routes.asset_library_routes import asset_library_bp
     from routes.prompt_template_routes import prompt_template_bp
     from routes.project_routes import project_bp
+    from routes.social_media_routes import social_media_bp
 
     # Register blueprints (routes)
     app.register_blueprint(chat_bp, url_prefix='/api')
@@ -146,6 +147,7 @@ def create_app():
     app.register_blueprint(asset_library_bp, url_prefix='/api')
     app.register_blueprint(prompt_template_bp, url_prefix='/api')
     app.register_blueprint(project_bp, url_prefix='/api')
+    app.register_blueprint(social_media_bp, url_prefix='/api')
 
     # Initialize Socket.IO for real-time updates
     socketio = init_socketio(app)
