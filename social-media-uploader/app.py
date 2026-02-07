@@ -2168,7 +2168,9 @@ def get_instagram_credentials():
         # Get credentials from MongoDB
         instagram_credentials_collection = db['instagram_credentials']
 
-        query = build_multi_tenant_query({}, customer_id=customer_id, user_id=user_id)
+        # Build query with customer_id and user_id
+        base_query = {'user_id': user_id}
+        query = build_multi_tenant_query(base_query, customer_id=customer_id)
         credentials = list(instagram_credentials_collection.find(query))
 
         # Convert ObjectId to string and remove sensitive data

@@ -167,6 +167,35 @@ class MasterAppService:
             logger.error(f"❌ Failed to create master app: {e}")
             raise
 
+    def list_master_apps(self, customer_id, platform=None, active_only=False):
+        """
+        List master apps for a customer
+
+        Args:
+            customer_id (str): Customer ID
+            platform (str, optional): Filter by platform (instagram, tiktok, etc.)
+            active_only (bool): Only return active apps
+
+        Returns:
+            list: List of master app documents (without decrypted secrets)
+        """
+        try:
+            query = {'customer_id': customer_id}
+
+            if platform:
+                query['platform'] = platform
+
+            if active_only:
+                query['is_active'] = True
+
+            documents = list(self.collection.find(query).sort('created_at', -1))
+
+            # Sanitize all documents (remove secrets)
+            return [self._sanitize_app_document(doc) for doc in documents]
+        except Exception as e:
+            logger.error(f"❌ Failed to list master apps: {e}")
+            raise
+
     def get_master_app(self, customer_id, app_id, decrypt_secret=False):
         """
         Get a specific master app by ID
