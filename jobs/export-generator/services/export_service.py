@@ -533,23 +533,61 @@ class ExportService:
 
                     self.logger.info(f"✅ Slide {slide_idx + 1} saved (1 static frame)")
                 else:
-                    # For animated slides: save all frames
-                    self.logger.info(f"💾 Saving {num_frames} frames for slide {slide_idx + 1}...")
-                    for frame_idx in range(num_frames):
-                        frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
-                        slide_image.save(frame_path, 'PNG', compress_level=1)
-                        frame_number += 1
-                        frames_saved += 1
+                    # For animated slides: render and save each frame individually
+                    # This is needed for video elements that change over time
+                    self.logger.info(f"💾 Rendering and saving {num_frames} frames for slide {slide_idx + 1}...")
 
-                        # Update progress every 50 frames (more frequent updates)
-                        if frame_idx > 0 and frame_idx % 50 == 0:
-                            progress = int((frames_saved / total_frames_needed) * 70) + 10  # 10-80%
-                            if job_id and customer_id:
-                                self._update_export_job(job_id, customer_id, {
-                                    "progress": progress,
-                                    "current_step": f"Rendering frames: {frames_saved}/{total_frames_needed}"
-                                })
-                            self.logger.info(f"💾 Progress: {frame_idx}/{num_frames} frames ({progress}%)")
+                    # Check if slide has video elements
+                    has_video = any(elem.get('type') == 'video' for elem in page.get('elements', []))
+
+                    if has_video:
+                        self.logger.info(f"🎬 Slide has video elements - rendering frame-by-frame")
+                        # Download video files first
+                        video_elements = [elem for elem in page.get('elements', []) if elem.get('type') == 'video']
+                        video_files = {}
+                        for idx, video_elem in enumerate(video_elements):
+                            video_url = video_elem.get('src')
+                            if video_url:
+                                video_file = self._download_video(video_url, frames_dir, f"video_{slide_idx}_{idx}", customer_id, user_id)
+                                if video_file:
+                                    video_files[video_elem.get('id')] = video_file
+
+                        # Render each frame with video
+                        for frame_idx in range(num_frames):
+                            frame_time = frame_idx / fps
+                            frame_image = self._render_slide_with_video(page, canvas_width, canvas_height, customer_id, user_id, frame_time, video_files, fps)
+                            frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
+                            frame_image.save(frame_path, 'PNG', compress_level=1)
+                            frame_image.close()
+                            frame_number += 1
+                            frames_saved += 1
+
+                            # Update progress every 50 frames
+                            if frame_idx > 0 and frame_idx % 50 == 0:
+                                progress = int((frames_saved / total_frames_needed) * 70) + 10
+                                if job_id and customer_id:
+                                    self._update_export_job(job_id, customer_id, {
+                                        "progress": progress,
+                                        "current_step": f"Rendering frames: {frames_saved}/{total_frames_needed}"
+                                    })
+                                self.logger.info(f"💾 Progress: {frame_idx}/{num_frames} frames ({progress}%)")
+                    else:
+                        # No video - just save the same frame multiple times (for animations)
+                        for frame_idx in range(num_frames):
+                            frame_path = os.path.join(frames_dir, f"frame_{frame_number:05d}.png")
+                            slide_image.save(frame_path, 'PNG', compress_level=1)
+                            frame_number += 1
+                            frames_saved += 1
+
+                            # Update progress every 50 frames (more frequent updates)
+                            if frame_idx > 0 and frame_idx % 50 == 0:
+                                progress = int((frames_saved / total_frames_needed) * 70) + 10  # 10-80%
+                                if job_id and customer_id:
+                                    self._update_export_job(job_id, customer_id, {
+                                        "progress": progress,
+                                        "current_step": f"Rendering frames: {frames_saved}/{total_frames_needed}"
+                                    })
+                                self.logger.info(f"💾 Progress: {frame_idx}/{num_frames} frames ({progress}%)")
 
                     self.logger.info(f"✅ Slide {slide_idx + 1} saved ({num_frames} frames)")
 
@@ -570,6 +608,38 @@ class ExportService:
         except Exception as e:
             self.logger.error(f"❌ Error rendering slides to frames: {e}", exc_info=True)
             raise
+
+    def _render_slide_with_video(
+        self,
+        page: Dict[str, Any],
+        width: int,
+        height: int,
+        customer_id: str,
+        user_id: str,
+        frame_time: float,
+        video_files: Dict[str, str],
+        fps: int
+    ) -> Image.Image:
+        """Render a single slide at a specific time (for video elements)"""
+        try:
+            # Create blank canvas
+            background = page.get('background', {})
+            bg_color = background.get('color', '#FFFFFF')
+            img = Image.new('RGB', (width, height), color=bg_color)
+            draw = ImageDraw.Draw(img)
+
+            # Render elements
+            elements = page.get('elements', [])
+            sorted_elements = sorted(elements, key=lambda e: e.get('zIndex', 0))
+
+            for element in sorted_elements:
+                self._render_element_with_video(img, draw, element, width, height, customer_id, user_id, frame_time, video_files, fps)
+
+            return img
+
+        except Exception as e:
+            self.logger.error(f"❌ Error rendering slide with video: {e}", exc_info=True)
+            return Image.new('RGB', (width, height), color='white')
 
     def _render_slide(self, page: Dict[str, Any], width: int, height: int, customer_id: str, user_id: str) -> Image.Image:
         """Render a single slide to an image"""
@@ -723,6 +793,52 @@ class ExportService:
                 else:
                     self.logger.warning(f"⚠️ Failed to download/render image")
 
+            elif elem_type == 'video':
+                # Render video element - download thumbnail or first frame
+                x = int(element.get('x', 0))
+                y = int(element.get('y', 0))
+                w = int(element.get('width', 100))
+                h = int(element.get('height', 100))
+                video_src = element.get('src', '')
+
+                self.logger.info(f"🎬 Video element - position: ({x}, {y}), size: {w}x{h}")
+                self.logger.info(f"   Video URL: {video_src}")
+
+                # Try to download and render the video thumbnail
+                # For now, we'll treat it like an image element
+                if video_src:
+                    # Check if there's a thumbnail URL
+                    thumbnail_url = element.get('thumbnail') or video_src
+
+                    # Download the thumbnail/video
+                    video_img = self._download_image(thumbnail_url, customer_id, user_id)
+                    if video_img:
+                        # Resize to fit the video element dimensions
+                        video_img = video_img.resize((w, h))
+
+                        # Paste onto the canvas
+                        self.logger.info(f"   Pasting video thumbnail at ({x}, {y}) with size {w}x{h}")
+                        img.paste(video_img, (x, y), video_img if video_img.mode == 'RGBA' else None)
+                        video_img.close()
+                        self.logger.info(f"✅ Video thumbnail rendered successfully")
+                    else:
+                        # Fallback: draw black rectangle with "VIDEO" text
+                        self.logger.warning(f"⚠️ Failed to download video thumbnail, using placeholder")
+                        draw.rectangle([x, y, x + w, y + h], fill='#000000')
+                        try:
+                            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+                        except:
+                            font = ImageFont.load_default()
+                        text = "VIDEO"
+                        bbox = draw.textbbox((0, 0), text, font=font)
+                        text_width = bbox[2] - bbox[0]
+                        text_height = bbox[3] - bbox[1]
+                        text_x = x + (w - text_width) // 2
+                        text_y = y + (h - text_height) // 2
+                        draw.text((text_x, text_y), text, fill='#FFFFFF', font=font)
+                else:
+                    self.logger.warning(f"⚠️ Video element has no src, skipping")
+
             elif elem_type == 'shape':
                 # Render basic shapes
                 x = int(element.get('x', 0))
@@ -744,6 +860,78 @@ class ExportService:
         except Exception as e:
             self.logger.error(f"❌ Error rendering element {element.get('type')}: {e}", exc_info=True)
             self.logger.error(f"   Element data: {element}")
+
+    def _render_element_with_video(
+        self,
+        img: Image.Image,
+        draw: ImageDraw.Draw,
+        element: Dict[str, Any],
+        width: int,
+        height: int,
+        customer_id: str,
+        user_id: str,
+        frame_time: float,
+        video_files: Dict[str, str],
+        fps: int
+    ):
+        """Render a single element with video support at a specific time"""
+        try:
+            elem_type = element.get('type')
+
+            if elem_type == 'video':
+                # Render video frame at specific time
+                x = int(element.get('x', 0))
+                y = int(element.get('y', 0))
+                w = int(element.get('width', 100))
+                h = int(element.get('height', 100))
+                elem_id = element.get('id')
+
+                video_file = video_files.get(elem_id)
+                if video_file and os.path.exists(video_file):
+                    try:
+                        # Extract frame from video at frame_time using FFmpeg
+                        import subprocess
+                        import tempfile
+
+                        # Create temp file for extracted frame
+                        temp_frame = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                        temp_frame_path = temp_frame.name
+                        temp_frame.close()
+
+                        # Use FFmpeg to extract frame at specific time
+                        cmd = [
+                            'ffmpeg',
+                            '-ss', str(frame_time),
+                            '-i', video_file,
+                            '-frames:v', '1',
+                            '-y',
+                            temp_frame_path
+                        ]
+
+                        subprocess.run(cmd, capture_output=True, check=True)
+
+                        # Load and composite the frame
+                        video_frame = Image.open(temp_frame_path)
+                        video_frame = video_frame.resize((w, h))
+                        img.paste(video_frame, (x, y))
+                        video_frame.close()
+
+                        # Clean up temp file
+                        os.unlink(temp_frame_path)
+
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Failed to extract video frame at {frame_time}s: {e}")
+                        # Draw placeholder
+                        draw.rectangle([x, y, x + w, y + h], fill='#000000')
+                else:
+                    # No video file - draw placeholder
+                    draw.rectangle([x, y, x + w, y + h], fill='#000000')
+            else:
+                # For non-video elements, use the regular rendering method
+                self._render_element(img, draw, element, width, height, customer_id, user_id)
+
+        except Exception as e:
+            self.logger.error(f"❌ Error rendering element with video {element.get('type')}: {e}", exc_info=True)
 
     def _mix_audio_tracks(
         self,
@@ -1110,20 +1298,72 @@ class ExportService:
             self.logger.warning(f"Error downloading image {url}: {e}")
             return None
 
+    def _download_video(self, url: str, export_dir: str, filename: str, customer_id: str, user_id: str) -> Optional[str]:
+        """
+        Download video file from URL
+
+        Handles both relative URLs (e.g., /api/assets/...) and absolute URLs.
+        For relative URLs, converts them to absolute URLs using the asset-service.
+        """
+        try:
+            output_path = os.path.join(export_dir, f"{filename}.mp4")
+
+            # Convert relative URL to absolute URL if needed
+            if url.startswith('/api/'):
+                # Asset service URL - call asset-service directly
+                full_url = f"{self.config.ASSET_SERVICE_URL}{url}"
+                self.logger.info(f"🔗 Converting video URL to asset-service: {url} -> {full_url}")
+            elif url.startswith('/'):
+                # Other relative URL - prepend asset service URL
+                full_url = f"{self.config.ASSET_SERVICE_URL}{url}"
+                self.logger.info(f"🔗 Converting relative URL to absolute: {url} -> {full_url}")
+            else:
+                full_url = url
+
+            self.logger.info(f"📥 Downloading video from URL: {full_url}")
+
+            # Add authentication headers for internal API calls
+            headers = {
+                'x-customer-id': customer_id,
+                'x-user-id': user_id
+            }
+
+            # Download video
+            response = requests.get(full_url, headers=headers, timeout=60, stream=True)
+            response.raise_for_status()
+
+            with open(output_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+
+            self.logger.info(f"✅ Successfully downloaded video to: {output_path}")
+            return output_path
+
+        except Exception as e:
+            self.logger.error(f"❌ Error downloading video {url}: {e}", exc_info=True)
+            return None
+
     def _download_audio(self, url: str, export_dir: str, filename: str, customer_id: str, user_id: str) -> Optional[str]:
         """
         Download audio file from URL
 
         Handles both relative URLs (e.g., /api/audio-studio/library/...) and absolute URLs.
-        For relative URLs, converts them to absolute URLs using the API server.
+        For relative URLs, converts them to absolute URLs using the asset-service directly.
         """
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
             # Convert relative URL to absolute URL if needed
-            if url.startswith('/'):
-                # Relative URL - prepend API server URL
-                full_url = f"{self.config.API_SERVER_URL}{url}"
+            if url.startswith('/api/audio-studio/library/'):
+                # Audio library URL - call asset-service directly
+                # Extract the path after /api/
+                asset_path = url.replace('/api/', '')
+                full_url = f"{self.config.ASSET_SERVICE_URL}/api/{asset_path}"
+                self.logger.info(f"🔗 Converting audio library URL to asset-service: {url} -> {full_url}")
+            elif url.startswith('/'):
+                # Other relative URL - prepend asset service URL
+                full_url = f"{self.config.ASSET_SERVICE_URL}{url}"
                 self.logger.info(f"🔗 Converting relative URL to absolute: {url} -> {full_url}")
             else:
                 full_url = url

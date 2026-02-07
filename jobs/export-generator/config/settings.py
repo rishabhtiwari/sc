@@ -78,11 +78,8 @@ class Config:
     HTTP_TIMEOUT = int(os.getenv('HTTP_TIMEOUT', 30))
 
     # Asset Service Configuration
-    # Note: Asset service also handles /api/audio-studio/* endpoints
+    # Note: Asset service handles /api/audio-studio/* and /api/assets/* endpoints
     ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://ichat-asset-service:8099')
-
-    # API Server Configuration (for downloading audio/video files)
-    API_SERVER_URL = os.getenv('API_SERVER_URL', 'http://ichat-api-server:8000')
 
     @classmethod
     def validate_config(cls):

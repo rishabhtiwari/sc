@@ -1018,8 +1018,6 @@ services:
       - TEMP_DIR=/app/temp
       - MAX_EXPORT_SIZE_MB=500
       - EXPORT_TIMEOUT=600
-      # API Server Configuration (for downloading audio/video files)
-      - API_SERVER_URL=http://ichat-api-server:8000
     volumes:
       - ./jobs/export-generator/logs:/app/logs
       - ./jobs/export-generator/temp:/app/temp
