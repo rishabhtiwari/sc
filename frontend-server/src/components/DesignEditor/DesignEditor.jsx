@@ -259,7 +259,7 @@ const DesignEditor = () => {
       const deltaY = timelineResizeStartRef.current.y - e.clientY;
       const newHeight = timelineResizeStartRef.current.height + deltaY;
       const clampedHeight = Math.max(150, Math.min(1000, newHeight));
-      console.log('📏 Resizing timeline - deltaY:', deltaY, 'newHeight:', clampedHeight);
+      console.log('📏 Resizing timeline - startY:', timelineResizeStartRef.current.y, 'currentY:', e.clientY, 'deltaY:', deltaY, 'startHeight:', timelineResizeStartRef.current.height, 'newHeight:', newHeight, 'clampedHeight:', clampedHeight);
       // Min: 150px, Max: 1000px (allow more flexibility)
       setTimelineHeight(clampedHeight);
     };
