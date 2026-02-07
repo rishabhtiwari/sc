@@ -255,7 +255,8 @@ const DesignEditor = () => {
       // Calculate delta: dragging UP (negative) should INCREASE height
       const deltaY = timelineResizeStartRef.current.y - e.clientY;
       const newHeight = timelineResizeStartRef.current.height + deltaY;
-      setTimelineHeight(Math.max(200, Math.min(800, newHeight)));
+      // Min: 150px, Max: 1000px (allow more flexibility)
+      setTimelineHeight(Math.max(150, Math.min(1000, newHeight)));
     };
 
     const handleMouseUp = () => {
@@ -1493,12 +1494,12 @@ const DesignEditor = () => {
         {/* Audio Timeline with Resize Handle */}
         {(audioTracks.length > 0 || videoTracks.length > 0) && (
           <div
-            className="relative border-t border-gray-200"
+            className="relative border-t border-gray-200 bg-gray-50"
             style={{ height: `${timelineHeight}px` }}
           >
             {/* Resize Handle - Larger hit area */}
             <div
-              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize hover:bg-blue-200 transition-colors z-50 group flex items-center justify-center bg-gray-100 border-b border-gray-300"
               onMouseDown={(e) => {
                 e.preventDefault();
                 // Capture initial position and height
@@ -1510,10 +1511,10 @@ const DesignEditor = () => {
               }}
               title="Drag to resize timeline"
             >
-              <div className="w-16 h-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
+              <div className="w-20 h-1 bg-gray-500 group-hover:bg-blue-600 rounded-full transition-colors"></div>
             </div>
 
-            <div className="h-full pt-2 flex flex-col">
+            <div className="h-full pt-3 flex flex-col">
               <AudioTimelineRefactored
                 audioTracks={audioTracks}
                 videoTracks={videoTracks}
