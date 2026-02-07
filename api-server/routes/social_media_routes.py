@@ -176,14 +176,20 @@ def instagram_oauth_initiate():
 
 @social_media_bp.route('/social-media/instagram/oauth/callback', methods=['GET'])
 def instagram_oauth_callback():
-    """Handle Instagram OAuth callback"""
+    """
+    Handle Instagram OAuth callback
+    NOTE: This endpoint is PUBLIC (no authentication required) because Facebook calls it
+    The state parameter contains customer_id and user_id for security
+    """
     try:
-        headers = get_request_headers_with_context()
-        # Forward query parameters
+        # Don't use get_request_headers_with_context() - this is a public callback from Facebook
+        # Forward query parameters (code, state, error)
         params = request.args.to_dict()
+
+        logger.info(f"📞 Instagram OAuth callback received with params: {params}")
+
         response = requests.get(
             f'{SOCIAL_MEDIA_SERVICE_URL}/api/instagram/oauth/callback',
-            headers=headers,
             params=params,
             timeout=30
         )

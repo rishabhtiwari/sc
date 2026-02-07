@@ -1903,6 +1903,11 @@ def instagram_oauth_initiate():
         master_app_id_str = str(master_app['_id'])
         state = f"{customer_id}:{user_id}:{master_app_id_str}"  # Pass customer, user, and master app context in state
 
+        # Log master app details for debugging
+        logger.info(f"🔍 Master App Details: app_id={master_app.get('app_id')}, platform={master_app.get('platform')}, name={master_app.get('app_name')}")
+        logger.info(f"🔍 Redirect URI: {master_app.get('redirect_uri', Config.INSTAGRAM_REDIRECT_URI)}")
+        logger.info(f"🔍 Scopes: {scopes}")
+
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
             f"client_id={master_app['app_id']}&"
@@ -1913,6 +1918,7 @@ def instagram_oauth_initiate():
         )
 
         logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}, master_app={master_app_id_str}")
+        logger.info(f"🔗 OAuth URL: {auth_url}")
 
         return jsonify({
             'status': 'success',
