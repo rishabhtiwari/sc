@@ -80,6 +80,9 @@ class Config:
     # Asset Service Configuration
     ASSET_SERVICE_URL = os.getenv('ASSET_SERVICE_URL', 'http://ichat-asset-service:8099')
 
+    # Audio Studio Service Configuration
+    AUDIO_STUDIO_SERVICE_URL = os.getenv('AUDIO_STUDIO_SERVICE_URL', 'http://audio-studio:3001')
+
     @classmethod
     def validate_config(cls):
         """Validate configuration settings"""

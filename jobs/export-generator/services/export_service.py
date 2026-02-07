@@ -1115,7 +1115,7 @@ class ExportService:
         try:
             output_path = os.path.join(export_dir, f"{filename}.wav")
 
-            # Handle both asset-service URLs and external URLs
+            # Handle internal service URLs and external URLs
             if url.startswith('/api/assets/download/'):
                 # Internal asset-service URL - make request to asset-service with auth headers
                 asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
@@ -1125,6 +1125,19 @@ class ExportService:
                     'x-user-id': user_id
                 }
                 response = requests.get(asset_service_url, headers=headers, timeout=30)
+                response.raise_for_status()
+                with open(output_path, 'wb') as f:
+                    f.write(response.content)
+                return output_path
+            elif url.startswith('/api/audio-studio/'):
+                # Internal audio-studio URL - make request to audio-studio service with auth headers
+                audio_studio_url = f"{self.config.AUDIO_STUDIO_SERVICE_URL}{url}"
+                self.logger.debug(f"Downloading audio from audio-studio: {audio_studio_url}")
+                headers = {
+                    'x-customer-id': customer_id,
+                    'x-user-id': user_id
+                }
+                response = requests.get(audio_studio_url, headers=headers, timeout=30)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
