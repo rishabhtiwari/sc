@@ -135,6 +135,9 @@ const CanvasElement = ({
       e.stopPropagation();
       setIsEditing(true);
       setEditText(element.text || '');
+      if (onEditingChange) {
+        onEditingChange(true);
+      }
     }
   };
 
@@ -147,6 +150,9 @@ const CanvasElement = ({
     if (editText !== element.text) {
       onUpdate({ text: editText });
     }
+    if (onEditingChange) {
+      onEditingChange(false);
+    }
   };
 
   const handleTextKeyDown = (e) => {
@@ -156,6 +162,9 @@ const CanvasElement = ({
     } else if (e.key === 'Escape') {
       setIsEditing(false);
       setEditText(element.text || '');
+      if (onEditingChange) {
+        onEditingChange(false);
+      }
     }
   };
 
@@ -222,7 +231,10 @@ const CanvasElement = ({
                 borderRadius: '4px',
                 outline: 'none',
                 resize: 'none',
-                background: 'white'
+                background: 'transparent',
+                WebkitBackgroundClip: 'border-box',
+                WebkitTextFillColor: element.color || 'black',
+                backgroundClip: 'border-box'
               }}
             />
           );

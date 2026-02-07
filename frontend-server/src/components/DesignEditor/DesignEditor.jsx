@@ -202,6 +202,7 @@ const DesignEditor = () => {
 
   // Properties Panel State (user can manually close/open)
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [isPropertiesPanelPinned, setIsPropertiesPanelPinned] = useState(true); // Auto-open by default
   const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(320); // Default 320px
   const [timelineHeight, setTimelineHeight] = useState(300); // Default 300px
   const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
@@ -212,12 +213,12 @@ const DesignEditor = () => {
   // Refs for resize tracking
   const timelineResizeStartRef = useRef({ y: 0, height: 0 });
 
-  // Auto-open Properties Panel when element is selected
+  // Auto-open Properties Panel when element is selected (only if pinned)
   useEffect(() => {
-    if (selectedElement) {
+    if (selectedElement && isPropertiesPanelPinned) {
       setIsPropertiesPanelOpen(true);
     }
-  }, [selectedElement]);
+  }, [selectedElement, isPropertiesPanelPinned]);
 
   // Handle properties panel resize
   useEffect(() => {
@@ -1600,6 +1601,8 @@ const DesignEditor = () => {
               }
             }}
             onClose={() => setIsPropertiesPanelOpen(false)}
+            isPinned={isPropertiesPanelPinned}
+            onTogglePin={() => setIsPropertiesPanelPinned(!isPropertiesPanelPinned)}
           />
           </div>
         </div>

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
  * Properties Panel - Edit selected element properties
  * Veed.io-inspired professional design with collapsible sections
  */
-const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
+const PropertiesPanel = ({ element, onUpdate, onDelete, onClose, isPinned, onTogglePin }) => {
   const [expandedSections, setExpandedSections] = useState({
     content: true,
     typography: true,
@@ -986,6 +986,18 @@ const PropertiesPanel = ({ element, onUpdate, onDelete, onClose }) => {
                 {element.type === 'text' ? '📝' : element.type === 'image' ? '🖼️' : element.type === 'audio' ? '🎵' : element.type === 'video' ? '🎬' : element.type === 'slide' ? '📊' : '⬜'}
               </span>
             </div>
+            {/* Pin/Unpin Button */}
+            {onTogglePin && (
+              <button
+                onClick={onTogglePin}
+                className={`w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 transition-colors ${isPinned ? 'text-blue-600' : 'text-gray-400'}`}
+                title={isPinned ? 'Unpin (manual mode)' : 'Pin (auto-open mode)'}
+              >
+                <svg className="w-5 h-5" fill={isPinned ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+              </button>
+            )}
             {/* Close Button */}
             {onClose && (
               <button
