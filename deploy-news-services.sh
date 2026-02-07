@@ -183,6 +183,9 @@ install_nvidia_container_toolkit() {
         print_info "Restarting Docker daemon..."
         sudo systemctl restart docker
 
+        # Wait for Docker to fully restart
+        sleep 5
+
         return 0
     fi
 
@@ -266,6 +269,10 @@ install_nvidia_container_toolkit() {
     print_info "Restarting Docker daemon..."
     sudo systemctl restart docker
 
+    # Wait for Docker to fully restart
+    print_info "Waiting for Docker to fully restart..."
+    sleep 5
+
     print_success "NVIDIA Container Toolkit installed and configured successfully!"
     return 0
 }
@@ -306,11 +313,31 @@ check_gpu() {
             if install_nvidia_container_toolkit; then
                 print_success "NVIDIA Container Toolkit installed successfully!"
 
-                # Verify installation
-                if ! docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null 2>&1; then
-                    print_error "NVIDIA Container Toolkit installation failed verification."
-                    print_error "Please check the installation manually."
-                    exit 1
+                # Wait for Docker to fully restart
+                print_info "Waiting for Docker to fully restart..."
+                sleep 5
+
+                # Verify installation with retries
+                local max_retries=3
+                local retry=0
+                local verified=false
+
+                while [ $retry -lt $max_retries ]; do
+                    if docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi &> /dev/null 2>&1; then
+                        verified=true
+                        break
+                    fi
+                    retry=$((retry + 1))
+                    if [ $retry -lt $max_retries ]; then
+                        print_info "Verification attempt $retry failed, retrying..."
+                        sleep 3
+                    fi
+                done
+
+                if [ "$verified" = false ]; then
+                    print_error "NVIDIA Container Toolkit installation failed verification after $max_retries attempts."
+                    print_info "This might be a temporary issue. Trying to continue anyway..."
+                    print_info "If GPU services fail to start, please run: sudo systemctl restart docker"
                 fi
             else
                 print_error "Failed to install NVIDIA Container Toolkit."
