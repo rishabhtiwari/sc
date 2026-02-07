@@ -251,16 +251,21 @@ const DesignEditor = () => {
   useEffect(() => {
     if (!isResizingTimeline) return;
 
+    console.log('📏 Timeline resize effect activated');
+
     const handleMouseMove = (e) => {
       e.preventDefault();
       // Calculate delta: dragging UP (negative) should INCREASE height
       const deltaY = timelineResizeStartRef.current.y - e.clientY;
       const newHeight = timelineResizeStartRef.current.height + deltaY;
+      const clampedHeight = Math.max(150, Math.min(1000, newHeight));
+      console.log('📏 Resizing timeline - deltaY:', deltaY, 'newHeight:', clampedHeight);
       // Min: 150px, Max: 1000px (allow more flexibility)
-      setTimelineHeight(Math.max(150, Math.min(1000, newHeight)));
+      setTimelineHeight(clampedHeight);
     };
 
     const handleMouseUp = () => {
+      console.log('📏 Timeline resize ended at height:', timelineHeight);
       setIsResizingTimeline(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
@@ -278,7 +283,7 @@ const DesignEditor = () => {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-  }, [isResizingTimeline]);
+  }, [isResizingTimeline, timelineHeight]);
 
   // Session Storage Hook (auto-save/restore)
   useSessionStorage({
@@ -1499,15 +1504,14 @@ const DesignEditor = () => {
 
         {/* Audio Timeline with Resize Handle */}
         {(audioTracks.length > 0 || videoTracks.length > 0) && (
-          <div
-            className="relative border-t border-gray-200 bg-gray-50"
-            style={{ height: `${timelineHeight}px` }}
-          >
-            {/* Resize Handle - Larger hit area */}
+          <>
+            {/* Resize Handle - ABOVE the timeline container */}
             <div
-              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize hover:bg-blue-200 transition-colors z-50 group flex items-center justify-center bg-gray-100 border-b border-gray-300"
+              className="relative h-2 cursor-ns-resize hover:bg-blue-300 transition-colors z-[100] group flex items-center justify-center bg-gray-200 border-y border-gray-400 shadow-sm"
               onMouseDown={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+                console.log('🖱️ Timeline resize started at Y:', e.clientY, 'Current height:', timelineHeight);
                 // Capture initial position and height
                 timelineResizeStartRef.current = {
                   y: e.clientY,
@@ -1516,11 +1520,16 @@ const DesignEditor = () => {
                 setIsResizingTimeline(true);
               }}
               title="Drag to resize timeline"
+              style={{ userSelect: 'none' }}
             >
-              <div className="w-20 h-1 bg-gray-500 group-hover:bg-blue-600 rounded-full transition-colors"></div>
+              <div className="w-24 h-1 bg-gray-600 group-hover:bg-blue-700 rounded-full transition-colors shadow-sm"></div>
             </div>
 
-            <div className="h-full pt-3 flex flex-col">
+            {/* Timeline Container */}
+            <div
+              className="relative bg-gray-50"
+              style={{ height: `${timelineHeight}px` }}
+            >
               <AudioTimelineRefactored
                 audioTracks={audioTracks}
                 videoTracks={videoTracks}
@@ -1544,7 +1553,7 @@ const DesignEditor = () => {
                 onPause={handlePause}
               />
             </div>
-          </div>
+          </>
         )}
       </div>
 
