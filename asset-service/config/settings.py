@@ -76,7 +76,10 @@ class Settings(BaseSettings):
     
     # Temp Directory
     TEMP_DIR: str = "/app/temp"
-    
+
+    # Export Generator Service
+    EXPORT_GENERATOR_URL: str = os.getenv("EXPORT_GENERATOR_URL", "http://job-export-generator:8101")
+
     class Config:
         env_file = ".env"
         case_sensitive = True

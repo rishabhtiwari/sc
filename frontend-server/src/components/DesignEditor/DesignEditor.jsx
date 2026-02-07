@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../../hooks/useToast';
 
@@ -22,6 +23,8 @@ import Sidebar from './Sidebar/Sidebar';
 import PropertiesPanel from './PropertiesPanel/PropertiesPanel';
 import AudioTimelineRefactored from './AudioTimeline/AudioTimelineRefactored';
 import ConfirmDialog from '../common/ConfirmDialog';
+import ExportDialog from './ExportDialog/ExportDialog';
+import ExportsListDialog from './ExportDialog/ExportsListDialog';
 
 /**
  * DesignEditor - Main component (refactored)
@@ -42,6 +45,8 @@ const DesignEditor = () => {
   const [selectedTool, setSelectedTool] = useState(location.state?.returnTool || 'text');
   const [zoom, setZoom] = useState(1);
   const [deleteDialog, setDeleteDialog] = useState({ isOpen: false, slideIndex: null });
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showExportsListDialog, setShowExportsListDialog] = useState(false);
 
   // Pages state (initialized with one default page)
   const [pages, setPages] = useState([{
@@ -197,17 +202,23 @@ const DesignEditor = () => {
 
   // Properties Panel State (user can manually close/open)
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [isPropertiesPanelPinned, setIsPropertiesPanelPinned] = useState(true); // Auto-open by default
   const [propertiesPanelWidth, setPropertiesPanelWidth] = useState(320); // Default 320px
   const [timelineHeight, setTimelineHeight] = useState(300); // Default 300px
   const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
   const [isResizingTimeline, setIsResizingTimeline] = useState(false);
 
-  // Auto-open Properties Panel when element is selected
+
+
+  // Refs for resize tracking
+  const timelineResizeStartRef = useRef({ y: 0, height: 0 });
+
+  // Auto-open Properties Panel when element is selected (only if pinned)
   useEffect(() => {
-    if (selectedElement) {
+    if (selectedElement && isPropertiesPanelPinned) {
       setIsPropertiesPanelOpen(true);
     }
-  }, [selectedElement]);
+  }, [selectedElement, isPropertiesPanelPinned]);
 
   // Handle properties panel resize
   useEffect(() => {
@@ -245,8 +256,12 @@ const DesignEditor = () => {
 
     const handleMouseMove = (e) => {
       e.preventDefault();
-      const newHeight = window.innerHeight - e.clientY;
-      setTimelineHeight(Math.max(200, Math.min(600, newHeight)));
+      // Calculate delta: dragging UP (negative) should INCREASE height
+      const deltaY = timelineResizeStartRef.current.y - e.clientY;
+      const newHeight = timelineResizeStartRef.current.height + deltaY;
+      const clampedHeight = Math.max(150, Math.min(800, newHeight));
+      // Min: 150px, Max: 800px
+      setTimelineHeight(clampedHeight);
     };
 
     const handleMouseUp = () => {
@@ -722,38 +737,47 @@ const DesignEditor = () => {
    */
   useEffect(() => {
     let animationFrame;
+    let lastTimestamp = null;
 
     if (isPlaying) {
       console.log('🎬 Playback loop started');
-      const updatePlayhead = () => {
-        setCurrentTime(prevTime => {
-          const newTime = prevTime + 0.016; // ~60fps
+      const updatePlayhead = (timestamp) => {
+        // Calculate delta time based on actual frame timing
+        if (lastTimestamp === null) {
+          lastTimestamp = timestamp;
+        }
+        const deltaTime = (timestamp - lastTimestamp) / 1000; // Convert to seconds
+        lastTimestamp = timestamp;
 
-          // Calculate total duration
+        setCurrentTime(prevTime => {
+          // Use actual delta time instead of fixed 0.016
+          const newTime = prevTime + deltaTime;
+
+          // Calculate total duration (must match AudioTimelineRefactored calculation)
           const totalDuration = (() => {
             const audioDuration = audioTracks.length > 0
               ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
               : 0;
+
+            const videoDuration = 0; // Videos are in page elements, not separate tracks
+
             const slidesDuration = pages.length > 0
               ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
               : 0;
-            return Math.max(audioDuration, slidesDuration, 30);
+
+            const contentDuration = Math.max(audioDuration, videoDuration, slidesDuration);
+            const calculated = contentDuration > 0 ? contentDuration : 30;
+
+            // Debug log once per second
+            if (Math.floor(newTime) !== Math.floor(prevTime)) {
+              console.log(`⏱️ Playback at ${newTime.toFixed(2)}s / ${calculated.toFixed(2)}s (audio: ${audioDuration.toFixed(2)}s, slides: ${slidesDuration.toFixed(2)}s)`);
+            }
+
+            return calculated;
           })();
 
-          // Stop playback when reaching the end
-          if (newTime >= totalDuration) {
-            setIsPlaying(false);
-            // Pause all audio
-            audioTracks.forEach(track => {
-              const audio = audioRefs.current[track.id];
-              if (audio && !audio.paused) {
-                audio.pause();
-              }
-            });
-            return totalDuration;
-          }
-
-          // Update audio elements
+          // Update audio elements and sync playhead with audio
+          let syncedTime = newTime;
           audioTracks.forEach(track => {
             const audio = audioRefs.current[track.id];
             if (audio) {
@@ -777,6 +801,18 @@ const DesignEditor = () => {
                     audio.play().catch(err => console.error('Audio play error:', err));
                   }
                 } else {
+                  // Sync playhead with actual audio time to prevent drift
+                  const actualAudioTime = audio.currentTime;
+                  const expectedTrackTime = actualAudioTime; // Since we're not stretching audio
+                  const expectedTimelineTime = track.startTime + expectedTrackTime;
+
+                  // If there's significant drift (>100ms), sync to audio time
+                  const drift = Math.abs(newTime - expectedTimelineTime);
+                  if (drift > 0.1 && isFinite(expectedTimelineTime)) {
+                    console.log(`🔄 Syncing playhead to audio: ${expectedTimelineTime.toFixed(2)}s (was ${newTime.toFixed(2)}s, drift: ${(drift * 1000).toFixed(0)}ms)`);
+                    syncedTime = expectedTimelineTime;
+                  }
+
                   // Check if audio needs to loop (reached end of original duration)
                   if (audio.currentTime >= originalDuration - 0.05) {
                     audio.currentTime = 0; // Loop back to start
@@ -790,6 +826,34 @@ const DesignEditor = () => {
               }
             }
           });
+
+          // Use synced time if we corrected for drift
+          const finalTime = syncedTime !== newTime ? syncedTime : newTime;
+
+          // Stop playback when reaching the end (check AFTER syncing)
+          if (finalTime >= totalDuration) {
+            console.log(`⏹️ Reached end of timeline at ${finalTime.toFixed(2)}s / ${totalDuration.toFixed(2)}s`);
+            setIsPlaying(false);
+            // Pause all audio
+            audioTracks.forEach(track => {
+              const audio = audioRefs.current[track.id];
+              if (audio && !audio.paused) {
+                audio.pause();
+              }
+            });
+            // Pause all videos
+            pages.forEach(page => {
+              page.elements.forEach(element => {
+                if (element.type === 'video') {
+                  const videoRef = videoElementRefs.current[element.id];
+                  if (videoRef && !videoRef.paused) {
+                    videoRef.pause();
+                  }
+                }
+              });
+            });
+            return totalDuration;
+          }
 
           // Update video elements on canvas
           pages.forEach((page, pageIndex) => {
@@ -854,7 +918,7 @@ const DesignEditor = () => {
             });
           });
 
-          return newTime;
+          return finalTime;
         });
 
         animationFrame = requestAnimationFrame(updatePlayhead);
@@ -1190,8 +1254,154 @@ const DesignEditor = () => {
     setEditedProjectName('');
   };
 
+  // Project Controls Component (to be rendered in portal)
+  const projectControls = (
+    <>
+      {/* Create New Project */}
+      <button
+        onClick={handleCreateNewProject}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        New Project
+      </button>
+
+      {/* Save Project */}
+      <button
+        onClick={handleSaveWithToast}
+        disabled={isSaving}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+      >
+        {isSaving ? (
+          <>
+            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Saving...
+          </>
+        ) : (
+          <>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            Save
+          </>
+        )}
+      </button>
+
+      {/* Load Project */}
+      <button
+        onClick={() => navigate('/asset-management/projects', { state: { fromEditor: true } })}
+        disabled={isLoading}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+        </svg>
+        Load
+      </button>
+
+      {/* Create Video */}
+      <button
+        onClick={() => setShowExportDialog(true)}
+        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+        title={!currentProject?.project_id ? 'Save your project first to enable export' : 'Create video, audio, or JSON export'}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Create Video
+        {!currentProject?.project_id && (
+          <span className="ml-1 text-xs bg-yellow-500 text-white px-2 py-0.5 rounded">Save first</span>
+        )}
+      </button>
+
+      {/* My Videos */}
+      <button
+        onClick={() => setShowExportsListDialog(true)}
+        disabled={!currentProject?.exports || currentProject.exports.length === 0}
+        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
+        title={currentProject?.exports?.length > 0 ? `View ${currentProject.exports.length} video(s)` : 'No videos yet'}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+        My Videos {currentProject?.exports?.length > 0 && `(${currentProject.exports.length})`}
+      </button>
+
+      {/* Project Name - Editable */}
+      <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
+        {isEditingProjectName ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={editedProjectName}
+              onChange={(e) => setEditedProjectName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveProjectName();
+                if (e.key === 'Escape') handleCancelEditingProjectName();
+              }}
+              className="px-3 py-1.5 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
+              placeholder="Enter project name"
+              autoFocus
+            />
+            <button
+              onClick={handleSaveProjectName}
+              className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              title="Save name"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </button>
+            <button
+              onClick={handleCancelEditingProjectName}
+              className="p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              title="Cancel"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <div className="text-sm text-gray-600">
+              <span className="font-medium">Project:</span>{' '}
+              <span className="text-gray-900">
+                {currentProject?.name || 'Untitled Project'}
+              </span>
+            </div>
+            {currentProject && (
+              <button
+                onClick={handleStartEditingProjectName}
+                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                title="Edit project name"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full bg-gray-50 relative">
+      {/* Render Project Controls in Portal */}
+      {typeof document !== 'undefined' && document.getElementById('project-controls-container') &&
+        ReactDOM.createPortal(
+          projectControls,
+          document.getElementById('project-controls-container')
+        )
+      }
+
       {/* Sidebar */}
       <Sidebar
           selectedTool={selectedTool}
@@ -1236,132 +1446,8 @@ const DesignEditor = () => {
           })}
         />
 
-      {/* Main Canvas Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Project Toolbar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Create New Project */}
-            <button
-              onClick={handleCreateNewProject}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              New Project
-            </button>
-
-            {/* Save Project */}
-            <button
-              onClick={handleSaveWithToast}
-              disabled={isSaving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
-            >
-              {isSaving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                  </svg>
-                  Save
-                </>
-              )}
-            </button>
-
-            {/* Load Project */}
-            <button
-              onClick={() => navigate('/asset-management/projects', { state: { fromEditor: true } })}
-              disabled={isLoading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 2 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-              </svg>
-              Load
-            </button>
-
-            {/* Export Project */}
-            <button
-              onClick={() => showToast('Export functionality coming soon', 'info')}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm flex items-center gap-2 shadow-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              Export
-            </button>
-          </div>
-
-          {/* Project Name - Editable */}
-          <div className="flex items-center gap-2">
-            {isEditingProjectName ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={editedProjectName}
-                  onChange={(e) => setEditedProjectName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSaveProjectName();
-                    } else if (e.key === 'Escape') {
-                      handleCancelEditingProjectName();
-                    }
-                  }}
-                  className="px-3 py-1.5 border border-blue-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"
-                  placeholder="Enter project name"
-                  autoFocus
-                />
-                <button
-                  onClick={handleSaveProjectName}
-                  className="p-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                  title="Save name"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </button>
-                <button
-                  onClick={handleCancelEditingProjectName}
-                  className="p-1.5 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                  title="Cancel"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Project:</span>{' '}
-                  <span className="text-gray-900">
-                    {currentProject?.name || 'Untitled Project'}
-                  </span>
-                </div>
-                {currentProject && (
-                  <button
-                    onClick={handleStartEditingProjectName}
-                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                    title="Edit project name"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
+      {/* Main Canvas Area - Full height container */}
+      <div className="flex-1 flex flex-col relative">
         {/* Page Navigation */}
         {pages.length > 1 && (
           <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-center">
@@ -1403,37 +1489,50 @@ const DesignEditor = () => {
           </div>
         )}
 
-        {/* Canvas */}
-        <Canvas
-          elements={currentPage?.elements || []}
-          selectedElement={selectedElement}
-          onSelectElement={handleSelectElement}
-          onUpdateElement={handleUpdateElement}
-          onDeleteElement={handleDeleteElement}
-          background={currentPage?.background}
-          registerVideoRef={registerVideoRef}
-          unregisterVideoRef={unregisterVideoRef}
-        />
+        {/* Canvas - Takes full available height */}
+        <div className="flex-1 overflow-hidden">
+          <Canvas
+            elements={currentPage?.elements || []}
+            selectedElement={selectedElement}
+            onSelectElement={handleSelectElement}
+            onUpdateElement={handleUpdateElement}
+            onDeleteElement={handleDeleteElement}
+            background={currentPage?.background}
+            registerVideoRef={registerVideoRef}
+            unregisterVideoRef={unregisterVideoRef}
+          />
+        </div>
 
-        {/* Audio Timeline with Resize Handle */}
+        {/* Audio Timeline - Absolutely positioned at bottom, can overlay canvas */}
         {(audioTracks.length > 0 || videoTracks.length > 0) && (
           <div
-            className="relative border-t border-gray-200"
+            className="absolute left-0 right-0 bottom-0 z-50"
             style={{ height: `${timelineHeight}px` }}
           >
-            {/* Resize Handle - Larger hit area */}
+            {/* Resize Handle - ABOVE the timeline container */}
             <div
-              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-100 transition-colors z-50 group flex items-center justify-center"
+              className="relative h-2 cursor-ns-resize hover:bg-blue-400 transition-colors z-[100] group flex items-center justify-center bg-gray-300 border-y-2 border-gray-500 shadow-lg"
               onMouseDown={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
+                // Capture initial position and height
+                timelineResizeStartRef.current = {
+                  y: e.clientY,
+                  height: timelineHeight
+                };
                 setIsResizingTimeline(true);
               }}
               title="Drag to resize timeline"
+              style={{ userSelect: 'none' }}
             >
-              <div className="w-16 h-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
+              <div className="w-32 h-1.5 bg-gray-700 group-hover:bg-blue-700 rounded-full transition-colors shadow-md"></div>
             </div>
 
-            <div className="h-full overflow-hidden pt-2">
+            {/* Timeline Container */}
+            <div
+              className="relative bg-white border-t-2 border-gray-300 shadow-2xl"
+              style={{ height: 'calc(100% - 8px)' }}
+            >
               <AudioTimelineRefactored
                 audioTracks={audioTracks}
                 videoTracks={videoTracks}
@@ -1461,10 +1560,10 @@ const DesignEditor = () => {
         )}
       </div>
 
-      {/* Properties Panel with Resize Handle - Always show if open, regardless of selection */}
+      {/* Properties Panel with Resize Handle - Absolutely positioned to extend full height */}
       {isPropertiesPanelOpen && (
         <div
-          className="relative bg-gray-50 border-l border-gray-200 flex flex-col h-full"
+          className="absolute top-0 right-0 bottom-0 bg-gray-50 border-l border-gray-200 flex flex-col shadow-lg z-40"
           style={{ width: `${propertiesPanelWidth}px` }}
         >
           {/* Resize Handle - Larger hit area */}
@@ -1502,9 +1601,24 @@ const DesignEditor = () => {
               }
             }}
             onClose={() => setIsPropertiesPanelOpen(false)}
+            isPinned={isPropertiesPanelPinned}
+            onTogglePin={() => setIsPropertiesPanelPinned(!isPropertiesPanelPinned)}
           />
           </div>
         </div>
+      )}
+
+      {/* Floating button to reopen properties panel when closed */}
+      {!isPropertiesPanelOpen && selectedElement && (
+        <button
+          onClick={() => setIsPropertiesPanelOpen(true)}
+          className="fixed right-4 top-1/2 -translate-y-1/2 z-30 bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-all"
+          title="Open properties panel"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
       )}
 
       {/* Delete Slide Confirmation Dialog */}
@@ -1580,6 +1694,31 @@ const DesignEditor = () => {
           </div>
         </div>
       )}
+
+      {/* Export Dialog */}
+      <ExportDialog
+        isOpen={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        project={currentProject}
+      />
+
+      {/* Exports List Dialog */}
+      <ExportsListDialog
+        isOpen={showExportsListDialog}
+        onClose={() => setShowExportsListDialog(false)}
+        project={currentProject}
+        onExportDeleted={async () => {
+          // Reload the project to get updated exports list
+          if (currentProject?.project_id) {
+            try {
+              const updatedProject = await handleLoadProject(currentProject.project_id);
+              console.log('✅ Project reloaded after export deletion');
+            } catch (error) {
+              console.error('❌ Failed to reload project after export deletion:', error);
+            }
+          }
+        }}
+      />
     </div>
   );
 };

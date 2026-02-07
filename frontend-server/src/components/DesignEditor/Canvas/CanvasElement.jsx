@@ -21,9 +21,9 @@ const CanvasElement = ({
   const [resizeHandle, setResizeHandle] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(element.text || '');
   const elementRef = useRef(null);
   const videoRef = useRef(null);
+  const editableRef = useRef(null);
 
   // Notify parent when editing state changes
   React.useEffect(() => {
@@ -134,28 +134,48 @@ const CanvasElement = ({
     if (element.type === 'text') {
       e.stopPropagation();
       setIsEditing(true);
-      setEditText(element.text || '');
+      if (onEditingChange) {
+        onEditingChange(true);
+      }
+      // Focus the editable div after state update
+      setTimeout(() => {
+        if (editableRef.current) {
+          editableRef.current.focus();
+          // Select all text
+          const range = document.createRange();
+          range.selectNodeContents(editableRef.current);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }, 0);
     }
   };
 
-  const handleTextChange = (e) => {
-    setEditText(e.target.value);
-  };
-
-  const handleTextBlur = () => {
+  const handleEditableBlur = () => {
     setIsEditing(false);
-    if (editText !== element.text) {
-      onUpdate({ text: editText });
+    const newText = editableRef.current?.innerText || '';
+    if (newText !== element.text) {
+      onUpdate({ text: newText });
+    }
+    if (onEditingChange) {
+      onEditingChange(false);
     }
   };
 
-  const handleTextKeyDown = (e) => {
+  const handleEditableKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleTextBlur();
+      handleEditableBlur();
     } else if (e.key === 'Escape') {
+      e.preventDefault();
       setIsEditing(false);
-      setEditText(element.text || '');
+      if (editableRef.current) {
+        editableRef.current.innerText = element.text || '';
+      }
+      if (onEditingChange) {
+        onEditingChange(false);
+      }
     }
   };
 
@@ -208,30 +228,21 @@ const CanvasElement = ({
           textStyle.WebkitTextStroke = element.textStroke;
         }
 
-        if (isEditing) {
-          return (
-            <textarea
-              value={editText}
-              onChange={handleTextChange}
-              onBlur={handleTextBlur}
-              onKeyDown={handleTextKeyDown}
-              autoFocus
-              style={{
-                ...textStyle,
-                border: '2px solid #3b82f6',
-                borderRadius: '4px',
-                outline: 'none',
-                resize: 'none',
-                background: 'white'
-              }}
-            />
-          );
-        }
-
         return (
           <div
-            style={textStyle}
+            ref={editableRef}
+            contentEditable={isEditing}
+            suppressContentEditableWarning={true}
+            onBlur={isEditing ? handleEditableBlur : undefined}
+            onKeyDown={isEditing ? handleEditableKeyDown : undefined}
             onDoubleClick={handleDoubleClick}
+            style={{
+              ...textStyle,
+              border: isEditing ? '2px solid #3b82f6' : 'none',
+              borderRadius: isEditing ? '4px' : '0',
+              outline: 'none',
+              userSelect: isEditing ? 'text' : 'none'
+            }}
           >
             {element.text}
           </div>

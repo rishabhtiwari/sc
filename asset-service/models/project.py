@@ -143,6 +143,7 @@ class Project(BaseModel):
     audioTracks: List[AudioTrack] = Field(default_factory=list)
     videoTracks: List[VideoTrack] = Field(default_factory=list)
     assetReferences: List[str] = Field(default_factory=list)
+    exports: List[Dict[str, Any]] = Field(default_factory=list)
     version: int = 1
     status: ProjectStatus = ProjectStatus.DRAFT
     tags: List[str] = Field(default_factory=list)

@@ -1,0 +1,45 @@
+# PyTorch CPU Base Image
+# This base image contains PyTorch CPU version pre-installed
+# Used by services that need PyTorch but don't require GPU acceleration
+FROM python:3.10-slim
+
+LABEL maintainer="News Automation Team"
+LABEL description="PyTorch CPU base image for Python services"
+LABEL pytorch.version="2.1.2"
+LABEL python.version="3.10"
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+ENV PYTHONUNBUFFERED=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Install PyTorch CPU version using direct wheel URLs for faster downloads
+# This avoids pip's dependency resolver and downloads pre-built wheels directly
+RUN pip install --no-cache-dir \
+    https://download.pytorch.org/whl/cpu/torch-2.1.2%2Bcpu-cp310-cp310-linux_x86_64.whl \
+    https://download.pytorch.org/whl/cpu/torchvision-0.16.2%2Bcpu-cp310-cp310-linux_x86_64.whl \
+    https://download.pytorch.org/whl/cpu/torchaudio-2.1.2%2Bcpu-cp310-cp310-linux_x86_64.whl
+
+# Install NumPy <2.0 for compatibility with most ML libraries
+RUN pip install --no-cache-dir "numpy>=1.20.0,<2.0"
+
+# Verify installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__} installed successfully')" && \
+    python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# Set working directory
+WORKDIR /app
+
+# Default command
+CMD ["/bin/bash"]
+
