@@ -155,7 +155,7 @@ const Timeline = ({
         <div
           className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none"
           style={{
-            left: `${padding.left + timeToPixels(currentTime)}px`,
+            left: `${padding.left + Math.min(timeToPixels(currentTime), timeToPixels(duration))}px`,
             zIndex: 9999
           }}
         >

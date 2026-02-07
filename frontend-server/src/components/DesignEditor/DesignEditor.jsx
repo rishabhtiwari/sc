@@ -747,15 +747,20 @@ const DesignEditor = () => {
           // Use actual delta time instead of fixed 0.016
           const newTime = prevTime + deltaTime;
 
-          // Calculate total duration
+          // Calculate total duration (must match AudioTimelineRefactored calculation)
           const totalDuration = (() => {
             const audioDuration = audioTracks.length > 0
               ? Math.max(...audioTracks.map(track => (track.startTime || 0) + (track.duration || 0)))
               : 0;
+
+            const videoDuration = 0; // Videos are in page elements, not separate tracks
+
             const slidesDuration = pages.length > 0
               ? pages.reduce((sum, s) => sum + (s.duration || 5), 0)
               : 0;
-            const calculated = Math.max(audioDuration, slidesDuration, 30);
+
+            const contentDuration = Math.max(audioDuration, videoDuration, slidesDuration);
+            const calculated = contentDuration > 0 ? contentDuration : 30;
 
             // Debug log once per second
             if (Math.floor(newTime) !== Math.floor(prevTime)) {
