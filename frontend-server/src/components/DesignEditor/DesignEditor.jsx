@@ -1608,6 +1608,19 @@ const DesignEditor = () => {
         </div>
       )}
 
+      {/* Floating button to reopen properties panel when closed */}
+      {!isPropertiesPanelOpen && selectedElement && (
+        <button
+          onClick={() => setIsPropertiesPanelOpen(true)}
+          className="fixed right-4 top-1/2 -translate-y-1/2 z-30 bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-all"
+          title="Open properties panel"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+
       {/* Delete Slide Confirmation Dialog */}
       <ConfirmDialog
         isOpen={deleteDialog.isOpen}
