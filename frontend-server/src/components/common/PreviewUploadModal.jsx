@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal } from './index';
+import { Modal, AuthenticatedVideo } from './index';
 import { PLATFORMS, getConnectedAccounts, uploadToPlatform } from '../../services/uploadService';
 import { useToast } from '../../hooks/useToast';
 
@@ -153,10 +153,11 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
           <div className="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
             {asset.preview_url || asset.url || asset.video_url ? (
               asset.type === 'video' || asset.video_url ? (
-                <video
+                <AuthenticatedVideo
                   src={asset.preview_url || asset.url || asset.video_url}
                   controls
                   className="w-full h-full"
+                  autoPlay={false}
                 />
               ) : (
                 <img
