@@ -1195,7 +1195,7 @@ const DesignEditor = () => {
   };
 
   return (
-    <div className="flex h-full bg-gray-50">
+    <div className="flex h-full bg-gray-50 relative">
       {/* Sidebar */}
       <Sidebar
           selectedTool={selectedTool}
@@ -1454,7 +1454,7 @@ const DesignEditor = () => {
               <div className="w-16 h-1 bg-gray-400 group-hover:bg-blue-500 rounded-full transition-colors"></div>
             </div>
 
-            <div className="h-full overflow-hidden pt-2">
+            <div className="h-full pt-2 flex flex-col">
               <AudioTimelineRefactored
                 audioTracks={audioTracks}
                 videoTracks={videoTracks}
@@ -1482,10 +1482,10 @@ const DesignEditor = () => {
         )}
       </div>
 
-      {/* Properties Panel with Resize Handle - Always show if open, regardless of selection */}
+      {/* Properties Panel with Resize Handle - Absolutely positioned to extend full height */}
       {isPropertiesPanelOpen && (
         <div
-          className="relative bg-gray-50 border-l border-gray-200 flex flex-col h-full"
+          className="absolute top-0 right-0 bottom-0 bg-gray-50 border-l border-gray-200 flex flex-col shadow-lg z-40"
           style={{ width: `${propertiesPanelWidth}px` }}
         >
           {/* Resize Handle - Larger hit area */}

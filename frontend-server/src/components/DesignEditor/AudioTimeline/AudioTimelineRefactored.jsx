@@ -56,7 +56,19 @@ const AudioTimelineRefactored = ({
       : 0;
 
     const contentDuration = Math.max(audioDuration, videoDuration, slidesDuration, duration || 0);
-    return contentDuration > 0 ? contentDuration : 30;
+    const finalDuration = contentDuration > 0 ? contentDuration : 30;
+
+    console.log('📊 Timeline Duration Calculation:', {
+      audioDuration,
+      videoDuration,
+      slidesDuration,
+      propDuration: duration,
+      contentDuration,
+      finalDuration,
+      audioTracks: audioTracks.map(t => ({ id: t.id, start: t.startTime, dur: t.duration, end: (t.startTime || 0) + (t.duration || 0) }))
+    });
+
+    return finalDuration;
   })();
 
   // Audio track color coding
@@ -125,9 +137,9 @@ const AudioTimelineRefactored = ({
   };
 
   return (
-    <div className="bg-white border-t border-gray-200 flex flex-col" style={{ height: '300px', flexShrink: 0 }}>
+    <div className="bg-white border-t border-gray-200 flex flex-col h-full">
       {/* Timeline Header */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           {/* Play/Pause Button */}
           <button
