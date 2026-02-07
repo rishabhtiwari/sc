@@ -71,7 +71,14 @@ const InstagramCredentialsManager = () => {
       }
     } catch (error) {
       console.error('Error connecting Instagram:', error);
-      showToast(error.response?.data?.error || 'Failed to connect Instagram account', 'error');
+
+      // Handle specific error codes
+      if (error.response?.data?.code === 'NO_MASTER_APP') {
+        showToast('Instagram app not configured. Please contact your administrator.', 'error');
+      } else {
+        showToast(error.response?.data?.error || 'Failed to connect Instagram account', 'error');
+      }
+
       setConnecting(false);
     }
   };

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import UserManagementPage from './UserManagementPage';
 import RolesPermissionsPage from './RolesPermissionsPage';
 import AuditLogsPage from './AuditLogsPage';
+import { MasterAppManager } from '../components/SocialMedia';
 import { getCurrentUser } from '../services/authService';
 
 const SettingsPage = () => {
@@ -28,6 +29,16 @@ const SettingsPage = () => {
         </svg>
       ),
       permission: 'role.view'
+    },
+    {
+      id: 'social-apps',
+      name: 'Social Media Apps',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+        </svg>
+      ),
+      permission: 'admin'
     },
     {
       id: 'audit',
@@ -83,6 +94,7 @@ const SettingsPage = () => {
         <div className="p-6">
           {activeTab === 'users' && <UserManagementPage />}
           {activeTab === 'roles' && <RolesPermissionsPage />}
+          {activeTab === 'social-apps' && <MasterAppManager />}
           {activeTab === 'audit' && <AuditLogsPage />}
         </div>
       </div>

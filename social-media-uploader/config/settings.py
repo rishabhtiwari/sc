@@ -45,9 +45,8 @@ class Config:
     # Default Tags
     DEFAULT_TAGS = os.getenv('DEFAULT_TAGS', 'news,hindi news,breaking news,latest news').split(',')
 
-    # Instagram API Configuration
-    INSTAGRAM_APP_ID = os.getenv('INSTAGRAM_APP_ID', '')
-    INSTAGRAM_APP_SECRET = os.getenv('INSTAGRAM_APP_SECRET', '')
-    INSTAGRAM_REDIRECT_URI = os.getenv('INSTAGRAM_REDIRECT_URI', 'http://localhost:8097/api/instagram/oauth/callback')
+    # Instagram API Configuration (Default values - actual credentials come from Master App in DB)
+    # OAuth callback goes through API server (port 8080), not directly to this service
+    INSTAGRAM_REDIRECT_URI = os.getenv('INSTAGRAM_REDIRECT_URI', 'http://localhost:8080/api/social-media/instagram/oauth/callback')
     INSTAGRAM_SCOPES = ['instagram_basic', 'instagram_content_publish', 'pages_read_engagement']
 

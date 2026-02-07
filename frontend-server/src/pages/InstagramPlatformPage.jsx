@@ -1,6 +1,9 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { InstagramCredentialsManager } from '../components/InstagramUploader';
+import { Card } from '../components/common';
+import { listMasterApps } from '../services/socialMediaService';
+import { getCurrentUser } from '../services/authService';
 
 /**
  * Instagram Platform Management Page
@@ -8,6 +11,27 @@ import { InstagramCredentialsManager } from '../components/InstagramUploader';
  */
 const InstagramPlatformPage = () => {
   const navigate = useNavigate();
+  const [hasMasterApp, setHasMasterApp] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const currentUser = getCurrentUser();
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.permissions?.includes('admin');
+
+  useEffect(() => {
+    checkMasterApp();
+  }, []);
+
+  const checkMasterApp = async () => {
+    try {
+      setLoading(true);
+      const response = await listMasterApps({ platform: 'instagram', active_only: true });
+      setHasMasterApp(response.master_apps && response.master_apps.length > 0);
+    } catch (error) {
+      console.error('Error checking master app:', error);
+      setHasMasterApp(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -65,24 +89,56 @@ const InstagramPlatformPage = () => {
           </div>
         </div>
 
+        {/* Master App Warning Banner */}
+        {!loading && !hasMasterApp && (
+          <Card className="bg-yellow-50 border-yellow-200 mb-6">
+            <div className="flex items-start gap-4 p-6">
+              <div className="text-3xl">⚠️</div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-yellow-900 mb-2">Instagram App Not Configured</h3>
+                <p className="text-sm text-yellow-800 mb-3">
+                  Your administrator needs to configure an Instagram master app before you can connect accounts.
+                  The master app stores the OAuth credentials required for Instagram authentication.
+                </p>
+                {isAdmin && (
+                  <Link
+                    to="/settings?tab=social-apps"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors text-sm font-medium"
+                  >
+                    <span>⚙️</span>
+                    Configure Instagram App Now
+                  </Link>
+                )}
+                {!isAdmin && (
+                  <p className="text-xs text-yellow-700 mt-2">
+                    Please contact your administrator to set up the Instagram integration.
+                  </p>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Setup Instructions */}
-        <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <span>📋</span>
-            Before You Connect
-          </h3>
-          <div className="text-sm text-gray-700 space-y-2">
-            <p className="font-medium">Make sure you have:</p>
-            <ul className="ml-6 space-y-1">
-              <li className="list-disc">An Instagram Business or Creator account</li>
-              <li className="list-disc">A Facebook Page connected to your Instagram account</li>
-              <li className="list-disc">Admin access to the Facebook Page</li>
-            </ul>
-            <p className="mt-3 text-xs text-gray-600">
-              💡 <strong>Tip:</strong> To convert your Instagram account to Business, go to Instagram Settings → Account → Switch to Professional Account
-            </p>
+        {!loading && hasMasterApp && (
+          <div className="bg-blue-50 border-l-4 border-blue-500 p-6 rounded-lg mb-6">
+            <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <span>📋</span>
+              Before You Connect
+            </h3>
+            <div className="text-sm text-gray-700 space-y-2">
+              <p className="font-medium">Make sure you have:</p>
+              <ul className="ml-6 space-y-1">
+                <li className="list-disc">An Instagram Business or Creator account</li>
+                <li className="list-disc">A Facebook Page connected to your Instagram account</li>
+                <li className="list-disc">Admin access to the Facebook Page</li>
+              </ul>
+              <p className="mt-3 text-xs text-gray-600">
+                💡 <strong>Tip:</strong> To convert your Instagram account to Business, go to Instagram Settings → Account → Switch to Professional Account
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Credentials Manager */}
         <InstagramCredentialsManager />

@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request
 from pymongo import MongoClient
 from config import Config
-from services import YouTubeService, YouTubeMetadataBuilder
+from services import YouTubeService, YouTubeMetadataBuilder, MasterAppService
 import spacy
 
 # Add current directory to path for common utilities
@@ -69,6 +69,9 @@ youtube_service = YouTubeService(Config, db)
 
 # Initialize metadata builder (used for Shorts metadata only)
 metadata_builder = YouTubeMetadataBuilder()
+
+# Initialize Master App service for managing social media app credentials
+master_app_service = MasterAppService(db)
 
 
 def _extract_keywords_from_titles(news_items, keywords_per_article=2):
@@ -1629,6 +1632,235 @@ def delete_credential(credential_id):
 
 
 # ============================================================================
+# Master App Management Endpoints
+# ============================================================================
+
+@app.route('/api/master-apps', methods=['POST'])
+def create_master_app():
+    """Create a new master app for social media platform"""
+    try:
+        logger.info("📱 Creating new master app")
+
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+        user_id = user_context.get('user_id')
+
+        if not customer_id or not user_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id or user_id in headers'
+            }), 400
+
+        # Get request data
+        app_data = request.get_json()
+
+        # Create master app
+        master_app = master_app_service.create_master_app(customer_id, user_id, app_data)
+
+        return jsonify({
+            'status': 'success',
+            'master_app': master_app,
+            'message': 'Master app created successfully'
+        })
+
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"❌ Error creating master app: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/master-apps', methods=['GET'])
+def list_master_apps():
+    """List master apps for customer"""
+    try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id in headers'
+            }), 400
+
+        # Get query parameters
+        platform = request.args.get('platform')
+        active_only = request.args.get('active_only', 'false').lower() == 'true'
+
+        # List master apps
+        master_apps = master_app_service.list_master_apps(customer_id, platform, active_only)
+
+        return jsonify({
+            'status': 'success',
+            'master_apps': master_apps,
+            'count': len(master_apps)
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error listing master apps: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/master-apps/<app_id>', methods=['GET'])
+def get_master_app(app_id):
+    """Get a specific master app"""
+    try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id in headers'
+            }), 400
+
+        # Get master app
+        master_app = master_app_service.get_master_app(customer_id, app_id)
+
+        if not master_app:
+            return jsonify({
+                'status': 'error',
+                'error': 'Master app not found'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            'master_app': master_app
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error getting master app: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/master-apps/<app_id>', methods=['PUT'])
+def update_master_app(app_id):
+    """Update a master app"""
+    try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id in headers'
+            }), 400
+
+        # Get update data
+        update_data = request.get_json()
+
+        # Update master app
+        master_app = master_app_service.update_master_app(customer_id, app_id, update_data)
+
+        return jsonify({
+            'status': 'success',
+            'master_app': master_app,
+            'message': 'Master app updated successfully'
+        })
+
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"❌ Error updating master app: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/master-apps/<app_id>', methods=['DELETE'])
+def delete_master_app(app_id):
+    """Delete a master app"""
+    try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id in headers'
+            }), 400
+
+        # Delete master app
+        result = master_app_service.delete_master_app(customer_id, app_id)
+
+        return jsonify({
+            'status': 'success',
+            **result
+        })
+
+    except ValueError as e:
+        logger.error(f"❌ Validation error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 400
+    except Exception as e:
+        logger.error(f"❌ Error deleting master app: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/api/master-apps/<app_id>/activate', methods=['POST'])
+def activate_master_app(app_id):
+    """Activate or deactivate a master app"""
+    try:
+        # Extract user context
+        user_context = extract_user_context_from_headers(request.headers)
+        customer_id = user_context.get('customer_id')
+
+        if not customer_id:
+            return jsonify({
+                'status': 'error',
+                'error': 'Missing customer_id in headers'
+            }), 400
+
+        # Get activation state
+        data = request.get_json()
+        is_active = data.get('is_active', True)
+
+        # Update master app
+        master_app = master_app_service.update_master_app(customer_id, app_id, {'is_active': is_active})
+
+        return jsonify({
+            'status': 'success',
+            'master_app': master_app,
+            'message': f"Master app {'activated' if is_active else 'deactivated'} successfully"
+        })
+
+    except Exception as e:
+        logger.error(f"❌ Error activating master app: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+# ============================================================================
 # Instagram OAuth Endpoints
 # ============================================================================
 
@@ -1649,32 +1881,42 @@ def instagram_oauth_initiate():
                 'error': 'Missing customer_id or user_id in headers'
             }), 400
 
-        # Check if Instagram credentials are configured
-        if not Config.INSTAGRAM_APP_ID or not Config.INSTAGRAM_APP_SECRET:
+        # Get master app ID from query params (optional)
+        master_app_id = request.args.get('master_app_id')
+
+        # Get active master app for Instagram
+        if master_app_id:
+            master_app = master_app_service.get_master_app(customer_id, master_app_id, decrypt_secret=True)
+        else:
+            master_app = master_app_service.get_active_app_for_platform(customer_id, 'instagram', decrypt_secret=True)
+
+        if not master_app:
             return jsonify({
                 'status': 'error',
-                'error': 'Instagram API credentials not configured. Please set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET environment variables.'
-            }), 500
+                'error': 'No active Instagram app configured for your organization. Please contact your administrator to set up Instagram integration.',
+                'code': 'NO_MASTER_APP'
+            }), 400
 
-        # Build OAuth URL
+        # Build OAuth URL using master app credentials
         # Instagram uses Facebook OAuth for Instagram Business/Creator accounts
-        scopes = ','.join(Config.INSTAGRAM_SCOPES)
-        state = f"{customer_id}:{user_id}"  # Pass customer and user context in state
+        scopes = ','.join(master_app.get('scopes', Config.INSTAGRAM_SCOPES))
+        state = f"{customer_id}:{user_id}:{master_app['_id']}"  # Pass customer, user, and master app context in state
 
         auth_url = (
             f"https://www.facebook.com/v18.0/dialog/oauth?"
-            f"client_id={Config.INSTAGRAM_APP_ID}&"
-            f"redirect_uri={Config.INSTAGRAM_REDIRECT_URI}&"
+            f"client_id={master_app['app_id']}&"
+            f"redirect_uri={master_app.get('redirect_uri', Config.INSTAGRAM_REDIRECT_URI)}&"
             f"scope={scopes}&"
             f"state={state}&"
             f"response_type=code"
         )
 
-        logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}")
+        logger.info(f"✅ Generated Instagram OAuth URL for customer={customer_id}, user={user_id}, master_app={master_app['_id']}")
 
         return jsonify({
             'status': 'success',
-            'auth_url': auth_url
+            'auth_url': auth_url,
+            'master_app_id': master_app['_id']
         })
 
     except Exception as e:
@@ -1715,21 +1957,45 @@ def instagram_oauth_callback():
                 'error': 'Missing code or state parameter'
             }), 400
 
-        # Extract customer_id and user_id from state
+        # Extract customer_id, user_id, and master_app_id from state
         try:
-            customer_id, user_id = state.split(':')
+            state_parts = state.split(':')
+            if len(state_parts) == 3:
+                customer_id, user_id, master_app_id = state_parts
+            else:
+                # Fallback for old format (backward compatibility)
+                customer_id, user_id = state_parts
+                master_app_id = None
         except ValueError:
             return jsonify({
                 'status': 'error',
                 'error': 'Invalid state parameter'
             }), 400
 
-        # Exchange authorization code for access token
+        # Get master app credentials
+        if master_app_id:
+            master_app = master_app_service.get_master_app(customer_id, master_app_id, decrypt_secret=True)
+        else:
+            master_app = master_app_service.get_active_app_for_platform(customer_id, 'instagram', decrypt_secret=True)
+
+        if not master_app:
+            return f"""
+            <html>
+                <body>
+                    <h2>Instagram Connection Failed</h2>
+                    <p>No active Instagram app configured. Please contact your administrator.</p>
+                    <p>You can close this window.</p>
+                    <script>setTimeout(() => window.close(), 3000);</script>
+                </body>
+            </html>
+            """, 400
+
+        # Exchange authorization code for access token using master app credentials
         token_url = "https://graph.facebook.com/v18.0/oauth/access_token"
         token_params = {
-            'client_id': Config.INSTAGRAM_APP_ID,
-            'client_secret': Config.INSTAGRAM_APP_SECRET,
-            'redirect_uri': Config.INSTAGRAM_REDIRECT_URI,
+            'client_id': master_app['app_id'],
+            'client_secret': master_app['app_secret'],
+            'redirect_uri': master_app.get('redirect_uri', Config.INSTAGRAM_REDIRECT_URI),
             'code': code
         }
 
@@ -1800,15 +2066,22 @@ def instagram_oauth_callback():
         # Save credentials to MongoDB
         instagram_credentials_collection = db['instagram_credentials']
 
+        # Import encryption utility
+        from utils.encryption import encrypt_value
+        from bson import ObjectId
+
+        # Get customer's encryption key for encrypting access token
+        encryption_key = master_app_service._get_or_create_encryption_key(customer_id)
+
         credential_doc = {
             'customer_id': customer_id,
             'user_id': user_id,
+            'master_app_id': ObjectId(master_app['_id']),  # Reference to master app
             'instagram_user_id': instagram_account_id,
             'instagram_username': instagram_username,
-            'app_id': Config.INSTAGRAM_APP_ID,
-            'app_secret': Config.INSTAGRAM_APP_SECRET,
             'facebook_page_id': page_id,
-            'access_token': page_access_token,
+            'facebook_page_name': page_name,
+            'access_token': encrypt_value(page_access_token, encryption_key),  # Encrypt access token
             'is_active': True,
             'is_authenticated': True,
             'created_at': datetime.utcnow(),
@@ -1828,9 +2101,11 @@ def instagram_oauth_callback():
         if existing:
             # Update existing credential
             update_data = {
+                'master_app_id': ObjectId(master_app['_id']),
                 'instagram_username': instagram_username,
                 'facebook_page_id': page_id,
-                'access_token': page_access_token,
+                'facebook_page_name': page_name,
+                'access_token': encrypt_value(page_access_token, encryption_key),  # Encrypt access token
                 'is_active': True,
                 'is_authenticated': True,
                 'updated_at': datetime.utcnow()
@@ -1896,10 +2171,12 @@ def get_instagram_credentials():
         query = build_multi_tenant_query({}, customer_id=customer_id, user_id=user_id)
         credentials = list(instagram_credentials_collection.find(query))
 
-        # Convert ObjectId to string
+        # Convert ObjectId to string and remove sensitive data
         for cred in credentials:
             cred['_id'] = str(cred['_id'])
-            # Remove sensitive data
+            if 'master_app_id' in cred:
+                cred['master_app_id'] = str(cred['master_app_id'])
+            # Remove sensitive data (encrypted tokens)
             cred.pop('access_token', None)
             cred.pop('app_secret', None)
 
