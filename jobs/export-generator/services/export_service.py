@@ -1130,14 +1130,15 @@ class ExportService:
                     f.write(response.content)
                 return output_path
             elif url.startswith('/api/audio-studio/'):
-                # Internal audio-studio URL - make request to audio-studio service with auth headers
-                audio_studio_url = f"{self.config.AUDIO_STUDIO_SERVICE_URL}{url}"
-                self.logger.debug(f"Downloading audio from audio-studio: {audio_studio_url}")
+                # Internal audio-studio URL - served by asset-service
+                # The asset-service handles /api/audio-studio/* endpoints
+                asset_service_url = f"{self.config.ASSET_SERVICE_URL}{url}"
+                self.logger.debug(f"Downloading audio from asset-service (audio-studio): {asset_service_url}")
                 headers = {
                     'x-customer-id': customer_id,
                     'x-user-id': user_id
                 }
-                response = requests.get(audio_studio_url, headers=headers, timeout=30)
+                response = requests.get(asset_service_url, headers=headers, timeout=30)
                 response.raise_for_status()
                 with open(output_path, 'wb') as f:
                     f.write(response.content)
