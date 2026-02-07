@@ -618,8 +618,17 @@ class ExportService:
             # Render elements (text, images, shapes, videos)
             elements = page.get('elements', [])
             self.logger.info(f"🎭 Rendering {len(elements)} elements")
-            for idx, element in enumerate(sorted(elements, key=lambda e: e.get('zIndex', 0))):
-                self.logger.info(f"🔧 Rendering element {idx + 1}/{len(elements)}: type={element.get('type')}")
+
+            # Sort by zIndex (lower values render first = behind)
+            sorted_elements = sorted(elements, key=lambda e: e.get('zIndex', 0))
+            self.logger.info(f"📊 Element rendering order (by zIndex):")
+            for idx, elem in enumerate(sorted_elements):
+                self.logger.info(f"   {idx + 1}. type={elem.get('type')}, zIndex={elem.get('zIndex', 0)}, id={elem.get('id')}")
+
+            for idx, element in enumerate(sorted_elements):
+                elem_type = element.get('type')
+                z_index = element.get('zIndex', 0)
+                self.logger.info(f"🔧 Rendering element {idx + 1}/{len(elements)}: type={elem_type}, zIndex={z_index}")
                 self._render_element(img, draw, element, width, height, customer_id, user_id)
                 self.logger.info(f"✅ Element {idx + 1}/{len(elements)} rendered")
 
@@ -653,14 +662,18 @@ class ExportService:
                 text = element.get('text', "")
                 font_size = int(element.get('fontSize', 16))
                 color = element.get('color', '#000000')
+                text_width = int(element.get('width', width))  # Max width for text wrapping
+                text_height = int(element.get('height', height))
+                z_index = element.get('zIndex', 0)
 
                 # Log text element details for debugging
                 self.logger.info(f"📝 Text element details:")
                 self.logger.info(f"   Position: ({x}, {y})")
+                self.logger.info(f"   Size: {text_width}x{text_height}")
                 self.logger.info(f"   Text content: '{text}'")
                 self.logger.info(f"   Font size: {font_size}")
                 self.logger.info(f"   Color: {color}")
-                self.logger.info(f"   Full element data: {element}")
+                self.logger.info(f"   Z-Index: {z_index}")
 
                 # Validate text content
                 if not text or text.strip() == "":
@@ -675,12 +688,24 @@ class ExportService:
                     self.logger.warning(f"⚠️ Failed to load TrueType font: {font_error}, using default")
                     font = ImageFont.load_default()
 
-                draw.text((x, y), text, fill=color, font=font)
-                self.logger.info(f"✅ Text rendered successfully: '{text[:50]}...' at ({x}, {y})")
+                # Wrap text to fit within the specified width
+                wrapped_lines = self._wrap_text(text, font, text_width, draw)
+                self.logger.info(f"📏 Text wrapped into {len(wrapped_lines)} lines")
+
+                # Draw each line
+                current_y = y
+                line_height = font_size + int(font_size * 0.2)  # Add 20% line spacing
+
+                for line in wrapped_lines:
+                    draw.text((x, current_y), line, fill=color, font=font)
+                    current_y += line_height
+
+                self.logger.info(f"✅ Text rendered successfully: {len(wrapped_lines)} lines at ({x}, {y})")
 
             elif elem_type == 'image' and element.get('src'):
                 # Download and composite image
-                self.logger.info(f"🖼️ Image element - src: {element.get('src')}")
+                z_index = element.get('zIndex', 0)
+                self.logger.info(f"🖼️ Image element - src: {element.get('src')}, zIndex: {z_index}")
                 elem_img = self._download_image(element.get('src'), customer_id, user_id)
                 if elem_img:
                     # Resize and position
@@ -1115,6 +1140,51 @@ class ExportService:
         except Exception as e:
             self.logger.warning(f"Error downloading audio {url}: {e}")
             return None
+
+    def _wrap_text(self, text: str, font: ImageFont.FreeTypeFont, max_width: int, draw: ImageDraw.Draw) -> list:
+        """
+        Wrap text to fit within a specified width
+
+        Args:
+            text: The text to wrap
+            font: The font to use for measuring
+            max_width: Maximum width in pixels
+            draw: ImageDraw object for text measurement
+
+        Returns:
+            List of wrapped text lines
+        """
+        words = text.split()
+        lines = []
+        current_line = []
+
+        for word in words:
+            # Try adding this word to the current line
+            test_line = ' '.join(current_line + [word])
+
+            # Get the bounding box of the test line
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            text_width = bbox[2] - bbox[0]
+
+            if text_width <= max_width:
+                # Word fits, add it to current line
+                current_line.append(word)
+            else:
+                # Word doesn't fit
+                if current_line:
+                    # Save current line and start new one
+                    lines.append(' '.join(current_line))
+                    current_line = [word]
+                else:
+                    # Single word is too long, add it anyway
+                    lines.append(word)
+                    current_line = []
+
+        # Add the last line
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        return lines if lines else [text]
 
     def _create_gradient(self, width: int, height: int, gradient_config: Dict[str, Any]) -> Image.Image:
         """Create a gradient image"""
