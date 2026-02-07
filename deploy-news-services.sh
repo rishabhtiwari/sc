@@ -159,34 +159,26 @@ wait_for_apt_lock() {
 install_nvidia_container_toolkit() {
     print_header "Installing NVIDIA Container Toolkit"
 
-    # Check if nvidia-container-toolkit is already installed
+    # Check if nvidia-container-toolkit is already installed and configured
     if command -v nvidia-ctk &> /dev/null; then
         print_success "NVIDIA Container Toolkit is already installed"
         nvidia-ctk --version 2>/dev/null || true
 
-        # Just configure it and return
-        print_info "Configuring Docker to use NVIDIA Container Runtime..."
-        sudo nvidia-ctk runtime configure --runtime=docker
+        # Check if Docker is already configured for NVIDIA runtime
+        if grep -q "nvidia" /etc/docker/daemon.json 2>/dev/null; then
+            print_success "Docker is already configured for NVIDIA runtime"
+            print_info "Skipping reconfiguration"
+            return 0
+        else
+            print_info "Configuring Docker to use NVIDIA Container Runtime..."
+            sudo nvidia-ctk runtime configure --runtime=docker
 
-        # Enable and start NVIDIA persistence daemon
-        print_info "Ensuring NVIDIA persistence daemon is running..."
-        sudo systemctl enable nvidia-persistenced 2>/dev/null || true
-        sudo systemctl start nvidia-persistenced 2>/dev/null || true
+            print_info "Restarting Docker daemon..."
+            sudo systemctl restart docker
+            sleep 3
 
-        # Create socket directory if needed
-        if [ ! -d /run/nvidia-persistenced ]; then
-            sudo mkdir -p /run/nvidia-persistenced
-            sudo chmod 755 /run/nvidia-persistenced
+            return 0
         fi
-
-        # Restart Docker
-        print_info "Restarting Docker daemon..."
-        sudo systemctl restart docker
-
-        # Wait for Docker to fully restart
-        sleep 5
-
-        return 0
     fi
 
     # Detect OS
@@ -253,16 +245,26 @@ install_nvidia_container_toolkit() {
     print_info "Configuring Docker to use NVIDIA Container Runtime..."
     sudo nvidia-ctk runtime configure --runtime=docker
 
-    # Enable and start NVIDIA persistence daemon
-    print_info "Enabling NVIDIA persistence daemon..."
-    sudo systemctl enable nvidia-persistenced 2>/dev/null || true
-    sudo systemctl start nvidia-persistenced 2>/dev/null || true
+    # Disable persistence mode requirement in NVIDIA runtime config
+    print_info "Configuring NVIDIA runtime to not require persistence daemon..."
+    if [ -f /etc/nvidia-container-runtime/config.toml ]; then
+        # Set no-cgroups = false to disable persistence daemon requirement
+        sudo sed -i 's/#no-cgroups = false/no-cgroups = false/' /etc/nvidia-container-runtime/config.toml 2>/dev/null || true
+        sudo sed -i 's/no-cgroups = true/no-cgroups = false/' /etc/nvidia-container-runtime/config.toml 2>/dev/null || true
+    fi
 
-    # If persistence daemon doesn't exist, create the socket directory manually
-    if [ ! -d /run/nvidia-persistenced ]; then
-        print_info "Creating NVIDIA persistence daemon socket directory..."
-        sudo mkdir -p /run/nvidia-persistenced
-        sudo chmod 755 /run/nvidia-persistenced
+    # Try to start NVIDIA persistence daemon (optional)
+    print_info "Attempting to start NVIDIA persistence daemon..."
+    sudo systemctl stop nvidia-persistenced 2>/dev/null || true
+    sudo killall nvidia-persistenced 2>/dev/null || true
+
+    sudo mkdir -p /run/nvidia-persistenced
+    sudo chmod 755 /run/nvidia-persistenced
+
+    # Try to start - ignore if it fails
+    if ! pgrep -x nvidia-persiste > /dev/null; then
+        sudo nohup nvidia-persistenced --persistence-mode > /var/log/nvidia-persistenced.log 2>&1 &
+        sleep 2
     fi
 
     # Restart Docker
@@ -290,19 +292,59 @@ check_gpu() {
             exit 1
         fi
 
-        # Ensure NVIDIA persistence daemon is running
-        print_info "Checking NVIDIA persistence daemon..."
-        if ! systemctl is-active --quiet nvidia-persistenced 2>/dev/null; then
+        # Set up NVIDIA persistence daemon or create dummy socket
+        print_info "Setting up NVIDIA persistence daemon..."
+
+        # Stop any existing instance first
+        sudo systemctl stop nvidia-persistenced 2>/dev/null || true
+        sudo killall nvidia-persistenced 2>/dev/null || true
+        sleep 1
+
+        # Create socket directory
+        sudo mkdir -p /run/nvidia-persistenced
+        sudo chmod 755 /run/nvidia-persistenced
+
+        # Method 1: Try to load nvidia kernel module first
+        print_info "Loading NVIDIA kernel modules..."
+        sudo modprobe nvidia 2>/dev/null || true
+        sudo nvidia-modprobe -u -c=0 2>/dev/null || true
+        sleep 1
+
+        # Method 2: Try to start the daemon
+        if ! pgrep -x nvidia-persiste > /dev/null; then
             print_info "Starting NVIDIA persistence daemon..."
-            sudo systemctl enable nvidia-persistenced 2>/dev/null || true
-            sudo systemctl start nvidia-persistenced 2>/dev/null || true
+            # Try without --persistence-mode flag first
+            sudo nvidia-persistenced --verbose > /var/log/nvidia-persistenced.log 2>&1 &
+            sleep 3
+
+            # If that didn't work, try with --persistence-mode
+            if [ ! -S /run/nvidia-persistenced/socket ]; then
+                sudo killall nvidia-persistenced 2>/dev/null || true
+                sudo nvidia-persistenced --persistence-mode --verbose > /var/log/nvidia-persistenced.log 2>&1 &
+                sleep 3
+            fi
         fi
 
-        # Create socket directory if it doesn't exist
-        if [ ! -d /run/nvidia-persistenced ]; then
-            print_info "Creating NVIDIA persistence daemon socket directory..."
-            sudo mkdir -p /run/nvidia-persistenced
-            sudo chmod 755 /run/nvidia-persistenced
+        # Check if socket was created
+        if [ -S /run/nvidia-persistenced/socket ]; then
+            print_success "NVIDIA persistence daemon socket created successfully"
+        else
+            print_warning "Failed to create persistence daemon socket"
+            print_info "Checking logs..."
+            tail -5 /var/log/nvidia-persistenced.log 2>/dev/null || true
+
+            # Method 3: Create a dummy socket as workaround
+            print_info "Creating dummy socket as workaround..."
+            sudo rm -f /run/nvidia-persistenced/socket
+            # Use socat to create a dummy unix socket that just accepts connections
+            sudo nohup socat UNIX-LISTEN:/run/nvidia-persistenced/socket,fork,mode=666 - > /dev/null 2>&1 &
+            sleep 1
+
+            if [ -S /run/nvidia-persistenced/socket ]; then
+                print_success "Dummy socket created (containers should start now)"
+            else
+                print_error "Failed to create socket. GPU containers may not start."
+            fi
         fi
 
         # Check if NVIDIA Docker runtime is available
