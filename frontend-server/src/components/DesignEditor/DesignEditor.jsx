@@ -207,6 +207,11 @@ const DesignEditor = () => {
   const [isResizingPropertiesPanel, setIsResizingPropertiesPanel] = useState(false);
   const [isResizingTimeline, setIsResizingTimeline] = useState(false);
 
+  // Debug: Log timeline height changes
+  useEffect(() => {
+    console.log('📐 Timeline height changed to:', timelineHeight);
+  }, [timelineHeight]);
+
   // Refs for resize tracking
   const timelineResizeStartRef = useRef({ y: 0, height: 0 });
 
