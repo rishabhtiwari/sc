@@ -1123,9 +1123,16 @@ class ExportService:
             img = Image.new('RGB', (width, height))
             draw = ImageDraw.Draw(img)
 
+            # Handle None or empty gradient config
+            if gradient_config is None or not isinstance(gradient_config, dict):
+                self.logger.warning(f"⚠️ Invalid gradient config (None or not a dict), using default colors")
+                gradient_config = {}
+
             # Parse colors (simplified - assumes hex colors)
-            start_color = gradient_config.get('startColor', '#ffffff')
-            end_color = gradient_config.get('endColor', '#000000')
+            start_color = gradient_config.get('startColor', '#667eea')
+            end_color = gradient_config.get('endColor', '#764ba2')
+
+            self.logger.info(f"🎨 Creating gradient: {start_color} → {end_color}")
 
             # Convert hex to RGB
             start_rgb = tuple(int(start_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
@@ -1139,9 +1146,10 @@ class ExportService:
                 b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
                 draw.line([(0, y), (width, y)], fill=(r, g, b))
 
+            self.logger.info(f"✅ Gradient created successfully")
             return img
         except Exception as e:
-            self.logger.warning(f"Error creating gradient: {e}")
+            self.logger.error(f"❌ Error creating gradient: {e}", exc_info=True)
             return Image.new('RGB', (width, height), color='white')
 
     def _upload_export(
