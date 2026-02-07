@@ -366,7 +366,7 @@ download_coqui_model() {
     print_header "Downloading Coqui TTS Model"
 
     local model_dir="./coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2"
-    local abs_model_dir=$(cd "$(dirname "$0")" && pwd)"/coqui-tts-models/tts_models--multilingual--multi-dataset--xtts_v2"
+    local parent_dir="./coqui-tts-models"
 
     # Check if model already exists
     if [ -f "$model_dir/config.json" ]; then
@@ -378,7 +378,15 @@ download_coqui_model() {
     print_info "This is a one-time download (~2GB, may take 5-10 minutes)"
     echo ""
 
+    # Create parent directory first
+    if [ ! -d "$parent_dir" ]; then
+        print_info "Creating directory: $parent_dir"
+        mkdir -p "$parent_dir"
+        chmod 777 "$parent_dir"
+    fi
+
     # Create model directory
+    print_info "Creating directory: $model_dir"
     mkdir -p "$model_dir"
     chmod 777 "$model_dir"
 
@@ -767,7 +775,12 @@ deploy_all_services() {
 
     # Download Coqui TTS model if using GPU (model is needed for TTS service)
     if [ "$USE_GPU" = true ]; then
-        download_coqui_model
+        print_info "Checking Coqui TTS model..."
+        if ! download_coqui_model; then
+            print_error "Failed to download Coqui TTS model. Cannot proceed with GPU deployment."
+            print_info "Please check your internet connection and try again."
+            exit 1
+        fi
     fi
 
     # Build base Docker images first (if --build flag is set or images don't exist)
