@@ -124,9 +124,67 @@ check_docker() {
     print_success "Docker is running"
 }
 
+# Function to wait for apt lock to be released
+wait_for_apt_lock() {
+    local max_wait=300  # 5 minutes
+    local waited=0
+
+    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+
+        if [ $waited -ge $max_wait ]; then
+            print_error "Timeout waiting for apt lock to be released."
+            print_info "Another process (likely unattended-upgrades) is using apt."
+            print_info "You can manually stop it with: sudo systemctl stop unattended-upgrades"
+            return 1
+        fi
+
+        if [ $waited -eq 0 ]; then
+            print_info "Waiting for apt lock to be released (another process is using apt)..."
+        fi
+
+        sleep 5
+        waited=$((waited + 5))
+
+        if [ $((waited % 30)) -eq 0 ]; then
+            print_info "Still waiting... ($waited seconds elapsed)"
+        fi
+    done
+
+    return 0
+}
+
 # Function to install NVIDIA Container Toolkit
 install_nvidia_container_toolkit() {
     print_header "Installing NVIDIA Container Toolkit"
+
+    # Check if nvidia-container-toolkit is already installed
+    if command -v nvidia-ctk &> /dev/null; then
+        print_success "NVIDIA Container Toolkit is already installed"
+        nvidia-ctk --version 2>/dev/null || true
+
+        # Just configure it and return
+        print_info "Configuring Docker to use NVIDIA Container Runtime..."
+        sudo nvidia-ctk runtime configure --runtime=docker
+
+        # Enable and start NVIDIA persistence daemon
+        print_info "Ensuring NVIDIA persistence daemon is running..."
+        sudo systemctl enable nvidia-persistenced 2>/dev/null || true
+        sudo systemctl start nvidia-persistenced 2>/dev/null || true
+
+        # Create socket directory if needed
+        if [ ! -d /run/nvidia-persistenced ]; then
+            sudo mkdir -p /run/nvidia-persistenced
+            sudo chmod 755 /run/nvidia-persistenced
+        fi
+
+        # Restart Docker
+        print_info "Restarting Docker daemon..."
+        sudo systemctl restart docker
+
+        return 0
+    fi
 
     # Detect OS
     if [ -f /etc/os-release ]; then
@@ -141,6 +199,11 @@ install_nvidia_container_toolkit() {
 
     case "$OS" in
         ubuntu|debian)
+            # Wait for apt lock if needed
+            if ! wait_for_apt_lock; then
+                return 1
+            fi
+
             print_info "Installing prerequisites..."
             sudo apt-get update && sudo apt-get install -y --no-install-recommends curl gnupg2
 
@@ -187,6 +250,18 @@ install_nvidia_container_toolkit() {
     print_info "Configuring Docker to use NVIDIA Container Runtime..."
     sudo nvidia-ctk runtime configure --runtime=docker
 
+    # Enable and start NVIDIA persistence daemon
+    print_info "Enabling NVIDIA persistence daemon..."
+    sudo systemctl enable nvidia-persistenced 2>/dev/null || true
+    sudo systemctl start nvidia-persistenced 2>/dev/null || true
+
+    # If persistence daemon doesn't exist, create the socket directory manually
+    if [ ! -d /run/nvidia-persistenced ]; then
+        print_info "Creating NVIDIA persistence daemon socket directory..."
+        sudo mkdir -p /run/nvidia-persistenced
+        sudo chmod 755 /run/nvidia-persistenced
+    fi
+
     # Restart Docker
     print_info "Restarting Docker daemon..."
     sudo systemctl restart docker
@@ -206,6 +281,21 @@ check_gpu() {
             print_error "Please install NVIDIA drivers first:"
             print_error "https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/index.html"
             exit 1
+        fi
+
+        # Ensure NVIDIA persistence daemon is running
+        print_info "Checking NVIDIA persistence daemon..."
+        if ! systemctl is-active --quiet nvidia-persistenced 2>/dev/null; then
+            print_info "Starting NVIDIA persistence daemon..."
+            sudo systemctl enable nvidia-persistenced 2>/dev/null || true
+            sudo systemctl start nvidia-persistenced 2>/dev/null || true
+        fi
+
+        # Create socket directory if it doesn't exist
+        if [ ! -d /run/nvidia-persistenced ]; then
+            print_info "Creating NVIDIA persistence daemon socket directory..."
+            sudo mkdir -p /run/nvidia-persistenced
+            sudo chmod 755 /run/nvidia-persistenced
         fi
 
         # Check if NVIDIA Docker runtime is available
@@ -340,9 +430,47 @@ create_directories() {
     print_success "All necessary directories exist with proper permissions"
 }
 
+# Function to wait for apt lock to be released
+wait_for_apt_lock() {
+    local max_wait=300  # 5 minutes
+    local waited=0
+
+    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || \
+          sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1 || \
+          sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do
+
+        if [ $waited -ge $max_wait ]; then
+            print_error "Timeout waiting for apt lock to be released."
+            print_info "Another process (likely unattended-upgrades) is using apt."
+            print_info "You can manually stop it with: sudo systemctl stop unattended-upgrades"
+            return 1
+        fi
+
+        if [ $waited -eq 0 ]; then
+            print_info "Waiting for apt lock to be released (another process is using apt)..."
+        fi
+
+        sleep 5
+        waited=$((waited + 5))
+
+        if [ $((waited % 30)) -eq 0 ]; then
+            print_info "Still waiting... ($waited seconds elapsed)"
+        fi
+    done
+
+    return 0
+}
+
 # Function to install Docker Compose
 install_docker_compose() {
     print_header "Installing Docker Compose"
+
+    # Check if docker-compose is already installed
+    if command -v docker-compose &> /dev/null; then
+        print_success "Docker Compose is already installed"
+        docker-compose version | head -1
+        return 0
+    fi
 
     # Detect OS
     if [ -f /etc/os-release ]; then
@@ -355,12 +483,19 @@ install_docker_compose() {
 
     print_info "Detected OS: $OS"
 
-    # Fix any broken apt state first
-    print_info "Fixing any broken package state..."
-    sudo apt-get install -f -y 2>/dev/null || true
+    # Fix any broken apt state first (only for Debian-based)
+    if [ "$OS" = "ubuntu" ] || [ "$OS" = "debian" ]; then
+        print_info "Fixing any broken package state..."
+        sudo apt-get install -f -y 2>/dev/null || true
+    fi
 
     case "$OS" in
         ubuntu|debian)
+            # Wait for apt lock if needed
+            if ! wait_for_apt_lock; then
+                return 1
+            fi
+
             print_info "Updating package list..."
             sudo apt-get update
 
