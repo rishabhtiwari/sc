@@ -16,12 +16,12 @@ export const getConnectedAccounts = async (platform) => {
   switch (platform) {
     case 'youtube':
       const response = await api.get('/youtube/credentials');
-      return response.data.credentials || [];
-    
+      return response.data.data || []; // YouTube returns { status, data, count }
+
     case 'instagram':
       const igResponse = await api.get('/social-media/instagram/credentials');
-      return igResponse.data.credentials || [];
-    
+      return igResponse.data.credentials || []; // Instagram returns { status, credentials }
+
     // Add more platforms as needed
     default:
       throw new Error(`Platform ${platform} not supported`);
