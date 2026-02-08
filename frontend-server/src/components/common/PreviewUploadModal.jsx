@@ -6,15 +6,16 @@ import { useToast } from '../../hooks/useToast';
 /**
  * Preview and Upload Modal
  * Multi-step modal for previewing content and uploading to social media platforms
- * 
+ *
  * Steps:
  * 1. Preview - Show video/image preview
- * 2. Platform Selection - Choose platform and account
- * 3. Upload - Configure metadata and upload
+ * 2. Platform Selection - Choose platform
+ * 3. Account Selection - Choose account for selected platform
+ * 4. Upload - Configure metadata and upload
  */
 const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
   const { showToast } = useToast();
-  const [step, setStep] = useState(1); // 1: Preview, 2: Platform Selection, 3: Upload
+  const [step, setStep] = useState(1); // 1: Preview, 2: Platform, 3: Account, 4: Upload
   const [selectedPlatform, setSelectedPlatform] = useState(null);
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(null);
@@ -50,29 +51,31 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
 
   const handlePlatformSelect = async (platform) => {
     setSelectedPlatform(platform);
+    setSelectedAccount(null); // Reset account selection
     setLoading(true);
-    
+
     try {
       const connectedAccounts = await getConnectedAccounts(platform.id);
       setAccounts(connectedAccounts);
-      
+
       if (connectedAccounts.length === 0) {
         showToast(`No ${platform.name} accounts connected. Please connect an account first.`, 'warning');
+        setLoading(false);
         return;
       }
-      
-      // Auto-select first account if only one
-      if (connectedAccounts.length === 1) {
-        setSelectedAccount(connectedAccounts[0]);
-      }
-      
-      setStep(3); // Go to upload step
+
+      setLoading(false);
+      setStep(3); // Go to account selection step
     } catch (error) {
       console.error('Failed to load accounts:', error);
       showToast(`Failed to load ${platform.name} accounts`, 'error');
-    } finally {
       setLoading(false);
     }
+  };
+
+  const handleAccountSelect = (account) => {
+    setSelectedAccount(account);
+    setStep(4); // Go to upload configuration step
   };
 
   const handleUpload = async () => {
@@ -128,22 +131,37 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
   };
 
   const handleBack = () => {
-    if (step === 3) {
+    if (step === 4) {
+      // From upload config back to account selection
+      setStep(3);
+      setSelectedAccount(null);
+    } else if (step === 3) {
+      // From account selection back to platform selection
       setStep(2);
       setSelectedAccount(null);
     } else if (step === 2) {
+      // From platform selection back to preview
       setStep(1);
       setSelectedPlatform(null);
+      setAccounts([]);
     }
   };
 
   if (!asset) return null;
 
+  const getModalTitle = () => {
+    if (step === 1) return 'Preview';
+    if (step === 2) return 'Select Platform';
+    if (step === 3) return `Select ${selectedPlatform?.name} Account`;
+    if (step === 4) return `Upload to ${selectedPlatform?.name}`;
+    return 'Upload';
+  };
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={step === 1 ? 'Preview' : step === 2 ? 'Select Platform' : `Upload to ${selectedPlatform?.name}`}
+      title={getModalTitle()}
       size="large"
     >
       {/* Step 1: Preview */}
@@ -237,6 +255,81 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
             ))}
           </div>
 
+          {/* Loading state */}
+          {loading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="ml-4 text-gray-600">Loading accounts...</p>
+            </div>
+          )}
+
+          <div className="flex justify-between pt-4">
+            <button
+              onClick={handleBack}
+              disabled={loading}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Account Selection */}
+      {step === 3 && selectedPlatform && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${selectedPlatform.color} flex items-center justify-center text-2xl shadow`}>
+              {selectedPlatform.icon}
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">{selectedPlatform.name}</h3>
+              <p className="text-sm text-gray-500">Select an account to upload to</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {accounts.map((account) => (
+              <button
+                key={account._id || account.credential_id}
+                onClick={() => handleAccountSelect(account)}
+                className="w-full p-4 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:shadow-md transition-all text-left group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                      {account.channel_title || account.account_name || account.email || 'Account'}
+                    </h4>
+                    {account.channel_id && (
+                      <p className="text-xs text-gray-500 mt-1">ID: {account.channel_id}</p>
+                    )}
+                    {account.email && (
+                      <p className="text-xs text-gray-500 mt-1">{account.email}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                      Connected
+                    </span>
+                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
           <div className="flex justify-between pt-4">
             <button
               onClick={handleBack}
@@ -257,32 +350,26 @@ const PreviewUploadModal = ({ isOpen, onClose, asset }) => {
         </div>
       )}
 
-      {/* Step 3: Upload Configuration */}
-      {step === 3 && selectedPlatform && (
+      {/* Step 4: Upload Configuration */}
+      {step === 4 && selectedPlatform && selectedAccount && (
         <div className="space-y-4">
-          {/* Account Selection */}
-          {accounts.length > 1 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Account
-              </label>
-              <select
-                value={selectedAccount?._id || selectedAccount?.credential_id || ''}
-                onChange={(e) => {
-                  const account = accounts.find(a => (a._id || a.credential_id) === e.target.value);
-                  setSelectedAccount(account);
-                }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Choose an account...</option>
-                {accounts.map((account) => (
-                  <option key={account._id || account.credential_id} value={account._id || account.credential_id}>
-                    {account.channel_title || account.account_name || account.email || 'Account'}
-                  </option>
-                ))}
-              </select>
+          {/* Selected Account Display */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${selectedPlatform.color} flex items-center justify-center text-xl shadow`}>
+                {selectedPlatform.icon}
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-600">Uploading to</p>
+                <p className="font-semibold text-gray-900">
+                  {selectedAccount.channel_title || selectedAccount.account_name || selectedAccount.email || 'Account'}
+                </p>
+              </div>
+              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                Connected
+              </span>
             </div>
-          )}
+          </div>
 
           {/* YouTube-specific fields */}
           {selectedPlatform.id === 'youtube' && (
